@@ -1,0 +1,101 @@
+[package]
+name = "lol_team_companion"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Leptos core (shared)
+leptos = { version = "0.8", features = [] }
+leptos_meta = { version = "0.8" }
+leptos_router = { version = "0.8" }
+
+# SSR-only
+leptos_axum = { version = "0.8", optional = true }
+axum = { version = "0.8", features = ["macros"], optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+surrealdb = { version = "3", features = ["kv-surrealkv"], optional = true }
+surrealdb-types-derive = { version = "3", optional = true }
+tower-sessions = { version = "0.14", optional = true }
+tower-sessions-core = { version = "0.14", optional = true }
+rmp-serde = { version = "1", optional = true }
+axum-login = { version = "0.17", optional = true }
+riven = { version = "2", features = ["tracing"], optional = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
+argon2 = { version = "0.5", optional = true }
+password-hash = { version = "0.5", optional = true }
+tower = { version = "0.5", features = ["full"], optional = true }
+tower-http = { version = "0.6", features = ["fs"], optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+dotenvy = { version = "0.15", optional = true }
+
+# Client-only
+console_error_panic_hook = { version = "0.1", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+
+# Shared
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+
+[features]
+default = []
+hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
+ssr = [
+  "dep:leptos_axum",
+  "dep:axum",
+  "dep:tokio",
+  "dep:surrealdb",
+  "dep:surrealdb-types-derive",
+  "dep:tower-sessions",
+  "dep:tower-sessions-core",
+  "dep:rmp-serde",
+  "dep:axum-login",
+  "dep:riven",
+  "dep:reqwest",
+  "dep:argon2",
+  "dep:password-hash",
+  "dep:tower",
+  "dep:tower-http",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+  "dep:dotenvy",
+  "leptos/ssr",
+  "leptos_meta/ssr",
+  "leptos_router/ssr",
+]
+
+[[bin]]
+name = "lol_team_companion"
+path = "src/main.rs"
+required-features = ["ssr"]
+
+[package.metadata.leptos]
+output-name = "lol_team_companion"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "input.css"
+tailwind-input-file = "input.css"
+assets-dir = "public"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+end2end-cmd = "npx playwright test"
+end2end-dir = "end2end"
+browserquery = "defaults"
+env = "DEV"
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-release = "wasm-release"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1

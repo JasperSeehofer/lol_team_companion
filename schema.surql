@@ -1,0 +1,85 @@
+-- Users
+DEFINE TABLE IF NOT EXISTS user SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS username ON user TYPE string;
+DEFINE FIELD IF NOT EXISTS email ON user TYPE string;
+DEFINE FIELD IF NOT EXISTS password_hash ON user TYPE string;
+DEFINE FIELD IF NOT EXISTS riot_puuid ON user TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS riot_summoner_name ON user TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON user TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
+
+-- Teams
+DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON team TYPE string;
+DEFINE FIELD IF NOT EXISTS region ON team TYPE string;
+DEFINE FIELD IF NOT EXISTS created_by ON team TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON team TYPE datetime DEFAULT time::now();
+
+-- Team membership
+DEFINE TABLE IF NOT EXISTS team_member SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON team_member TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS user ON team_member TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS role ON team_member TYPE string;
+
+-- Cached match data
+DEFINE TABLE IF NOT EXISTS match SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS match_id ON match TYPE string;
+DEFINE FIELD IF NOT EXISTS queue_id ON match TYPE int;
+DEFINE FIELD IF NOT EXISTS game_duration ON match TYPE int;
+DEFINE FIELD IF NOT EXISTS game_end ON match TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS team_id ON match TYPE option<record<team>>;
+DEFINE INDEX IF NOT EXISTS match_id_unique ON match FIELDS match_id UNIQUE;
+
+-- Per-player match stats
+DEFINE TABLE IF NOT EXISTS player_match SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS match ON player_match TYPE record<match>;
+DEFINE FIELD IF NOT EXISTS user ON player_match TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS champion ON player_match TYPE string;
+DEFINE FIELD IF NOT EXISTS kills ON player_match TYPE int;
+DEFINE FIELD IF NOT EXISTS deaths ON player_match TYPE int;
+DEFINE FIELD IF NOT EXISTS assists ON player_match TYPE int;
+DEFINE FIELD IF NOT EXISTS cs ON player_match TYPE int;
+DEFINE FIELD IF NOT EXISTS vision_score ON player_match TYPE int;
+DEFINE FIELD IF NOT EXISTS damage ON player_match TYPE int;
+DEFINE FIELD IF NOT EXISTS win ON player_match TYPE bool;
+
+-- Draft plans
+DEFINE TABLE IF NOT EXISTS draft SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON draft TYPE string;
+DEFINE FIELD IF NOT EXISTS team ON draft TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS created_by ON draft TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS opponent ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS notes ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
+
+-- Picks/bans in a draft
+DEFINE TABLE IF NOT EXISTS draft_action SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS draft ON draft_action TYPE record<draft>;
+DEFINE FIELD IF NOT EXISTS phase ON draft_action TYPE string;
+DEFINE FIELD IF NOT EXISTS side ON draft_action TYPE string;
+DEFINE FIELD IF NOT EXISTS champion ON draft_action TYPE string;
+DEFINE FIELD IF NOT EXISTS `order` ON draft_action TYPE int;
+
+-- Game plans
+DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS draft ON game_plan TYPE option<record<draft>>;
+DEFINE FIELD IF NOT EXISTS team ON game_plan TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS win_conditions ON game_plan TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS objective_priority ON game_plan TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS teamfight_strategy ON game_plan TYPE string;
+DEFINE FIELD IF NOT EXISTS early_game ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS notes ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::now();
+
+-- Post-game learnings
+DEFINE TABLE IF NOT EXISTS post_game_learning SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS match ON post_game_learning TYPE option<record<match>>;
+DEFINE FIELD IF NOT EXISTS team ON post_game_learning TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS what_went_well ON post_game_learning TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS improvements ON post_game_learning TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS action_items ON post_game_learning TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS created_by ON post_game_learning TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON post_game_learning TYPE datetime DEFAULT time::now();
+
+-- Sessions (for tower-sessions-surrealdb-store)
+DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;
