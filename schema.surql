@@ -98,5 +98,31 @@ DEFINE FIELD IF NOT EXISTS champion ON champion_pool TYPE string;
 DEFINE FIELD IF NOT EXISTS role ON champion_pool TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON champion_pool TYPE datetime DEFAULT time::now();
 
+-- Draft trees (branching draft plans)
+DEFINE TABLE IF NOT EXISTS draft_tree SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON draft_tree TYPE string;
+DEFINE FIELD IF NOT EXISTS team ON draft_tree TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS created_by ON draft_tree TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS opponent ON draft_tree TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON draft_tree TYPE datetime DEFAULT time::now();
+
+-- Nodes within a draft tree
+DEFINE TABLE IF NOT EXISTS draft_tree_node SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tree ON draft_tree_node TYPE record<draft_tree>;
+DEFINE FIELD IF NOT EXISTS parent ON draft_tree_node TYPE option<record<draft_tree_node>>;
+DEFINE FIELD IF NOT EXISTS label ON draft_tree_node TYPE string;
+DEFINE FIELD IF NOT EXISTS notes ON draft_tree_node TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS is_improvised ON draft_tree_node TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS sort_order ON draft_tree_node TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS created_at ON draft_tree_node TYPE datetime DEFAULT time::now();
+
+-- Picks/bans within a tree node
+DEFINE TABLE IF NOT EXISTS tree_node_action SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS node ON tree_node_action TYPE record<draft_tree_node>;
+DEFINE FIELD IF NOT EXISTS phase ON tree_node_action TYPE string;
+DEFINE FIELD IF NOT EXISTS side ON tree_node_action TYPE string;
+DEFINE FIELD IF NOT EXISTS champion ON tree_node_action TYPE string;
+DEFINE FIELD IF NOT EXISTS `order` ON tree_node_action TYPE int;
+
 -- Sessions (for tower-sessions-surrealdb-store)
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;

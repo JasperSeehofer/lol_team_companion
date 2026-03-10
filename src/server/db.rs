@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::models::{
     champion::ChampionPoolEntry,
-    draft::{Draft, DraftAction},
+    draft::{Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
     team::Team,
@@ -650,6 +650,336 @@ pub async fn update_draft(
             .bind(("side", action.side))
             .bind(("champion", action.champion))
             .bind(("order", action.order))
+            .await?
+            .check()?;
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Draft Trees
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbDraftTree {
+    id: RecordId,
+    name: String,
+    team: RecordId,
+    created_by: RecordId,
+    opponent: Option<String>,
+}
+
+impl From<DbDraftTree> for DraftTree {
+    fn from(t: DbDraftTree) -> Self {
+        DraftTree {
+            id: Some(t.id.to_sql()),
+            name: t.name,
+            team_id: t.team.to_sql(),
+            created_by: t.created_by.to_sql(),
+            opponent: t.opponent,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbDraftTreeNode {
+    id: RecordId,
+    tree: RecordId,
+    parent: Option<RecordId>,
+    label: String,
+    notes: Option<String>,
+    is_improvised: bool,
+    sort_order: i32,
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbTreeNodeAction {
+    id: RecordId,
+    node: RecordId,
+    phase: String,
+    side: String,
+    champion: String,
+    order: i32,
+}
+
+pub async fn create_draft_tree(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    name: String,
+    opponent: Option<String>,
+) -> DbResult<String> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+
+    let mut response = db
+        .query("CREATE draft_tree SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent")
+        .bind(("name", name))
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .bind(("opponent", opponent))
+        .await?;
+
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => {
+            let tree_id = r.id.to_sql();
+            // Auto-create a root node
+            let tree_key = tree_id.strip_prefix("draft_tree:").unwrap_or(&tree_id).to_string();
+            db.query("CREATE draft_tree_node SET tree = type::record('draft_tree', $tree_key), parent = NONE, label = 'Root', sort_order = 0")
+                .bind(("tree_key", tree_key))
+                .await?
+                .check()?;
+            Ok(tree_id)
+        }
+        None => Err(DbError::Other("Failed to create draft tree".into())),
+    }
+}
+
+pub async fn list_draft_trees(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<DraftTree>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT * FROM draft_tree WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+    let trees: Vec<DbDraftTree> = r.take(0).unwrap_or_default();
+    Ok(trees.into_iter().map(DraftTree::from).collect())
+}
+
+pub async fn delete_draft_tree(db: &Surreal<Db>, tree_id: &str) -> DbResult<()> {
+    let tree_key = tree_id.strip_prefix("draft_tree:").unwrap_or(tree_id).to_string();
+    // Delete actions, then nodes, then tree
+    db.query("DELETE tree_node_action WHERE node IN (SELECT VALUE id FROM draft_tree_node WHERE tree = type::record('draft_tree', $tree_key)); DELETE draft_tree_node WHERE tree = type::record('draft_tree', $tree_key); DELETE type::record('draft_tree', $tree_key)")
+        .bind(("tree_key", tree_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_draft_tree(
+    db: &Surreal<Db>,
+    tree_id: &str,
+    name: String,
+    opponent: Option<String>,
+) -> DbResult<()> {
+    let tree_key = tree_id.strip_prefix("draft_tree:").unwrap_or(tree_id).to_string();
+    db.query("UPDATE type::record('draft_tree', $tree_key) SET name = $name, opponent = $opponent")
+        .bind(("tree_key", tree_key))
+        .bind(("name", name))
+        .bind(("opponent", opponent))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn get_tree_nodes(db: &Surreal<Db>, tree_id: &str) -> DbResult<Vec<DraftTreeNode>> {
+    let tree_key = tree_id.strip_prefix("draft_tree:").unwrap_or(tree_id).to_string();
+
+    let mut result = db
+        .query("SELECT * FROM draft_tree_node WHERE tree = type::record('draft_tree', $tree_key) ORDER BY sort_order ASC; SELECT * FROM tree_node_action WHERE node IN (SELECT VALUE id FROM draft_tree_node WHERE tree = type::record('draft_tree', $tree_key)) ORDER BY `order` ASC")
+        .bind(("tree_key", tree_key))
+        .await?;
+
+    let db_nodes: Vec<DbDraftTreeNode> = result.take(0).unwrap_or_default();
+    let db_actions: Vec<DbTreeNodeAction> = result.take(1).unwrap_or_default();
+
+    // Group actions by node
+    let mut actions_by_node: HashMap<String, Vec<DraftAction>> = HashMap::new();
+    for a in db_actions {
+        let node_id = a.node.to_sql();
+        actions_by_node.entry(node_id).or_default().push(DraftAction {
+            id: Some(a.id.to_sql()),
+            draft_id: String::new(),
+            phase: a.phase,
+            side: a.side,
+            champion: a.champion,
+            order: a.order,
+        });
+    }
+
+    // Build flat list of nodes
+    let flat_nodes: Vec<DraftTreeNode> = db_nodes
+        .into_iter()
+        .map(|n| {
+            let id = n.id.to_sql();
+            let actions = actions_by_node.remove(&id).unwrap_or_default();
+            DraftTreeNode {
+                id: Some(id),
+                tree_id: n.tree.to_sql(),
+                parent_id: n.parent.map(|p| p.to_sql()),
+                label: n.label,
+                notes: n.notes,
+                is_improvised: n.is_improvised,
+                sort_order: n.sort_order,
+                actions,
+                children: Vec::new(),
+            }
+        })
+        .collect();
+
+    // Build tree structure
+    let mut node_map: HashMap<String, DraftTreeNode> = HashMap::new();
+    let mut root_ids: Vec<String> = Vec::new();
+    let mut child_ids: Vec<(String, String)> = Vec::new(); // (parent_id, child_id)
+
+    for node in flat_nodes {
+        let id = node.id.clone().unwrap_or_default();
+        if node.parent_id.is_none() {
+            root_ids.push(id.clone());
+        } else {
+            child_ids.push((node.parent_id.clone().unwrap_or_default(), id.clone()));
+        }
+        node_map.insert(id, node);
+    }
+
+    // Attach children bottom-up
+    // Sort child_ids so we process deepest nodes first (approximation: reverse order)
+    child_ids.reverse();
+    for (parent_id, child_id) in child_ids {
+        if let Some(child) = node_map.remove(&child_id) {
+            if let Some(parent) = node_map.get_mut(&parent_id) {
+                parent.children.push(child);
+            } else {
+                // Parent was already consumed, put child back
+                node_map.insert(child_id, child);
+            }
+        }
+    }
+
+    // Sort children by sort_order
+    fn sort_children(node: &mut DraftTreeNode) {
+        node.children.sort_by_key(|c| c.sort_order);
+        for child in &mut node.children {
+            sort_children(child);
+        }
+    }
+
+    let mut roots: Vec<DraftTreeNode> = root_ids
+        .into_iter()
+        .filter_map(|id| node_map.remove(&id))
+        .collect();
+
+    for root in &mut roots {
+        sort_children(root);
+    }
+
+    Ok(roots)
+}
+
+pub async fn create_tree_node(
+    db: &Surreal<Db>,
+    tree_id: &str,
+    parent_id: Option<String>,
+    label: String,
+) -> DbResult<String> {
+    let tree_key = tree_id.strip_prefix("draft_tree:").unwrap_or(tree_id).to_string();
+
+    let parent_clause = match &parent_id {
+        Some(pid) => {
+            let pk = pid.strip_prefix("draft_tree_node:").unwrap_or(pid).to_string();
+            format!("parent = type::record('draft_tree_node', '{pk}')")
+        }
+        None => "parent = NONE".to_string(),
+    };
+
+    // Get next sort_order among siblings
+    let sort_query = match &parent_id {
+        Some(pid) => {
+            let pk = pid.strip_prefix("draft_tree_node:").unwrap_or(pid).to_string();
+            format!("SELECT count() as n FROM draft_tree_node WHERE tree = type::record('draft_tree', '{tree_key}') AND parent = type::record('draft_tree_node', '{pk}') GROUP ALL")
+        }
+        None => format!("SELECT count() as n FROM draft_tree_node WHERE tree = type::record('draft_tree', '{tree_key}') AND parent = NONE GROUP ALL"),
+    };
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Count { n: i64 }
+
+    let mut sr = db.query(&sort_query).await?;
+    let count: Option<Count> = sr.take(0)?;
+    let sort_order = count.map(|c| c.n as i32).unwrap_or(0);
+
+    let query = format!(
+        "CREATE draft_tree_node SET tree = type::record('draft_tree', $tree_key), {parent_clause}, label = $label, sort_order = $sort_order"
+    );
+    let mut response = db
+        .query(&query)
+        .bind(("tree_key", tree_key))
+        .bind(("label", label))
+        .bind(("sort_order", sort_order))
+        .await?;
+
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create tree node".into())),
+    }
+}
+
+pub async fn update_tree_node(
+    db: &Surreal<Db>,
+    node_id: &str,
+    label: String,
+    notes: Option<String>,
+    is_improvised: bool,
+    actions: Vec<DraftAction>,
+) -> DbResult<()> {
+    let node_key = node_id.strip_prefix("draft_tree_node:").unwrap_or(node_id).to_string();
+
+    db.query("UPDATE type::record('draft_tree_node', $node_key) SET label = $label, notes = $notes, is_improvised = $is_improvised")
+        .bind(("node_key", node_key.clone()))
+        .bind(("label", label))
+        .bind(("notes", notes))
+        .bind(("is_improvised", is_improvised))
+        .await?
+        .check()?;
+
+    // Replace actions
+    db.query("DELETE tree_node_action WHERE node = type::record('draft_tree_node', $node_key)")
+        .bind(("node_key", node_key.clone()))
+        .await?
+        .check()?;
+
+    for action in actions {
+        let nk = node_key.clone();
+        db.query("CREATE tree_node_action SET node = type::record('draft_tree_node', $node_key), phase = $phase, side = $side, champion = $champion, `order` = $order")
+            .bind(("node_key", nk))
+            .bind(("phase", action.phase))
+            .bind(("side", action.side))
+            .bind(("champion", action.champion))
+            .bind(("order", action.order))
+            .await?
+            .check()?;
+    }
+
+    Ok(())
+}
+
+pub async fn delete_tree_node(db: &Surreal<Db>, node_id: &str) -> DbResult<()> {
+    let node_key = node_id.strip_prefix("draft_tree_node:").unwrap_or(node_id).to_string();
+    // Delete actions for this node and all descendants, then delete nodes
+    // First get all descendant node IDs
+    // SurrealDB doesn't have recursive CTEs, so we do iterative deletion
+    let mut to_delete = vec![node_key.clone()];
+    let mut i = 0;
+    while i < to_delete.len() {
+        let key = to_delete[i].clone();
+        let mut r = db
+            .query("SELECT id FROM draft_tree_node WHERE parent = type::record('draft_tree_node', $key)")
+            .bind(("key", key))
+            .await?;
+        let children: Vec<IdRecord> = r.take(0).unwrap_or_default();
+        for child in children {
+            let child_id = child.id.to_sql();
+            let child_key = child_id.strip_prefix("draft_tree_node:").unwrap_or(&child_id).to_string();
+            to_delete.push(child_key);
+        }
+        i += 1;
+    }
+
+    for key in to_delete {
+        db.query("DELETE tree_node_action WHERE node = type::record('draft_tree_node', $key); DELETE type::record('draft_tree_node', $key)")
+            .bind(("key", key))
             .await?
             .check()?;
     }

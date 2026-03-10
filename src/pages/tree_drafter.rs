@@ -1,0 +1,1204 @@
+use leptos::prelude::*;
+use std::collections::HashMap;
+use crate::models::champion::Champion;
+use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
+use crate::components::draft_board::{DraftBoard, slot_meta};
+use crate::components::champion_picker::ChampionPicker;
+
+// ---------------------------------------------------------------------------
+// Server functions
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::data_dragon;
+    data_dragon::fetch_champions()
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    db::list_draft_trees(&db, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn create_tree(
+    name: String,
+    opponent: Option<String>,
+) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    db::create_draft_tree(&db, &team_id, &user.id, name, opponent)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn delete_tree(tree_id: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::delete_draft_tree(&db, &tree_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn update_tree_meta(
+    tree_id: String,
+    name: String,
+    opponent: Option<String>,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::update_draft_tree(&db, &tree_id, name, opponent)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn get_tree_nodes(tree_id: String) -> Result<Vec<DraftTreeNode>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::get_tree_nodes(&db, &tree_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn add_branch(
+    tree_id: String,
+    parent_id: Option<String>,
+    label: String,
+) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::create_tree_node(&db, &tree_id, parent_id, label)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn save_node(
+    node_id: String,
+    label: String,
+    notes: Option<String>,
+    is_improvised: bool,
+    actions_json: String,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
+
+    db::update_tree_node(&db, &node_id, label, notes, is_improvised, actions)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn remove_node(node_id: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::delete_tree_node(&db, &node_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn build_actions_from_slots(slots: &[Option<String>]) -> Vec<DraftAction> {
+    slots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, opt)| opt.as_ref().map(|champ| {
+            let (side, kind, label) = slot_meta(i);
+            DraftAction {
+                id: None,
+                draft_id: String::new(),
+                phase: format!("{}_{}", kind, label),
+                side: side.to_string(),
+                champion: champ.clone(),
+                order: i as i32,
+            }
+        }))
+        .collect()
+}
+
+fn actions_to_slots(actions: &[DraftAction]) -> Vec<Option<String>> {
+    let mut slots = vec![None::<String>; 20];
+    for a in actions {
+        let o = a.order as usize;
+        if o < 20 {
+            slots[o] = Some(a.champion.clone());
+        }
+    }
+    slots
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn TreeDrafterPage() -> impl IntoView {
+    // Mode: "edit" or "live"
+    let (mode, set_mode) = signal("edit".to_string());
+
+    // Tree management
+    let (new_tree_name, set_new_tree_name) = signal(String::new());
+    let (new_tree_opponent, set_new_tree_opponent) = signal(String::new());
+    let (selected_tree_id, set_selected_tree_id) = signal(Option::<String>::None);
+    let (status_msg, set_status_msg) = signal(Option::<String>::None);
+
+    // Node editing
+    let (selected_node_id, set_selected_node_id) = signal(Option::<String>::None);
+    let (node_label, set_node_label) = signal(String::new());
+    let (node_notes, set_node_notes) = signal(String::new());
+    let (node_improvised, set_node_improvised) = signal(false);
+    let (draft_slots, set_draft_slots) = signal(vec![None::<String>; 20]);
+    let (active_slot, set_active_slot) = signal(Some(0_usize));
+
+    // Branch adding
+    let (adding_branch_to, set_adding_branch_to) = signal(Option::<String>::None);
+    let (new_branch_label, set_new_branch_label) = signal(String::new());
+
+    // Expanded nodes in tree view
+    let (expanded_nodes, set_expanded_nodes) = signal(std::collections::HashSet::<String>::new());
+
+    // Live navigator state
+    let (nav_path, set_nav_path) = signal(Vec::<String>::new());
+
+    // Resources
+    let champions_resource = Resource::new(|| (), |_| get_champions_for_tree());
+    let trees = Resource::new(|| (), |_| list_trees());
+
+    // Reactive resource for tree nodes — depends on selected_tree_id
+    let nodes_resource = Resource::new(
+        move || selected_tree_id.get(),
+        move |tree_id| async move {
+            match tree_id {
+                Some(id) => get_tree_nodes(id).await,
+                None => Ok(Vec::new()),
+            }
+        },
+    );
+
+    // Create tree handler
+    let do_create_tree = move |_| {
+        let name = new_tree_name.get_untracked();
+        if name.trim().is_empty() {
+            set_status_msg.set(Some("Enter a tree name.".into()));
+            return;
+        }
+        let opp = new_tree_opponent.get_untracked();
+        let opp_opt = if opp.is_empty() { None } else { Some(opp) };
+        leptos::task::spawn_local(async move {
+            match create_tree(name, opp_opt).await {
+                Ok(id) => {
+                    set_selected_tree_id.set(Some(id));
+                    set_new_tree_name.set(String::new());
+                    set_new_tree_opponent.set(String::new());
+                    set_status_msg.set(Some("Tree created!".into()));
+                    trees.refetch();
+                    nodes_resource.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    // Delete tree handler
+    let do_delete_tree = move |_| {
+        let tree_id = match selected_tree_id.get_untracked() {
+            Some(id) => id,
+            None => return,
+        };
+        leptos::task::spawn_local(async move {
+            match delete_tree(tree_id).await {
+                Ok(_) => {
+                    set_selected_tree_id.set(None);
+                    set_selected_node_id.set(None);
+                    set_status_msg.set(Some("Tree deleted.".into()));
+                    trees.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    // Select a node for editing
+    let select_node = move |node: &DraftTreeNode| {
+        set_selected_node_id.set(node.id.clone());
+        set_node_label.set(node.label.clone());
+        set_node_notes.set(node.notes.clone().unwrap_or_default());
+        set_node_improvised.set(node.is_improvised);
+        let slots = actions_to_slots(&node.actions);
+        let next = (0..20).find(|&i| slots[i].is_none());
+        set_draft_slots.set(slots);
+        set_active_slot.set(next);
+    };
+
+    // Save node handler
+    let do_save_node = move |_| {
+        let nid = match selected_node_id.get_untracked() {
+            Some(id) => id,
+            None => return,
+        };
+        let label = node_label.get_untracked();
+        let notes_raw = node_notes.get_untracked();
+        let notes = if notes_raw.trim().is_empty() { None } else { Some(notes_raw) };
+        let improvised = node_improvised.get_untracked();
+        let actions = build_actions_from_slots(&draft_slots.get_untracked());
+        let actions_json = serde_json::to_string(&actions).unwrap_or_default();
+
+        leptos::task::spawn_local(async move {
+            match save_node(nid, label, notes, improvised, actions_json).await {
+                Ok(_) => {
+                    set_status_msg.set(Some("Node saved!".into()));
+                    nodes_resource.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    // Add branch handler
+    let do_add_branch = move |_| {
+        let tree_id = match selected_tree_id.get_untracked() {
+            Some(id) => id,
+            None => return,
+        };
+        let parent = adding_branch_to.get_untracked();
+        let label = new_branch_label.get_untracked();
+        if label.trim().is_empty() {
+            set_status_msg.set(Some("Enter a branch label.".into()));
+            return;
+        }
+        leptos::task::spawn_local(async move {
+            match add_branch(tree_id, parent, label).await {
+                Ok(_) => {
+                    set_new_branch_label.set(String::new());
+                    set_adding_branch_to.set(None);
+                    set_status_msg.set(Some("Branch added!".into()));
+                    nodes_resource.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    // Delete node handler
+    let do_delete_node = move |node_id: String| {
+        leptos::task::spawn_local(async move {
+            match remove_node(node_id).await {
+                Ok(_) => {
+                    set_selected_node_id.set(None);
+                    set_status_msg.set(Some("Node deleted.".into()));
+                    nodes_resource.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    // Champion slot filling
+    let used_champions = move || {
+        draft_slots.get().into_iter().flatten().collect::<Vec<String>>()
+    };
+
+    let fill_slot = move |slot_idx: usize, champion_name: String| {
+        let already_used = draft_slots
+            .get_untracked()
+            .iter()
+            .any(|s| s.as_deref() == Some(&champion_name));
+        if already_used {
+            return;
+        }
+        set_draft_slots.update(|s| s[slot_idx] = Some(champion_name));
+        let updated = draft_slots.get_untracked();
+        let next = (0..20).find(|&i| updated[i].is_none());
+        set_active_slot.set(next);
+    };
+
+    let on_champion_select = Callback::new(move |champ: Champion| {
+        if let Some(slot) = active_slot.get_untracked() {
+            fill_slot(slot, champ.name);
+        }
+    });
+
+    let on_slot_drop = Callback::new(move |(slot_idx, name): (usize, String)| {
+        fill_slot(slot_idx, name);
+    });
+
+    let on_slot_click = Callback::new(move |slot_idx: usize| {
+        let slots = draft_slots.get_untracked();
+        if slots.get(slot_idx).and_then(|s| s.as_ref()).is_some() {
+            set_draft_slots.update(|s| s[slot_idx] = None);
+            set_active_slot.set(Some(slot_idx));
+        } else {
+            set_active_slot.update(|a| {
+                *a = if *a == Some(slot_idx) { None } else { Some(slot_idx) };
+            });
+        }
+    });
+
+    view! {
+        <div class="max-w-[90rem] mx-auto py-8 px-6 flex flex-col gap-6">
+            // Header
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-white">"Tree Drafter"</h1>
+                    <p class="text-gray-400 text-sm mt-1">"Plan branching draft strategies for every scenario"</p>
+                </div>
+                <div class="flex gap-2">
+                    <button
+                        class=move || if mode.get() == "edit" {
+                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-yellow-400 text-gray-900"
+                        } else {
+                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                        }
+                        on:click=move |_| set_mode.set("edit".to_string())
+                    >"Edit"</button>
+                    <button
+                        class=move || if mode.get() == "live" {
+                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-emerald-500 text-white"
+                        } else {
+                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                        }
+                        on:click=move |_| {
+                            set_mode.set("live".to_string());
+                            set_nav_path.set(Vec::new());
+                        }
+                    >"Live Game"</button>
+                </div>
+            </div>
+
+            // Status message
+            {move || status_msg.get().map(|msg| {
+                let is_error = msg.starts_with("Error");
+                let cls = if is_error { "text-red-400" } else { "text-emerald-400" };
+                view! {
+                    <div class=format!("text-sm {cls}")>{msg}</div>
+                }
+            })}
+
+            // Main layout: sidebar + content
+            <div class="flex gap-6 min-h-[36rem]">
+                // Left sidebar: tree list
+                <div class="w-72 flex-shrink-0 flex flex-col gap-4">
+                    // New tree form
+                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
+                        <h3 class="text-white font-semibold text-sm">"New Tree"</h3>
+                        <input
+                            type="text"
+                            placeholder="Tree name..."
+                            prop:value=move || new_tree_name.get()
+                            on:input=move |ev| set_new_tree_name.set(event_target_value(&ev))
+                            class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Opponent (optional)"
+                            prop:value=move || new_tree_opponent.get()
+                            on:input=move |ev| set_new_tree_opponent.set(event_target_value(&ev))
+                            class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                        />
+                        <button
+                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                            on:click=do_create_tree
+                        >"Create Tree"</button>
+                    </div>
+
+                    // Tree list
+                    <div class="flex flex-col gap-1.5 flex-1 overflow-y-auto">
+                        <h3 class="text-gray-400 text-xs font-semibold uppercase tracking-wider px-1">"Your Trees"</h3>
+                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm px-1">"Loading..."</div> }>
+                            {move || trees.get().map(|result| match result {
+                                Ok(list) if list.is_empty() => view! {
+                                    <p class="text-gray-500 text-sm px-1">"No trees yet."</p>
+                                }.into_any(),
+                                Ok(list) => view! {
+                                    <div class="flex flex-col gap-1.5">
+                                        {list.into_iter().map(|t| {
+                                            let id = t.id.clone().unwrap_or_default();
+                                            let id_for_click = id.clone();
+                                            let name = t.name.clone();
+                                            let opp = t.opponent.clone();
+                                            view! {
+                                                <button
+                                                    class=move || {
+                                                        let sel = selected_tree_id.get();
+                                                        if sel.as_deref() == Some(&id) {
+                                                            "w-full text-left bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-3 transition-all"
+                                                        } else {
+                                                            "w-full text-left bg-gray-800/30 border border-gray-700/30 rounded-lg p-3 hover:bg-gray-700/30 transition-all"
+                                                        }
+                                                    }
+                                                    on:click=move |_| {
+                                                        set_selected_tree_id.set(Some(id_for_click.clone()));
+                                                        set_selected_node_id.set(None);
+                                                        set_nav_path.set(Vec::new());
+                                                        nodes_resource.refetch();
+                                                    }
+                                                >
+                                                    <div class="text-white text-sm font-medium truncate">{name}</div>
+                                                    {opp.map(|o| view! {
+                                                        <div class="text-gray-400 text-xs mt-0.5">"vs " {o}</div>
+                                                    })}
+                                                </button>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                }.into_any(),
+                                Err(e) => view! {
+                                    <p class="text-red-400 text-sm">{e.to_string()}</p>
+                                }.into_any(),
+                            })}
+                        </Suspense>
+                    </div>
+
+                    // Delete tree button
+                    {move || selected_tree_id.get().map(|_| view! {
+                        <button
+                            class="text-red-400 hover:text-red-300 text-sm transition-colors border border-red-400/20 hover:border-red-400/40 rounded-lg px-3 py-1.5"
+                            on:click=do_delete_tree
+                        >"Delete Tree"</button>
+                    })}
+                </div>
+
+                // Main content area
+                <div class="flex-1 flex flex-col gap-4">
+                    {move || {
+                        if selected_tree_id.get().is_none() {
+                            return view! {
+                                <div class="flex-1 flex items-center justify-center">
+                                    <div class="text-center">
+                                        <div class="text-gray-500 text-6xl mb-4">"&#x1f333;"</div>
+                                        <p class="text-gray-400 text-lg">"Select or create a tree to start planning"</p>
+                                    </div>
+                                </div>
+                            }.into_any();
+                        }
+
+                        let current_mode = mode.get();
+                        if current_mode == "live" {
+                            // Live navigator mode
+                            view! {
+                                <LiveNavigator
+                                    nodes_resource=nodes_resource
+                                    nav_path=nav_path
+                                    set_nav_path=set_nav_path
+                                    champions_resource=champions_resource
+                                    status_msg=set_status_msg
+                                    selected_tree_id=selected_tree_id
+                                />
+                            }.into_any()
+                        } else {
+                            // Edit mode
+                            view! {
+                                <div class="flex gap-4 flex-1">
+                                    // Tree visualization
+                                    <div class="w-80 flex-shrink-0 bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 overflow-y-auto flex flex-col gap-3">
+                                        <h3 class="text-white font-semibold text-sm">"Tree Structure"</h3>
+                                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading nodes..."</div> }>
+                                            {move || nodes_resource.get().map(|result| match result {
+                                                Ok(roots) if roots.is_empty() => view! {
+                                                    <p class="text-gray-500 text-sm">"No nodes yet."</p>
+                                                }.into_any(),
+                                                Ok(roots) => view! {
+                                                    <div class="flex flex-col gap-1">
+                                                        {roots.into_iter().map(|root| {
+                                                            view! {
+                                                                <TreeNodeView
+                                                                    node=root
+                                                                    depth=0
+                                                                    selected_node_id=selected_node_id
+                                                                    expanded_nodes=expanded_nodes
+                                                                    set_expanded_nodes=set_expanded_nodes
+                                                                    on_select=Callback::new(move |n: DraftTreeNode| {
+                                                                        select_node(&n);
+                                                                    })
+                                                                    on_add_branch=Callback::new(move |parent_id: String| {
+                                                                        set_adding_branch_to.set(Some(parent_id));
+                                                                        set_new_branch_label.set(String::new());
+                                                                    })
+                                                                    on_delete=Callback::new(move |nid: String| {
+                                                                        do_delete_node(nid);
+                                                                    })
+                                                                />
+                                                            }
+                                                        }).collect_view()}
+                                                    </div>
+                                                }.into_any(),
+                                                Err(e) => view! {
+                                                    <p class="text-red-400 text-sm">{e.to_string()}</p>
+                                                }.into_any(),
+                                            })}
+                                        </Suspense>
+
+                                        // Add branch inline form
+                                        {move || adding_branch_to.get().map(|_pid| view! {
+                                            <div class="mt-3 border-t border-gray-700/50 pt-3 flex flex-col gap-2">
+                                                <label class="text-gray-300 text-xs font-medium">"New branch label"</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="e.g. If they ban Jinx..."
+                                                    prop:value=move || new_branch_label.get()
+                                                    on:input=move |ev| set_new_branch_label.set(event_target_value(&ev))
+                                                    class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                                                />
+                                                <div class="flex gap-2">
+                                                    <button
+                                                        class="flex-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
+                                                        on:click=do_add_branch
+                                                    >"Add"</button>
+                                                    <button
+                                                        class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg px-3 py-1.5 transition-colors"
+                                                        on:click=move |_| set_adding_branch_to.set(None)
+                                                    >"Cancel"</button>
+                                                </div>
+                                            </div>
+                                        })}
+                                    </div>
+
+                                    // Node editor panel
+                                    <div class="flex-1 flex flex-col gap-4">
+                                        {move || {
+                                            if selected_node_id.get().is_none() {
+                                                return view! {
+                                                    <div class="flex-1 flex items-center justify-center bg-gray-800/30 border border-gray-700/30 rounded-xl">
+                                                        <p class="text-gray-500 text-sm">"Click a node to edit its draft"</p>
+                                                    </div>
+                                                }.into_any();
+                                            }
+
+                                            view! {
+                                                <NodeEditor
+                                                    node_label=node_label
+                                                    set_node_label=set_node_label
+                                                    node_notes=node_notes
+                                                    set_node_notes=set_node_notes
+                                                    node_improvised=node_improvised
+                                                    set_node_improvised=set_node_improvised
+                                                    draft_slots=draft_slots
+                                                    set_draft_slots=set_draft_slots
+                                                    active_slot=active_slot
+                                                    set_active_slot=set_active_slot
+                                                    champions_resource=champions_resource
+                                                    used_champions=Signal::derive(used_champions)
+                                                    on_champion_select=on_champion_select
+                                                    on_slot_click=on_slot_click
+                                                    on_slot_drop=on_slot_drop
+                                                    on_save=Callback::new(do_save_node)
+                                                />
+                                            }.into_any()
+                                        }}
+                                    </div>
+                                </div>
+                            }.into_any()
+                        }
+                    }}
+                </div>
+            </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tree node view (recursive, indented)
+// ---------------------------------------------------------------------------
+
+#[component]
+fn TreeNodeView(
+    node: DraftTreeNode,
+    depth: usize,
+    selected_node_id: ReadSignal<Option<String>>,
+    expanded_nodes: ReadSignal<std::collections::HashSet<String>>,
+    set_expanded_nodes: WriteSignal<std::collections::HashSet<String>>,
+    on_select: Callback<DraftTreeNode>,
+    on_add_branch: Callback<String>,
+    on_delete: Callback<String>,
+) -> impl IntoView {
+    let node_id = node.id.clone().unwrap_or_default();
+    let has_children = !node.children.is_empty();
+    let children = node.children.clone();
+    let node_for_select = node.clone();
+    let node_id_for_expand = node_id.clone();
+    let node_id_for_add = node_id.clone();
+    let node_id_for_delete = node_id.clone();
+    let node_id_for_selected = node_id.clone();
+    let is_root = node.parent_id.is_none();
+    let is_improvised = node.is_improvised;
+    let has_actions = !node.actions.is_empty();
+    let action_count = node.actions.len();
+    let label = node.label.clone();
+
+    view! {
+        <div style=format!("padding-left: {}rem", depth as f64 * 0.75)>
+            <div
+                class=move || {
+                    let selected = selected_node_id.get().as_deref() == Some(&node_id_for_selected);
+                    if selected {
+                        "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-yellow-400/15 border border-yellow-400/30 cursor-pointer transition-all"
+                    } else {
+                        "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-gray-700/50 cursor-pointer transition-all"
+                    }
+                }
+            >
+                // Expand/collapse toggle
+                {if has_children {
+                    let nid = node_id_for_expand.clone();
+                    view! {
+                        <button
+                            class="text-gray-400 hover:text-white text-xs w-4 h-4 flex items-center justify-center flex-shrink-0 transition-colors"
+                            on:click=move |ev| {
+                                ev.stop_propagation();
+                                let nid = nid.clone();
+                                set_expanded_nodes.update(|s| {
+                                    if s.contains(&nid) {
+                                        s.remove(&nid);
+                                    } else {
+                                        s.insert(nid);
+                                    }
+                                });
+                            }
+                        >
+                            {move || {
+                                let expanded = expanded_nodes.get();
+                                if expanded.contains(&node_id_for_expand) { "\u{25BE}" } else { "\u{25B8}" }
+                            }}
+                        </button>
+                    }.into_any()
+                } else {
+                    view! { <span class="w-4 flex-shrink-0"></span> }.into_any()
+                }}
+
+                // Node content — clickable
+                <div
+                    class="flex-1 flex items-center gap-1.5 min-w-0"
+                    on:click={
+                        let node_for_select = node_for_select.clone();
+                        move |_| on_select.run(node_for_select.clone())
+                    }
+                >
+                    // Icon
+                    {if is_improvised {
+                        view! { <span class="text-amber-400 text-xs flex-shrink-0" title="Improvised">"\u{26A1}"</span> }.into_any()
+                    } else if is_root {
+                        view! { <span class="text-emerald-400 text-xs flex-shrink-0">"\u{25C9}"</span> }.into_any()
+                    } else {
+                        view! { <span class="text-gray-500 text-xs flex-shrink-0">"\u{251C}"</span> }.into_any()
+                    }}
+
+                    <span class="text-white text-sm truncate">{label}</span>
+
+                    // Action count badge
+                    {has_actions.then(|| view! {
+                        <span class="text-gray-500 text-xs flex-shrink-0">{format!("({action_count})")}</span>
+                    })}
+                </div>
+
+                // Action buttons (visible on hover)
+                <div class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                    <button
+                        class="text-gray-400 hover:text-yellow-400 text-xs p-1 transition-colors"
+                        title="Add branch"
+                        on:click={
+                            let nid = node_id_for_add.clone();
+                            move |ev: web_sys::MouseEvent| {
+                                ev.stop_propagation();
+                                on_add_branch.run(nid.clone());
+                            }
+                        }
+                    >"+"</button>
+                    {(!is_root).then(|| {
+                        let nid = node_id_for_delete.clone();
+                        view! {
+                            <button
+                                class="text-gray-400 hover:text-red-400 text-xs p-1 transition-colors"
+                                title="Delete node"
+                                on:click=move |ev: web_sys::MouseEvent| {
+                                    ev.stop_propagation();
+                                    on_delete.run(nid.clone());
+                                }
+                            >"\u{00D7}"</button>
+                        }
+                    })}
+                </div>
+            </div>
+
+            // Children (if expanded)
+            {move || {
+                let expanded = expanded_nodes.get();
+                if !has_children || !expanded.contains(&node_id) {
+                    return view! { <div></div> }.into_any();
+                }
+                let children = children.clone();
+                view! {
+                    <div class="flex flex-col gap-0.5 mt-0.5">
+                        {children.into_iter().map(|child| {
+                            view! {
+                                <TreeNodeView
+                                    node=child
+                                    depth=depth + 1
+                                    selected_node_id=selected_node_id
+                                    expanded_nodes=expanded_nodes
+                                    set_expanded_nodes=set_expanded_nodes
+                                    on_select=on_select
+                                    on_add_branch=on_add_branch
+                                    on_delete=on_delete
+                                />
+                            }
+                        }).collect_view()}
+                    </div>
+                }.into_any()
+            }}
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Node editor
+// ---------------------------------------------------------------------------
+
+#[component]
+fn NodeEditor(
+    node_label: ReadSignal<String>,
+    set_node_label: WriteSignal<String>,
+    node_notes: ReadSignal<String>,
+    set_node_notes: WriteSignal<String>,
+    node_improvised: ReadSignal<bool>,
+    set_node_improvised: WriteSignal<bool>,
+    draft_slots: ReadSignal<Vec<Option<String>>>,
+    set_draft_slots: WriteSignal<Vec<Option<String>>>,
+    active_slot: ReadSignal<Option<usize>>,
+    set_active_slot: WriteSignal<Option<usize>>,
+    champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
+    used_champions: Signal<Vec<String>>,
+    on_champion_select: Callback<Champion>,
+    on_slot_click: Callback<usize>,
+    on_slot_drop: Callback<(usize, String)>,
+    on_save: Callback<web_sys::MouseEvent>,
+) -> impl IntoView {
+    view! {
+        <div class="flex flex-col gap-4">
+            // Node metadata
+            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
+                <div class="flex items-center gap-4">
+                    <div class="flex-1">
+                        <label class="block text-gray-400 text-xs font-medium mb-1">"Node Label"</label>
+                        <input
+                            type="text"
+                            prop:value=move || node_label.get()
+                            on:input=move |ev| set_node_label.set(event_target_value(&ev))
+                            class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-400/50 transition-colors"
+                        />
+                    </div>
+                    <div class="flex items-center gap-2 pt-5">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                class="sr-only peer"
+                                prop:checked=move || node_improvised.get()
+                                on:change=move |ev| {
+                                    let checked = event_target_checked(&ev);
+                                    set_node_improvised.set(checked);
+                                }
+                            />
+                            <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
+                        </label>
+                        <span class="text-gray-300 text-xs">"Improvised"</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-xs font-medium mb-1">"Notes"</label>
+                    <textarea
+                        rows="2"
+                        prop:value=move || node_notes.get()
+                        on:input=move |ev| set_node_notes.set(event_target_value(&ev))
+                        placeholder="Strategy notes for this branch..."
+                        class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 resize-none transition-colors"
+                    />
+                </div>
+            </div>
+
+            // Draft board
+            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                <Suspense fallback=|| view! { <div class="text-gray-500 text-sm text-center py-8">"Loading champions..."</div> }>
+                    {move || champions_resource.get().map(|result| match result {
+                        Err(e) => view! {
+                            <div class="text-red-400 text-sm">"Failed to load champions: " {e.to_string()}</div>
+                        }.into_any(),
+                        Ok(champs) => {
+                            let champion_map: HashMap<String, Champion> = champs
+                                .into_iter()
+                                .map(|c| (c.name.clone(), c))
+                                .collect();
+                            view! {
+                                <DraftBoard
+                                    draft_slots=draft_slots
+                                    champion_map=champion_map
+                                    active_slot=active_slot
+                                    on_slot_click=on_slot_click
+                                    on_slot_drop=on_slot_drop
+                                />
+                            }.into_any()
+                        }
+                    })}
+                </Suspense>
+            </div>
+
+            // Champion picker
+            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                    {move || champions_resource.get().map(|result| match result {
+                        Err(e) => view! {
+                            <div class="text-red-400 text-sm">"Error: " {e.to_string()}</div>
+                        }.into_any(),
+                        Ok(champs) => view! {
+                            <ChampionPicker
+                                champions=champs
+                                used_champions=used_champions.get()
+                                on_select=on_champion_select
+                            />
+                        }.into_any(),
+                    })}
+                </Suspense>
+            </div>
+
+            // Save + clear
+            <div class="flex gap-3 items-center">
+                <button
+                    class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
+                    on:click=move |ev| on_save.run(ev)
+                >"Save Node"</button>
+                <button
+                    class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+                    on:click=move |_| {
+                        set_draft_slots.set(vec![None; 20]);
+                        set_active_slot.set(Some(0));
+                    }
+                >"Clear Board"</button>
+            </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Live navigator
+// ---------------------------------------------------------------------------
+
+#[component]
+fn LiveNavigator(
+    nodes_resource: Resource<Result<Vec<DraftTreeNode>, ServerFnError>>,
+    nav_path: ReadSignal<Vec<String>>,
+    set_nav_path: WriteSignal<Vec<String>>,
+    champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
+    status_msg: WriteSignal<Option<String>>,
+    selected_tree_id: ReadSignal<Option<String>>,
+) -> impl IntoView {
+    // Find the current node based on nav_path
+    let current_node = move || -> Option<DraftTreeNode> {
+        let roots = nodes_resource.get()?.ok()?;
+        let path = nav_path.get();
+        if path.is_empty() {
+            return roots.into_iter().next();
+        }
+        // Walk the tree following path
+        let mut current: Option<DraftTreeNode> = roots.into_iter().next();
+        for step_id in &path {
+            current = current.and_then(|n| {
+                n.children.into_iter().find(|c| c.id.as_deref() == Some(step_id.as_str()))
+            });
+        }
+        current
+    };
+
+    view! {
+        <div class="flex-1 flex flex-col gap-4">
+            // Breadcrumb path
+            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-gray-400 text-xs font-semibold uppercase tracking-wider">"Path:"</span>
+                    <button
+                        class="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors"
+                        on:click=move |_| set_nav_path.set(Vec::new())
+                    >"Root"</button>
+                    {move || {
+                        let path = nav_path.get();
+                        if path.is_empty() {
+                            return view! { <span></span> }.into_any();
+                        }
+                        view! {
+                            <div class="flex items-center gap-2">
+                                {path.into_iter().enumerate().map(|(i, _step_id)| {
+                                    let truncated_path: Vec<String> = nav_path.get_untracked().into_iter().take(i + 1).collect();
+                                    let label = {
+                                        // Find label for this step
+                                        let roots = nodes_resource.get().and_then(|r| r.ok()).unwrap_or_default();
+                                        let mut node: Option<&DraftTreeNode> = roots.first();
+                                        for (j, sid) in truncated_path.iter().enumerate() {
+                                            if j == 0 { continue; }
+                                            node = node.and_then(|n| n.children.iter().find(|c| c.id.as_deref() == Some(sid.as_str())));
+                                        }
+                                        node.map(|n| n.label.clone()).unwrap_or_else(|| "...".to_string())
+                                    };
+                                    view! {
+                                        <span class="text-gray-600">"\u{203A}"</span>
+                                        <button
+                                            class="text-yellow-400 hover:text-yellow-300 text-sm font-medium transition-colors"
+                                            on:click=move |_| {
+                                                set_nav_path.set(truncated_path.clone());
+                                            }
+                                        >{label}</button>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        }.into_any()
+                    }}
+                </div>
+            </div>
+
+            // Current node display
+            <Suspense fallback=|| view! { <div class="text-gray-500 text-center py-8">"Loading..."</div> }>
+                {move || {
+                    let node = current_node();
+                    match node {
+                        None => view! {
+                            <div class="flex-1 flex items-center justify-center bg-gray-800/30 border border-gray-700/30 rounded-xl">
+                                <p class="text-gray-500">"No node found at this path."</p>
+                            </div>
+                        }.into_any(),
+                        Some(node) => {
+                            let node_id = node.id.clone().unwrap_or_default();
+                            let node_label = node.label.clone();
+                            let node_notes = node.notes.clone();
+                            let node_improvised = node.is_improvised;
+                            let children = node.children.clone();
+                            let has_children = !children.is_empty();
+                            let actions = node.actions.clone();
+                            let slots = actions_to_slots(&actions);
+
+                            view! {
+                                <div class="flex flex-col gap-4">
+                                    // Node header
+                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                                        <div class="flex items-center gap-3">
+                                            <h2 class="text-white text-xl font-bold">{node_label}</h2>
+                                            {node_improvised.then(|| view! {
+                                                <span class="bg-amber-500/20 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded-full">
+                                                    "\u{26A1} Improvised"
+                                                </span>
+                                            })}
+                                        </div>
+                                        {node_notes.map(|notes| view! {
+                                            <p class="text-gray-300 text-sm mt-2 whitespace-pre-wrap">{notes}</p>
+                                        })}
+                                    </div>
+
+                                    // Draft board (read-only display)
+                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                                            {move || champions_resource.get().map(|result| match result {
+                                                Err(_) => view! { <div class="text-gray-500">"Champions unavailable"</div> }.into_any(),
+                                                Ok(champs) => {
+                                                    let champion_map: HashMap<String, Champion> = champs
+                                                        .into_iter()
+                                                        .map(|c| (c.name.clone(), c))
+                                                        .collect();
+                                                    let (ro_slots, _) = signal(slots.clone());
+                                                    let (ro_active, _) = signal(None::<usize>);
+                                                    let noop_click = Callback::new(|_: usize| {});
+                                                    let noop_drop = Callback::new(|_: (usize, String)| {});
+                                                    view! {
+                                                        <DraftBoard
+                                                            draft_slots=ro_slots
+                                                            champion_map=champion_map
+                                                            active_slot=ro_active
+                                                            on_slot_click=noop_click
+                                                            on_slot_drop=noop_drop
+                                                        />
+                                                    }.into_any()
+                                                }
+                                            })}
+                                        </Suspense>
+                                    </div>
+
+                                    // Branch selection
+                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
+                                        <div class="flex items-center justify-between">
+                                            <h3 class="text-white font-semibold">"Choose Path"</h3>
+                                            // Improvise button
+                                            <button
+                                                class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium px-3 py-1.5 rounded-lg border border-amber-500/30 transition-colors"
+                                                on:click={
+                                                    let nid = node_id.clone();
+                                                    let tree_id = selected_tree_id.get_untracked();
+                                                    move |_| {
+                                                        let nid = nid.clone();
+                                                        let tree_id = tree_id.clone();
+                                                        if let Some(tree_id) = tree_id {
+                                                            let status_msg = status_msg;
+                                                            leptos::task::spawn_local(async move {
+                                                                match add_branch(tree_id, Some(nid), "Improvised".to_string()).await {
+                                                                    Ok(new_id) => {
+                                                                        let _ = save_node(new_id, "Improvised".to_string(), None, true, "[]".to_string()).await;
+                                                                        status_msg.set(Some("Improvised branch created!".into()));
+                                                                        nodes_resource.refetch();
+                                                                    }
+                                                                    Err(e) => status_msg.set(Some(format!("Error: {e}"))),
+                                                                }
+                                                            });
+                                                        }
+                                                    }
+                                                }
+                                            >
+                                                "\u{26A1} Improvise"
+                                            </button>
+                                        </div>
+                                        {if has_children {
+                                            let children = children.clone();
+                                            view! {
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                    {children.into_iter().map(|child| {
+                                                        let child_id = child.id.clone().unwrap_or_default();
+                                                        let child_label = child.label.clone();
+                                                        let child_notes = child.notes.clone();
+                                                        let child_improvised = child.is_improvised;
+                                                        let child_action_count = child.actions.len();
+                                                        view! {
+                                                            <button
+                                                                class="text-left bg-gray-700/50 hover:bg-gray-700 border border-gray-600/50 hover:border-yellow-400/30 rounded-lg p-3 transition-all group"
+                                                                on:click=move |_| {
+                                                                    set_nav_path.update(|p| p.push(child_id.clone()));
+                                                                }
+                                                            >
+                                                                <div class="flex items-center gap-2">
+                                                                    <span class="text-white text-sm font-medium group-hover:text-yellow-400 transition-colors">{child_label}</span>
+                                                                    {child_improvised.then(|| view! {
+                                                                        <span class="text-amber-400 text-xs">"\u{26A1}"</span>
+                                                                    })}
+                                                                </div>
+                                                                {child_notes.map(|n| view! {
+                                                                    <p class="text-gray-400 text-xs mt-1 truncate">{n}</p>
+                                                                })}
+                                                                {(child_action_count > 0).then(|| view! {
+                                                                    <p class="text-gray-500 text-xs mt-1">{format!("{child_action_count} picks/bans")}</p>
+                                                                })}
+                                                            </button>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! {
+                                                <p class="text-gray-500 text-sm">"No branches yet. Click Improvise to create one."</p>
+                                            }.into_any()
+                                        }}
+                                    </div>
+
+                                    // Back button
+                                    {move || {
+                                        let path = nav_path.get();
+                                        if path.is_empty() {
+                                            return view! { <div></div> }.into_any();
+                                        }
+                                        view! {
+                                            <button
+                                                class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors self-start"
+                                                on:click=move |_| {
+                                                    set_nav_path.update(|p| { p.pop(); });
+                                                }
+                                            >"\u{2190} Back"</button>
+                                        }.into_any()
+                                    }}
+                                </div>
+                            }.into_any()
+                        }
+                    }
+                }}
+            </Suspense>
+        </div>
+    }
+}

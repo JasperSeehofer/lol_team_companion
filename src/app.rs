@@ -17,6 +17,7 @@ use crate::pages::{
     stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
     team_builder::TeamBuilderPage,
+    tree_drafter::TreeDrafterPage,
 };
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
@@ -56,6 +57,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/team/dashboard") view=TeamDashboard />
                     <Route path=path!("/team/roster") view=RosterPage />
                     <Route path=path!("/draft") view=DraftPage />
+                    <Route path=path!("/tree-drafter") view=TreeDrafterPage />
                     <Route path=path!("/stats") view=StatsPage />
                     <Route path=path!("/team-builder") view=TeamBuilderPage />
                     <Route path=path!("/game-plan") view=GamePlanPage />

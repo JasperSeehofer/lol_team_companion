@@ -10,6 +10,15 @@
 - [x] Leader can kick members and edit team name/region
 - [x] Role dropdown per bench member
 
+### Section 2 – Draft Tree System (`/tree-drafter`)
+- [x] New page at /tree-drafter (do NOT touch existing /draft)
+- [x] Tree data model: DraftTree + DraftTreeNode (parent/child)
+- [x] Create tree, add branches (child nodes)
+- [x] Tree visualisation: indented list with expand/collapse
+- [x] Node editor: full draft board per node + notes
+- [x] Live game navigator: step-by-step branch selection
+- [x] Improvisation mode: create branch mid-game, tag as improvised
+
 ### Earlier Work
 - [x] Saved drafts display bans left/right of picks, phase groups separated
 - [x] Draft rating (S+ to D tier picker)
@@ -23,15 +32,6 @@
 ---
 
 ## Next Up
-
-### Section 2 – Draft Tree System (`/tree-drafter`)
-- [ ] New page at /tree-drafter (do NOT touch existing /draft)
-- [ ] Tree data model: DraftTree + DraftTreeNode (parent/child)
-- [ ] Create tree, add branches (child nodes)
-- [ ] Tree visualisation: indented list with expand/collapse
-- [ ] Node editor: full draft board per node + notes
-- [ ] Live game navigator: step-by-step branch selection
-- [ ] Improvisation mode: create branch mid-game, tag as improvised
 
 ### Section 3 – Stats & League API
 - [ ] Pull match history from Riot API (manual refresh only)

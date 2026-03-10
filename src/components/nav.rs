@@ -91,6 +91,9 @@ pub fn Nav() -> impl IntoView {
                     <A href="/draft" attr:class="text-gray-300 hover:text-white transition-colors">
                         "Draft"
                     </A>
+                    <A href="/tree-drafter" attr:class="text-gray-300 hover:text-white transition-colors">
+                        "Tree Drafter"
+                    </A>
                     <A href="/stats" attr:class="text-gray-300 hover:text-white transition-colors">
                         "Stats"
                     </A>

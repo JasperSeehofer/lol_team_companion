@@ -7,3 +7,4 @@ pub mod profile;
 pub mod stats;
 pub mod team;
 pub mod team_builder;
+pub mod tree_drafter;
