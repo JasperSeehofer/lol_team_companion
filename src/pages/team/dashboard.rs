@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
+use crate::components::ui::{ErrorBanner, StatusMessage};
 
 /// Returns (team, members, current_user_id) so the client can check leadership.
 #[server]
@@ -277,13 +278,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                             <div class="mt-4 pt-4 border-t border-gray-700">
                                                 <h3 class="text-gray-300 text-sm font-medium mb-3">"Edit Team"</h3>
                                                 {move || edit_msg.get().map(|m| {
-                                                    let is_err = m.starts_with("Error");
-                                                    let cls = if is_err {
-                                                        "bg-red-900 border border-red-700 text-red-200 rounded px-3 py-2 text-sm mb-3"
-                                                    } else {
-                                                        "bg-green-900 border border-green-700 text-green-200 rounded px-3 py-2 text-sm mb-3"
-                                                    };
-                                                    view! { <div class=cls>{m}</div> }
+                                                    view! { <div class="mb-3"><StatusMessage message=m /></div> }
                                                 })}
                                                 <div class="flex gap-3 items-end">
                                                     <div class="flex-1">
@@ -599,7 +594,7 @@ pub fn TeamDashboard() -> impl IntoView {
                         </div>
                     }.into_any(),
                     Err(e) => view! {
-                        <div class="text-red-400">"Error: " {e.to_string()}</div>
+                        <ErrorBanner message=format!("Failed to load team data: {e}") />
                     }.into_any(),
                 })}
             </Suspense>

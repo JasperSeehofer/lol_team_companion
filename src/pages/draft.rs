@@ -5,6 +5,7 @@ use crate::models::draft::{Draft, DraftAction};
 use crate::models::team::Team;
 use crate::components::draft_board::{DraftBoard, slot_meta};
 use crate::components::champion_picker::ChampionPicker;
+use crate::components::ui::ErrorBanner;
 
 #[server]
 pub async fn get_champions() -> Result<Vec<Champion>, ServerFnError> {
@@ -440,7 +441,7 @@ pub fn DraftPage() -> impl IntoView {
                 <Suspense fallback=|| view! { <div class="text-gray-400">"Loading champions..."</div> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
-                            <div class="text-red-400">"Error: " {e.to_string()}</div>
+                            <ErrorBanner message=format!("Failed to load champions: {e}") />
                         }.into_any(),
                         Ok(champs) => view! {
                             <ChampionPicker
@@ -679,7 +680,7 @@ pub fn DraftPage() -> impl IntoView {
                                 </div>
                             }.into_any(),
                             Err(e) => view! {
-                                <div class="text-red-400">"Error: " {e.to_string()}</div>
+                                <ErrorBanner message=format!("Failed to load drafts: {e}") />
                             }.into_any(),
                         })
                     }}

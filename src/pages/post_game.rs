@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
 use crate::models::draft::Draft;
+use crate::components::ui::{ErrorBanner, StatusMessage};
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -308,8 +309,7 @@ pub fn PostGamePage() -> impl IntoView {
             </div>
 
             {move || status_msg.get().map(|msg| {
-                let cls = if msg.starts_with("Error") { "text-red-400" } else { "text-emerald-400" };
-                view! { <div class=format!("text-sm {cls}")>{msg}</div> }
+                view! { <StatusMessage message=msg /> }
             })}
 
             <div class="flex gap-6 min-h-[36rem]">
@@ -400,7 +400,7 @@ pub fn PostGamePage() -> impl IntoView {
                                 }.into_any()
                             },
                             Err(e) => view! {
-                                <p class="text-red-400 text-sm">{e.to_string()}</p>
+                                <ErrorBanner message=format!("Failed to load reviews: {e}") />
                             }.into_any(),
                         })}
                     </Suspense>

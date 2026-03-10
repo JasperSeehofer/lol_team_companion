@@ -49,15 +49,15 @@
 - [x] Link Riot account (name#tag → PUUID)
 - [x] Create/join team from roster page
 
----
-
-## Next Up
-
 ### Section 6 – Full Integration & UI Polish
-- [ ] Consistent header with notifications dropdown
-- [ ] Dashboard showing teams, recent drafts, alerts, stats summary
-- [ ] Dark mode toggle
-- [ ] Error handling and graceful API failures
+- [x] Dashboard: team summary, draft/plan/review counts, recent game stats, win rate
+- [x] Landing page for unauthenticated users with CTA
+- [x] Alert banners: pending join requests, no team, missing API key
+- [x] Consistent header: sticky nav, backdrop blur, notifications dropdown, user avatar menu
+- [x] Mobile-responsive nav with hamburger menu
+- [x] Reusable ErrorBanner and StatusMessage UI components
+- [x] Consistent error display across all pages (standardized to ErrorBanner)
+- [x] Dark theme by default (app-wide `bg-gray-950`)
 
 ---
 

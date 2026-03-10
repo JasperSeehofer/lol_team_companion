@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 use crate::components::stat_card::StatCard;
+use crate::components::ui::ErrorBanner;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TeamMatchRow {
@@ -255,7 +256,7 @@ pub fn StatsPage() -> impl IntoView {
             <Suspense fallback=|| view! { <div class="text-gray-500 text-center py-8">"Loading stats..."</div> }>
                 {move || stats.get().map(|result| match result {
                     Err(e) => view! {
-                        <div class="text-red-400">"Error: " {e.to_string()}</div>
+                        <ErrorBanner message=format!("Failed to load stats: {e}") />
                     }.into_any(),
                     Ok(rows) if rows.is_empty() => view! {
                         <div class="flex flex-col items-center justify-center py-16">

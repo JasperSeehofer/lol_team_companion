@@ -3,8 +3,14 @@ use leptos_router::components::A;
 
 use crate::pages::profile::{get_current_user, Logout};
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct Notifications {
+    pub pending_requests: usize,
+    pub is_leader: bool,
+}
+
 #[server]
-pub async fn get_pending_request_count() -> Result<usize, ServerFnError> {
+pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -13,7 +19,7 @@ pub async fn get_pending_request_count() -> Result<usize, ServerFnError> {
     let auth: AuthSession = leptos_axum::extract().await?;
     let user = match auth.user {
         Some(u) => u,
-        None => return Ok(0),
+        None => return Ok(Notifications::default()),
     };
     let db = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
@@ -24,132 +30,222 @@ pub async fn get_pending_request_count() -> Result<usize, ServerFnError> {
 
     let (team, _) = match result {
         Some(t) => t,
-        None => return Ok(0),
+        None => return Ok(Notifications::default()),
     };
 
-    if team.created_by != user.id {
-        return Ok(0); // only leaders see badge
+    let is_leader = team.created_by == user.id;
+    if !is_leader {
+        return Ok(Notifications { pending_requests: 0, is_leader: false });
     }
 
     let team_id = match team.id {
         Some(id) => id,
-        None => return Ok(0),
+        None => return Ok(Notifications { pending_requests: 0, is_leader: true }),
     };
 
-    db::count_pending_join_requests(&db, &team_id)
+    let pending = db::count_pending_join_requests(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .unwrap_or(0);
+
+    Ok(Notifications { pending_requests: pending, is_leader: true })
 }
 
 #[component]
 pub fn Nav() -> impl IntoView {
     let logout_action = ServerAction::<Logout>::new();
     let menu_open = RwSignal::new(false);
+    let notif_open = RwSignal::new(false);
+    let mobile_open = RwSignal::new(false);
 
-    // Refetch current user whenever logout action completes
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
+    let notifications = Resource::new(|| (), |_| get_notifications());
 
-    let request_count = Resource::new(|| (), |_| get_pending_request_count());
-
-    // Close menu when logout finishes
     Effect::new(move || {
         if logout_version.get() > 0 {
             menu_open.set(false);
+            notif_open.set(false);
+            mobile_open.set(false);
         }
     });
 
+    let nav_links = move |extra_class: &'static str| {
+        view! {
+            <A href="/" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Home"
+            </A>
+            <A href="/team/dashboard" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Team"
+            </A>
+            <A href="/draft" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Draft"
+            </A>
+            <A href="/tree-drafter" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Tree Drafter"
+            </A>
+            <A href="/stats" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Stats"
+            </A>
+            <A href="/game-plan" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Game Plan"
+            </A>
+            <A href="/post-game" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+                "Post Game"
+            </A>
+        }
+    };
+
     view! {
-        <nav class="bg-gray-900 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
-            <div class="flex items-center gap-6">
-                <span class="text-yellow-400 font-bold text-lg tracking-wide">
-                    "LoL Team Companion"
-                </span>
-                <div class="flex gap-4 text-sm">
-                    <A href="/" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Home"
+        <nav class="bg-gray-900/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6">
+                <div class="flex items-center justify-between h-14">
+                    // Logo
+                    <A href="/" attr:class="flex items-center gap-2 shrink-0">
+                        <span class="text-yellow-400 font-bold text-lg tracking-wide">"LoL Team Companion"</span>
                     </A>
-                    <span class="relative inline-flex items-center">
-                        <A href="/team/dashboard" attr:class="text-gray-300 hover:text-white transition-colors">
-                            "Team"
-                        </A>
-                        <Suspense fallback=|| view! { <span></span> }>
-                            {move || request_count.get().map(|res| {
-                                let n = res.unwrap_or(0);
-                                if n > 0 {
-                                    view! {
-                                        <span class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                                            {n}
-                                        </span>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
+
+                    // Desktop nav links
+                    <div class="hidden md:flex items-center gap-5 text-sm">
+                        {nav_links("")}
+                    </div>
+
+                    // Right side: notifications + user menu
+                    <div class="flex items-center gap-3">
+                        // Notifications bell
+                        <Suspense fallback=|| ()>
+                            {move || {
+                                let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
+                                let count = notifs.pending_requests;
+                                if count == 0 {
+                                    return view! { <span></span> }.into_any();
                                 }
-                            })}
+                                view! {
+                                    <div class="relative">
+                                        <button
+                                            on:click=move |_| notif_open.update(|v| *v = !*v)
+                                            class="relative text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-gray-800 cursor-pointer"
+                                            aria-label="Notifications"
+                                        >
+                                            // Bell SVG
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                            </svg>
+                                            <span class="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none">
+                                                {count}
+                                            </span>
+                                        </button>
+
+                                        // Notifications dropdown
+                                        <div
+                                            class="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden"
+                                            style:display=move || if notif_open.get() { "block" } else { "none" }
+                                        >
+                                            <div class="px-4 py-3 border-b border-gray-700">
+                                                <span class="text-white text-sm font-semibold">"Notifications"</span>
+                                            </div>
+                                            <A href="/team/dashboard" attr:class="block px-4 py-3 hover:bg-gray-750 transition-colors">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="bg-amber-500/20 text-amber-400 rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shrink-0">
+                                                        {count}
+                                                    </span>
+                                                    <div>
+                                                        <p class="text-white text-sm font-medium">
+                                                            {format!("Pending join request{}", if count == 1 { "" } else { "s" })}
+                                                        </p>
+                                                        <p class="text-gray-400 text-xs">"Review on Team Dashboard"</p>
+                                                    </div>
+                                                </div>
+                                            </A>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            }}
                         </Suspense>
-                    </span>
-                    <A href="/draft" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Draft"
-                    </A>
-                    <A href="/tree-drafter" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Tree Drafter"
-                    </A>
-                    <A href="/stats" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Stats"
-                    </A>
-                    <A href="/game-plan" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Game Plan"
-                    </A>
-                    <A href="/post-game" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Post Game"
-                    </A>
+
+                        // User menu
+                        <div class="relative text-sm">
+                            <Suspense fallback=move || view! {
+                                <span class="text-gray-500 text-sm">"..."</span>
+                            }>
+                                {move || Suspend::new(async move {
+                                    match user.await {
+                                        Ok(Some(u)) => view! {
+                                            <button
+                                                on:click=move |_| menu_open.update(|v| *v = !*v)
+                                                class="flex items-center gap-2 text-gray-300 hover:text-white transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-800"
+                                            >
+                                                <span class="bg-yellow-400/20 text-yellow-400 rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold uppercase">
+                                                    {u.username.chars().next().unwrap_or('?').to_string()}
+                                                </span>
+                                                <span class="hidden sm:inline text-sm font-medium">{u.username}</span>
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                            <div
+                                                class="absolute right-0 mt-2 w-44 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden"
+                                                style:display=move || if menu_open.get() { "block" } else { "none" }
+                                            >
+                                                <A
+                                                    href="/profile"
+                                                    attr:class="block px-4 py-2.5 text-gray-300 hover:bg-gray-750 hover:text-white transition-colors text-sm"
+                                                >
+                                                    "Profile"
+                                                </A>
+                                                <A
+                                                    href="/team/dashboard"
+                                                    attr:class="block px-4 py-2.5 text-gray-300 hover:bg-gray-750 hover:text-white transition-colors text-sm"
+                                                >
+                                                    "Team Settings"
+                                                </A>
+                                                <div class="border-t border-gray-700"></div>
+                                                <ActionForm action=logout_action>
+                                                    <button
+                                                        type="submit"
+                                                        class="block w-full text-left px-4 py-2.5 text-red-400 hover:bg-gray-750 hover:text-red-300 transition-colors cursor-pointer text-sm"
+                                                    >
+                                                        "Sign Out"
+                                                    </button>
+                                                </ActionForm>
+                                            </div>
+                                        }.into_any(),
+                                        _ => view! {
+                                            <div class="flex items-center gap-2 text-sm">
+                                                <A href="/auth/login" attr:class="text-gray-300 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-800">
+                                                    "Sign In"
+                                                </A>
+                                                <A href="/auth/register" attr:class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                                                    "Register"
+                                                </A>
+                                            </div>
+                                        }.into_any(),
+                                    }
+                                })}
+                            </Suspense>
+                        </div>
+
+                        // Mobile menu button
+                        <button
+                            on:click=move |_| mobile_open.update(|v| *v = !*v)
+                            class="md:hidden text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+                            aria-label="Menu"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="relative text-sm">
-                <Suspense fallback=move || view! {
-                    <span class="text-gray-500">"..."</span>
-                }>
-                    {move || Suspend::new(async move {
-                        match user.await {
-                            Ok(Some(u)) => view! {
-                                <button
-                                    on:click=move |_| menu_open.update(|v| *v = !*v)
-                                    class="text-yellow-400 hover:text-yellow-300 font-semibold transition-colors cursor-pointer"
-                                >
-                                    {u.username}
-                                </button>
-                                <div
-                                    class="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50"
-                                    style:display=move || if menu_open.get() { "block" } else { "none" }
-                                >
-                                    <A
-                                        href="/profile"
-                                        attr:class="block px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                                    >
-                                        "Profile Details"
-                                    </A>
-                                    <ActionForm action=logout_action>
-                                        <button
-                                            type="submit"
-                                            class="block w-full text-left px-4 py-2 text-red-400 hover:bg-gray-700 hover:text-red-300 transition-colors cursor-pointer"
-                                        >
-                                            "Logout"
-                                        </button>
-                                    </ActionForm>
-                                </div>
-                            }.into_any(),
-                            _ => view! {
-                                <A href="/auth/login" attr:class="text-gray-300 hover:text-white transition-colors">
-                                    "Login"
-                                </A>
-                                <span class="text-gray-600">"/"</span>
-                                <A href="/auth/register" attr:class="text-gray-300 hover:text-white transition-colors">
-                                    "Register"
-                                </A>
-                            }.into_any(),
-                        }
-                    })}
-                </Suspense>
+
+            // Mobile nav
+            <div
+                class="md:hidden border-t border-gray-800"
+                style:display=move || if mobile_open.get() { "block" } else { "none" }
+            >
+                <div class="px-4 py-3 flex flex-col gap-2 text-sm">
+                    {nav_links("block py-2 px-3 rounded-lg hover:bg-gray-800")}
+                </div>
             </div>
         </nav>
     }

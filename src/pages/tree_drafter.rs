@@ -4,6 +4,7 @@ use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
 use crate::components::draft_board::{DraftBoard, slot_meta};
 use crate::components::champion_picker::ChampionPicker;
+use crate::components::ui::{ErrorBanner, StatusMessage};
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -456,11 +457,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
             // Status message
             {move || status_msg.get().map(|msg| {
-                let is_error = msg.starts_with("Error");
-                let cls = if is_error { "text-red-400" } else { "text-emerald-400" };
-                view! {
-                    <div class=format!("text-sm {cls}")>{msg}</div>
-                }
+                view! { <StatusMessage message=msg /> }
             })}
 
             // Main layout: sidebar + content
@@ -934,7 +931,7 @@ fn NodeEditor(
                 <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
-                            <div class="text-red-400 text-sm">"Error: " {e.to_string()}</div>
+                            <ErrorBanner message=format!("Failed to load champions: {e}") />
                         }.into_any(),
                         Ok(champs) => view! {
                             <ChampionPicker
