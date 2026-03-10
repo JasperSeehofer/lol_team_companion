@@ -19,6 +19,12 @@
 - [x] Live game navigator: step-by-step branch selection
 - [x] Improvisation mode: create branch mid-game, tag as improvised
 
+### Section 3 – Stats & League API
+- [x] Pull match history from Riot API (manual refresh only)
+- [x] Filter for all-5-roster-player games
+- [x] Stats dashboard with date/opponent filters
+- [x] Flag clearly if RIOT_API_KEY is missing
+
 ### Earlier Work
 - [x] Saved drafts display bans left/right of picks, phase groups separated
 - [x] Draft rating (S+ to D tier picker)
@@ -32,12 +38,6 @@
 ---
 
 ## Next Up
-
-### Section 3 – Stats & League API
-- [ ] Pull match history from Riot API (manual refresh only)
-- [ ] Filter for all-5-roster-player games
-- [ ] Stats dashboard with date/opponent filters
-- [ ] Flag clearly if RIOT_API_KEY is missing
 
 ### Section 4 – Game Plan System
 - [ ] Create plans linked to a specific matchup (your 5 champs vs enemy 5)

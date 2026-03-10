@@ -12,6 +12,7 @@ pub struct MatchData {
     pub match_id: String,
     pub queue_id: i32,
     pub game_duration: i32,
+    pub game_end_epoch_ms: Option<i64>,
     pub champion: String,
     pub kills: i32,
     pub deaths: i32,
@@ -20,6 +21,11 @@ pub struct MatchData {
     pub vision_score: i32,
     pub damage: i32,
     pub win: bool,
+}
+
+pub fn has_api_key() -> bool {
+    let key = std::env::var("RIOT_API_KEY").unwrap_or_default();
+    !key.is_empty()
 }
 
 fn api() -> riven::RiotApi {
@@ -77,6 +83,7 @@ pub async fn fetch_match_history(puuid: &str, queue_id: i32) -> Result<Vec<Match
             match_id: mid,
             queue_id,
             game_duration: m.info.game_duration as i32,
+            game_end_epoch_ms: m.info.game_end_timestamp,
             champion: p.champion_name.clone(),
             kills: p.kills as i32,
             deaths: p.deaths as i32,

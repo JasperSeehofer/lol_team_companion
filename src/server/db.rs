@@ -1018,8 +1018,24 @@ pub async fn store_matches(
             let id_str = rec.id.to_sql();
             id_str.strip_prefix("match:").unwrap_or(&id_str).to_string()
         } else {
+            // Convert epoch ms to ISO datetime for SurrealDB
+            let game_end_str = m.game_end_epoch_ms.map(|ms| {
+                let secs = ms / 1000;
+                let nanos = ((ms % 1000) * 1_000_000) as u32;
+                chrono::DateTime::from_timestamp(secs, nanos)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default()
+            });
+
+            let query = match &game_end_str {
+                Some(ge) => format!(
+                    "CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration, game_end = <datetime>'{ge}'"
+                ),
+                None => "CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration".to_string(),
+            };
+
             let mut cr = db
-                .query("CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration")
+                .query(&query)
                 .bind(("match_id", m.match_id.clone()))
                 .bind(("queue_id", m.queue_id))
                 .bind(("game_duration", m.game_duration))
@@ -1033,6 +1049,17 @@ pub async fn store_matches(
                 None => continue,
             }
         };
+
+        // Check if player_match already exists for this user+match
+        let mut check = db
+            .query("SELECT id FROM player_match WHERE match = type::record('match', $match_key) AND user = type::record('user', $user_key) LIMIT 1")
+            .bind(("match_key", match_key.clone()))
+            .bind(("user_key", user_key.clone()))
+            .await?;
+        let existing_pm: Option<IdRecord> = check.take(0)?;
+        if existing_pm.is_some() {
+            continue; // Already stored
+        }
 
         db.query("CREATE player_match SET match = type::record('match', $match_key), user = type::record('user', $user_key), champion = $champion, kills = $kills, deaths = $deaths, assists = $assists, cs = $cs, vision_score = $vision_score, damage = $damage, win = $win")
             .bind(("match_key", match_key))
@@ -1049,6 +1076,122 @@ pub async fn store_matches(
             .ok();
     }
     Ok(())
+}
+
+/// Get team stats with player details, joining match + player_match.
+/// Returns all player_match entries for team members, enriched with match date.
+pub async fn get_team_match_stats(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<TeamMatchRow>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // Get all team member user IDs
+    let mut r = db
+        .query("SELECT user FROM team_member WHERE team = type::record('team', $team_key)")
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct UserRef { user: RecordId }
+    let user_refs: Vec<UserRef> = r.take(0).unwrap_or_default();
+    if user_refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Build a query that gets all player_match records for team members with match info
+    // Using a join via the match record
+    let user_ids: Vec<String> = user_refs.iter().map(|u| u.user.to_sql()).collect();
+    let user_id_list = user_ids.iter()
+        .map(|id| format!("{id}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let query = format!(
+        "SELECT *, match.match_id as riot_match_id, match.game_duration as game_duration, match.game_end as game_end, user.username as username FROM player_match WHERE user IN [{user_id_list}] ORDER BY match.game_end DESC LIMIT 200"
+    );
+
+    let mut result = db.query(&query).await?;
+    let rows: Vec<DbTeamMatchRow> = result.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(TeamMatchRow::from).collect())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbTeamMatchRow {
+    id: RecordId,
+    #[serde(rename = "match")]
+    match_ref: RecordId,
+    user: RecordId,
+    username: String,
+    riot_match_id: String,
+    game_duration: i32,
+    game_end: Option<String>,
+    champion: String,
+    kills: i32,
+    deaths: i32,
+    assists: i32,
+    cs: i32,
+    vision_score: i32,
+    damage: i32,
+    win: bool,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct TeamMatchRow {
+    pub match_db_id: String,
+    pub user_id: String,
+    pub username: String,
+    pub riot_match_id: String,
+    pub game_duration: i32,
+    pub game_end: Option<String>,
+    pub champion: String,
+    pub kills: i32,
+    pub deaths: i32,
+    pub assists: i32,
+    pub cs: i32,
+    pub vision_score: i32,
+    pub damage: i32,
+    pub win: bool,
+}
+
+impl From<DbTeamMatchRow> for TeamMatchRow {
+    fn from(r: DbTeamMatchRow) -> Self {
+        TeamMatchRow {
+            match_db_id: r.match_ref.to_sql(),
+            user_id: r.user.to_sql(),
+            username: r.username,
+            riot_match_id: r.riot_match_id,
+            game_duration: r.game_duration,
+            game_end: r.game_end,
+            champion: r.champion,
+            kills: r.kills,
+            deaths: r.deaths,
+            assists: r.assists,
+            cs: r.cs,
+            vision_score: r.vision_score,
+            damage: r.damage,
+            win: r.win,
+        }
+    }
+}
+
+/// Get roster member puuids for syncing
+pub async fn get_roster_puuids(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<(String, String, Option<String>)>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT user.id as user_id, user.username as username, user.riot_puuid as riot_puuid FROM team_member WHERE team = type::record('team', $team_key)")
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MemberPuuid {
+        user_id: RecordId,
+        username: String,
+        riot_puuid: Option<String>,
+    }
+
+    let members: Vec<MemberPuuid> = r.take(0).unwrap_or_default();
+    Ok(members.into_iter().map(|m| (m.user_id.to_sql(), m.username, m.riot_puuid)).collect())
 }
 
 // ---------------------------------------------------------------------------
