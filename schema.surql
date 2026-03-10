@@ -50,6 +50,8 @@ DEFINE FIELD IF NOT EXISTS team ON draft TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS created_by ON draft TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS opponent ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS notes ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS comments ON draft TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS rating ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
 -- Picks/bans in a draft
@@ -80,6 +82,13 @@ DEFINE FIELD IF NOT EXISTS improvements ON post_game_learning TYPE array<string>
 DEFINE FIELD IF NOT EXISTS action_items ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS created_by ON post_game_learning TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS created_at ON post_game_learning TYPE datetime DEFAULT time::now();
+
+-- Champion pool (personal champion pool per role)
+DEFINE TABLE IF NOT EXISTS champion_pool SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON champion_pool TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS champion ON champion_pool TYPE string;
+DEFINE FIELD IF NOT EXISTS role ON champion_pool TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON champion_pool TYPE datetime DEFAULT time::now();
 
 -- Sessions (for tower-sessions-surrealdb-store)
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;
