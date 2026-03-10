@@ -235,6 +235,40 @@ pub async fn get_user_team_id(db: &Surreal<Db>, user_id: &str) -> DbResult<Optio
     Ok(row.map(|r| r.team.to_sql()))
 }
 
+pub async fn update_team(db: &Surreal<Db>, team_id: &str, name: String, region: String) -> DbResult<()> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    db.query("UPDATE type::record('team', $team_key) SET name=$name, region=$region")
+        .bind(("team_key", team_key))
+        .bind(("name", name))
+        .bind(("region", region))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_member_role(db: &Surreal<Db>, team_id: &str, user_id: &str, role: String) -> DbResult<()> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE team_member SET role=$role WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .bind(("role", role))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn remove_team_member(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<()> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("DELETE team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
 pub async fn list_all_teams(db: &Surreal<Db>) -> DbResult<Vec<Team>> {
     let mut r = db.query("SELECT * FROM team ORDER BY name ASC").await?;
     let teams: Vec<DbTeam> = r.take(0).unwrap_or_default();
