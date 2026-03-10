@@ -66,10 +66,9 @@ pub async fn list_teams() -> Result<Vec<Team>, ServerFnError> {
 }
 
 #[server]
-pub async fn join_team(team_id: String) -> Result<(), ServerFnError> {
+pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
-    use leptos_axum::redirect;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
@@ -78,11 +77,9 @@ pub async fn join_team(team_id: String) -> Result<(), ServerFnError> {
     let db = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    db::join_team(&db, &user.id, &team_id)
+    db::create_join_request(&db, &user.id, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    redirect("/team/dashboard");
-    Ok(())
+        .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 #[component]
@@ -91,6 +88,7 @@ pub fn RosterPage() -> impl IntoView {
     let link_riot = ServerAction::<LinkRiotAccount>::new();
     let teams_resource = Resource::new(|| (), |_| list_teams());
     let (join_error, set_join_error) = signal(Option::<String>::None);
+    let (join_success, set_join_success) = signal(Option::<String>::None);
 
     view! {
         <div class="max-w-2xl mx-auto py-8 px-6 flex flex-col gap-8">
@@ -146,6 +144,11 @@ pub fn RosterPage() -> impl IntoView {
                         {e}
                     </div>
                 })}
+                {move || join_success.get().map(|m| view! {
+                    <div class="bg-green-900 border border-green-700 text-green-200 rounded px-4 py-3 text-sm mb-4">
+                        {m}
+                    </div>
+                })}
 
                 <Suspense fallback=|| view! { <div class="text-gray-400 text-sm">"Loading teams..."</div> }>
                     {move || teams_resource.get().map(|result| match result {
@@ -161,24 +164,25 @@ pub fn RosterPage() -> impl IntoView {
                                     view! {
                                         <div class="bg-gray-800 border border-gray-700 rounded px-4 py-3 flex items-center justify-between">
                                             <div>
-                                                <span class="text-white font-medium">{team_name}</span>
+                                                <span class="text-white font-medium">{team_name.clone()}</span>
                                                 <span class="text-gray-400 text-sm ml-2">{region}</span>
                                             </div>
                                             <button
                                                 class="bg-gray-700 hover:bg-yellow-400 hover:text-gray-900 text-gray-300 text-sm font-medium rounded px-3 py-1.5 transition-colors"
                                                 on:click=move |_| {
                                                     let id = team_id.clone();
+                                                    let tname = team_name.clone();
                                                     leptos::task::spawn_local(async move {
-                                                        match join_team(id).await {
-                                                            Ok(_) => {
-                                                                // redirect handled server-side
-                                                            }
+                                                        set_join_error.set(None);
+                                                        set_join_success.set(None);
+                                                        match request_to_join(id).await {
+                                                            Ok(_) => set_join_success.set(Some(format!("Join request sent to {}!", tname))),
                                                             Err(e) => set_join_error.set(Some(e.to_string())),
                                                         }
                                                     });
                                                 }
                                             >
-                                                "Join"
+                                                "Request to Join"
                                             </button>
                                         </div>
                                     }

@@ -20,6 +20,14 @@ DEFINE TABLE IF NOT EXISTS team_member SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON team_member TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS user ON team_member TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS role ON team_member TYPE string;
+DEFINE FIELD IF NOT EXISTS roster_type ON team_member TYPE string DEFAULT 'sub';
+
+-- Join requests
+DEFINE TABLE IF NOT EXISTS join_request SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON join_request TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS user ON join_request TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS status ON join_request TYPE string DEFAULT 'pending';
+DEFINE FIELD IF NOT EXISTS created_at ON join_request TYPE datetime DEFAULT time::now();
 
 -- Cached match data
 DEFINE TABLE IF NOT EXISTS match SCHEMAFULL;

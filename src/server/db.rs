@@ -10,7 +10,7 @@ use crate::models::{
     game_plan::{GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
     team::Team,
-    user::TeamMember,
+    user::{JoinRequest, TeamMember},
 };
 
 #[derive(Debug, Error)]
@@ -59,6 +59,7 @@ struct DbTeamMember {
     user_id: RecordId,
     username: String,
     role: String,
+    roster_type: String,
     riot_summoner_name: Option<String>,
 }
 
@@ -68,7 +69,29 @@ impl From<DbTeamMember> for TeamMember {
             user_id: m.user_id.to_sql(),
             username: m.username,
             role: m.role,
+            roster_type: m.roster_type,
             riot_summoner_name: m.riot_summoner_name,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbJoinRequest {
+    id: RecordId,
+    team: RecordId,
+    user_id: RecordId,
+    username: String,
+    riot_summoner_name: Option<String>,
+}
+
+impl From<DbJoinRequest> for JoinRequest {
+    fn from(r: DbJoinRequest) -> Self {
+        JoinRequest {
+            id: r.id.to_sql(),
+            team_id: r.team.to_sql(),
+            user_id: r.user_id.to_sql(),
+            username: r.username,
+            riot_summoner_name: r.riot_summoner_name,
         }
     }
 }
@@ -343,13 +366,127 @@ pub async fn get_user_team_with_members(
     };
 
     let mut members_result = db
-        .query("SELECT user.username as username, user.id as user_id, role, user.riot_summoner_name as riot_summoner_name FROM team_member WHERE team = type::record('team', $team_key)")
+        .query("SELECT user.username as username, user.id as user_id, role, roster_type, user.riot_summoner_name as riot_summoner_name FROM team_member WHERE team = type::record('team', $team_key)")
         .bind(("team_key", team_key))
         .await?;
     let db_members: Vec<DbTeamMember> = members_result.take(0).unwrap_or_default();
     let members: Vec<TeamMember> = db_members.into_iter().map(TeamMember::from).collect();
 
     Ok(Some((team, members)))
+}
+
+pub async fn create_join_request(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    // Prevent duplicate pending requests
+    let mut check = db
+        .query("SELECT id FROM join_request WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) AND status = 'pending' LIMIT 1")
+        .bind(("team_key", team_key.clone()))
+        .bind(("user_key", user_key.clone()))
+        .await?;
+    let existing: Option<IdRecord> = check.take(0)?;
+    if existing.is_some() {
+        return Err(DbError::Other("You already have a pending request for this team".into()));
+    }
+    // Also prevent joining a team you're already in
+    let mut member_check = db
+        .query("SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) LIMIT 1")
+        .bind(("team_key", team_key.clone()))
+        .bind(("user_key", user_key.clone()))
+        .await?;
+    let already_member: Option<IdRecord> = member_check.take(0)?;
+    if already_member.is_some() {
+        return Err(DbError::Other("You are already a member of this team".into()));
+    }
+    db.query("CREATE join_request SET team = type::record('team', $team_key), user = type::record('user', $user_key), status = 'pending'")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn list_pending_join_requests(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<JoinRequest>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT id, team, user.id as user_id, user.username as username, user.riot_summoner_name as riot_summoner_name FROM join_request WHERE team = type::record('team', $team_key) AND status = 'pending' ORDER BY created_at ASC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbJoinRequest> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(JoinRequest::from).collect())
+}
+
+pub async fn respond_to_join_request(db: &Surreal<Db>, request_id: &str, accept: bool, team_id: &str) -> DbResult<()> {
+    let req_key = request_id.strip_prefix("join_request:").unwrap_or(request_id).to_string();
+    let status = if accept { "accepted" } else { "declined" };
+    db.query("UPDATE type::record('join_request', $req_key) SET status = $status")
+        .bind(("req_key", req_key.clone()))
+        .bind(("status", status.to_string()))
+        .await?
+        .check()?;
+    if accept {
+        // Get the user from the request and add them to the team
+        let mut r = db
+            .query("SELECT user FROM type::record('join_request', $req_key)")
+            .bind(("req_key", req_key))
+            .await?;
+        #[derive(Debug, serde::Deserialize, SurrealValue)]
+        struct UserRef { user: RecordId }
+        let row: Option<UserRef> = r.take(0)?;
+        if let Some(ur) = row {
+            let user_sql = ur.user.to_sql();
+            let user_key = user_sql.strip_prefix("user:").unwrap_or(&user_sql).to_string();
+            let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+            db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'")
+                .bind(("team_key", team_key))
+                .bind(("user_key", user_key))
+                .await?
+                .check()?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn count_pending_join_requests(db: &Surreal<Db>, team_id: &str) -> DbResult<usize> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT count() as n FROM join_request WHERE team = type::record('team', $team_key) AND status = 'pending' GROUP ALL")
+        .bind(("team_key", team_key))
+        .await?;
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Count { n: i64 }
+    let row: Option<Count> = r.take(0)?;
+    Ok(row.map(|c| c.n as usize).unwrap_or(0))
+}
+
+pub async fn assign_to_slot(db: &Surreal<Db>, team_id: &str, user_id: &str, role: &str) -> DbResult<()> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    // Move existing starter for that role to sub
+    db.query("UPDATE team_member SET roster_type = 'sub' WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter'")
+        .bind(("team_key", team_key.clone()))
+        .bind(("role", role.to_string()))
+        .await?
+        .check()?;
+    // Assign this user as starter
+    db.query("UPDATE team_member SET role = $role, roster_type = 'starter' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .bind(("role", role.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn remove_from_slot(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<()> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE team_member SET roster_type = 'sub' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .await?
+        .check()?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

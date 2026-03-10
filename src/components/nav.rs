@@ -3,6 +3,44 @@ use leptos_router::components::A;
 
 use crate::pages::profile::{get_current_user, Logout};
 
+#[server]
+pub async fn get_pending_request_count() -> Result<usize, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = match auth.user {
+        Some(u) => u,
+        None => return Ok(0),
+    };
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let result = db::get_user_team_with_members(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let (team, _) = match result {
+        Some(t) => t,
+        None => return Ok(0),
+    };
+
+    if team.created_by != user.id {
+        return Ok(0); // only leaders see badge
+    }
+
+    let team_id = match team.id {
+        Some(id) => id,
+        None => return Ok(0),
+    };
+
+    db::count_pending_join_requests(&db, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 #[component]
 pub fn Nav() -> impl IntoView {
     let logout_action = ServerAction::<Logout>::new();
@@ -11,6 +49,8 @@ pub fn Nav() -> impl IntoView {
     // Refetch current user whenever logout action completes
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
+
+    let request_count = Resource::new(|| (), |_| get_pending_request_count());
 
     // Close menu when logout finishes
     Effect::new(move || {
@@ -29,9 +69,25 @@ pub fn Nav() -> impl IntoView {
                     <A href="/" attr:class="text-gray-300 hover:text-white transition-colors">
                         "Home"
                     </A>
-                    <A href="/team/dashboard" attr:class="text-gray-300 hover:text-white transition-colors">
-                        "Team"
-                    </A>
+                    <span class="relative inline-flex items-center">
+                        <A href="/team/dashboard" attr:class="text-gray-300 hover:text-white transition-colors">
+                            "Team"
+                        </A>
+                        <Suspense fallback=|| view! { <span></span> }>
+                            {move || request_count.get().map(|res| {
+                                let n = res.unwrap_or(0);
+                                if n > 0 {
+                                    view! {
+                                        <span class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                                            {n}
+                                        </span>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }
+                            })}
+                        </Suspense>
+                    </span>
                     <A href="/draft" attr:class="text-gray-300 hover:text-white transition-colors">
                         "Draft"
                     </A>

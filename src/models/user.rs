@@ -27,5 +27,15 @@ pub struct TeamMember {
     pub user_id: String,
     pub username: String,
     pub role: String,
+    pub roster_type: String,
+    pub riot_summoner_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct JoinRequest {
+    pub id: String,
+    pub team_id: String,
+    pub user_id: String,
+    pub username: String,
     pub riot_summoner_name: Option<String>,
 }
