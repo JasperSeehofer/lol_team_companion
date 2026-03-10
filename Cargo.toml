@@ -39,6 +39,7 @@ wasm-bindgen = { version = "0.2", optional = true }
 # Shared
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "Element", "HtmlElement", "Node"] }
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
@@ -82,8 +83,8 @@ site-pkg-dir = "pkg"
 style-file = "input.css"
 tailwind-input-file = "input.css"
 assets-dir = "public"
-site-addr = "127.0.0.1:3000"
-reload-port = 3001
+site-addr = "127.0.0.1:3002"
+reload-port = 3003
 end2end-cmd = "npx playwright test"
 end2end-dir = "end2end"
 browserquery = "defaults"

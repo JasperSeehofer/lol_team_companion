@@ -1,10 +1,36 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # LoL Team Companion
 
 A League of Legends team management app for coordinating drafts, tracking stats, and planning games.
 
-**Stack:** Rust nightly · Leptos 0.8 · Axum 0.8 · SurrealDB 2.x (SurrealKV) · Tailwind CSS v4
+**Stack:** Rust nightly · Leptos 0.8 · Axum 0.8 · SurrealDB 3.x (SurrealKV) · Tailwind CSS v4
 
-## Quick Start
+## Commands
+
+```bash
+# Dev server with live-reload (runs on :3000, reload on :3001)
+cargo leptos watch
+
+# Production build
+cargo leptos build --release
+
+# Fast type-check (SSR target, no WASM compile)
+cargo check --features ssr
+
+# Fast type-check (WASM/hydrate target)
+cargo check --features hydrate --target wasm32-unknown-unknown
+
+# Run server tests
+cargo test --features ssr
+
+# Adjust log level (default: info, app crate: debug)
+RUST_LOG=debug cargo leptos watch
+```
+
+## Setup
 
 ```bash
 # Prerequisites: rust nightly, cargo-leptos, tailwindcss standalone binary (no npm)
@@ -85,7 +111,7 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 
 ## Critical Patterns and Gotchas
 
-### SurrealDB 2.x
+### SurrealDB 3.x
 
 1. **`type::record()` not `type::thing()`** — `type::thing()` was removed in SurrealDB 2.x. Always use `type::record('table', $key)`.
 
@@ -149,6 +175,103 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 - Shared structs go in `src/models/` — must compile for both SSR and WASM
 - DB-facing structs with `RecordId` go in `src/server/db.rs` (SSR only)
 - Derive `Serialize, Deserialize, Clone` on shared structs
+
+### Leptos Reactivity
+
+18. **Clone before multiple closures** — `Vec<T>` and `HashMap<K,V>` don't implement `Copy`. When the same value must be captured by two or more `move` closures (e.g. `class=move ||` and `on:click=move |_|`), clone before each:
+    ```rust
+    let role_val_for_class = role_val.clone();
+    view! {
+        <button class=move || { ... role_val_for_class.clone() ... }
+                on:click=move |_| set_x.set(role_val.clone())>
+    ```
+
+19. **`into_any()` for divergent view branches** — When `if/else` or `match` arms inside `{move || ...}` return structurally different view types, each arm must call `.into_any()`:
+    ```rust
+    {move || if filled {
+        view! { <img ... /> }.into_any()
+    } else {
+        view! { <span>...</span> }.into_any()
+    }}
+    ```
+
+20. **`get_untracked()` in event handlers** — Inside `on:click`, `on:input`, etc., read signals with `get_untracked()` to avoid accidentally registering reactive dependencies in a non-tracking context:
+    ```rust
+    on:click=move |_| {
+        let val = my_signal.get_untracked(); // not .get()
+    }
+    ```
+
+21. **`prop:value` for controlled inputs** — `attr:value` only sets the initial DOM attribute. For a controlled input that reflects signal changes after render, use `prop:value`:
+    ```rust
+    <input prop:value=move || signal.get()
+           on:input=move |ev| set_signal.set(event_target_value(&ev)) />
+    ```
+
+22. **`StoredValue` for non-reactive data shared across closures** — When you need to share a large non-`Copy` value (like a `HashMap`) across multiple closures without reactive tracking overhead, use `store_value()`:
+    ```rust
+    let map = store_value(champion_map); // StoredValue<HashMap<...>>
+    // later in closures:
+    map.with_value(|m| m.get(&name).cloned())
+    ```
+
+23. **`resource.refetch()` after mutations** — `Resource::new` does not auto-refetch after a server fn mutates data. Call `resource.refetch()` inside the `spawn_local` success branch to refresh lists:
+    ```rust
+    Ok(_) => { drafts.refetch(); set_save_result.set(Some("Saved!".into())); }
+    ```
+
+24. **`spawn_local` for async event handlers** — The only way to call an async server function from a sync `on:click` handler. Errors must be handled inside:
+    ```rust
+    on:click=move |_| {
+        leptos::task::spawn_local(async move {
+            match my_server_fn(args).await {
+                Ok(v) => ...,
+                Err(e) => ...,
+            }
+        });
+    }
+    ```
+
+25. **`collect_view()` for iterators** — Use `.collect_view()` instead of `.collect::<Vec<_>>()` when building fragments from iterators inside `view!`. It handles the view trait conversion correctly.
+
+26. **`<For>` key must be stable** — The `key` prop on `<For>` drives DOM diffing. Always use a stable entity ID (e.g. `c.id`), never the array index. Unstable keys cause unnecessary re-renders or DOM thrash.
+
+### SurrealDB
+
+27. **`.check()` on write queries** — After `CREATE`/`UPDATE`/`DELETE`, call `.check()` to surface constraint violations and query errors. Without it, a failed write silently returns `Ok`:
+    ```rust
+    db.query("CREATE ...").bind(...).await?.check()?;
+    ```
+    Read queries (`SELECT`) surface errors via `response.take()` instead.
+
+28. **`take(0).unwrap_or_default()` for list queries** — For queries that return `Vec<T>`, use `unwrap_or_default()` rather than `?` so an empty result doesn't error:
+    ```rust
+    let rows: Vec<MyStruct> = result.take(0).unwrap_or_default();
+    ```
+    For single-record lookups returning `Option<T>`, use `result.take(0)?` instead.
+
+29. **Batch multiple queries in one call** — Chain statements in a single `.query()` to avoid round-trips. Index results by statement order:
+    ```rust
+    let mut r = db.query("SELECT ...; SELECT ...;").await?;
+    let teams: Vec<DbTeam> = r.take(0).unwrap_or_default();
+    let members: Vec<DbTeamMember> = r.take(1).unwrap_or_default();
+    ```
+
+30. **`DEFINE FIELD IF NOT EXISTS` for all schema fields** — Schema is re-applied on every startup. `IF NOT EXISTS` makes it idempotent so existing records are never affected by schema re-runs. Never omit it.
+
+31. **Use `BEGIN`/`COMMIT` for multi-step writes** — When multiple `CREATE`/`UPDATE` statements must succeed or fail together, wrap in a transaction:
+    ```rust
+    db.query("BEGIN TRANSACTION; CREATE ...; CREATE ...; COMMIT TRANSACTION;")
+        .bind(...).await?.check()?;
+    ```
+
+### Server Functions
+
+32. **Server fn args and return types must be `Serialize + Deserialize`** — All parameters and the `Ok` type cross the wire as JSON (or msgpack). Avoid types like `HashMap` with non-string keys; flatten to `Vec<(K,V)>` or a newtype if needed.
+
+33. **Pass complex data as JSON strings** — When a server fn needs a `Vec<T>` or nested struct that may be hard to encode as a top-level query param, serialize to `String` on the client and deserialize in the fn body (see `actions_json`/`comments_json` pattern in `draft.rs`).
+
+34. **`#[server]` ordering** — Server functions must be defined (or `use`d) before the `#[component]` that calls them in the same file, because the macro generates a client-side stub that must be in scope.
 
 ## Code Style
 

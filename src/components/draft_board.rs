@@ -1,73 +1,247 @@
 use leptos::prelude::*;
-use crate::models::draft::DraftAction;
+use std::collections::HashMap;
+use crate::models::champion::Champion;
+
+/// Returns (side, kind, label) for each of the 20 draft slots in official LoL order.
+pub fn slot_meta(idx: usize) -> (&'static str, &'static str, &'static str) {
+    match idx {
+        0  => ("blue", "ban",  "Ban 1"),
+        1  => ("red",  "ban",  "Ban 1"),
+        2  => ("blue", "ban",  "Ban 2"),
+        3  => ("red",  "ban",  "Ban 2"),
+        4  => ("blue", "ban",  "Ban 3"),
+        5  => ("red",  "ban",  "Ban 3"),
+        6  => ("blue", "pick", "Pick 1"),
+        7  => ("red",  "pick", "Pick 1"),
+        8  => ("red",  "pick", "Pick 2"),
+        9  => ("blue", "pick", "Pick 2"),
+        10 => ("blue", "pick", "Pick 3"),
+        11 => ("red",  "pick", "Pick 3"),
+        12 => ("red",  "ban",  "Ban 4"),
+        13 => ("blue", "ban",  "Ban 4"),
+        14 => ("red",  "ban",  "Ban 5"),
+        15 => ("blue", "ban",  "Ban 5"),
+        16 => ("red",  "pick", "Pick 4"),
+        17 => ("blue", "pick", "Pick 4"),
+        18 => ("blue", "pick", "Pick 5"),
+        19 => ("red",  "pick", "Pick 5"),
+        _  => ("blue", "ban",  "?"),
+    }
+}
 
 #[component]
-pub fn DraftBoard(actions: Vec<DraftAction>) -> impl IntoView {
-    let blue_bans: Vec<_> = actions
-        .iter()
-        .filter(|a| a.side == "blue" && a.phase.starts_with("ban"))
-        .cloned()
-        .collect();
-    let red_bans: Vec<_> = actions
-        .iter()
-        .filter(|a| a.side == "red" && a.phase.starts_with("ban"))
-        .cloned()
-        .collect();
-    let blue_picks: Vec<_> = actions
-        .iter()
-        .filter(|a| a.side == "blue" && a.phase.starts_with("pick"))
-        .cloned()
-        .collect();
-    let red_picks: Vec<_> = actions
-        .iter()
-        .filter(|a| a.side == "red" && a.phase.starts_with("pick"))
-        .cloned()
-        .collect();
+pub fn DraftBoard(
+    draft_slots: ReadSignal<Vec<Option<String>>>,
+    champion_map: HashMap<String, Champion>,
+    active_slot: ReadSignal<Option<usize>>,
+    on_slot_click: Callback<usize>,
+    on_slot_drop: Callback<(usize, String)>,
+) -> impl IntoView {
+    let (first_pick_blue, set_first_pick_blue) = signal(true);
+    let champion_map = StoredValue::new(champion_map);
+
+    let render_ban_slot = move |slot_idx: usize| {
+        let on_slot_drop = on_slot_drop.clone();
+        let (_, _, label) = slot_meta(slot_idx);
+        view! {
+            <div
+                class=move || {
+                    let slots = draft_slots.get();
+                    let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
+                    let is_active = active_slot.get() == Some(slot_idx);
+                    if is_active && !filled {
+                        "w-10 h-10 rounded border-2 border-yellow-400 animate-pulse bg-gray-900 flex items-center justify-center cursor-pointer"
+                    } else if filled {
+                        "w-10 h-10 rounded border border-gray-600 bg-gray-900 flex items-center justify-center relative overflow-hidden cursor-pointer hover:opacity-75"
+                    } else {
+                        "w-10 h-10 rounded border border-dashed border-gray-600 bg-gray-900 flex items-center justify-center cursor-pointer hover:border-gray-400"
+                    }
+                }
+                on:click=move |_| on_slot_click.run(slot_idx)
+                on:dragover=move |ev: web_sys::DragEvent| ev.prevent_default()
+                on:drop={
+                    let on_slot_drop = on_slot_drop.clone();
+                    move |ev: web_sys::DragEvent| {
+                        ev.prevent_default();
+                        if let Some(dt) = ev.data_transfer() {
+                            if let Ok(name) = dt.get_data("text/plain") {
+                                if !name.is_empty() {
+                                    on_slot_drop.run((slot_idx, name));
+                                }
+                            }
+                        }
+                    }
+                }
+            >
+                {move || {
+                    let slots = draft_slots.get();
+                    if let Some(Some(champ_name)) = slots.get(slot_idx) {
+                        let champ_name = champ_name.clone();
+                        let icon_url = champion_map.with_value(|m| {
+                            m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
+                        });
+                        view! {
+                            <div class="relative w-full h-full">
+                                <img src=icon_url alt=champ_name class="w-full h-full object-cover opacity-50 grayscale" />
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <div class="w-full h-0.5 bg-red-500 rotate-12"></div>
+                                </div>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! { <span class="text-gray-600 text-xs leading-none text-center">{label}</span> }.into_any()
+                    }
+                }}
+            </div>
+        }
+    };
+
+    // is_pick1_slot: slot 6 or 7 (first pick of each side)
+    let render_pick_slot = move |slot_idx: usize, is_blue: bool| {
+        let on_slot_drop = on_slot_drop.clone();
+        let (_, _, label) = slot_meta(slot_idx);
+        let is_pick1_slot = slot_idx == 6 || slot_idx == 7;
+        view! {
+            <div
+                class=move || {
+                    let slots = draft_slots.get();
+                    let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
+                    let is_active = active_slot.get() == Some(slot_idx);
+                    if is_active && !filled {
+                        "h-16 rounded border-2 border-yellow-400 animate-pulse bg-gray-900 overflow-hidden cursor-pointer"
+                    } else if filled && is_blue {
+                        "h-16 rounded border border-blue-600 bg-blue-950 overflow-hidden cursor-pointer hover:opacity-75"
+                    } else if filled {
+                        "h-16 rounded border border-red-600 bg-red-950 overflow-hidden cursor-pointer hover:opacity-75"
+                    } else {
+                        "h-16 rounded border border-dashed border-gray-600 bg-gray-900 overflow-hidden cursor-pointer hover:border-gray-400"
+                    }
+                }
+                on:click=move |_| on_slot_click.run(slot_idx)
+                on:dragover=move |ev: web_sys::DragEvent| ev.prevent_default()
+                on:drop={
+                    let on_slot_drop = on_slot_drop.clone();
+                    move |ev: web_sys::DragEvent| {
+                        ev.prevent_default();
+                        if let Some(dt) = ev.data_transfer() {
+                            if let Ok(name) = dt.get_data("text/plain") {
+                                if !name.is_empty() {
+                                    on_slot_drop.run((slot_idx, name));
+                                }
+                            }
+                        }
+                    }
+                }
+            >
+                {move || {
+                    let slots = draft_slots.get();
+                    let is_first_pick = is_pick1_slot && (
+                        (slot_idx == 6 && first_pick_blue.get()) ||
+                        (slot_idx == 7 && !first_pick_blue.get())
+                    );
+                    if let Some(Some(champ_name)) = slots.get(slot_idx) {
+                        let champ_name = champ_name.clone();
+                        let icon_url = champion_map.with_value(|m| {
+                            m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
+                        });
+                        view! {
+                            <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>
+                                <div class="relative flex-shrink-0 h-full">
+                                    <img src=icon_url alt=champ_name.clone() class="h-full aspect-square object-cover" />
+                                    {is_first_pick.then(|| view! {
+                                        <div class="absolute top-0 left-0 bg-yellow-400 text-gray-900 text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
+                                    })}
+                                </div>
+                                <span class={if is_blue { "flex-1 flex items-center px-2 text-white text-sm font-medium truncate" } else { "flex-1 flex items-center justify-end px-2 text-white text-sm font-medium truncate" }}>{champ_name}</span>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <div class="flex items-center justify-between px-2 h-full w-full">
+                                <span class="text-gray-500 text-sm">{label}</span>
+                                {is_first_pick.then(|| view! {
+                                    <span class="text-yellow-400 text-xs font-bold">"1st"</span>
+                                })}
+                            </div>
+                        }.into_any()
+                    }
+                }}
+            </div>
+        }
+    };
 
     view! {
-        <div class="grid grid-cols-3 gap-4">
-            // Blue side
-            <div class="flex flex-col gap-2">
-                <h3 class="text-blue-400 font-bold text-center">"Blue Side"</h3>
-                <div class="flex gap-1 flex-wrap justify-center">
-                    {blue_bans.into_iter().map(|a| view! {
-                        <span class="bg-red-900 border border-red-700 rounded px-2 py-1 text-xs text-red-300 line-through">
-                            {a.champion}
-                        </span>
-                    }).collect_view()}
+        <div class="grid grid-cols-[13rem_8rem_13rem] gap-x-4 gap-y-2">
+
+            // Row: Headers
+            <h3 class="text-blue-400 font-bold text-center text-sm">"Blue Side"</h3>
+            <div></div>
+            <h3 class="text-red-400 font-bold text-center text-sm">"Red Side"</h3>
+
+            // Row: Phase 1 bans + first-pick toggle
+            <div class="flex gap-1">
+                {render_ban_slot(0)}
+                {render_ban_slot(2)}
+                {render_ban_slot(4)}
+            </div>
+            <div class="flex items-center justify-center">
+                <div class="flex flex-col items-center gap-1">
+                    <span class="text-gray-400 text-xs font-medium">"First pick"</span>
+                    <button
+                        class="relative w-11 h-6 rounded-full bg-gray-800 border border-gray-600 hover:border-gray-500 cursor-pointer transition-colors"
+                        title="Toggle first pick side"
+                        on:click=move |_| set_first_pick_blue.update(|v| *v = !*v)
+                    >
+                        <span class=move || if first_pick_blue.get() {
+                            "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-blue-400 transition-all duration-300"
+                        } else {
+                            "absolute top-0.5 left-[1.375rem] w-5 h-5 rounded-full bg-red-400 transition-all duration-300"
+                        }></span>
+                    </button>
                 </div>
-                <div class="flex flex-col gap-1">
-                    {blue_picks.into_iter().map(|a| view! {
-                        <div class="bg-blue-900 border border-blue-700 rounded px-3 py-2 text-sm text-white">
-                            {a.champion}
-                        </div>
-                    }).collect_view()}
-                </div>
+            </div>
+            <div class="flex gap-1 justify-end">
+                {render_ban_slot(1)}
+                {render_ban_slot(3)}
+                {render_ban_slot(5)}
             </div>
 
-            // Center divider
-            <div class="flex items-center justify-center text-gray-500 text-sm font-bold">
-                "VS"
+            // Row: Pick 1
+            {render_pick_slot(6, true)}
+            <div class="flex items-center justify-center text-gray-500 font-bold text-sm">"VS"</div>
+            {render_pick_slot(7, false)}
+
+            // Row: Pick 2
+            {render_pick_slot(9, true)}
+            <div></div>
+            {render_pick_slot(8, false)}
+
+            // Row: Pick 3
+            {render_pick_slot(10, true)}
+            <div></div>
+            {render_pick_slot(11, false)}
+
+            // Row: Phase 2 bans
+            <div class="flex gap-1">
+                {render_ban_slot(13)}
+                {render_ban_slot(15)}
+            </div>
+            <div></div>
+            <div class="flex gap-1 justify-end">
+                {render_ban_slot(12)}
+                {render_ban_slot(14)}
             </div>
 
-            // Red side
-            <div class="flex flex-col gap-2">
-                <h3 class="text-red-400 font-bold text-center">"Red Side"</h3>
-                <div class="flex gap-1 flex-wrap justify-center">
-                    {red_bans.into_iter().map(|a| view! {
-                        <span class="bg-red-900 border border-red-700 rounded px-2 py-1 text-xs text-red-300 line-through">
-                            {a.champion}
-                        </span>
-                    }).collect_view()}
-                </div>
-                <div class="flex flex-col gap-1">
-                    {red_picks.into_iter().map(|a| view! {
-                        <div class="bg-red-900 border border-red-700 rounded px-3 py-2 text-sm text-white">
-                            {a.champion}
-                        </div>
-                    }).collect_view()}
-                </div>
-            </div>
+            // Row: Pick 4
+            {render_pick_slot(17, true)}
+            <div></div>
+            {render_pick_slot(16, false)}
+
+            // Row: Pick 5
+            {render_pick_slot(18, true)}
+            <div></div>
+            {render_pick_slot(19, false)}
+
         </div>
     }
 }

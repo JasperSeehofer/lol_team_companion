@@ -11,7 +11,9 @@ pub struct Draft {
     pub created_by: String,
     pub opponent: Option<String>,
     pub notes: Option<String>,
+    pub rating: Option<String>,
     pub actions: Vec<DraftAction>,
+    pub comments: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
