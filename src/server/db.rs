@@ -1312,16 +1312,89 @@ pub async fn delete_game_plan(db: &Surreal<Db>, plan_id: &str) -> DbResult<()> {
     Ok(())
 }
 
-pub async fn save_post_game_learning(db: &Surreal<Db>, learning: PostGameLearning) -> DbResult<()> {
+pub async fn save_post_game_learning(db: &Surreal<Db>, learning: PostGameLearning) -> DbResult<String> {
     let team_key = learning.team_id.strip_prefix("team:").unwrap_or(&learning.team_id).to_string();
     let created_by_key = learning.created_by.strip_prefix("user:").unwrap_or(&learning.created_by).to_string();
-    db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match = $match_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, created_by = type::record('user', $created_by_key)")
+    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key)")
         .bind(("team_key", team_key))
-        .bind(("match_id", learning.match_id))
+        .bind(("match_riot_id", learning.match_riot_id))
+        .bind(("game_plan_id", learning.game_plan_id))
+        .bind(("draft_id", learning.draft_id))
         .bind(("what_went_well", learning.what_went_well))
         .bind(("improvements", learning.improvements))
         .bind(("action_items", learning.action_items))
+        .bind(("open_notes", learning.open_notes))
         .bind(("created_by_key", created_by_key))
+        .await?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create post-game review".into())),
+    }
+}
+
+pub async fn update_post_game_learning(db: &Surreal<Db>, learning: PostGameLearning) -> DbResult<()> {
+    let id = learning.id.as_deref().ok_or(DbError::Other("No review ID".into()))?;
+    let key = id.strip_prefix("post_game_learning:").unwrap_or(id).to_string();
+    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes")
+        .bind(("key", key))
+        .bind(("match_riot_id", learning.match_riot_id))
+        .bind(("game_plan_id", learning.game_plan_id))
+        .bind(("draft_id", learning.draft_id))
+        .bind(("what_went_well", learning.what_went_well))
+        .bind(("improvements", learning.improvements))
+        .bind(("action_items", learning.action_items))
+        .bind(("open_notes", learning.open_notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbPostGameLearning {
+    id: RecordId,
+    team: RecordId,
+    match_riot_id: Option<String>,
+    game_plan_id: Option<String>,
+    draft_id: Option<String>,
+    what_went_well: Vec<String>,
+    improvements: Vec<String>,
+    action_items: Vec<String>,
+    open_notes: Option<String>,
+    created_by: RecordId,
+}
+
+impl From<DbPostGameLearning> for PostGameLearning {
+    fn from(p: DbPostGameLearning) -> Self {
+        PostGameLearning {
+            id: Some(p.id.to_sql()),
+            team_id: p.team.to_sql(),
+            match_riot_id: p.match_riot_id,
+            game_plan_id: p.game_plan_id,
+            draft_id: p.draft_id,
+            what_went_well: p.what_went_well,
+            improvements: p.improvements,
+            action_items: p.action_items,
+            open_notes: p.open_notes,
+            created_by: p.created_by.to_sql(),
+        }
+    }
+}
+
+pub async fn list_post_game_learnings(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<PostGameLearning>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbPostGameLearning> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(PostGameLearning::from).collect())
+}
+
+pub async fn delete_post_game_learning(db: &Surreal<Db>, id: &str) -> DbResult<()> {
+    let key = id.strip_prefix("post_game_learning:").unwrap_or(id).to_string();
+    db.query("DELETE type::record('post_game_learning', $key)")
+        .bind(("key", key))
         .await?
         .check()?;
     Ok(())

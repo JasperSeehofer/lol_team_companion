@@ -92,11 +92,14 @@ DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::n
 
 -- Post-game learnings
 DEFINE TABLE IF NOT EXISTS post_game_learning SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS match ON post_game_learning TYPE option<record<match>>;
 DEFINE FIELD IF NOT EXISTS team ON post_game_learning TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS match_riot_id ON post_game_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_plan_id ON post_game_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS draft_id ON post_game_learning TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS what_went_well ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS improvements ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS action_items ON post_game_learning TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS open_notes ON post_game_learning TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_by ON post_game_learning TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS created_at ON post_game_learning TYPE datetime DEFAULT time::now();
 

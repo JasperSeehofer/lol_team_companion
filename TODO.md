@@ -32,6 +32,13 @@
 - [x] Link to a draft
 - [x] Template-based auto-generation
 
+### Section 5 – Postgame Analysis
+- [x] Link to actual match from stats
+- [x] Link to original game plan and draft
+- [x] Structured feedback fields
+- [x] Open-ended notes
+- [x] Pattern analysis
+
 ### Earlier Work
 - [x] Saved drafts display bans left/right of picks, phase groups separated
 - [x] Draft rating (S+ to D tier picker)
@@ -45,13 +52,6 @@
 ---
 
 ## Next Up
-
-### Section 5 – Postgame Analysis
-- [ ] Link to actual match from stats
-- [ ] Link to original game plan and draft
-- [ ] Structured feedback fields
-- [ ] Open-ended notes
-- [ ] Pattern analysis
 
 ### Section 6 – Full Integration & UI Polish
 - [ ] Consistent header with notifications dropdown

@@ -27,10 +27,13 @@ pub struct GamePlan {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PostGameLearning {
     pub id: Option<String>,
-    pub match_id: Option<String>,
     pub team_id: String,
+    pub match_riot_id: Option<String>,
+    pub game_plan_id: Option<String>,
+    pub draft_id: Option<String>,
     pub what_went_well: Vec<String>,
     pub improvements: Vec<String>,
     pub action_items: Vec<String>,
+    pub open_notes: Option<String>,
     pub created_by: String,
 }

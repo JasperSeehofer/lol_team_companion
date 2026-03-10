@@ -1,12 +1,14 @@
 use leptos::prelude::*;
+use std::collections::HashMap;
+use crate::models::game_plan::{GamePlan, PostGameLearning};
+use crate::models::draft::Draft;
+
+// ---------------------------------------------------------------------------
+// Server functions
+// ---------------------------------------------------------------------------
 
 #[server]
-pub async fn save_post_game(
-    what_went_well: String,
-    improvements: String,
-    action_items: String,
-) -> Result<(), ServerFnError> {
-    use crate::models::game_plan::PostGameLearning;
+pub async fn list_reviews() -> Result<Vec<PostGameLearning>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -14,106 +16,531 @@ pub async fn save_post_game(
 
     let auth: AuthSession = leptos_axum::extract().await?;
     let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
+    let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&db, &user.id)
+    let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("Not in a team"))?;
+        .ok_or_else(|| ServerFnError::new("No team"))?;
 
-    let learning = PostGameLearning {
-        id: None,
-        match_id: None,
-        team_id,
-        what_went_well: what_went_well
-            .lines()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        improvements: improvements
-            .lines()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        action_items: action_items
-            .lines()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        created_by: user.id,
-    };
-
-    db::save_post_game_learning(&db, learning)
+    db::list_post_game_learnings(&surreal, &team_id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+#[server]
+pub async fn list_plans_for_postgame() -> Result<Vec<GamePlan>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    db::list_game_plans(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn list_drafts_for_postgame() -> Result<Vec<Draft>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    db::list_drafts(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    let rows = db::get_team_match_stats(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let mut seen = std::collections::HashSet::new();
+    let ids: Vec<String> = rows.into_iter()
+        .filter(|r| seen.insert(r.riot_match_id.clone()))
+        .map(|r| r.riot_match_id)
+        .collect();
+    Ok(ids)
+}
+
+#[server]
+pub async fn create_review(review_json: String) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    let mut review: PostGameLearning = serde_json::from_str(&review_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    review.team_id = team_id;
+    review.created_by = user.id;
+
+    db::save_post_game_learning(&surreal, review)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn update_review(review_json: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let review: PostGameLearning = serde_json::from_str(&review_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+
+    db::update_post_game_learning(&surreal, review)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn delete_review(review_id: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::delete_post_game_learning(&surreal, &review_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn textarea_class() -> &'static str {
+    "w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 resize-none transition-colors"
+}
+
+fn input_class() -> &'static str {
+    "w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+}
+
+/// Basic pattern analysis: find recurring themes across reviews
+fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<(String, usize)>) {
+    let mut good_counts: HashMap<String, usize> = HashMap::new();
+    let mut improve_counts: HashMap<String, usize> = HashMap::new();
+
+    for r in reviews {
+        for item in &r.what_went_well {
+            let key = item.to_lowercase();
+            *good_counts.entry(key).or_default() += 1;
+        }
+        for item in &r.improvements {
+            let key = item.to_lowercase();
+            *improve_counts.entry(key).or_default() += 1;
+        }
+    }
+
+    let mut good: Vec<(String, usize)> = good_counts.into_iter().filter(|(_, c)| *c >= 2).collect();
+    good.sort_by(|a, b| b.1.cmp(&a.1));
+    good.truncate(5);
+
+    let mut bad: Vec<(String, usize)> = improve_counts.into_iter().filter(|(_, c)| *c >= 2).collect();
+    bad.sort_by(|a, b| b.1.cmp(&a.1));
+    bad.truncate(5);
+
+    (good, bad)
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 #[component]
 pub fn PostGamePage() -> impl IntoView {
-    let save = ServerAction::<SavePostGame>::new();
+    let reviews = Resource::new(|| (), |_| list_reviews());
+    let plans = Resource::new(|| (), |_| list_plans_for_postgame());
+    let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
+    let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
+
+    let (status_msg, set_status_msg) = signal(Option::<String>::None);
+    let (editing_id, set_editing_id) = signal(Option::<String>::None);
+    let (match_riot_id, set_match_riot_id) = signal(String::new());
+    let (game_plan_id, set_game_plan_id) = signal(String::new());
+    let (draft_id, set_draft_id) = signal(String::new());
+    let (went_well, set_went_well) = signal(String::new());
+    let (improvements, set_improvements) = signal(String::new());
+    let (action_items, set_action_items) = signal(String::new());
+    let (open_notes, set_open_notes) = signal(String::new());
+
+    let clear_editor = move || {
+        set_editing_id.set(None);
+        set_match_riot_id.set(String::new());
+        set_game_plan_id.set(String::new());
+        set_draft_id.set(String::new());
+        set_went_well.set(String::new());
+        set_improvements.set(String::new());
+        set_action_items.set(String::new());
+        set_open_notes.set(String::new());
+    };
+
+    let load_review = move |r: &PostGameLearning| {
+        set_editing_id.set(r.id.clone());
+        set_match_riot_id.set(r.match_riot_id.clone().unwrap_or_default());
+        set_game_plan_id.set(r.game_plan_id.clone().unwrap_or_default());
+        set_draft_id.set(r.draft_id.clone().unwrap_or_default());
+        set_went_well.set(r.what_went_well.join("\n"));
+        set_improvements.set(r.improvements.join("\n"));
+        set_action_items.set(r.action_items.join("\n"));
+        set_open_notes.set(r.open_notes.clone().unwrap_or_default());
+    };
+
+    let build_review = move || -> PostGameLearning {
+        PostGameLearning {
+            id: editing_id.get_untracked(),
+            team_id: String::new(),
+            match_riot_id: { let s = match_riot_id.get_untracked(); if s.is_empty() { None } else { Some(s) } },
+            game_plan_id: { let s = game_plan_id.get_untracked(); if s.is_empty() { None } else { Some(s) } },
+            draft_id: { let s = draft_id.get_untracked(); if s.is_empty() { None } else { Some(s) } },
+            what_went_well: went_well.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            improvements: improvements.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            action_items: action_items.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            open_notes: { let s = open_notes.get_untracked(); if s.is_empty() { None } else { Some(s) } },
+            created_by: String::new(),
+        }
+    };
+
+    let do_save = move |_| {
+        let review = build_review();
+        let json = serde_json::to_string(&review).unwrap_or_default();
+        let is_update = editing_id.get_untracked().is_some();
+
+        leptos::task::spawn_local(async move {
+            let result = if is_update {
+                update_review(json).await.map(|_| String::new())
+            } else {
+                create_review(json).await
+            };
+            match result {
+                Ok(id) => {
+                    if !is_update && !id.is_empty() {
+                        set_editing_id.set(Some(id));
+                    }
+                    set_status_msg.set(Some(if is_update { "Review updated!".into() } else { "Review created!".into() }));
+                    reviews.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    let do_delete = move |review_id: String| {
+        leptos::task::spawn_local(async move {
+            match delete_review(review_id).await {
+                Ok(_) => {
+                    clear_editor();
+                    set_status_msg.set(Some("Review deleted.".into()));
+                    reviews.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
 
     view! {
-        <div class="max-w-3xl mx-auto py-8 px-6 flex flex-col gap-6">
-            <h1 class="text-3xl font-bold text-white">"Post-Game Learnings"</h1>
+        <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
-                <ActionForm action=save>
-                    <div class="flex flex-col gap-5">
-                        {move || save.value().get().and_then(|r| r.err()).map(|e| view! {
-                            <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm">
-                                {e.to_string()}
-                            </div>
+                <h1 class="text-3xl font-bold text-white">"Post-Game Review"</h1>
+                <p class="text-gray-400 text-sm mt-1">"Analyze games, track patterns, and improve together"</p>
+            </div>
+
+            {move || status_msg.get().map(|msg| {
+                let cls = if msg.starts_with("Error") { "text-red-400" } else { "text-emerald-400" };
+                view! { <div class=format!("text-sm {cls}")>{msg}</div> }
+            })}
+
+            <div class="flex gap-6 min-h-[36rem]">
+                // Left: review list + patterns
+                <div class="w-72 flex-shrink-0 flex flex-col gap-4">
+                    <button
+                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                        on:click=move |_| clear_editor()
+                    >"+ New Review"</button>
+
+                    // Saved reviews
+                    <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                        {move || reviews.get().map(|result| match result {
+                            Ok(list) if list.is_empty() => view! {
+                                <p class="text-gray-500 text-sm">"No reviews yet."</p>
+                            }.into_any(),
+                            Ok(list) => {
+                                let list_for_patterns = list.clone();
+                                let (good_patterns, bad_patterns) = analyze_patterns(&list_for_patterns);
+                                let has_patterns = !good_patterns.is_empty() || !bad_patterns.is_empty();
+                                view! {
+                                    <div class="flex flex-col gap-1.5">
+                                        {list.into_iter().map(|r| {
+                                            let review_for_load = r.clone();
+                                            let rid = r.id.clone().unwrap_or_default();
+                                            let rid_for_cls = rid.clone();
+                                            let rid_for_delete = rid.clone();
+                                            let match_label = r.match_riot_id.clone().unwrap_or_else(|| "No match linked".to_string());
+                                            let item_count = r.what_went_well.len() + r.improvements.len() + r.action_items.len();
+                                            view! {
+                                                <div class=move || {
+                                                    if editing_id.get().as_deref() == Some(&rid_for_cls) {
+                                                        "bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-3 transition-all"
+                                                    } else {
+                                                        "bg-gray-800/30 border border-gray-700/30 rounded-lg p-3 hover:bg-gray-700/30 transition-all"
+                                                    }
+                                                }>
+                                                    <button
+                                                        class="w-full text-left"
+                                                        on:click=move |_| load_review(&review_for_load)
+                                                    >
+                                                        <div class="text-white text-sm font-medium truncate">{match_label}</div>
+                                                        <div class="text-gray-500 text-xs mt-0.5">{format!("{item_count} points")}</div>
+                                                    </button>
+                                                    <button
+                                                        class="text-red-400/50 hover:text-red-400 text-xs mt-1 transition-colors"
+                                                        on:click=move |_| do_delete(rid_for_delete.clone())
+                                                    >"Delete"</button>
+                                                </div>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+
+                                    // Pattern analysis
+                                    {has_patterns.then(|| view! {
+                                        <div class="mt-4 bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
+                                            <h4 class="text-white font-semibold text-xs uppercase tracking-wider">"Recurring Patterns"</h4>
+                                            {(!good_patterns.is_empty()).then(|| {
+                                                let patterns = good_patterns.clone();
+                                                view! {
+                                                    <div>
+                                                        <span class="text-emerald-400 text-xs font-medium">"Strengths"</span>
+                                                        {patterns.into_iter().map(|(item, count)| view! {
+                                                            <div class="flex items-center gap-2 mt-1">
+                                                                <span class="text-gray-300 text-xs truncate flex-1">{item}</span>
+                                                                <span class="text-gray-500 text-xs flex-shrink-0">{format!("{count}x")}</span>
+                                                            </div>
+                                                        }).collect_view()}
+                                                    </div>
+                                                }
+                                            })}
+                                            {(!bad_patterns.is_empty()).then(|| {
+                                                let patterns = bad_patterns.clone();
+                                                view! {
+                                                    <div>
+                                                        <span class="text-red-400 text-xs font-medium">"Recurring Issues"</span>
+                                                        {patterns.into_iter().map(|(item, count)| view! {
+                                                            <div class="flex items-center gap-2 mt-1">
+                                                                <span class="text-gray-300 text-xs truncate flex-1">{item}</span>
+                                                                <span class="text-gray-500 text-xs flex-shrink-0">{format!("{count}x")}</span>
+                                                            </div>
+                                                        }).collect_view()}
+                                                    </div>
+                                                }
+                                            })}
+                                        </div>
+                                    })}
+                                }.into_any()
+                            },
+                            Err(e) => view! {
+                                <p class="text-red-400 text-sm">{e.to_string()}</p>
+                            }.into_any(),
                         })}
-                        {move || save.value().get().and_then(|r| r.ok()).map(|_| view! {
-                            <div class="bg-green-900 border border-green-700 text-green-200 rounded px-4 py-3 text-sm">
-                                "Post-game learning saved!"
+                    </Suspense>
+                </div>
+
+                // Right: editor
+                <div class="flex-1 flex flex-col gap-5">
+                    // Linking: match, game plan, draft
+                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                        <h3 class="text-white font-semibold text-sm mb-3">"Link to..."</h3>
+                        <div class="grid grid-cols-3 gap-4">
+                            // Match
+                            <div>
+                                <label class="block text-gray-400 text-xs font-medium mb-1">"Match"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                    {move || match_ids.get().map(|result| match result {
+                                        Ok(ids) => view! {
+                                            <select class=input_class()
+                                                prop:value=move || match_riot_id.get()
+                                                on:change=move |ev| set_match_riot_id.set(event_target_value(&ev))
+                                            >
+                                                <option value="">"None"</option>
+                                                {ids.into_iter().map(|id| {
+                                                    let label = if id.len() > 20 {
+                                                        format!("...{}", &id[id.len()-12..])
+                                                    } else {
+                                                        id.clone()
+                                                    };
+                                                    view! { <option value=id>{label}</option> }
+                                                }).collect_view()}
+                                            </select>
+                                        }.into_any(),
+                                        Err(_) => view! { <p class="text-gray-500 text-xs">"No matches"</p> }.into_any(),
+                                    })}
+                                </Suspense>
                             </div>
-                        })}
-
-                        <div>
-                            <label class="block text-gray-300 text-sm mb-1">
-                                "What Went Well (one per line)"
-                            </label>
-                            <textarea
-                                name="what_went_well"
-                                rows="4"
-                                placeholder="Good dragon control\nSupport roaming paid off"
-                                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400"
-                            />
+                            // Game Plan
+                            <div>
+                                <label class="block text-gray-400 text-xs font-medium mb-1">"Game Plan"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                    {move || plans.get().map(|result| match result {
+                                        Ok(list) => view! {
+                                            <select class=input_class()
+                                                prop:value=move || game_plan_id.get()
+                                                on:change=move |ev| set_game_plan_id.set(event_target_value(&ev))
+                                            >
+                                                <option value="">"None"</option>
+                                                {list.into_iter().map(|p| {
+                                                    let id = p.id.clone().unwrap_or_default();
+                                                    let name = if p.name.is_empty() { "Untitled".to_string() } else { p.name };
+                                                    view! { <option value=id>{name}</option> }
+                                                }).collect_view()}
+                                            </select>
+                                        }.into_any(),
+                                        Err(_) => view! { <p class="text-gray-500 text-xs">"No plans"</p> }.into_any(),
+                                    })}
+                                </Suspense>
+                            </div>
+                            // Draft
+                            <div>
+                                <label class="block text-gray-400 text-xs font-medium mb-1">"Draft"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                    {move || drafts.get().map(|result| match result {
+                                        Ok(list) => view! {
+                                            <select class=input_class()
+                                                prop:value=move || draft_id.get()
+                                                on:change=move |ev| set_draft_id.set(event_target_value(&ev))
+                                            >
+                                                <option value="">"None"</option>
+                                                {list.into_iter().map(|d| {
+                                                    let id = d.id.clone().unwrap_or_default();
+                                                    let name = d.name.clone();
+                                                    view! { <option value=id>{name}</option> }
+                                                }).collect_view()}
+                                            </select>
+                                        }.into_any(),
+                                        Err(_) => view! { <p class="text-gray-500 text-xs">"No drafts"</p> }.into_any(),
+                                    })}
+                                </Suspense>
+                            </div>
                         </div>
-
-                        <div>
-                            <label class="block text-gray-300 text-sm mb-1">
-                                "Improvements (one per line)"
-                            </label>
-                            <textarea
-                                name="improvements"
-                                rows="4"
-                                placeholder="Ward coverage around Baron\nBetter grouping after first tower"
-                                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-gray-300 text-sm mb-1">
-                                "Action Items (one per line)"
-                            </label>
-                            <textarea
-                                name="action_items"
-                                rows="3"
-                                placeholder="Review VOD of mid-game fights\nPractice 2v2 bot lane"
-                                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 transition-colors"
-                        >
-                            "Save Learnings"
-                        </button>
                     </div>
-                </ActionForm>
+
+                    // Structured feedback
+                    <div class="grid grid-cols-3 gap-4">
+                        // What went well
+                        <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col gap-2">
+                            <label class="text-emerald-400 text-xs font-semibold uppercase tracking-wider">"What Went Well"</label>
+                            <textarea rows="8" class=textarea_class()
+                                placeholder="Good dragon control\nSupport roaming paid off\nStrong level 1 invade"
+                                prop:value=move || went_well.get()
+                                on:input=move |ev| set_went_well.set(event_target_value(&ev))
+                            />
+                        </div>
+
+                        // Improvements
+                        <div class="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex flex-col gap-2">
+                            <label class="text-amber-400 text-xs font-semibold uppercase tracking-wider">"Improvements Needed"</label>
+                            <textarea rows="8" class=textarea_class()
+                                placeholder="Ward coverage around Baron\nBetter grouping after towers\nMid-game macro decisions"
+                                prop:value=move || improvements.get()
+                                on:input=move |ev| set_improvements.set(event_target_value(&ev))
+                            />
+                        </div>
+
+                        // Action items
+                        <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex flex-col gap-2">
+                            <label class="text-blue-400 text-xs font-semibold uppercase tracking-wider">"Action Items"</label>
+                            <textarea rows="8" class=textarea_class()
+                                placeholder="Review VOD of teamfights\nPractice 2v2 bot lane\nDrill baron timings"
+                                prop:value=move || action_items.get()
+                                on:input=move |ev| set_action_items.set(event_target_value(&ev))
+                            />
+                        </div>
+                    </div>
+
+                    // Open notes
+                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                        <label class="block text-gray-400 text-xs font-medium mb-1">"Open Notes"</label>
+                        <textarea rows="4" class=textarea_class()
+                            placeholder="Any additional thoughts, observations, or context..."
+                            prop:value=move || open_notes.get()
+                            on:input=move |ev| set_open_notes.set(event_target_value(&ev))
+                        />
+                    </div>
+
+                    // Save buttons
+                    <div class="flex gap-3 items-center">
+                        <button
+                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
+                            on:click=do_save
+                        >
+                            {move || if editing_id.get().is_some() { "Update Review" } else { "Save Review" }}
+                        </button>
+                        <button
+                            class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+                            on:click=move |_| clear_editor()
+                        >"Clear"</button>
+                    </div>
+                </div>
             </div>
         </div>
     }
