@@ -72,13 +72,22 @@ DEFINE FIELD IF NOT EXISTS `order` ON draft_action TYPE int;
 
 -- Game plans
 DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS draft ON game_plan TYPE option<record<draft>>;
+DEFINE FIELD IF NOT EXISTS name ON game_plan TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS draft ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS team ON game_plan TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS our_champions ON game_plan TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS enemy_champions ON game_plan TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS win_conditions ON game_plan TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS objective_priority ON game_plan TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS teamfight_strategy ON game_plan TYPE string;
 DEFINE FIELD IF NOT EXISTS early_game ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS top_strategy ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS jungle_strategy ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS mid_strategy ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS bot_strategy ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS support_strategy ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS notes ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_by ON game_plan TYPE option<record<user>>;
 DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::now();
 
 -- Post-game learnings

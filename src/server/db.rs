@@ -1198,16 +1198,115 @@ pub async fn get_roster_puuids(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<
 // Game plans / post-game
 // ---------------------------------------------------------------------------
 
-pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan) -> DbResult<()> {
+pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> DbResult<String> {
     let team_key = plan.team_id.strip_prefix("team:").unwrap_or(&plan.team_id).to_string();
-    db.query("CREATE game_plan SET team = type::record('team', $team_key), draft = $draft_id, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, notes = $notes")
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, created_by = type::record('user', $user_key)")
+        .bind(("name", plan.name))
         .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
         .bind(("draft_id", plan.draft_id))
+        .bind(("our_champions", plan.our_champions))
+        .bind(("enemy_champions", plan.enemy_champions))
         .bind(("win_conditions", plan.win_conditions))
         .bind(("objective_priority", plan.objective_priority))
         .bind(("teamfight_strategy", plan.teamfight_strategy))
         .bind(("early_game", plan.early_game))
+        .bind(("top_strategy", plan.top_strategy))
+        .bind(("jungle_strategy", plan.jungle_strategy))
+        .bind(("mid_strategy", plan.mid_strategy))
+        .bind(("bot_strategy", plan.bot_strategy))
+        .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
+        .await?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create game plan".into())),
+    }
+}
+
+pub async fn update_game_plan(db: &Surreal<Db>, plan: GamePlan) -> DbResult<()> {
+    let plan_id = plan.id.as_deref().ok_or(DbError::Other("No plan ID".into()))?;
+    let plan_key = plan_id.strip_prefix("game_plan:").unwrap_or(plan_id).to_string();
+    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes")
+        .bind(("plan_key", plan_key))
+        .bind(("name", plan.name))
+        .bind(("draft_id", plan.draft_id))
+        .bind(("our_champions", plan.our_champions))
+        .bind(("enemy_champions", plan.enemy_champions))
+        .bind(("win_conditions", plan.win_conditions))
+        .bind(("objective_priority", plan.objective_priority))
+        .bind(("teamfight_strategy", plan.teamfight_strategy))
+        .bind(("early_game", plan.early_game))
+        .bind(("top_strategy", plan.top_strategy))
+        .bind(("jungle_strategy", plan.jungle_strategy))
+        .bind(("mid_strategy", plan.mid_strategy))
+        .bind(("bot_strategy", plan.bot_strategy))
+        .bind(("support_strategy", plan.support_strategy))
+        .bind(("notes", plan.notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbGamePlan {
+    id: RecordId,
+    name: String,
+    team: RecordId,
+    draft: Option<String>,
+    our_champions: Vec<String>,
+    enemy_champions: Vec<String>,
+    win_conditions: Vec<String>,
+    objective_priority: Vec<String>,
+    teamfight_strategy: String,
+    early_game: Option<String>,
+    top_strategy: Option<String>,
+    jungle_strategy: Option<String>,
+    mid_strategy: Option<String>,
+    bot_strategy: Option<String>,
+    support_strategy: Option<String>,
+    notes: Option<String>,
+}
+
+impl From<DbGamePlan> for GamePlan {
+    fn from(p: DbGamePlan) -> Self {
+        GamePlan {
+            id: Some(p.id.to_sql()),
+            team_id: p.team.to_sql(),
+            draft_id: p.draft,
+            name: p.name,
+            our_champions: p.our_champions,
+            enemy_champions: p.enemy_champions,
+            win_conditions: p.win_conditions,
+            objective_priority: p.objective_priority,
+            teamfight_strategy: p.teamfight_strategy,
+            early_game: p.early_game,
+            top_strategy: p.top_strategy,
+            jungle_strategy: p.jungle_strategy,
+            mid_strategy: p.mid_strategy,
+            bot_strategy: p.bot_strategy,
+            support_strategy: p.support_strategy,
+            notes: p.notes,
+        }
+    }
+}
+
+pub async fn list_game_plans(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<GamePlan>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT * FROM game_plan WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbGamePlan> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(GamePlan::from).collect())
+}
+
+pub async fn delete_game_plan(db: &Surreal<Db>, plan_id: &str) -> DbResult<()> {
+    let plan_key = plan_id.strip_prefix("game_plan:").unwrap_or(plan_id).to_string();
+    db.query("DELETE type::record('game_plan', $plan_key)")
+        .bind(("plan_key", plan_key))
         .await?
         .check()?;
     Ok(())

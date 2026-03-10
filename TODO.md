@@ -25,6 +25,13 @@
 - [x] Stats dashboard with date/opponent filters
 - [x] Flag clearly if RIOT_API_KEY is missing
 
+### Section 4 – Game Plan System
+- [x] Create plans linked to a specific matchup (your 5 champs vs enemy 5)
+- [x] Macro strategy section (team-wide)
+- [x] 5 role-specific sections
+- [x] Link to a draft
+- [x] Template-based auto-generation
+
 ### Earlier Work
 - [x] Saved drafts display bans left/right of picks, phase groups separated
 - [x] Draft rating (S+ to D tier picker)
@@ -38,13 +45,6 @@
 ---
 
 ## Next Up
-
-### Section 4 – Game Plan System
-- [ ] Create plans linked to a specific matchup (your 5 champs vs enemy 5)
-- [ ] Macro strategy section (team-wide)
-- [ ] 5 role-specific sections
-- [ ] Link to a draft
-- [ ] Template-based auto-generation
 
 ### Section 5 – Postgame Analysis
 - [ ] Link to actual match from stats
