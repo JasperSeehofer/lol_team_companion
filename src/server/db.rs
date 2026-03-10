@@ -235,6 +235,33 @@ pub async fn get_user_team_id(db: &Surreal<Db>, user_id: &str) -> DbResult<Optio
     Ok(row.map(|r| r.team.to_sql()))
 }
 
+pub async fn list_all_teams(db: &Surreal<Db>) -> DbResult<Vec<Team>> {
+    let mut r = db.query("SELECT * FROM team ORDER BY name ASC").await?;
+    let teams: Vec<DbTeam> = r.take(0).unwrap_or_default();
+    Ok(teams.into_iter().map(Team::from).collect())
+}
+
+pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    // Prevent duplicate membership
+    let mut check = db
+        .query("SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) LIMIT 1")
+        .bind(("team_key", team_key.clone()))
+        .bind(("user_key", user_key.clone()))
+        .await?;
+    let existing: Option<IdRecord> = check.take(0)?;
+    if existing.is_some() {
+        return Err(DbError::Other("You are already a member of this team".into()));
+    }
+    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'sub'")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
 pub async fn get_user_teams(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<Team>> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let mut result = db
