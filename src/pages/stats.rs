@@ -184,7 +184,7 @@ pub fn StatsPage() -> impl IntoView {
     let (syncing, set_syncing) = signal(false);
 
     // Filters
-    let (filter_full_roster, set_filter_full_roster) = signal(false);
+    let (min_players, set_min_players) = signal(2_usize); // minimum team members in a match
     let (filter_player, set_filter_player) = signal(String::new()); // empty = all players
 
     let do_sync = move |_| {
@@ -279,9 +279,9 @@ pub fn StatsPage() -> impl IntoView {
                             <StatsContent
                                 all_matches=all_matches
                                 unique_players=unique_players
-                                _roster_size=roster_size
-                                filter_full_roster=filter_full_roster
-                                set_filter_full_roster=set_filter_full_roster
+                                roster_size=roster_size
+                                min_players=min_players
+                                set_min_players=set_min_players
                                 filter_player=filter_player
                                 set_filter_player=set_filter_player
                             />
@@ -297,9 +297,9 @@ pub fn StatsPage() -> impl IntoView {
 fn StatsContent(
     all_matches: Vec<MatchGroup>,
     unique_players: Vec<String>,
-    #[prop(optional)] _roster_size: usize,
-    filter_full_roster: ReadSignal<bool>,
-    set_filter_full_roster: WriteSignal<bool>,
+    roster_size: usize,
+    min_players: ReadSignal<usize>,
+    set_min_players: WriteSignal<usize>,
     filter_player: ReadSignal<String>,
     set_filter_player: WriteSignal<String>,
 ) -> impl IntoView {
@@ -307,13 +307,13 @@ fn StatsContent(
     let unique_players_for_filter = unique_players.clone();
 
     let filtered = move || {
-        let full_only = filter_full_roster.get();
+        let min = min_players.get();
         let player_filter = filter_player.get();
 
         all_matches.with_value(|matches| {
             matches.iter().filter(|m| {
-                // Full roster filter: only show matches where 5+ unique players participated
-                if full_only && m.players.len() < 5 {
+                // Minimum players filter
+                if m.players.len() < min {
                     return false;
                 }
                 // Player filter
@@ -366,16 +366,26 @@ fn StatsContent(
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
                 <span class="text-muted text-sm font-medium">"Filters:"</span>
 
-                // Full roster toggle
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        class="w-4 h-4 rounded bg-overlay border-outline text-accent focus:ring-accent/50"
-                        prop:checked=move || filter_full_roster.get()
-                        on:change=move |ev| set_filter_full_roster.set(event_target_checked(&ev))
-                    />
-                    <span class="text-secondary text-sm">"Full roster only (5 players)"</span>
-                </label>
+                // Min players dropdown
+                <div class="flex items-center gap-2">
+                    <span class="text-secondary text-sm">"Min. players:"</span>
+                    <select
+                        class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
+                        on:change=move |ev| {
+                            let v: usize = event_target_value(&ev).parse().unwrap_or(2);
+                            set_min_players.set(v);
+                        }
+                    >
+                        {(2..=roster_size.max(2)).map(|n| {
+                            let label = if n == roster_size && roster_size >= 5 {
+                                format!("{n} (full roster)")
+                            } else {
+                                n.to_string()
+                            };
+                            view! { <option value=n.to_string()>{label}</option> }
+                        }).collect_view()}
+                    </select>
+                </div>
 
                 <span class="text-overlay-strong">"|"</span>
 

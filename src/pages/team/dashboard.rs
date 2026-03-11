@@ -481,17 +481,14 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         }
                                                     }
                                                 >
-                                                    // Role icon + label
-                                                    <div class="flex items-center gap-1.5">
-                                                        {if !role_icon_url(role).is_empty() {
-                                                            view! {
-                                                                <img src=role_icon_url(role) alt=role class="w-4 h-4 invert opacity-60" />
-                                                            }.into_any()
-                                                        } else {
-                                                            view! { <span></span> }.into_any()
-                                                        }}
-                                                        <span class="text-muted text-xs capitalize">{role_label2.clone()}</span>
-                                                    </div>
+                                                    // Role icon
+                                                    {if !role_icon_url(role).is_empty() {
+                                                        view! {
+                                                            <img src=role_icon_url(role) alt=role_label2.clone() title=role_label2 class="w-6 h-6 invert opacity-70" />
+                                                        }.into_any()
+                                                    } else {
+                                                        view! { <span class="text-muted text-xs capitalize">{role_label2}</span> }.into_any()
+                                                    }}
 
                                                     // Assigned player or empty slot
                                                     {if let Some(m) = assigned {

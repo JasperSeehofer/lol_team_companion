@@ -15,7 +15,7 @@
 - [x] **Team owner missing from roster/bench**: Fixed `create_team()` in `db.rs` — owner now inserted as `team_member` with `role = 'unassigned', roster_type = 'sub'`.
 
 #### Draft & Game Plan
-- [ ] **Draft not saving / not appearing in saved list**: Verify `save_draft()` / `update_draft()` return a proper ID, that the client receives it, and `drafts.refetch()` is actually triggered. Add explicit error display if save fails. Same issue observed from game plan's draft picker — ensure draft selected there is persisted, not only held in client state.
+- [x] **Draft not saving / not appearing in saved list**: Fixed two root causes — (1) `list_drafts` returned `Err("No team")` instead of an empty list when user has no team, hiding the saved drafts panel; (2) no name guard before saving meant empty-name drafts were created silently. Both fixed.
 
 ---
 
@@ -34,7 +34,7 @@
 - [ ] **Drag-and-drop picks/bans**: Same as tree drafter — drag champions between slots.
 
 #### Team Section
-- [ ] **Role icons — remove duplicate text**: Slot rendering shows text ("Top", "Jungle", …) AND a broken partial-text icon. Show only the SVG role icon, remove the text label.
+- [x] **Role icons — remove duplicate text**: Starter slots now show only the SVG role icon (larger, 24px) with the role name as a `title` tooltip. Text label removed.
 - [ ] **Remove "Link Riot account" from team dashboard**: Belongs in Profile. Replace with a notice + link: "Riot account not linked — link it in your profile" if not yet connected.
 - [ ] **Team rename → pencil icon modal**: Remove the prominent rename form. Add a small pencil (✏) icon next to the team name that opens a modal to change name and region.
 
@@ -62,7 +62,7 @@
 - [ ] **Drag-and-drop roster management**: Players in bench/coach/starter slots should be draggable between slots. Show role selector on drop into a starter slot.
 
 #### Stats
-- [ ] **Show partial-team matches**: Display all matches where ≥ 2 linked team members played together, not only full-roster games. Add a "minimum players together" dropdown (2 / 3 / 4 / 5).
+- [x] **Show partial-team matches**: "Minimum players" dropdown (2–roster size) replaces the old "full roster only" checkbox. Shows all matches where ≥ N linked members played together.
 - [ ] **Solo Queue sync**: Add a queue type selector to `sync_team_stats()`:
   - 420 — Ranked Solo/Duo
   - 440 — Ranked Flex (current default)
@@ -103,6 +103,25 @@
 #### Game Plan
 - [ ] **Auto-save**: Same 2 s debounce + 30 s hard save as draft and tree sections
 - [ ] **Template from champion pool**: Pre-fill role strategy fields from the selected champion's notes in the pool
+
+#### Scouting & Opponent Prep
+- [ ] **Opponent team profile**: Before a match, fill in the enemy roster (5 summoner names). Auto-fetch their recent champion picks from the Riot API so you know their comfort picks going in. Link to the game plan for context.
+- [ ] **Champion matchup notes**: Per-champion card in the pool with a "Matchup notes" sub-section — short bullet points on how to play into specific counters (e.g. "vs Zed: build Seeker's early, respect level 6"). Searchable by opponent champion name.
+- [ ] **Patch tracking**: Record which patch each game was played on (auto-detected from match data or manual dropdown). Show patch label on match cards and allow filtering by patch to isolate meta-specific performance.
+
+#### Practice & Scheduling
+- [ ] **Scrim log**: Separate from ranked stats — log scrimmage results (opponent team name, score, date, format). Each scrim session links to drafts and post-game reviews from that session. Useful for tracking practice-vs-ranked performance separately.
+- [ ] **Pre-game checklist**: Customisable checklist that appears before a match (e.g. "Reviewed their ban pattern", "Agreed on win condition", "Called primary/secondary champions"). Mark items as done during draft prep. Resets per session.
+- [ ] **Practice priority queue**: In the champion pool, mark 1–3 champions per role as "focus this week". Shown prominently on the dashboard as a quick reminder of what each player should be grinding.
+
+#### Draft Tools
+- [ ] **Draft simulator**: Play both sides of a draft against yourself (or AI). Blue side picks → Red side picks, alternating as per tournament format. Useful for preparing pick/ban sequences without needing a partner.
+- [ ] **Saved counter-picks**: Per champion, maintain a list of "our go-to answers" — e.g. "When enemy picks Zed → our mid plays Malzahar or Lissandra". Displayed as a quick-reference overlay during the draft phase.
+- [ ] **Ban priority list**: A ranked list of 5–10 champions the team wants to ban every game, with a short "why ban" note. Shown in the sidebar during drafting to guide ban phase decisions.
+
+#### Communication
+- [ ] **VoD link on post-game**: Attach a YouTube or Twitch timestamp link to a post-game review so the team can watch the replay together. Mark specific timestamps with notes (e.g. "dragon fight at 18:00 — poor positioning").
+- [ ] **Team announcements**: A simple pinboard on the team dashboard where the leader can post short text announcements (practice schedule, meta notes, role changes). Shown in the notification dropdown.
 
 ---
 

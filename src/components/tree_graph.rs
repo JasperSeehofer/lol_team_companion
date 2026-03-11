@@ -230,9 +230,17 @@ pub fn TreeGraph(
                         edge.to_x, mid_y,
                         edge.to_x, edge.to_y
                     );
-                    let icons = edge.diff_champions.clone();
+                    let all_icons = edge.diff_champions.clone();
                     let icon_mid_x = (edge.from_x + edge.to_x) / 2.0;
                     let icon_mid_y = mid_y;
+                    // Cap at 5 icons; show overflow count as text
+                    const MAX_ICONS: usize = 5;
+                    let overflow = all_icons.len().saturating_sub(MAX_ICONS);
+                    let icons: Vec<_> = all_icons.into_iter().take(MAX_ICONS).collect();
+                    let n = icons.len();
+                    // Center the row: start_x so the group is centered at icon_mid_x
+                    let row_width = n as f64 * ICON_SIZE + (n.saturating_sub(1)) as f64 * 2.0;
+                    let row_start_x = icon_mid_x - row_width / 2.0;
 
                     view! {
                         <path
@@ -241,9 +249,9 @@ pub fn TreeGraph(
                             stroke="var(--t-divider)"
                             stroke-width="2"
                         />
-                        // Champion icons on edge
+                        // Champion icons on edge (centered, capped at MAX_ICONS)
                         {icons.into_iter().enumerate().map(|(i, diff)| {
-                            let ix = icon_mid_x - ICON_SIZE / 2.0 + (i as f64 * (ICON_SIZE + 2.0));
+                            let ix = row_start_x + i as f64 * (ICON_SIZE + 2.0);
                             let iy = icon_mid_y - ICON_SIZE / 2.0;
                             let image_url = champion_map.with_value(|m| {
                                 m.get(&diff.name).map(|c| c.image_full.clone()).unwrap_or_default()
@@ -301,6 +309,19 @@ pub fn TreeGraph(
                                 </g>
                             }
                         }).collect_view()}
+                        // Overflow badge: "+N more"
+                        {(overflow > 0).then(|| {
+                            let bx = row_start_x + n as f64 * (ICON_SIZE + 2.0);
+                            let by = icon_mid_y;
+                            view! {
+                                <text
+                                    x=format!("{}", bx + 2.0)
+                                    y=format!("{}", by + ICON_SIZE * 0.7)
+                                    font-size="9"
+                                    fill="var(--t-muted)"
+                                >{format!("+{overflow}")}</text>
+                            }
+                        })}
                     }
                 }).collect_view()}
 

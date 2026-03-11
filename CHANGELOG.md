@@ -7,9 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-03-11
+
+### Added
+
+- Draft planner: 2 s debounced auto-save for existing named drafts; "✓ Saved" / "● Unsaved changes" status indicator in header
+- Tree drafter: 2 s debounced auto-save per node with save status indicator next to Save Node button
+- Tree drafter: Enter key on tree name / opponent inputs triggers Create Tree
+- Draft board: highlight-first slot deletion — click a filled slot to highlight it (red border + × badge); click × to remove; click elsewhere to deselect
+- Champion autocomplete: optional `on_select` callback prop fired on dropdown item click
+- Champion pool: clicking an autocomplete suggestion now immediately adds the champion (no separate button press)
+- Champion pool: all tiers always rendered from the start; empty tiers show "No champions yet" placeholder
+
+### Fixed
+
+- Join request accept silently failing: errors now surfaced with per-request inline error message; dashboard and request list refetch on success
+- Team owner no longer missing from roster: `create_team()` in `db.rs` now immediately inserts the owner as a `team_member` (`role = 'unassigned', roster_type = 'sub'`)
+- Tree drafter root node now labelled with the tree name instead of hardcoded "Root"
+
+## [0.11.0] - 2026-03-11
+
+### Added
+
+- Full integration test suite: 44 tests (19 unit + 25 integration) across `db_users`, `db_teams`, `db_drafts`, `db_tree`, `db_champion_pool`
+- In-memory SurrealDB test helper (`tests/common/mod.rs`) for fast, isolated integration tests
+- GitHub Actions CI pipeline: SSR + WASM type-checks, tests, clippy, rustfmt
+- `justfile` with `check`, `test`, `watch`, `build` recipes
+- `.env.example` with all required and optional environment variables
+- `delete_draft()` server function and DB query
+
+### Fixed
+
+- `list_pending_join_requests`: removed `ORDER BY created_at` from partial SELECT (SurrealDB 3.x rejects fields not in partial SELECT)
+- `get_tree_nodes` tree assembly: replaced bottom-up heuristic with recursive DFS using `children_of: HashMap` — fixes node ordering when siblings share the same `sort_order`
+
+## [0.10.0] - 2026-03-11
+
 ### Fixed
 
 - WASM runtime crash caused by `.unwrap()` in event handlers (nav Escape listener, drag-and-drop) that froze all subsequent user interactions
+
+## [0.9.0] - 2026-03-11
 
 ### Added
 
@@ -17,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Champion icons on tree graph edges showing picks/bans diff between parent and child nodes
 - Ban indicators (red border + cross overlay) vs pick indicators (green border) on edge icons
 - List/graph view toggle in tree structure panel header
+
+## [0.8.0] - 2026-03-11
+
+### Added
+
 - CSS custom property-based theming system with semantic color tokens (`input.css`)
 - Dark/light mode toggle (moon/sun icon) with localStorage persistence
 - Anti-FOUC inline script in HTML head to prevent flash on page load

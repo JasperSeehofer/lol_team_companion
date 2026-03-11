@@ -95,10 +95,13 @@ pub async fn list_drafts() -> Result<Vec<Draft>, ServerFnError> {
     let db = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&db, &user.id)
+    let team_id = match db::get_user_team_id(&db, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     db::list_drafts(&db, &team_id)
         .await
@@ -258,6 +261,10 @@ pub fn DraftPage() -> impl IntoView {
 
     let do_save = move |_| {
         let name = draft_name.get_untracked();
+        if name.trim().is_empty() {
+            set_save_result.set(Some("Give this draft a name before saving.".into()));
+            return;
+        }
         let opp = opponent.get_untracked();
         let tid = selected_team_id.get_untracked();
         let rate = rating.get_untracked();
