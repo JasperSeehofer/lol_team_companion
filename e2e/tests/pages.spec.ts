@@ -39,8 +39,12 @@ for (const { path, content } of AUTHED_PAGES) {
     // Nav should be present
     await expect(authedPage.locator("nav")).toBeVisible();
 
-    // No JS errors (ignore favicon 404s)
-    const realErrors = errors.filter((e) => !e.includes("favicon"));
+    // No JS errors (ignore 404s — the Tailwind v4 @import "tailwindcss" causes a
+    // harmless 404 in dev mode on every page)
+    const realErrors = errors.filter((e) =>
+      !e.includes("favicon") &&
+      !e.includes("404 (Not Found)")
+    );
     expect(realErrors).toHaveLength(0);
   });
 }

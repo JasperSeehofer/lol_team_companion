@@ -10,6 +10,28 @@
 - [ ] **Tree graph — too many icons on single edge**: SVG tree stacks multiple champion icons on one edge. Each pick/ban diff should show one icon, spaced or summarized. Fix edge rendering in `tree_graph.rs`.
 - [ ] **Cannot easily switch between drafts**: `selected_node` and `nodes_resource` go out of sync when switching trees. Ensure `nodes_resource` is keyed on `selected_tree_id`.
 
+#### Auth / Session
+- [ ] **Logout doesn't clear session**: Clicking "Log Out" on the profile page (or "Sign Out" in the nav dropdown) does not actually end the session. After logout, navigating to `/profile` still shows the authenticated user's data. Root cause: the `logout()` server fn calls `auth.logout().await` + `redirect("/")`, but (1) the Leptos `ActionForm` submission may not properly propagate the session cookie deletion, and (2) there's no hard navigation after logout (violates CLAUDE.md rule 8). Fix: add `window.location().set_href("/")` in the client-side Effect after logout success, similar to the login flow in `login.rs`.
+- [ ] **Registration doesn't auto-login**: After registering, the user is redirected to `/auth/login` and must log in manually. The `register_action()` server fn only calls `redirect("/auth/login")` without calling `auth.login()`. Consider auto-login after registration for better UX.
+
+#### Multiple Pages — Rule 44 Violations
+- [ ] **"No team" errors shown instead of empty state**: 9 server functions return `Err("No team")` when the user has no team, causing error banners to appear instead of empty-state UI. Violates CLAUDE.md rule 44. Affected functions (all should return `Ok(Vec::new())` or `Ok(empty_struct)`):
+  - `list_trees()` in `tree_drafter.rs` (line 37)
+  - `get_team_stats()` in `stats.rs` (line 45)
+  - `list_plans()` in `game_plan.rs` (line 28)
+  - `list_team_drafts()` in `game_plan.rs` (line 50)
+  - `list_reviews()` in `post_game.rs` (line 26)
+  - `list_plans_for_postgame()` in `post_game.rs` (line 48)
+  - `list_drafts_for_postgame()` in `post_game.rs` (line 70)
+  - `get_recent_match_ids()` in `post_game.rs` (line 92)
+  - `sync_team_stats()` in `stats.rs` (line 90) — mutation op, should show user-friendly error instead
+
+#### Profile
+- [ ] **Missing `.check()` on UPDATE query**: `update_profile()` in `profile.rs` (lines 40-44) is missing `.check()` after `.await?`. Username updates can fail silently. Add `.check()?` after the `.await` call.
+
+#### CSS / Build
+- [ ] **Tailwind v4 `@import "tailwindcss"` 404**: The `input.css` file starts with `@import "tailwindcss"` (Tailwind v4 syntax). This is supposed to be processed by the Tailwind CLI at build time, but the raw import leaks through to the browser CSS, causing a 404 for `/pkg/tailwindcss` on every page load. The `tailwindcss` standalone binary is not present. Either install it or configure `cargo-leptos` to properly process the import.
+
 #### Team Section
 - [x] **Accept join request — member does not appear**: Fixed by surfacing the error from `handle_join_request` and calling `dashboard.refetch()` + `requests.refetch()` on success.
 - [x] **Team owner missing from roster/bench**: Fixed `create_team()` in `db.rs` — owner now inserted as `team_member` with `role = 'unassigned', roster_type = 'sub'`.
@@ -37,6 +59,13 @@
 - [x] **Role icons — remove duplicate text**: Starter slots now show only the SVG role icon (larger, 24px) with the role name as a `title` tooltip. Text label removed.
 - [ ] **Remove "Link Riot account" from team dashboard**: Belongs in Profile. Replace with a notice + link: "Riot account not linked — link it in your profile" if not yet connected.
 - [ ] **Team rename → pencil icon modal**: Remove the prominent rename form. Add a small pencil (✏) icon next to the team name that opens a modal to change name and region.
+
+#### Auth UX
+- [ ] **Protected pages show inline "not logged in" instead of redirecting**: Unauthenticated users who visit `/profile`, `/draft`, `/stats`, etc. see the page shell with a "not logged in" or error message instead of being redirected to `/auth/login`. Consider adding a client-side auth guard that checks `get_current_user()` and redirects to login if `None`.
+- [ ] **Nav shows all links regardless of auth state**: Team, Draft, Tree Drafter, Stats, Game Plan, Post Game links are always visible even for unauthenticated users. Consider hiding or dimming them when not logged in.
+
+#### Team Builder
+- [ ] **Placeholder page**: `/team-builder` just shows "Composition builder coming in a future phase." — needs actual implementation or should be hidden from nav until ready.
 
 #### Champion Pool
 - [x] **Click-to-add champion**: Selecting a champion in the autocomplete dropdown now immediately adds it to the pool.
@@ -231,5 +260,21 @@
 
 ---
 
-## Known Bugs
-*(none currently tracked)*
+## Known Bugs (from e2e audit 2026-03-11)
+
+### Critical
+- **Logout broken**: Session not cleared after clicking Log Out / Sign Out. User remains authenticated. See Priority 1 auth section above.
+
+### Medium
+- **9 rule-44 violations**: Tree drafter, stats, game plan, and post-game pages show "error running server function: No team" instead of empty-state UI when user has no team. See Priority 1 above.
+- **Missing `.check()` on profile UPDATE**: Username changes can fail silently. See Priority 1 above.
+- **Registration doesn't auto-login**: User must manually log in after registering.
+
+### Low
+- **Tailwind CSS 404**: Every page loads `/pkg/tailwindcss` and gets 404. Harmless but noisy in console.
+- **Auth test false positive**: `auth.spec.ts` "register → auto-login → profile accessible" passes vacuously — it only checks the URL is `/profile`, not that the user is actually logged in. The profile page doesn't redirect unauthenticated users.
+
+## E2E Test Status (2026-03-11)
+- 20/21 passing, 1 skipped (`logout clears session` — marked `test.fixme`)
+- Auth fixture fixed: now always registers then logs in (registration doesn't auto-login)
+- Tailwind 404 filtered from error assertions (known dev-mode issue)

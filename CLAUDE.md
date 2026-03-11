@@ -394,15 +394,17 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 - **e2e tests (`just e2e`):** Regression suite. Run before committing or when validating multiple pages at once.
 
 **Auth for MCP sessions:**
-1. `browser_navigate` to `/auth/register`, fill form with `browser_type`, submit with `browser_click`
-2. If user already exists, navigate to `/auth/login` and log in instead
-3. All subsequent navigations in the same session are authenticated
+1. **Always register then log in** — registration does NOT auto-login. The `register_action()` server fn redirects to `/auth/login` without calling `auth.login()`.
+2. `browser_navigate` to `/auth/register`, fill form, submit. Then navigate to `/auth/login`, fill form, submit.
+3. After login, wait for the hard navigation to `/team/dashboard` to complete before visiting other pages.
+4. All subsequent navigations in the same browser session are authenticated.
 
 **Common verification patterns:**
 - New page: navigate → snapshot → confirm page-specific content visible, no error banners
 - Form submission: fill fields → submit → snapshot → confirm success message or redirect
 - List mutation (add/delete): perform action → snapshot → confirm list updated
 - Error handling: trigger an error condition → snapshot → confirm error banner appears with useful message
+- "No team" state: verify pages show empty state (not error banners) for users without a team
 
 ### After making code changes
 - `cargo leptos watch` auto-recompiles on file save
@@ -414,6 +416,22 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 - `just verify` — check both targets + test + lint + fmt
 - `just smoke` — health check + API smoke tests (requires running server)
 - `just e2e` — full Playwright e2e suite (requires running server)
+
+### Gotchas learned from browser testing
+
+45. **`WebFetch` cannot reach localhost** — It auto-upgrades HTTP to HTTPS, which fails for `127.0.0.1`. Use `curl` via Bash for fetching local pages, or Playwright MCP / e2e tests for browser interaction.
+
+46. **Extracting text from Leptos SSR HTML** — The HTML contains large inline `<script>` blocks (hot-reload, hydration). Use Python's `HTMLParser` to strip scripts and extract visible text content. Raw `sed` approaches break on multi-line scripts.
+
+47. **Tailwind v4 `@import "tailwindcss"` 404** — The `input.css` starts with `@import "tailwindcss"` which is Tailwind v4 build-time syntax. When the tailwind CLI doesn't fully process it, the browser resolves it as a relative URL `/pkg/tailwindcss` → 404. This is harmless but causes console errors on every page. E2e tests must filter out `404 (Not Found)` console errors.
+
+48. **E2e auth fixture must register then login** — Registration redirects to `/auth/login` without auto-login. The `authedPage` fixture must always do both steps. After login, `waitForURL("**/team/dashboard")` ensures the hard navigation completes before visiting other pages.
+
+49. **Logout does not hard-navigate** — The `logout()` server fn calls `auth.logout()` + `redirect("/")`, but the client-side `ActionForm` does not do a hard navigation (`window.location().set_href()`). This means client-side state (nav, resources) is not refreshed. Same issue as login (rule 8) but not yet fixed for logout.
+
+50. **Protected pages don't redirect unauthenticated users** — They show inline "not logged in" messages or error banners instead of redirecting to `/auth/login`. Server functions correctly reject unauthenticated requests, but the UI degrades rather than redirects. This is by design but should be documented in tests.
+
+51. **`just` may not be installed** — `just` is a dev dependency. Fall back to running cargo/npx commands directly if `just` is not on PATH.
 
 ## Code Style
 
