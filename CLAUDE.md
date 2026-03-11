@@ -313,6 +313,18 @@ schema.surql             # DB schema (loaded on startup via include_str!)
     }
     ```
 
+### Toolchain / Compiler
+
+38. **`recursion_limit = "512"` in `lib.rs` and `main.rs`** — The deeply nested Leptos view types in `post_game.rs` exceed the default limit of 128. Both files have `#![recursion_limit = "512"]`. Do not lower it.
+
+### Testing
+
+39. **Run tests with `--features ssr`** — `cargo test --features ssr` runs all 44 tests (19 unit + 25 integration). Integration tests live in `tests/` and use an in-memory SurrealDB via `tests/common/mod.rs`. Unit tests live in `#[cfg(test)]` blocks in model and server files.
+
+40. **`ORDER BY` only on selected fields in partial SELECTs** — SurrealDB 3.x rejects `ORDER BY <field>` if the field is not included in a partial `SELECT` clause. Either add the field to the `SELECT` or use `SELECT *`.
+
+41. **Tree assembly: use `children_of` map, not reversal heuristic** — Building a `HashMap<String, Vec<String>>` of parent→child IDs and doing a recursive DFS is correct regardless of DB return order. The old reverse-child_ids heuristic failed when sibling nodes shared the same `sort_order`.
+
 ## Code Style
 
 - **Errors:** `thiserror` for custom error types, map to `ServerFnError` via `.map_err(|e| ServerFnError::new(e.to_string()))`
