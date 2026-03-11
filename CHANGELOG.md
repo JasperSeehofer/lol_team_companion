@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-03-11
+
+### Added
+
+- Playwright MCP server config (`.mcp.json`) for browser interaction during development — navigate pages, snapshot accessibility trees, click elements, fill forms
+- `scripts/wait_for_server.sh` — polls `/healthz` until the dev server is ready (configurable timeout)
+- Justfile recipes: `verify` (full validation), `smoke` (runtime tests), `wait-for-server`, `full-check` (verify + e2e)
+- E2e test fixtures (`e2e/tests/fixtures.ts`) — shared auth helper that registers + logs in a test user
+- Authenticated page smoke tests (`e2e/tests/pages.spec.ts`) — smoke tests for all 10 protected routes checking for JS errors, correct rendering, and no login redirect
+- Claude Code dev workflow section in CLAUDE.md documenting browser verification patterns with Playwright MCP
+
+### Changed
+
+- Expanded `.claude/settings.local.json` permissions: `cargo:*`, `just:*`, `curl:*`, `./scripts/*`, MCP tool access
+- "Adding a New Feature > New page" checklist now includes e2e smoke test and MCP verification steps
+
+### Fixed
+
+- `Cargo.toml`: `end2end-dir` corrected from `"end2end"` to `"e2e"` to match actual directory
+- `CLAUDE.md`: dev server ports corrected from `:3000`/`:3001` to `:3002`/`:3003`
+
 ## [0.13.0] - 2026-03-11
 
 ### Added

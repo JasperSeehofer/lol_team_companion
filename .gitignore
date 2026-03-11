@@ -3,3 +3,6 @@
 .env
 node_modules/
 tailwindcss-linux-x64
+e2e/playwright-report/
+e2e/test-results/
+.mcp.json

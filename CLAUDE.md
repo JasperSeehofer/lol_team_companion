@@ -11,7 +11,7 @@ A League of Legends team management app for coordinating drafts, tracking stats,
 ## Commands
 
 ```bash
-# Dev server with live-reload (runs on :3000, reload on :3001)
+# Dev server with live-reload (runs on :3002, reload on :3003)
 cargo leptos watch
 
 # Production build
@@ -171,6 +171,8 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 2. Add `pub mod my_page;` to `src/pages/mod.rs`
 3. Add a `<Route>` in `src/app.rs`
 4. Add a nav link in `src/components/nav.rs` if needed
+5. Add a smoke test entry to `e2e/tests/pages.spec.ts` (`AUTHED_PAGES` array if auth-required, or `PUBLIC_PAGES` in `smoke.spec.ts` if public)
+6. **Verify via Playwright MCP**: navigate to the new route, snapshot, confirm it renders without errors
 
 ### New DB table
 
@@ -369,6 +371,49 @@ schema.surql             # DB schema (loaded on startup via include_str!)
         None => return Ok(Vec::new()),
     };
     ```
+
+## Claude Code Dev Workflow
+
+### Starting a dev session
+1. Start dev server in background: `cargo leptos watch` (use `run_in_background`)
+2. Wait for ready: `./scripts/wait_for_server.sh 120`
+3. Register + log in via Playwright MCP so subsequent page visits are authenticated
+
+### Browser verification with Playwright MCP
+
+The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, and more. **Use it liberally** — it's the primary way to catch UI/runtime bugs that the compiler can't.
+
+**After every UI change:**
+1. `browser_navigate` to the affected page
+2. `browser_snapshot` — read the accessibility tree to confirm the page rendered correctly
+3. Check for missing elements, broken text, wrong state
+4. If the change involves interaction (click, form submit, drag), perform the interaction via MCP and snapshot again to verify the result
+
+**When to use MCP vs Playwright e2e tests:**
+- **MCP (interactive):** Quick one-off checks during development. Verify a page renders, click through a flow, inspect state after a mutation.
+- **e2e tests (`just e2e`):** Regression suite. Run before committing or when validating multiple pages at once.
+
+**Auth for MCP sessions:**
+1. `browser_navigate` to `/auth/register`, fill form with `browser_type`, submit with `browser_click`
+2. If user already exists, navigate to `/auth/login` and log in instead
+3. All subsequent navigations in the same session are authenticated
+
+**Common verification patterns:**
+- New page: navigate → snapshot → confirm page-specific content visible, no error banners
+- Form submission: fill fields → submit → snapshot → confirm success message or redirect
+- List mutation (add/delete): perform action → snapshot → confirm list updated
+- Error handling: trigger an error condition → snapshot → confirm error banner appears with useful message
+
+### After making code changes
+- `cargo leptos watch` auto-recompiles on file save
+- rust-analyzer LSP provides real-time type errors
+- `just check-ssr` for a quick compile check when LSP is insufficient
+- **Always verify the affected page in the browser via MCP** — compiler checks alone miss rendering bugs, wrong CSS, missing data, and broken interactions
+
+### Periodic / before committing
+- `just verify` — check both targets + test + lint + fmt
+- `just smoke` — health check + API smoke tests (requires running server)
+- `just e2e` — full Playwright e2e suite (requires running server)
 
 ## Code Style
 

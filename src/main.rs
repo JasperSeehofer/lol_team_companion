@@ -1,6 +1,6 @@
 #![recursion_limit = "512"]
 
-use axum::Router;
+use axum::{Router, extract::State, routing::get};
 use axum_login::{AuthManagerLayerBuilder, tower_sessions::SessionManagerLayer};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -14,6 +14,16 @@ struct AppState {
     leptos_options: LeptosOptions,
     db: Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
     auth_backend: AuthBackend,
+}
+
+async fn health_handler(
+    State(state): State<AppState>,
+) -> axum::Json<serde_json::Value> {
+    let db_ok = state.db.query("RETURN true").await.is_ok();
+    axum::Json(serde_json::json!({
+        "status": "ok",
+        "db": if db_ok { "ok" } else { "error" }
+    }))
 }
 
 #[tokio::main]
@@ -63,6 +73,7 @@ async fn main() {
     };
 
     let app = Router::new()
+        .route("/healthz", get(health_handler))
         .leptos_routes_with_context(
             &app_state,
             routes,
