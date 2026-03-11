@@ -4,4 +4,5 @@ pub mod draft_board;
 pub mod nav;
 pub mod stat_card;
 pub mod theme_toggle;
+pub mod tree_graph;
 pub mod ui;

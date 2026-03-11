@@ -2,11 +2,16 @@
 ## Open
 ### General
 - [ ] it seems that often if a button click did not work, all subsequent clicks or links to different routes dont do anything. Please investigate and solve this issue in general.
-### Tree drafter
-- [ ] I would love to have a graph representation of the tree structure with the connection edges have a little champion Icon in the center on the connection edge that shows the champion that was banned or the champion that was left open
-
-
 ## Completed
+
+### Section 9 – Tree Graph Visualization
+- [x] SVG-based tree graph component (`src/components/tree_graph.rs`)
+- [x] Top-down layout algorithm with automatic node positioning
+- [x] Champion icons on connection edges showing picks/bans diff between parent and child
+- [x] Ban indicators (red border + cross overlay) vs pick indicators (green border)
+- [x] List/graph view toggle in tree structure panel header
+- [x] Graph panel auto-expands to fill width; list view stays as fixed sidebar
+- [x] Clickable nodes to select for editing, hover + button to add branches
 
 ### Section 8 – Theming System
 - [x] CSS custom property-based theme system with semantic color tokens

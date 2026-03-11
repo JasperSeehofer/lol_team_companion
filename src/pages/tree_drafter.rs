@@ -4,6 +4,7 @@ use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
 use crate::components::draft_board::{DraftBoard, slot_meta};
 use crate::components::champion_picker::ChampionPicker;
+use crate::components::tree_graph::TreeGraph;
 use crate::components::ui::{ErrorBanner, StatusMessage};
 
 // ---------------------------------------------------------------------------
@@ -246,6 +247,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
     // Expanded nodes in tree view
     let (expanded_nodes, set_expanded_nodes) = signal(std::collections::HashSet::<String>::new());
+
+    // Tree visualization mode: "list" or "graph"
+    let (tree_view_mode, set_tree_view_mode) = signal("list".to_string());
 
     // Live navigator state
     let (nav_path, set_nav_path) = signal(Vec::<String>::new());
@@ -614,39 +618,110 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             // Edit mode
                             view! {
                                 <div class="flex gap-4 flex-1">
-                                    // Tree visualization
-                                    <div class="w-80 flex-shrink-0 bg-elevated/50 border border-divider/50 rounded-xl p-4 overflow-y-auto flex flex-col gap-3">
-                                        <h3 class="text-primary font-semibold text-sm">"Tree Structure"</h3>
+                                    // Tree visualization panel
+                                    <div class=move || {
+                                        if tree_view_mode.get() == "graph" {
+                                            "flex-1 bg-elevated/50 border border-divider/50 rounded-xl p-4 overflow-y-auto flex flex-col gap-3"
+                                        } else {
+                                            "w-80 flex-shrink-0 bg-elevated/50 border border-divider/50 rounded-xl p-4 overflow-y-auto flex flex-col gap-3"
+                                        }
+                                    }>
+                                        // Header with view toggle
+                                        <div class="flex items-center justify-between">
+                                            <h3 class="text-primary font-semibold text-sm">"Tree Structure"</h3>
+                                            <div class="flex items-center gap-1 bg-overlay/50 rounded-lg p-0.5">
+                                                <button
+                                                    class=move || {
+                                                        if tree_view_mode.get() == "list" {
+                                                            "px-2 py-0.5 text-xs rounded-md bg-accent text-accent-contrast font-medium transition-colors cursor-pointer"
+                                                        } else {
+                                                            "px-2 py-0.5 text-xs rounded-md text-secondary hover:text-primary transition-colors cursor-pointer"
+                                                        }
+                                                    }
+                                                    on:click=move |_| set_tree_view_mode.set("list".to_string())
+                                                    title="List view"
+                                                >
+                                                    // List icon (≡)
+                                                    "\u{2261}"
+                                                </button>
+                                                <button
+                                                    class=move || {
+                                                        if tree_view_mode.get() == "graph" {
+                                                            "px-2 py-0.5 text-xs rounded-md bg-accent text-accent-contrast font-medium transition-colors cursor-pointer"
+                                                        } else {
+                                                            "px-2 py-0.5 text-xs rounded-md text-secondary hover:text-primary transition-colors cursor-pointer"
+                                                        }
+                                                    }
+                                                    on:click=move |_| set_tree_view_mode.set("graph".to_string())
+                                                    title="Graph view"
+                                                >
+                                                    // Graph/tree icon (⎔)
+                                                    "\u{2442}"
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading nodes..."</div> }>
                                             {move || nodes_resource.get().map(|result| match result {
                                                 Ok(roots) if roots.is_empty() => view! {
                                                     <p class="text-dimmed text-sm">"No nodes yet."</p>
                                                 }.into_any(),
-                                                Ok(roots) => view! {
-                                                    <div class="flex flex-col gap-1">
-                                                        {roots.into_iter().map(|root| {
-                                                            view! {
-                                                                <TreeNodeView
-                                                                    node=root
-                                                                    depth=0
-                                                                    selected_node_id=selected_node_id
-                                                                    expanded_nodes=expanded_nodes
-                                                                    set_expanded_nodes=set_expanded_nodes
-                                                                    on_select=Callback::new(move |n: DraftTreeNode| {
-                                                                        select_node(&n);
-                                                                    })
-                                                                    on_add_branch=Callback::new(move |parent_id: String| {
-                                                                        set_adding_branch_to.set(Some(parent_id));
-                                                                        set_new_branch_label.set(String::new());
-                                                                    })
-                                                                    on_delete=Callback::new(move |nid: String| {
-                                                                        do_delete_node(nid);
-                                                                    })
-                                                                />
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any(),
+                                                Ok(roots) => {
+                                                    let vm = tree_view_mode.get();
+                                                    if vm == "graph" {
+                                                        // Build champion map for edge icons
+                                                        let champ_map = champions_resource.get()
+                                                            .and_then(|r| r.ok())
+                                                            .map(|champs| {
+                                                                champs.into_iter().map(|c| (c.name.clone(), c)).collect::<HashMap<String, Champion>>()
+                                                            })
+                                                            .unwrap_or_default();
+                                                        let champion_map_stored = StoredValue::new(champ_map);
+                                                        let all_nodes_stored = StoredValue::new(roots.clone());
+                                                        view! {
+                                                            <TreeGraph
+                                                                roots=roots
+                                                                selected_node_id=selected_node_id
+                                                                on_select=Callback::new(move |n: DraftTreeNode| {
+                                                                    select_node(&n);
+                                                                })
+                                                                on_add_branch=Callback::new(move |parent_id: String| {
+                                                                    set_adding_branch_to.set(Some(parent_id));
+                                                                    set_new_branch_label.set(String::new());
+                                                                })
+                                                                champion_map=champion_map_stored
+                                                                all_nodes=all_nodes_stored
+                                                            />
+                                                        }.into_any()
+                                                    } else {
+                                                        // List view
+                                                        view! {
+                                                            <div class="flex flex-col gap-1">
+                                                                {roots.into_iter().map(|root| {
+                                                                    view! {
+                                                                        <TreeNodeView
+                                                                            node=root
+                                                                            depth=0
+                                                                            selected_node_id=selected_node_id
+                                                                            expanded_nodes=expanded_nodes
+                                                                            set_expanded_nodes=set_expanded_nodes
+                                                                            on_select=Callback::new(move |n: DraftTreeNode| {
+                                                                                select_node(&n);
+                                                                            })
+                                                                            on_add_branch=Callback::new(move |parent_id: String| {
+                                                                                set_adding_branch_to.set(Some(parent_id));
+                                                                                set_new_branch_label.set(String::new());
+                                                                            })
+                                                                            on_delete=Callback::new(move |nid: String| {
+                                                                                do_delete_node(nid);
+                                                                            })
+                                                                        />
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        }.into_any()
+                                                    }
+                                                },
                                                 Err(e) => view! {
                                                     <p class="text-red-400 text-sm">{e.to_string()}</p>
                                                 }.into_any(),
