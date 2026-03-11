@@ -46,7 +46,7 @@ pub fn ChampionAutocomplete(
         <div class="relative">
             <input
                 type="text"
-                class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
                 placeholder=placeholder
                 prop:value=move || filter_text.get()
                 on:input=move |ev| {
@@ -85,21 +85,21 @@ pub fn ChampionAutocomplete(
                     return view! { <div></div> }.into_any();
                 }
                 view! {
-                    <div class="absolute z-50 mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                    <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
                         {items.into_iter().map(|c| {
                             let name = c.name.clone();
                             let name_for_click = name.clone();
                             let img = c.image_full.clone();
                             view! {
                                 <button
-                                    class="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-700 transition-colors text-left cursor-pointer"
+                                    class="w-full flex items-center gap-2 px-3 py-2 hover:bg-overlay transition-colors text-left cursor-pointer"
                                     on:mousedown=move |ev| {
                                         ev.prevent_default();
                                         select_champion(name_for_click.clone());
                                     }
                                 >
                                     <img src=img alt=name.clone() class="w-6 h-6 rounded object-cover" />
-                                    <span class="text-white text-sm">{name}</span>
+                                    <span class="text-primary text-sm">{name}</span>
                                 </button>
                             }
                         }).collect_view()}

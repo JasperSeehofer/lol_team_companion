@@ -143,12 +143,12 @@ fn build_actions(slots: Vec<Option<String>>) -> Vec<DraftAction> {
 fn tier_badge_class(tier: &str) -> &'static str {
     match tier {
         "S+" => "bg-purple-500 text-white",
-        "S"  => "bg-yellow-400 text-gray-900",
-        "A"  => "bg-green-500 text-white",
+        "S"  => "bg-accent text-accent-contrast",
+        "A"  => "bg-green-500 text-primary",
         "B"  => "bg-blue-500 text-white",
-        "C"  => "bg-orange-500 text-white",
+        "C"  => "bg-orange-500 text-primary",
         "D"  => "bg-red-600 text-white",
-        _    => "bg-gray-600 text-gray-300",
+        _    => "bg-overlay-strong text-secondary",
     }
 }
 
@@ -279,39 +279,39 @@ pub fn DraftPage() -> impl IntoView {
     view! {
         <div class="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
-                <h1 class="text-3xl font-bold text-white">"Draft Planner"</h1>
-                <p class="text-yellow-400 font-medium mt-1">{phase_label}</p>
+                <h1 class="text-3xl font-bold text-primary">"Draft Planner"</h1>
+                <p class="text-accent font-medium mt-1">{phase_label}</p>
                 {move || loaded_draft_id.get().map(|_| view! {
-                    <p class="text-yellow-300/70 text-sm mt-0.5">"Editing saved draft — save to update"</p>
+                    <p class="text-accent-hover/70 text-sm mt-0.5">"Editing saved draft — save to update"</p>
                 })}
             </div>
 
             // Header form
-            <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 flex flex-col gap-4">
+            <div class="bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-4">
                 <div class="grid grid-cols-3 gap-4">
                     // Draft Name
                     <div>
-                        <label class="block text-gray-300 text-sm mb-1">"Draft Name"</label>
+                        <label class="block text-secondary text-sm mb-1">"Draft Name"</label>
                         <input
                             type="text"
                             prop:value=move || draft_name.get()
-                            class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                             on:input=move |ev| set_draft_name.set(event_target_value(&ev))
                         />
                     </div>
                     // Team selection
                     <div>
-                        <label class="block text-gray-300 text-sm mb-1">"Team"</label>
-                        <Suspense fallback=|| view! { <div class="h-9 bg-gray-700 rounded animate-pulse"></div> }>
+                        <label class="block text-secondary text-sm mb-1">"Team"</label>
+                        <Suspense fallback=|| view! { <div class="h-9 bg-overlay rounded animate-pulse"></div> }>
                             {move || teams_resource.get().map(|result| match result {
                                 Ok(teams) if teams.is_empty() => view! {
-                                    <p class="text-gray-500 text-sm py-2">"Not part of a team yet."</p>
+                                    <p class="text-dimmed text-sm py-2">"Not part of a team yet."</p>
                                 }.into_any(),
                                 Ok(teams) => view! {
                                     <select
                                         prop:value=move || selected_team_id.get()
                                         on:change=move |ev| set_selected_team_id.set(event_target_value(&ev))
-                                        class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                                     >
                                         {teams.into_iter().map(|t| {
                                             let id = t.id.clone().unwrap_or_default();
@@ -328,24 +328,24 @@ pub fn DraftPage() -> impl IntoView {
                     </div>
                     // Opponent
                     <div>
-                        <label class="block text-gray-300 text-sm mb-1">"Opponent (optional)"</label>
+                        <label class="block text-secondary text-sm mb-1">"Opponent (optional)"</label>
                         <input
                             type="text"
                             prop:value=move || opponent.get()
-                            class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                             on:input=move |ev| set_opponent.set(event_target_value(&ev))
                         />
                     </div>
                 </div>
                 // Our Side toggle
                 <div class="flex items-center gap-4">
-                    <label class="text-gray-300 text-sm">"Our Side"</label>
+                    <label class="text-secondary text-sm">"Our Side"</label>
                     <div class="flex gap-1">
                         <button
                             class=move || if our_side.get() == "blue" {
                                 "px-3 py-1 rounded text-sm font-medium bg-blue-500 text-white cursor-pointer"
                             } else {
-                                "px-3 py-1 rounded text-sm font-medium bg-gray-700 text-gray-400 hover:bg-gray-600 transition-colors cursor-pointer"
+                                "px-3 py-1 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
                             }
                             on:click=move |_| set_our_side.set("blue".to_string())
                         >"Blue"</button>
@@ -353,7 +353,7 @@ pub fn DraftPage() -> impl IntoView {
                             class=move || if our_side.get() == "red" {
                                 "px-3 py-1 rounded text-sm font-medium bg-red-500 text-white cursor-pointer"
                             } else {
-                                "px-3 py-1 rounded text-sm font-medium bg-gray-700 text-gray-400 hover:bg-gray-600 transition-colors cursor-pointer"
+                                "px-3 py-1 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
                             }
                             on:click=move |_| set_our_side.set("red".to_string())
                         >"Red"</button>
@@ -362,7 +362,7 @@ pub fn DraftPage() -> impl IntoView {
 
                 // Rating picker
                 <div>
-                    <label class="block text-gray-300 text-sm mb-2">"Rating"</label>
+                    <label class="block text-secondary text-sm mb-2">"Rating"</label>
                     <div class="flex gap-1.5">
                         {TIERS.iter().map(|&tier| {
                             view! {
@@ -372,7 +372,7 @@ pub fn DraftPage() -> impl IntoView {
                                         if selected {
                                             format!("rounded px-3 py-1 text-sm font-bold transition-colors {}", tier_badge_class(tier))
                                         } else {
-                                            "rounded px-3 py-1 text-sm font-bold transition-colors bg-gray-700 hover:bg-gray-600 text-gray-400".to_string()
+                                            "rounded px-3 py-1 text-sm font-bold transition-colors bg-overlay hover:bg-overlay-strong text-muted".to_string()
                                         }
                                     }
                                     on:click=move |_| {
@@ -393,8 +393,8 @@ pub fn DraftPage() -> impl IntoView {
 
             // Board + Comments
             <div class="flex gap-4">
-                <div class="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-4">
-                    <Suspense fallback=|| view! { <div class="text-gray-400 text-center py-8">"Loading champions..."</div> }>
+                <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
+                    <Suspense fallback=|| view! { <div class="text-muted text-center py-8">"Loading champions..."</div> }>
                         {move || champions_resource.get().map(|result| match result {
                             Err(e) => view! {
                                 <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
@@ -419,18 +419,18 @@ pub fn DraftPage() -> impl IntoView {
                 </div>
 
                 // Comments sidebar
-                <div class="w-72 bg-gray-800 border border-gray-700 rounded-lg p-4 flex flex-col gap-3">
-                    <h3 class="text-white font-bold">"Comments"</h3>
+                <div class="w-72 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3">
+                    <h3 class="text-primary font-bold">"Comments"</h3>
                     <div class="flex flex-col gap-1 max-h-64 overflow-y-auto flex-1">
                         {move || {
                             let list = comments.get();
                             if list.is_empty() {
-                                view! { <p class="text-gray-500 text-sm">"No comments yet."</p> }.into_any()
+                                view! { <p class="text-dimmed text-sm">"No comments yet."</p> }.into_any()
                             } else {
                                 view! {
                                     <div class="flex flex-col gap-1">
                                         {list.into_iter().map(|c| view! {
-                                            <div class="bg-gray-900 rounded p-2 text-sm text-gray-200">{c}</div>
+                                            <div class="bg-surface rounded p-2 text-sm text-gray-200">{c}</div>
                                         }).collect_view()}
                                     </div>
                                 }.into_any()
@@ -440,12 +440,12 @@ pub fn DraftPage() -> impl IntoView {
                     <textarea
                         rows="3"
                         placeholder="Add a comment..."
-                        class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm placeholder-gray-400 focus:outline-none focus:border-yellow-400 resize-none"
+                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus:border-accent resize-none"
                         on:input=move |ev| set_comment_input.set(event_target_value(&ev))
                         prop:value=move || comment_input.get()
                     />
                     <button
-                        class="bg-gray-600 hover:bg-gray-500 text-white text-sm rounded px-3 py-1 transition-colors"
+                        class="bg-overlay-strong hover:bg-overlay-strong text-primary text-sm rounded px-3 py-1 transition-colors"
                         on:click=move |_| {
                             let text = comment_input.get_untracked();
                             let trimmed = text.trim().to_string();
@@ -461,11 +461,11 @@ pub fn DraftPage() -> impl IntoView {
             </div>
 
             // Champion Picker
-            <div class="bg-gray-800 border border-gray-700 rounded-lg p-4">
+            <div class="bg-elevated border border-divider rounded-lg p-4">
                 {move || active_slot_label().map(|label| view! {
-                    <p class="text-yellow-300 text-sm font-medium mb-2">{label}</p>
+                    <p class="text-accent-hover text-sm font-medium mb-2">{label}</p>
                 })}
-                <Suspense fallback=|| view! { <div class="text-gray-400">"Loading champions..."</div> }>
+                <Suspense fallback=|| view! { <div class="text-muted">"Loading champions..."</div> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load champions: {e}") />
@@ -484,13 +484,13 @@ pub fn DraftPage() -> impl IntoView {
             // Action buttons
             <div class="flex gap-3 items-center">
                 <button
-                    class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-6 py-2 transition-colors"
+                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-6 py-2 transition-colors"
                     on:click=do_save
                 >
                     {move || if loaded_draft_id.get().is_some() { "Update Draft" } else { "Save Draft" }}
                 </button>
                 <button
-                    class="bg-gray-600 hover:bg-gray-500 text-white rounded px-4 py-2 transition-colors"
+                    class="bg-overlay-strong hover:bg-overlay-strong text-primary rounded px-4 py-2 transition-colors"
                     on:click=move |_| {
                         set_draft_slots.set(vec![None; 20]);
                         set_active_slot.set(Some(0));
@@ -512,8 +512,8 @@ pub fn DraftPage() -> impl IntoView {
 
             // Saved Drafts
             <div>
-                <h2 class="text-xl font-bold text-white mb-3">"Saved Drafts"</h2>
-                <Suspense fallback=|| view! { <div class="text-gray-400">"Loading..."</div> }>
+                <h2 class="text-xl font-bold text-primary mb-3">"Saved Drafts"</h2>
+                <Suspense fallback=|| view! { <div class="text-muted">"Loading..."</div> }>
                     {move || {
                         let champ_url_map: HashMap<String, String> = champions_resource.get()
                             .and_then(|r| r.ok())
@@ -523,7 +523,7 @@ pub fn DraftPage() -> impl IntoView {
 
                         drafts.get().map(move |result| match result {
                             Ok(list) if list.is_empty() => view! {
-                                <p class="text-gray-500">"No drafts yet."</p>
+                                <p class="text-dimmed">"No drafts yet."</p>
                             }.into_any(),
                             Ok(list) => view! {
                                 <div class="flex flex-col gap-2">
@@ -577,13 +577,13 @@ pub fn DraftPage() -> impl IntoView {
                                         let display_rating = d_rating.clone();
 
                                         view! {
-                                            <div class="bg-gray-800 border border-gray-700 rounded px-4 py-3 flex items-center gap-4">
+                                            <div class="bg-elevated border border-divider rounded px-4 py-3 flex items-center gap-4">
                                                 <div class="flex-1 min-w-0">
                                                     // Name + opponent + rating badge
                                                     <div class="flex items-center gap-2 mb-1.5">
-                                                        <span class="text-white font-medium">{display_name}</span>
+                                                        <span class="text-primary font-medium">{display_name}</span>
                                                         {display_opp.map(|o| view! {
-                                                            <span class="text-gray-400 text-sm">"vs " {o}</span>
+                                                            <span class="text-muted text-sm">"vs " {o}</span>
                                                         })}
                                                         {display_rating.map(|r| {
                                                             let cls = format!("rounded px-1.5 py-0.5 text-xs font-bold {}", tier_badge_class(&r));
@@ -595,7 +595,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         // Blue bans (left)
                                                         {blue_ban_p1.into_iter().map(|(name, url)| view! {
                                                             <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-gray-600 grayscale opacity-50">
+                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -611,7 +611,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }}
                                                         {blue_ban_p2.into_iter().map(|(name, url)| view! {
                                                             <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-gray-600 grayscale opacity-50">
+                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -621,7 +621,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }).collect_view()}
                                                         // Separator between bans and picks
                                                         {if has_left_bans && has_picks {
-                                                            view! { <span class="text-gray-600 text-xs mx-0.5 flex-shrink-0">"|"</span> }.into_any()
+                                                            view! { <span class="text-overlay-strong text-xs mx-0.5 flex-shrink-0">"|"</span> }.into_any()
                                                         } else {
                                                             view! { <span></span> }.into_any()
                                                         }}
@@ -633,7 +633,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }).collect_view()}
                                                         // VS separator
                                                         {if has_both_sides {
-                                                            view! { <span class="text-gray-500 text-xs mx-0.5 flex-shrink-0">"vs"</span> }.into_any()
+                                                            view! { <span class="text-dimmed text-xs mx-0.5 flex-shrink-0">"vs"</span> }.into_any()
                                                         } else {
                                                             view! { <span></span> }.into_any()
                                                         }}
@@ -645,14 +645,14 @@ pub fn DraftPage() -> impl IntoView {
                                                         }).collect_view()}
                                                         // Separator between picks and red bans
                                                         {if has_right_bans && has_picks {
-                                                            view! { <span class="text-gray-600 text-xs mx-0.5 flex-shrink-0">"|"</span> }.into_any()
+                                                            view! { <span class="text-overlay-strong text-xs mx-0.5 flex-shrink-0">"|"</span> }.into_any()
                                                         } else {
                                                             view! { <span></span> }.into_any()
                                                         }}
                                                         // Red bans (right)
                                                         {red_ban_p1.into_iter().map(|(name, url)| view! {
                                                             <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-gray-600 grayscale opacity-50">
+                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -668,7 +668,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }}
                                                         {red_ban_p2.into_iter().map(|(name, url)| view! {
                                                             <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-gray-600 grayscale opacity-50">
+                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -679,7 +679,7 @@ pub fn DraftPage() -> impl IntoView {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    class="flex-shrink-0 bg-gray-700 hover:bg-yellow-400 hover:text-gray-900 text-gray-300 text-sm font-medium rounded px-3 py-1.5 transition-colors"
+                                                    class="flex-shrink-0 bg-overlay hover:bg-accent hover:text-accent-contrast text-secondary text-sm font-medium rounded px-3 py-1.5 transition-colors"
                                                     on:click=move |_| {
                                                         set_loaded_draft_id.set(d_id.clone());
                                                         set_draft_name.set(d_name.clone());

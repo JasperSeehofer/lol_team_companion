@@ -166,11 +166,11 @@ fn generate_template(our: &[String], enemy: &[String]) -> (Vec<String>, Vec<Stri
 const ROLES: [&str; 5] = ["Top", "Jungle", "Mid", "Bot", "Support"];
 
 fn textarea_class() -> &'static str {
-    "w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 resize-none transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
 }
 
 fn input_class() -> &'static str {
-    "w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
 }
 
 // ---------------------------------------------------------------------------
@@ -332,8 +332,8 @@ pub fn GamePlanPage() -> impl IntoView {
     view! {
         <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
-                <h1 class="text-3xl font-bold text-white">"Game Plans"</h1>
-                <p class="text-gray-400 text-sm mt-1">"Strategic plans for specific champion matchups"</p>
+                <h1 class="text-3xl font-bold text-primary">"Game Plans"</h1>
+                <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups"</p>
             </div>
 
             {move || status_msg.get().map(|msg| {
@@ -344,14 +344,14 @@ pub fn GamePlanPage() -> impl IntoView {
                 // Left: plan list
                 <div class="w-72 flex-shrink-0 flex flex-col gap-3">
                     <button
-                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
                         on:click=move |_| clear_editor.run(())
                     >"+ New Plan"</button>
 
-                    <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                    <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
                         {move || plans.get().map(|result| match result {
                             Ok(list) if list.is_empty() => view! {
-                                <p class="text-gray-500 text-sm">"No plans yet."</p>
+                                <p class="text-dimmed text-sm">"No plans yet."</p>
                             }.into_any(),
                             Ok(list) => view! {
                                 <div class="flex flex-col gap-1.5">
@@ -371,18 +371,18 @@ pub fn GamePlanPage() -> impl IntoView {
                                             <div class=move || {
                                                 let sel = editing_id.get();
                                                 if sel.as_deref() == Some(&plan_id_for_cls) {
-                                                    "bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-3 transition-all"
+                                                    "bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all"
                                                 } else {
-                                                    "bg-gray-800/30 border border-gray-700/30 rounded-lg p-3 hover:bg-gray-700/30 transition-all"
+                                                    "bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all"
                                                 }
                                             }>
                                                 <button
                                                     class="w-full text-left"
                                                     on:click=move |_| load_plan.run(plan_for_load.clone())
                                                 >
-                                                    <div class="text-white text-sm font-medium truncate">{name}</div>
+                                                    <div class="text-primary text-sm font-medium truncate">{name}</div>
                                                     {(!champ_summary.is_empty()).then(|| view! {
-                                                        <div class="text-gray-500 text-xs mt-0.5">{champ_summary} " champs"</div>
+                                                        <div class="text-dimmed text-xs mt-0.5">{champ_summary} " champs"</div>
                                                     })}
                                                 </button>
                                                 <button
@@ -404,10 +404,10 @@ pub fn GamePlanPage() -> impl IntoView {
                 // Right: editor
                 <div class="flex-1 flex flex-col gap-5">
                     // Plan name + draft link
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-4">
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Plan Name"</label>
+                                <label class="block text-muted text-xs font-medium mb-1">"Plan Name"</label>
                                 <input type="text" class=input_class()
                                     placeholder="e.g. Comp A vs Scaling"
                                     prop:value=move || plan_name.get()
@@ -415,8 +415,8 @@ pub fn GamePlanPage() -> impl IntoView {
                                 />
                             </div>
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Linked Draft (optional)"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                <label class="block text-muted text-xs font-medium mb-1">"Linked Draft (optional)"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
                                     {move || {
                                         let our_sigs = our_champs_for_draft.clone();
                                         let enemy_sigs = enemy_champs_for_draft.clone();
@@ -462,7 +462,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                     </select>
                                                 }.into_any()
                                             },
-                                            Err(_) => view! { <p class="text-gray-500 text-sm">"No drafts"</p> }.into_any(),
+                                            Err(_) => view! { <p class="text-dimmed text-sm">"No drafts"</p> }.into_any(),
                                         })
                                     }}
                                 </Suspense>
@@ -471,15 +471,15 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Matchup: Your 5 vs Enemy 5
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
                         <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-white font-semibold text-sm">"Champion Matchup"</h3>
+                            <h3 class="text-primary font-semibold text-sm">"Champion Matchup"</h3>
                             <button
-                                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                class="bg-overlay hover:bg-overlay-strong text-secondary text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                                 on:click=do_generate_template
                             >"Generate Template"</button>
                         </div>
-                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm py-4">"Loading champions..."</div> }>
+                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm py-4">"Loading champions..."</div> }>
                             {move || {
                                 let our_sigs = our_champs_for_matchup.clone();
                                 let enemy_sigs = enemy_champs_for_matchup.clone();
@@ -496,7 +496,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                     let champs = champ_list.clone();
                                                     view! {
                                                         <div class="flex items-center gap-2">
-                                                            <span class="text-gray-500 text-xs w-14">{role}</span>
+                                                            <span class="text-dimmed text-xs w-14">{role}</span>
                                                             <ChampionAutocomplete
                                                                 champions=champs
                                                                 value=*sig
@@ -506,7 +506,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                     }
                                                 }).collect_view()}
                                             </div>
-                                            <div class="flex items-center justify-center self-center text-gray-500 font-bold text-sm pt-6">"VS"</div>
+                                            <div class="flex items-center justify-center self-center text-dimmed font-bold text-sm pt-6">"VS"</div>
                                             // Enemy team
                                             <div class="flex flex-col gap-2">
                                                 <span class="text-red-400 text-xs font-semibold uppercase">"Enemy Team"</span>
@@ -515,7 +515,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                     let champs = champ_list2.clone();
                                                     view! {
                                                         <div class="flex items-center gap-2">
-                                                            <span class="text-gray-500 text-xs w-14">{role}</span>
+                                                            <span class="text-dimmed text-xs w-14">{role}</span>
                                                             <ChampionAutocomplete
                                                                 champions=champs
                                                                 value=*sig
@@ -533,11 +533,11 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Macro strategy
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-4">
-                        <h3 class="text-white font-semibold text-sm">"Macro Strategy"</h3>
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
+                        <h3 class="text-primary font-semibold text-sm">"Macro Strategy"</h3>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Win Conditions (one per line)"</label>
+                                <label class="block text-muted text-xs font-medium mb-1">"Win Conditions (one per line)"</label>
                                 <textarea rows="4" class=textarea_class()
                                     placeholder="Force early teamfights\nControl Dragon side"
                                     prop:value=move || win_conditions.get()
@@ -545,7 +545,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                 />
                             </div>
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Objective Priority (one per line)"</label>
+                                <label class="block text-muted text-xs font-medium mb-1">"Objective Priority (one per line)"</label>
                                 <textarea rows="4" class=textarea_class()
                                     placeholder="Dragon\nRift Herald\nBaron"
                                     prop:value=move || obj_priority.get()
@@ -554,7 +554,7 @@ pub fn GamePlanPage() -> impl IntoView {
                             </div>
                         </div>
                         <div>
-                            <label class="block text-gray-400 text-xs font-medium mb-1">"Teamfight Strategy"</label>
+                            <label class="block text-muted text-xs font-medium mb-1">"Teamfight Strategy"</label>
                             <textarea rows="2" class=textarea_class()
                                 placeholder="Front-to-back: protect ADC while top zones..."
                                 prop:value=move || teamfight.get()
@@ -562,7 +562,7 @@ pub fn GamePlanPage() -> impl IntoView {
                             />
                         </div>
                         <div>
-                            <label class="block text-gray-400 text-xs font-medium mb-1">"Early Game Plan"</label>
+                            <label class="block text-muted text-xs font-medium mb-1">"Early Game Plan"</label>
                             <textarea rows="2" class=textarea_class()
                                 placeholder="Contest level 1 vision, jungle path..."
                                 prop:value=move || early_game.get()
@@ -572,8 +572,8 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Role-specific strategy
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
-                        <h3 class="text-white font-semibold text-sm">"Role-Specific Strategy"</h3>
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                        <h3 class="text-primary font-semibold text-sm">"Role-Specific Strategy"</h3>
                         <div class="grid grid-cols-1 gap-3">
                             {ROLES.iter().enumerate().map(|(i, &role)| {
                                 let our_sig = our_champ_signals[i];
@@ -581,13 +581,13 @@ pub fn GamePlanPage() -> impl IntoView {
                                 view! {
                                     <div class="flex gap-3 items-start">
                                         <div class="w-16 flex-shrink-0 pt-2">
-                                            <span class="text-yellow-400 text-xs font-semibold">{role}</span>
+                                            <span class="text-accent text-xs font-semibold">{role}</span>
                                             {move || {
                                                 let o = our_sig.get();
                                                 let t = enemy_sig.get();
                                                 if !o.is_empty() && !t.is_empty() {
                                                     view! {
-                                                        <div class="text-gray-500 text-xs mt-0.5">{format!("{o} vs {t}")}</div>
+                                                        <div class="text-dimmed text-xs mt-0.5">{format!("{o} vs {t}")}</div>
                                                     }.into_any()
                                                 } else {
                                                     view! { <div></div> }.into_any()
@@ -611,8 +611,8 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Notes
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                        <label class="block text-gray-400 text-xs font-medium mb-1">"Additional Notes"</label>
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                        <label class="block text-muted text-xs font-medium mb-1">"Additional Notes"</label>
                         <textarea rows="3" class=textarea_class()
                             placeholder="Anything else the team should know..."
                             prop:value=move || notes.get()
@@ -623,13 +623,13 @@ pub fn GamePlanPage() -> impl IntoView {
                     // Save buttons
                     <div class="flex gap-3 items-center">
                         <button
-                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
+                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
                             on:click=do_save
                         >
                             {move || if editing_id.get().is_some() { "Update Plan" } else { "Save Plan" }}
                         </button>
                         <button
-                            class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+                            class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
                             on:click=move |_| clear_editor.run(())
                         >"Clear"</button>
                     </div>

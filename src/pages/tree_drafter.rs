@@ -464,15 +464,15 @@ pub fn TreeDrafterPage() -> impl IntoView {
             // Header
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold text-white">"Tree Drafter"</h1>
-                    <p class="text-gray-400 text-sm mt-1">"Plan branching draft strategies for every scenario"</p>
+                    <h1 class="text-3xl font-bold text-primary">"Tree Drafter"</h1>
+                    <p class="text-muted text-sm mt-1">"Plan branching draft strategies for every scenario"</p>
                 </div>
                 <div class="flex gap-2">
                     <button
                         class=move || if mode.get() == "edit" {
-                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-yellow-400 text-gray-900 cursor-pointer"
+                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-accent text-accent-contrast cursor-pointer"
                         } else {
-                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
+                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-overlay text-secondary hover:bg-overlay-strong transition-colors cursor-pointer"
                         }
                         on:click=move |_| set_mode.set("edit".to_string())
                     >"Edit"</button>
@@ -480,7 +480,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         class=move || if mode.get() == "live" {
                             "px-4 py-2 rounded-r-lg text-sm font-medium bg-emerald-500 text-white cursor-pointer"
                         } else {
-                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
+                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-overlay text-secondary hover:bg-overlay-strong transition-colors cursor-pointer"
                         }
                         on:click=move |_| {
                             if selected_tree_id.get_untracked().is_none() {
@@ -504,35 +504,35 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 // Left sidebar: tree list
                 <div class="w-72 flex-shrink-0 flex flex-col gap-4">
                     // New tree form
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
-                        <h3 class="text-white font-semibold text-sm">"New Tree"</h3>
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                        <h3 class="text-primary font-semibold text-sm">"New Tree"</h3>
                         <input
                             type="text"
                             placeholder="Tree name..."
                             prop:value=move || new_tree_name.get()
                             on:input=move |ev| set_new_tree_name.set(event_target_value(&ev))
-                            class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
                         />
                         <input
                             type="text"
                             placeholder="Opponent (optional)"
                             prop:value=move || new_tree_opponent.get()
                             on:input=move |ev| set_new_tree_opponent.set(event_target_value(&ev))
-                            class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
                         />
                         <button
-                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
                             on:click=do_create_tree
                         >"Create Tree"</button>
                     </div>
 
                     // Tree list
                     <div class="flex flex-col gap-1.5 flex-1 overflow-y-auto">
-                        <h3 class="text-gray-400 text-xs font-semibold uppercase tracking-wider px-1">"Your Trees"</h3>
-                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm px-1">"Loading..."</div> }>
+                        <h3 class="text-muted text-xs font-semibold uppercase tracking-wider px-1">"Your Trees"</h3>
+                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm px-1">"Loading..."</div> }>
                             {move || trees.get().map(|result| match result {
                                 Ok(list) if list.is_empty() => view! {
-                                    <p class="text-gray-500 text-sm px-1">"No trees yet."</p>
+                                    <p class="text-dimmed text-sm px-1">"No trees yet."</p>
                                 }.into_any(),
                                 Ok(list) => view! {
                                     <div class="flex flex-col gap-1.5">
@@ -546,9 +546,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     class=move || {
                                                         let sel = selected_tree_id.get();
                                                         if sel.as_deref() == Some(&id) {
-                                                            "w-full text-left bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-3 transition-all"
+                                                            "w-full text-left bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all"
                                                         } else {
-                                                            "w-full text-left bg-gray-800/30 border border-gray-700/30 rounded-lg p-3 hover:bg-gray-700/30 transition-all"
+                                                            "w-full text-left bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all"
                                                         }
                                                     }
                                                     on:click=move |_| {
@@ -558,9 +558,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                         nodes_resource.refetch();
                                                     }
                                                 >
-                                                    <div class="text-white text-sm font-medium truncate">{name}</div>
+                                                    <div class="text-primary text-sm font-medium truncate">{name}</div>
                                                     {opp.map(|o| view! {
-                                                        <div class="text-gray-400 text-xs mt-0.5">"vs " {o}</div>
+                                                        <div class="text-muted text-xs mt-0.5">"vs " {o}</div>
                                                     })}
                                                 </button>
                                             }
@@ -590,8 +590,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             return view! {
                                 <div class="flex-1 flex items-center justify-center">
                                     <div class="text-center">
-                                        <div class="text-gray-500 text-6xl mb-4">"&#x1f333;"</div>
-                                        <p class="text-gray-400 text-lg">"Select or create a tree to start planning"</p>
+                                        <div class="text-dimmed text-6xl mb-4">"&#x1f333;"</div>
+                                        <p class="text-muted text-lg">"Select or create a tree to start planning"</p>
                                     </div>
                                 </div>
                             }.into_any();
@@ -615,12 +615,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             view! {
                                 <div class="flex gap-4 flex-1">
                                     // Tree visualization
-                                    <div class="w-80 flex-shrink-0 bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 overflow-y-auto flex flex-col gap-3">
-                                        <h3 class="text-white font-semibold text-sm">"Tree Structure"</h3>
-                                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading nodes..."</div> }>
+                                    <div class="w-80 flex-shrink-0 bg-elevated/50 border border-divider/50 rounded-xl p-4 overflow-y-auto flex flex-col gap-3">
+                                        <h3 class="text-primary font-semibold text-sm">"Tree Structure"</h3>
+                                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading nodes..."</div> }>
                                             {move || nodes_resource.get().map(|result| match result {
                                                 Ok(roots) if roots.is_empty() => view! {
-                                                    <p class="text-gray-500 text-sm">"No nodes yet."</p>
+                                                    <p class="text-dimmed text-sm">"No nodes yet."</p>
                                                 }.into_any(),
                                                 Ok(roots) => view! {
                                                     <div class="flex flex-col gap-1">
@@ -655,22 +655,22 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
                                         // Add branch inline form
                                         {move || adding_branch_to.get().map(|_pid| view! {
-                                            <div class="mt-3 border-t border-gray-700/50 pt-3 flex flex-col gap-2">
-                                                <label class="text-gray-300 text-xs font-medium">"New branch label"</label>
+                                            <div class="mt-3 border-t border-divider/50 pt-3 flex flex-col gap-2">
+                                                <label class="text-secondary text-xs font-medium">"New branch label"</label>
                                                 <input
                                                     type="text"
                                                     placeholder="e.g. If they ban Jinx..."
                                                     prop:value=move || new_branch_label.get()
                                                     on:input=move |ev| set_new_branch_label.set(event_target_value(&ev))
-                                                    class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
                                                 />
                                                 <div class="flex gap-2">
                                                     <button
-                                                        class="flex-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
+                                                        class="flex-1 bg-accent hover:bg-accent-hover text-accent-contrast text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
                                                         on:click=do_add_branch
                                                     >"Add"</button>
                                                     <button
-                                                        class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg px-3 py-1.5 transition-colors"
+                                                        class="flex-1 bg-overlay hover:bg-overlay-strong text-secondary text-sm rounded-lg px-3 py-1.5 transition-colors"
                                                         on:click=move |_| set_adding_branch_to.set(None)
                                                     >"Cancel"</button>
                                                 </div>
@@ -683,8 +683,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                         {move || {
                                             if selected_node_id.get().is_none() {
                                                 return view! {
-                                                    <div class="flex-1 flex items-center justify-center bg-gray-800/30 border border-gray-700/30 rounded-xl">
-                                                        <p class="text-gray-500 text-sm">"Click a node to edit its draft"</p>
+                                                    <div class="flex-1 flex items-center justify-center bg-elevated/30 border border-divider/30 rounded-xl">
+                                                        <p class="text-dimmed text-sm">"Click a node to edit its draft"</p>
                                                     </div>
                                                 }.into_any();
                                             }
@@ -757,9 +757,9 @@ fn TreeNodeView(
                 class=move || {
                     let selected = selected_node_id.get().as_deref() == Some(&node_id_for_selected);
                     if selected {
-                        "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-yellow-400/15 border border-yellow-400/30 cursor-pointer transition-all"
+                        "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-accent/15 border border-accent/30 cursor-pointer transition-all"
                     } else {
-                        "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-gray-700/50 cursor-pointer transition-all"
+                        "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-overlay/50 cursor-pointer transition-all"
                     }
                 }
             >
@@ -768,7 +768,7 @@ fn TreeNodeView(
                     let nid = node_id_for_expand.clone();
                     view! {
                         <button
-                            class="text-gray-400 hover:text-white text-xs w-4 h-4 flex items-center justify-center flex-shrink-0 transition-colors"
+                            class="text-muted hover:text-primary text-xs w-4 h-4 flex items-center justify-center flex-shrink-0 transition-colors"
                             on:click=move |ev| {
                                 ev.stop_propagation();
                                 let nid = nid.clone();
@@ -805,21 +805,21 @@ fn TreeNodeView(
                     } else if is_root {
                         view! { <span class="text-emerald-400 text-xs flex-shrink-0">"\u{25C9}"</span> }.into_any()
                     } else {
-                        view! { <span class="text-gray-500 text-xs flex-shrink-0">"\u{251C}"</span> }.into_any()
+                        view! { <span class="text-dimmed text-xs flex-shrink-0">"\u{251C}"</span> }.into_any()
                     }}
 
-                    <span class="text-white text-sm truncate">{label}</span>
+                    <span class="text-primary text-sm truncate">{label}</span>
 
                     // Action count badge
                     {has_actions.then(|| view! {
-                        <span class="text-gray-500 text-xs flex-shrink-0">{format!("({action_count})")}</span>
+                        <span class="text-dimmed text-xs flex-shrink-0">{format!("({action_count})")}</span>
                     })}
                 </div>
 
                 // Action buttons (visible on hover)
                 <div class="hidden group-hover:flex items-center gap-1 flex-shrink-0">
                     <button
-                        class="text-gray-400 hover:text-yellow-400 hover:bg-gray-700/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
+                        class="text-muted hover:text-accent hover:bg-overlay/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
                         title="Add branch"
                         on:click={
                             let nid = node_id_for_add.clone();
@@ -833,7 +833,7 @@ fn TreeNodeView(
                         let nid = node_id_for_delete.clone();
                         view! {
                             <button
-                                class="text-gray-400 hover:text-red-400 hover:bg-gray-700/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
+                                class="text-muted hover:text-red-400 hover:bg-overlay/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
                                 title="Delete node"
                                 on:click=move |ev: web_sys::MouseEvent| {
                                     ev.stop_propagation();
@@ -902,15 +902,15 @@ fn NodeEditor(
     view! {
         <div class="flex flex-col gap-4">
             // Node metadata
-            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
                 <div class="flex items-center gap-4">
                     <div class="flex-1">
-                        <label class="block text-gray-400 text-xs font-medium mb-1">"Node Label"</label>
+                        <label class="block text-muted text-xs font-medium mb-1">"Node Label"</label>
                         <input
                             type="text"
                             prop:value=move || node_label.get()
                             on:input=move |ev| set_node_label.set(event_target_value(&ev))
-                            class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-400/50 transition-colors"
+                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors"
                         />
                     </div>
                     <div class="flex items-center gap-2 pt-5">
@@ -924,26 +924,26 @@ fn NodeEditor(
                                     set_node_improvised.set(checked);
                                 }
                             />
-                            <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
+                            <div class="w-9 h-5 bg-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
                         </label>
-                        <span class="text-gray-300 text-xs">"Improvised"</span>
+                        <span class="text-secondary text-xs">"Improvised"</span>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-gray-400 text-xs font-medium mb-1">"Notes"</label>
+                    <label class="block text-muted text-xs font-medium mb-1">"Notes"</label>
                     <textarea
                         rows="2"
                         prop:value=move || node_notes.get()
                         on:input=move |ev| set_node_notes.set(event_target_value(&ev))
                         placeholder="Strategy notes for this branch..."
-                        class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 resize-none transition-colors"
+                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
                     />
                 </div>
             </div>
 
             // Draft board
-            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                <Suspense fallback=|| view! { <div class="text-gray-500 text-sm text-center py-8">"Loading champions..."</div> }>
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                <Suspense fallback=|| view! { <div class="text-dimmed text-sm text-center py-8">"Loading champions..."</div> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <div class="text-red-400 text-sm">"Failed to load champions: " {e.to_string()}</div>
@@ -979,7 +979,7 @@ fn NodeEditor(
                             >
                                 "Branch from here"
                             </button>
-                            <span class="text-gray-500 text-xs">
+                            <span class="text-dimmed text-xs">
                                 {format!("Create branch copying through {} {} {}", side, kind, num)}
                             </span>
                         </div>
@@ -988,8 +988,8 @@ fn NodeEditor(
             }}
 
             // Champion picker
-            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load champions: {e}") />
@@ -1008,11 +1008,11 @@ fn NodeEditor(
             // Save + clear
             <div class="flex gap-3 items-center">
                 <button
-                    class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
+                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
                     on:click=move |ev| on_save.run(ev)
                 >"Save Node"</button>
                 <button
-                    class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+                    class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
                     on:click=move |_| {
                         set_draft_slots.set(vec![None; 20]);
                         set_active_slot.set(Some(0));
@@ -1056,9 +1056,9 @@ fn LiveNavigator(
     view! {
         <div class="flex-1 flex flex-col gap-4">
             // Breadcrumb path
-            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
                 <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-gray-400 text-xs font-semibold uppercase tracking-wider">"Path:"</span>
+                    <span class="text-muted text-xs font-semibold uppercase tracking-wider">"Path:"</span>
                     <button
                         class="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors"
                         on:click=move |_| set_nav_path.set(Vec::new())
@@ -1083,9 +1083,9 @@ fn LiveNavigator(
                                         node.map(|n| n.label.clone()).unwrap_or_else(|| "...".to_string())
                                     };
                                     view! {
-                                        <span class="text-gray-600">"\u{203A}"</span>
+                                        <span class="text-overlay-strong">"\u{203A}"</span>
                                         <button
-                                            class="text-yellow-400 hover:text-yellow-300 text-sm font-medium transition-colors"
+                                            class="text-accent hover:text-accent-hover text-sm font-medium transition-colors"
                                             on:click=move |_| {
                                                 set_nav_path.set(truncated_path.clone());
                                             }
@@ -1099,13 +1099,13 @@ fn LiveNavigator(
             </div>
 
             // Current node display
-            <Suspense fallback=|| view! { <div class="text-gray-500 text-center py-8">"Loading..."</div> }>
+            <Suspense fallback=|| view! { <div class="text-dimmed text-center py-8">"Loading..."</div> }>
                 {move || {
                     let node = current_node();
                     match node {
                         None => view! {
-                            <div class="flex-1 flex items-center justify-center bg-gray-800/30 border border-gray-700/30 rounded-xl">
-                                <p class="text-gray-500">"No node found at this path."</p>
+                            <div class="flex-1 flex items-center justify-center bg-elevated/30 border border-divider/30 rounded-xl">
+                                <p class="text-dimmed">"No node found at this path."</p>
                             </div>
                         }.into_any(),
                         Some(node) => {
@@ -1121,9 +1121,9 @@ fn LiveNavigator(
                             view! {
                                 <div class="flex flex-col gap-4">
                                     // Node header
-                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+                                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
                                         <div class="flex items-center gap-3">
-                                            <h2 class="text-white text-xl font-bold">{node_label}</h2>
+                                            <h2 class="text-primary text-xl font-bold">{node_label}</h2>
                                             {node_improvised.then(|| view! {
                                                 <span class="bg-amber-500/20 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded-full">
                                                     "\u{26A1} Improvised"
@@ -1131,15 +1131,15 @@ fn LiveNavigator(
                                             })}
                                         </div>
                                         {node_notes.map(|notes| view! {
-                                            <p class="text-gray-300 text-sm mt-2 whitespace-pre-wrap">{notes}</p>
+                                            <p class="text-secondary text-sm mt-2 whitespace-pre-wrap">{notes}</p>
                                         })}
                                     </div>
 
                                     // Draft board (read-only display)
-                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
                                             {move || champions_resource.get().map(|result| match result {
-                                                Err(_) => view! { <div class="text-gray-500">"Champions unavailable"</div> }.into_any(),
+                                                Err(_) => view! { <div class="text-dimmed">"Champions unavailable"</div> }.into_any(),
                                                 Ok(champs) => {
                                                     let champion_map: HashMap<String, Champion> = champs
                                                         .into_iter()
@@ -1164,9 +1164,9 @@ fn LiveNavigator(
                                     </div>
 
                                     // Branch selection
-                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
+                                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
                                         <div class="flex items-center justify-between">
-                                            <h3 class="text-white font-semibold">"Choose Path"</h3>
+                                            <h3 class="text-primary font-semibold">"Choose Path"</h3>
                                             // Improvise button
                                             <button
                                                 class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium px-3 py-1.5 rounded-lg border border-amber-500/30 transition-colors"
@@ -1207,22 +1207,22 @@ fn LiveNavigator(
                                                         let child_action_count = child.actions.len();
                                                         view! {
                                                             <button
-                                                                class="text-left bg-gray-700/50 hover:bg-gray-700 border border-gray-600/50 hover:border-yellow-400/30 rounded-lg p-3 transition-all group"
+                                                                class="text-left bg-overlay/50 hover:bg-overlay border border-outline/50 hover:border-accent/30 rounded-lg p-3 transition-all group"
                                                                 on:click=move |_| {
                                                                     set_nav_path.update(|p| p.push(child_id.clone()));
                                                                 }
                                                             >
                                                                 <div class="flex items-center gap-2">
-                                                                    <span class="text-white text-sm font-medium group-hover:text-yellow-400 transition-colors">{child_label}</span>
+                                                                    <span class="text-primary text-sm font-medium group-hover:text-accent transition-colors">{child_label}</span>
                                                                     {child_improvised.then(|| view! {
                                                                         <span class="text-amber-400 text-xs">"\u{26A1}"</span>
                                                                     })}
                                                                 </div>
                                                                 {child_notes.map(|n| view! {
-                                                                    <p class="text-gray-400 text-xs mt-1 truncate">{n}</p>
+                                                                    <p class="text-muted text-xs mt-1 truncate">{n}</p>
                                                                 })}
                                                                 {(child_action_count > 0).then(|| view! {
-                                                                    <p class="text-gray-500 text-xs mt-1">{format!("{child_action_count} picks/bans")}</p>
+                                                                    <p class="text-dimmed text-xs mt-1">{format!("{child_action_count} picks/bans")}</p>
                                                                 })}
                                                             </button>
                                                         }
@@ -1231,7 +1231,7 @@ fn LiveNavigator(
                                             }.into_any()
                                         } else {
                                             view! {
-                                                <p class="text-gray-500 text-sm">"No branches yet. Click Improvise to create one."</p>
+                                                <p class="text-dimmed text-sm">"No branches yet. Click Improvise to create one."</p>
                                             }.into_any()
                                         }}
                                     </div>
@@ -1244,7 +1244,7 @@ fn LiveNavigator(
                                         }
                                         view! {
                                             <button
-                                                class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors self-start"
+                                                class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors self-start"
                                                 on:click=move |_| {
                                                     set_nav_path.update(|p| { p.pop(); });
                                                 }

@@ -26,14 +26,14 @@ pub fn ErrorTemplate(
     };
 
     view! {
-        <div class="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div class="min-h-screen bg-base flex items-center justify-center">
             <div class="max-w-lg text-center px-6">
-                <h1 class="text-6xl font-bold text-yellow-400 mb-4">"Oops"</h1>
-                <p class="text-gray-300 mb-6">"Something went wrong:"</p>
-                <ul class="text-left bg-gray-800 border border-gray-700 rounded p-4">
+                <h1 class="text-6xl font-bold text-accent mb-4">"Oops"</h1>
+                <p class="text-secondary mb-6">"Something went wrong:"</p>
+                <ul class="text-left bg-elevated border border-divider rounded p-4">
                     {error_list}
                 </ul>
-                <a href="/" class="mt-6 inline-block text-yellow-400 hover:text-yellow-300 underline">
+                <a href="/" class="mt-6 inline-block text-accent hover:text-accent-hover underline">
                     "Go Home"
                 </a>
             </div>

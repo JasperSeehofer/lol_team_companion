@@ -39,7 +39,7 @@ pub fn LoginPage() -> impl IntoView {
 
     view! {
         <div class="max-w-md mx-auto py-16 px-6">
-            <h1 class="text-3xl font-bold text-white mb-8">"Sign In"</h1>
+            <h1 class="text-3xl font-bold text-primary mb-8">"Sign In"</h1>
             <ActionForm action=login>
                 <div class="flex flex-col gap-4">
                     {move || error().map(|e| view! {
@@ -48,32 +48,32 @@ pub fn LoginPage() -> impl IntoView {
                         </div>
                     })}
                     <div>
-                        <label class="block text-gray-300 text-sm mb-1">"Email"</label>
+                        <label class="block text-secondary text-sm mb-1">"Email"</label>
                         <input
                             type="email"
                             name="email"
                             required
-                            class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                            class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                         />
                     </div>
                     <div>
-                        <label class="block text-gray-300 text-sm mb-1">"Password"</label>
+                        <label class="block text-secondary text-sm mb-1">"Password"</label>
                         <input
                             type="password"
                             name="password"
                             required
-                            class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                            class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                         />
                     </div>
                     <button
                         type="submit"
-                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 transition-colors"
+                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors"
                     >
                         "Sign In"
                     </button>
-                    <p class="text-gray-400 text-sm text-center">
+                    <p class="text-muted text-sm text-center">
                         "No account? "
-                        <A href="/auth/register" attr:class="text-yellow-400 hover:text-yellow-300">
+                        <A href="/auth/register" attr:class="text-accent hover:text-accent-hover">
                             "Register"
                         </A>
                     </p>

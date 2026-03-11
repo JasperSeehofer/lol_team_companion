@@ -66,9 +66,9 @@ pub fn ChampionPicker(
                             class=move || {
                                 let active = role_filter.get() == role_val_for_class.clone();
                                 if active {
-                                    "w-8 h-8 flex items-center justify-center bg-yellow-400 text-gray-900 font-bold rounded transition-colors"
+                                    "w-8 h-8 flex items-center justify-center bg-accent text-accent-contrast font-bold rounded transition-colors"
                                 } else {
-                                    "w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-gray-200 rounded transition-colors"
+                                    "w-8 h-8 flex items-center justify-center bg-overlay hover:bg-overlay-strong text-muted hover:text-gray-200 rounded transition-colors"
                                 }
                             }
                             on:click=move |_| set_role_filter.set(role_val.clone())
@@ -97,7 +97,7 @@ pub fn ChampionPicker(
             <input
                 type="text"
                 placeholder="Search champion..."
-                class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-400"
+                class="bg-elevated border border-outline rounded px-3 py-2 text-primary placeholder-gray-400 focus:outline-none focus:border-accent"
                 on:input=move |ev| set_query.set(event_target_value(&ev))
             />
 
@@ -116,9 +116,9 @@ pub fn ChampionPicker(
                             view! {
                                 <button
                                     class=if is_used {
-                                        "relative overflow-hidden rounded border border-gray-700 w-11 h-11 flex-shrink-0 grayscale opacity-40 cursor-not-allowed"
+                                        "relative overflow-hidden rounded border border-divider w-11 h-11 flex-shrink-0 grayscale opacity-40 cursor-not-allowed"
                                     } else {
-                                        "relative overflow-hidden rounded border border-gray-700 hover:border-yellow-400 w-11 h-11 flex-shrink-0 transition-colors cursor-grab"
+                                        "relative overflow-hidden rounded border border-divider hover:border-accent w-11 h-11 flex-shrink-0 transition-colors cursor-grab"
                                     }
                                     disabled=is_used
                                     draggable="true"
@@ -141,7 +141,7 @@ pub fn ChampionPicker(
                                         class="w-full h-full object-cover"
                                     />
                                     <div class="absolute inset-0 bg-black/75 opacity-0 hover:opacity-100 flex items-end justify-center pb-1 transition-opacity pointer-events-none">
-                                        <span class="text-white text-xs font-medium text-center leading-tight px-0.5 truncate w-full">
+                                        <span class="text-primary text-xs font-medium text-center leading-tight px-0.5 truncate w-full">
                                             {champion.name.clone()}
                                         </span>
                                     </div>

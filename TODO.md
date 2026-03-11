@@ -4,11 +4,16 @@
 - [ ] it seems that often if a button click did not work, all subsequent clicks or links to different routes dont do anything. Please investigate and solve this issue in general.
 ### Tree drafter
 - [ ] I would love to have a graph representation of the tree structure with the connection edges have a little champion Icon in the center on the connection edge that shows the champion that was banned or the champion that was left open
-### Design and Style
-- [ ] Please implement a dark/light mode switch and a color theme picker. Seek a modern approach.
 
 
 ## Completed
+
+### Section 8 – Theming System
+- [x] CSS custom property-based theme system with semantic color tokens
+- [x] Dark/light mode toggle (moon/sun icon) with localStorage persistence
+- [x] Anti-FOUC inline script in HTML head
+- [x] Accent color picker (yellow, blue, purple, emerald, rose)
+- [x] Replaced ~285 hardcoded color references with semantic tokens across all pages and components
 
 ### Section 7 – Bug Fixes & Feature Enhancements
 - [x] Nav dropdowns close on outside click (transparent backdrop), Escape key, and link click

@@ -207,12 +207,12 @@ pub fn StatsPage() -> impl IntoView {
             // Header
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold text-white">"Team Stats"</h1>
-                    <p class="text-gray-400 text-sm mt-1">"Match history synced from the Riot API"</p>
+                    <h1 class="text-3xl font-bold text-primary">"Team Stats"</h1>
+                    <p class="text-muted text-sm mt-1">"Match history synced from the Riot API"</p>
                 </div>
                 <button
                     class=move || if syncing.get() {
-                        "bg-gray-600 text-gray-400 font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed"
+                        "bg-overlay-strong text-muted font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed"
                     } else {
                         "bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg px-5 py-2.5 text-sm transition-colors"
                     }
@@ -253,15 +253,15 @@ pub fn StatsPage() -> impl IntoView {
             })}
 
             // Stats content
-            <Suspense fallback=|| view! { <div class="text-gray-500 text-center py-8">"Loading stats..."</div> }>
+            <Suspense fallback=|| view! { <div class="text-dimmed text-center py-8">"Loading stats..."</div> }>
                 {move || stats.get().map(|result| match result {
                     Err(e) => view! {
                         <ErrorBanner message=format!("Failed to load stats: {e}") />
                     }.into_any(),
                     Ok(rows) if rows.is_empty() => view! {
                         <div class="flex flex-col items-center justify-center py-16">
-                            <p class="text-gray-400 text-lg mb-2">"No match data yet"</p>
-                            <p class="text-gray-500 text-sm">"Click Sync Matches to pull recent games from the Riot API."</p>
+                            <p class="text-muted text-lg mb-2">"No match data yet"</p>
+                            <p class="text-dimmed text-sm">"Click Sync Matches to pull recent games from the Riot API."</p>
                         </div>
                     }.into_any(),
                     Ok(rows) => {
@@ -363,25 +363,25 @@ fn StatsContent(
     view! {
         <div class="flex flex-col gap-6">
             // Filters
-            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
-                <span class="text-gray-400 text-sm font-medium">"Filters:"</span>
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
+                <span class="text-muted text-sm font-medium">"Filters:"</span>
 
                 // Full roster toggle
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input
                         type="checkbox"
-                        class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-yellow-400 focus:ring-yellow-400/50"
+                        class="w-4 h-4 rounded bg-overlay border-outline text-accent focus:ring-accent/50"
                         prop:checked=move || filter_full_roster.get()
                         on:change=move |ev| set_filter_full_roster.set(event_target_checked(&ev))
                     />
-                    <span class="text-gray-300 text-sm">"Full roster only (5 players)"</span>
+                    <span class="text-secondary text-sm">"Full roster only (5 players)"</span>
                 </label>
 
-                <span class="text-gray-600">"|"</span>
+                <span class="text-overlay-strong">"|"</span>
 
                 // Player filter
                 <select
-                    class="bg-gray-700/50 border border-gray-600/50 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-yellow-400/50"
+                    class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
                     on:change=move |ev| set_filter_player.set(event_target_value(&ev))
                 >
                     <option value="">"All Players"</option>
@@ -391,7 +391,7 @@ fn StatsContent(
                     }).collect_view()}
                 </select>
 
-                <span class="text-gray-500 text-xs ml-auto">
+                <span class="text-dimmed text-xs ml-auto">
                     {move || {
                         let (total, _, _, _) = computed_stats();
                         format!("{total} matches")
@@ -414,13 +414,13 @@ fn StatsContent(
 
             // Match list
             <div>
-                <h2 class="text-white font-semibold text-lg mb-3">"Match History"</h2>
+                <h2 class="text-primary font-semibold text-lg mb-3">"Match History"</h2>
                 <div class="flex flex-col gap-2">
                     {move || {
                         let matches = filtered();
                         if matches.is_empty() {
                             return view! {
-                                <p class="text-gray-500 text-sm py-4 text-center">"No matches match current filters."</p>
+                                <p class="text-dimmed text-sm py-4 text-center">"No matches match current filters."</p>
                             }.into_any();
                         }
                         view! {
@@ -435,19 +435,19 @@ fn StatsContent(
                                     let player_count = m.players.len();
 
                                     view! {
-                                        <div class=format!("bg-gray-800/50 border border-gray-700/50 border-l-4 {border_cls} rounded-xl p-4")>
+                                        <div class=format!("bg-elevated/50 border border-divider/50 border-l-4 {border_cls} rounded-xl p-4")>
                                             // Match header
                                             <div class="flex items-center justify-between mb-3">
                                                 <div class="flex items-center gap-3">
                                                     <span class=format!("font-semibold text-sm {result_cls}")>{result_text}</span>
-                                                    <span class="text-gray-500 text-xs">{duration}</span>
-                                                    <span class="text-gray-500 text-xs">{date}</span>
+                                                    <span class="text-dimmed text-xs">{duration}</span>
+                                                    <span class="text-dimmed text-xs">{date}</span>
                                                 </div>
                                                 <span class={
                                                     if player_count >= 5 {
                                                         "text-emerald-400/70 text-xs font-medium bg-emerald-400/10 px-2 py-0.5 rounded-full"
                                                     } else {
-                                                        "text-gray-500 text-xs"
+                                                        "text-dimmed text-xs"
                                                     }
                                                 }>
                                                     {format!("{player_count} players")}
@@ -463,14 +463,14 @@ fn StatsContent(
                                                         format!("{:.1}", (p.kills + p.assists) as f64 / p.deaths as f64)
                                                     };
                                                     view! {
-                                                        <div class="bg-gray-900/50 rounded-lg p-2.5">
-                                                            <div class="text-gray-400 text-xs truncate">{p.username}</div>
-                                                            <div class="text-white text-sm font-medium truncate mt-0.5">{p.champion}</div>
-                                                            <div class="text-gray-300 text-xs mt-1">{kda_str}</div>
+                                                        <div class="bg-surface/50 rounded-lg p-2.5">
+                                                            <div class="text-muted text-xs truncate">{p.username}</div>
+                                                            <div class="text-primary text-sm font-medium truncate mt-0.5">{p.champion}</div>
+                                                            <div class="text-secondary text-xs mt-1">{kda_str}</div>
                                                             <div class="flex items-center gap-2 mt-1">
-                                                                <span class="text-gray-500 text-xs">{format!("{} CS", p.cs)}</span>
-                                                                <span class="text-gray-600 text-xs">"|"</span>
-                                                                <span class="text-gray-500 text-xs">{format!("{kda_ratio} KDA")}</span>
+                                                                <span class="text-dimmed text-xs">{format!("{} CS", p.cs)}</span>
+                                                                <span class="text-overlay-strong text-xs">"|"</span>
+                                                                <span class="text-dimmed text-xs">{format!("{kda_ratio} KDA")}</span>
                                                             </div>
                                                         </div>
                                                     }

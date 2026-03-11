@@ -172,11 +172,11 @@ pub async fn delete_review(review_id: String) -> Result<(), ServerFnError> {
 // ---------------------------------------------------------------------------
 
 fn textarea_class() -> &'static str {
-    "w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 resize-none transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
 }
 
 fn input_class() -> &'static str {
-    "w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
 }
 
 /// Basic pattern analysis: find recurring themes across reviews
@@ -304,8 +304,8 @@ pub fn PostGamePage() -> impl IntoView {
     view! {
         <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
-                <h1 class="text-3xl font-bold text-white">"Post-Game Review"</h1>
-                <p class="text-gray-400 text-sm mt-1">"Analyze games, track patterns, and improve together"</p>
+                <h1 class="text-3xl font-bold text-primary">"Post-Game Review"</h1>
+                <p class="text-muted text-sm mt-1">"Analyze games, track patterns, and improve together"</p>
             </div>
 
             {move || status_msg.get().map(|msg| {
@@ -316,15 +316,15 @@ pub fn PostGamePage() -> impl IntoView {
                 // Left: review list + patterns
                 <div class="w-72 flex-shrink-0 flex flex-col gap-4">
                     <button
-                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
                         on:click=move |_| clear_editor()
                     >"+ New Review"</button>
 
                     // Saved reviews
-                    <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                    <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
                         {move || reviews.get().map(|result| match result {
                             Ok(list) if list.is_empty() => view! {
-                                <p class="text-gray-500 text-sm">"No reviews yet."</p>
+                                <p class="text-dimmed text-sm">"No reviews yet."</p>
                             }.into_any(),
                             Ok(list) => {
                                 let list_for_patterns = list.clone();
@@ -342,17 +342,17 @@ pub fn PostGamePage() -> impl IntoView {
                                             view! {
                                                 <div class=move || {
                                                     if editing_id.get().as_deref() == Some(&rid_for_cls) {
-                                                        "bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-3 transition-all"
+                                                        "bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all"
                                                     } else {
-                                                        "bg-gray-800/30 border border-gray-700/30 rounded-lg p-3 hover:bg-gray-700/30 transition-all"
+                                                        "bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all"
                                                     }
                                                 }>
                                                     <button
                                                         class="w-full text-left"
                                                         on:click=move |_| load_review(&review_for_load)
                                                     >
-                                                        <div class="text-white text-sm font-medium truncate">{match_label}</div>
-                                                        <div class="text-gray-500 text-xs mt-0.5">{format!("{item_count} points")}</div>
+                                                        <div class="text-primary text-sm font-medium truncate">{match_label}</div>
+                                                        <div class="text-dimmed text-xs mt-0.5">{format!("{item_count} points")}</div>
                                                     </button>
                                                     <button
                                                         class="text-red-400/50 hover:text-red-400 text-xs mt-1 transition-colors"
@@ -365,8 +365,8 @@ pub fn PostGamePage() -> impl IntoView {
 
                                     // Pattern analysis
                                     {has_patterns.then(|| view! {
-                                        <div class="mt-4 bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-3">
-                                            <h4 class="text-white font-semibold text-xs uppercase tracking-wider">"Recurring Patterns"</h4>
+                                        <div class="mt-4 bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                                            <h4 class="text-primary font-semibold text-xs uppercase tracking-wider">"Recurring Patterns"</h4>
                                             {(!good_patterns.is_empty()).then(|| {
                                                 let patterns = good_patterns.clone();
                                                 view! {
@@ -374,8 +374,8 @@ pub fn PostGamePage() -> impl IntoView {
                                                         <span class="text-emerald-400 text-xs font-medium">"Strengths"</span>
                                                         {patterns.into_iter().map(|(item, count)| view! {
                                                             <div class="flex items-center gap-2 mt-1">
-                                                                <span class="text-gray-300 text-xs truncate flex-1">{item}</span>
-                                                                <span class="text-gray-500 text-xs flex-shrink-0">{format!("{count}x")}</span>
+                                                                <span class="text-secondary text-xs truncate flex-1">{item}</span>
+                                                                <span class="text-dimmed text-xs flex-shrink-0">{format!("{count}x")}</span>
                                                             </div>
                                                         }).collect_view()}
                                                     </div>
@@ -388,8 +388,8 @@ pub fn PostGamePage() -> impl IntoView {
                                                         <span class="text-red-400 text-xs font-medium">"Recurring Issues"</span>
                                                         {patterns.into_iter().map(|(item, count)| view! {
                                                             <div class="flex items-center gap-2 mt-1">
-                                                                <span class="text-gray-300 text-xs truncate flex-1">{item}</span>
-                                                                <span class="text-gray-500 text-xs flex-shrink-0">{format!("{count}x")}</span>
+                                                                <span class="text-secondary text-xs truncate flex-1">{item}</span>
+                                                                <span class="text-dimmed text-xs flex-shrink-0">{format!("{count}x")}</span>
                                                             </div>
                                                         }).collect_view()}
                                                     </div>
@@ -409,13 +409,13 @@ pub fn PostGamePage() -> impl IntoView {
                 // Right: editor
                 <div class="flex-1 flex flex-col gap-5">
                     // Linking: match, game plan, draft
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                        <h3 class="text-white font-semibold text-sm mb-3">"Link to..."</h3>
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                        <h3 class="text-primary font-semibold text-sm mb-3">"Link to..."</h3>
                         <div class="grid grid-cols-3 gap-4">
                             // Match
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Match"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                <label class="block text-muted text-xs font-medium mb-1">"Match"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
                                     {move || match_ids.get().map(|result| match result {
                                         Ok(ids) => view! {
                                             <select class=input_class()
@@ -433,14 +433,14 @@ pub fn PostGamePage() -> impl IntoView {
                                                 }).collect_view()}
                                             </select>
                                         }.into_any(),
-                                        Err(_) => view! { <p class="text-gray-500 text-xs">"No matches"</p> }.into_any(),
+                                        Err(_) => view! { <p class="text-dimmed text-xs">"No matches"</p> }.into_any(),
                                     })}
                                 </Suspense>
                             </div>
                             // Game Plan
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Game Plan"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                <label class="block text-muted text-xs font-medium mb-1">"Game Plan"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
                                     {move || plans.get().map(|result| match result {
                                         Ok(list) => view! {
                                             <select class=input_class()
@@ -455,14 +455,14 @@ pub fn PostGamePage() -> impl IntoView {
                                                 }).collect_view()}
                                             </select>
                                         }.into_any(),
-                                        Err(_) => view! { <p class="text-gray-500 text-xs">"No plans"</p> }.into_any(),
+                                        Err(_) => view! { <p class="text-dimmed text-xs">"No plans"</p> }.into_any(),
                                     })}
                                 </Suspense>
                             </div>
                             // Draft
                             <div>
-                                <label class="block text-gray-400 text-xs font-medium mb-1">"Draft"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
+                                <label class="block text-muted text-xs font-medium mb-1">"Draft"</label>
+                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
                                     {move || drafts.get().map(|result| match result {
                                         Ok(list) => view! {
                                             <select class=input_class()
@@ -477,7 +477,7 @@ pub fn PostGamePage() -> impl IntoView {
                                                 }).collect_view()}
                                             </select>
                                         }.into_any(),
-                                        Err(_) => view! { <p class="text-gray-500 text-xs">"No drafts"</p> }.into_any(),
+                                        Err(_) => view! { <p class="text-dimmed text-xs">"No drafts"</p> }.into_any(),
                                     })}
                                 </Suspense>
                             </div>
@@ -518,8 +518,8 @@ pub fn PostGamePage() -> impl IntoView {
                     </div>
 
                     // Open notes
-                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                        <label class="block text-gray-400 text-xs font-medium mb-1">"Open Notes"</label>
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                        <label class="block text-muted text-xs font-medium mb-1">"Open Notes"</label>
                         <textarea rows="4" class=textarea_class()
                             placeholder="Any additional thoughts, observations, or context..."
                             prop:value=move || open_notes.get()
@@ -530,13 +530,13 @@ pub fn PostGamePage() -> impl IntoView {
                     // Save buttons
                     <div class="flex gap-3 items-center">
                         <button
-                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
+                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
                             on:click=do_save
                         >
                             {move || if editing_id.get().is_some() { "Update Review" } else { "Save Review" }}
                         </button>
                         <button
-                            class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+                            class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
                             on:click=move |_| clear_editor()
                         >"Clear"</button>
                     </div>

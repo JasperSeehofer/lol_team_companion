@@ -128,12 +128,12 @@ pub fn HomePage() -> impl IntoView {
         <Suspense fallback=|| view! {
             <div class="max-w-5xl mx-auto py-16 px-6">
                 <div class="animate-pulse flex flex-col gap-6">
-                    <div class="h-10 bg-gray-800 rounded w-64"></div>
-                    <div class="h-6 bg-gray-800 rounded w-96"></div>
+                    <div class="h-10 bg-elevated rounded w-64"></div>
+                    <div class="h-6 bg-elevated rounded w-96"></div>
                     <div class="grid grid-cols-3 gap-4">
-                        <div class="h-32 bg-gray-800 rounded-xl"></div>
-                        <div class="h-32 bg-gray-800 rounded-xl"></div>
-                        <div class="h-32 bg-gray-800 rounded-xl"></div>
+                        <div class="h-32 bg-elevated rounded-xl"></div>
+                        <div class="h-32 bg-elevated rounded-xl"></div>
+                        <div class="h-32 bg-elevated rounded-xl"></div>
                     </div>
                 </div>
             </div>
@@ -159,37 +159,37 @@ pub fn HomePage() -> impl IntoView {
 fn LandingPage() -> impl IntoView {
     view! {
         <div class="max-w-4xl mx-auto py-20 px-6 text-center">
-            <h1 class="text-5xl font-bold text-white mb-4 tracking-tight">
+            <h1 class="text-5xl font-bold text-primary mb-4 tracking-tight">
                 "LoL Team Companion"
             </h1>
-            <p class="text-gray-400 text-lg mb-10 max-w-2xl mx-auto">
+            <p class="text-muted text-lg mb-10 max-w-2xl mx-auto">
                 "Draft planning, team stats, and strategic tools for competitive League of Legends teams."
             </p>
             <div class="flex gap-4 justify-center mb-16">
                 <A href="/auth/register">
-                    <div class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded-lg px-8 py-3 transition-colors">
+                    <div class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-8 py-3 transition-colors">
                         "Get Started"
                     </div>
                 </A>
                 <A href="/auth/login">
-                    <div class="bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-8 py-3 border border-gray-700 transition-colors">
+                    <div class="bg-elevated hover:bg-overlay text-primary font-medium rounded-lg px-8 py-3 border border-divider transition-colors">
                         "Sign In"
                     </div>
                 </A>
             </div>
 
             <div class="grid grid-cols-3 gap-6 text-left">
-                <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-                    <div class="text-yellow-400 font-bold text-lg mb-2">"Draft Trees"</div>
-                    <p class="text-gray-400 text-sm">"Plan branching draft strategies. Navigate decisions in real-time during live games."</p>
+                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-6">
+                    <div class="text-accent font-bold text-lg mb-2">"Draft Trees"</div>
+                    <p class="text-muted text-sm">"Plan branching draft strategies. Navigate decisions in real-time during live games."</p>
                 </div>
-                <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-                    <div class="text-yellow-400 font-bold text-lg mb-2">"Team Stats"</div>
-                    <p class="text-gray-400 text-sm">"Sync match history from the Riot API. Filter by roster, date, and more."</p>
+                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-6">
+                    <div class="text-accent font-bold text-lg mb-2">"Team Stats"</div>
+                    <p class="text-muted text-sm">"Sync match history from the Riot API. Filter by roster, date, and more."</p>
                 </div>
-                <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-                    <div class="text-yellow-400 font-bold text-lg mb-2">"Game Plans"</div>
-                    <p class="text-gray-400 text-sm">"Create matchup strategies with macro and role-specific sections."</p>
+                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-6">
+                    <div class="text-accent font-bold text-lg mb-2">"Game Plans"</div>
+                    <p class="text-muted text-sm">"Create matchup strategies with macro and role-specific sections."</p>
                 </div>
             </div>
         </div>
@@ -208,11 +208,11 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
         <div class="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-8">
             // Welcome
             <div>
-                <h1 class="text-3xl font-bold text-white">
-                    "Welcome back, " <span class="text-yellow-400">{data.username.clone()}</span>
+                <h1 class="text-3xl font-bold text-primary">
+                    "Welcome back, " <span class="text-accent">{data.username.clone()}</span>
                 </h1>
                 {data.team_name.clone().map(|name| view! {
-                    <p class="text-gray-400 text-sm mt-1">"Team: " <span class="text-white font-medium">{name}</span></p>
+                    <p class="text-muted text-sm mt-1">"Team: " <span class="text-primary font-medium">{name}</span></p>
                 })}
             </div>
 
@@ -220,7 +220,7 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
             {(data.pending_requests > 0).then(|| view! {
                 <A href="/team/dashboard">
                     <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3 hover:bg-amber-500/15 transition-colors cursor-pointer">
-                        <span class="bg-amber-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                        <span class="bg-amber-500 text-primary text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
                             {data.pending_requests}
                         </span>
                         <span class="text-amber-400 text-sm font-medium">
@@ -239,8 +239,8 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
             })}
 
             {(!data.has_riot_key).then(|| view! {
-                <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                    <p class="text-gray-400 text-sm">"RIOT_API_KEY not set — stats syncing is disabled. Add it to .env."</p>
+                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                    <p class="text-muted text-sm">"RIOT_API_KEY not set — stats syncing is disabled. Add it to .env."</p>
                 </div>
             })}
 
@@ -299,9 +299,9 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
 fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoView {
     view! {
         <A href=href>
-            <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 hover:bg-gray-800 transition-colors cursor-pointer">
-                <div class="text-gray-400 text-xs uppercase tracking-wider mb-1">{label}</div>
-                <div class="text-white text-xl font-bold">{value}</div>
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 hover:bg-elevated transition-colors cursor-pointer">
+                <div class="text-muted text-xs uppercase tracking-wider mb-1">{label}</div>
+                <div class="text-primary text-xl font-bold">{value}</div>
             </div>
         </A>
     }
@@ -311,9 +311,9 @@ fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoV
 fn NavCard(href: &'static str, title: &'static str, desc: &'static str, accent: &'static str) -> impl IntoView {
     view! {
         <A href=href>
-            <div class=format!("bg-gray-800/50 border border-gray-700/50 border-l-4 {accent} rounded-xl p-5 hover:bg-gray-800 transition-colors cursor-pointer h-full")>
-                <div class="text-white text-lg font-semibold mb-1">{title}</div>
-                <div class="text-gray-400 text-sm">{desc}</div>
+            <div class=format!("bg-elevated/50 border border-divider/50 border-l-4 {accent} rounded-xl p-5 hover:bg-elevated transition-colors cursor-pointer h-full")>
+                <div class="text-primary text-lg font-semibold mb-1">{title}</div>
+                <div class="text-muted text-sm">{desc}</div>
             </div>
         </A>
     }

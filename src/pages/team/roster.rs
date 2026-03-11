@@ -94,7 +94,7 @@ pub fn RosterPage() -> impl IntoView {
         <div class="max-w-2xl mx-auto py-8 px-6 flex flex-col gap-8">
             // Create Team
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4">"Create a New Team"</h2>
+                <h2 class="text-2xl font-bold text-primary mb-4">"Create a New Team"</h2>
                 <ActionForm action=create_team_action>
                     <div class="flex flex-col gap-4">
                         {move || create_team_action.value().get().and_then(|r| r.err()).map(|e| view! {
@@ -103,19 +103,19 @@ pub fn RosterPage() -> impl IntoView {
                             </div>
                         })}
                         <div>
-                            <label class="block text-gray-300 text-sm mb-1">"Team Name"</label>
+                            <label class="block text-secondary text-sm mb-1">"Team Name"</label>
                             <input
                                 type="text"
                                 name="name"
                                 required
-                                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                             />
                         </div>
                         <div>
-                            <label class="block text-gray-300 text-sm mb-1">"Region"</label>
+                            <label class="block text-secondary text-sm mb-1">"Region"</label>
                             <select
                                 name="region"
-                                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                             >
                                 <option value="EUW">"EUW"</option>
                                 <option value="EUNE">"EUNE"</option>
@@ -126,7 +126,7 @@ pub fn RosterPage() -> impl IntoView {
                         </div>
                         <button
                             type="submit"
-                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 transition-colors"
+                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors"
                         >
                             "Create Team"
                         </button>
@@ -136,8 +136,8 @@ pub fn RosterPage() -> impl IntoView {
 
             // Join Existing Team
             <section>
-                <h2 class="text-2xl font-bold text-white mb-1">"Join an Existing Team"</h2>
-                <p class="text-gray-400 text-sm mb-4">"Find a team below and click Join to become a member."</p>
+                <h2 class="text-2xl font-bold text-primary mb-1">"Join an Existing Team"</h2>
+                <p class="text-muted text-sm mb-4">"Find a team below and click Join to become a member."</p>
 
                 {move || join_error.get().map(|e| view! {
                     <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm mb-4">
@@ -150,10 +150,10 @@ pub fn RosterPage() -> impl IntoView {
                     </div>
                 })}
 
-                <Suspense fallback=|| view! { <div class="text-gray-400 text-sm">"Loading teams..."</div> }>
+                <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading teams..."</div> }>
                     {move || teams_resource.get().map(|result| match result {
                         Ok(teams) if teams.is_empty() => view! {
-                            <p class="text-gray-500 text-sm">"No teams yet. Be the first to create one!"</p>
+                            <p class="text-dimmed text-sm">"No teams yet. Be the first to create one!"</p>
                         }.into_any(),
                         Ok(teams) => view! {
                             <div class="flex flex-col gap-2">
@@ -162,13 +162,13 @@ pub fn RosterPage() -> impl IntoView {
                                     let team_name = team.name.clone();
                                     let region = team.region.clone();
                                     view! {
-                                        <div class="bg-gray-800 border border-gray-700 rounded px-4 py-3 flex items-center justify-between">
+                                        <div class="bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between">
                                             <div>
-                                                <span class="text-white font-medium">{team_name.clone()}</span>
-                                                <span class="text-gray-400 text-sm ml-2">{region}</span>
+                                                <span class="text-primary font-medium">{team_name.clone()}</span>
+                                                <span class="text-muted text-sm ml-2">{region}</span>
                                             </div>
                                             <button
-                                                class="bg-gray-700 hover:bg-yellow-400 hover:text-gray-900 text-gray-300 text-sm font-medium rounded px-3 py-1.5 transition-colors"
+                                                class="bg-overlay hover:bg-accent hover:text-accent-contrast text-secondary text-sm font-medium rounded px-3 py-1.5 transition-colors"
                                                 on:click=move |_| {
                                                     let id = team_id.clone();
                                                     let tname = team_name.clone();
@@ -198,7 +198,7 @@ pub fn RosterPage() -> impl IntoView {
 
             // Link Riot Account
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4">"Link Riot Account"</h2>
+                <h2 class="text-2xl font-bold text-primary mb-4">"Link Riot Account"</h2>
                 <ActionForm action=link_riot>
                     <div class="flex flex-col gap-4">
                         {move || link_riot.value().get().and_then(|r| r.err()).map(|e| view! {
@@ -212,7 +212,7 @@ pub fn RosterPage() -> impl IntoView {
                             </div>
                         })}
                         <div>
-                            <label class="block text-gray-300 text-sm mb-1">
+                            <label class="block text-secondary text-sm mb-1">
                                 "Riot ID (e.g. PlayerName#EUW)"
                             </label>
                             <input
@@ -220,7 +220,7 @@ pub fn RosterPage() -> impl IntoView {
                                 name="riot_id"
                                 placeholder="GameName#TAG"
                                 required
-                                class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                             />
                         </div>
                         <button

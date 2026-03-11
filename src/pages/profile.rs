@@ -76,8 +76,8 @@ pub fn ProfilePage() -> impl IntoView {
 
     view! {
         <div class="max-w-2xl mx-auto py-8 px-6">
-            <h1 class="text-3xl font-bold text-white mb-8">"Profile"</h1>
-            <Suspense fallback=move || view! { <p class="text-gray-400">"Loading..."</p> }>
+            <h1 class="text-3xl font-bold text-primary mb-8">"Profile"</h1>
+            <Suspense fallback=move || view! { <p class="text-muted">"Loading..."</p> }>
                 {move || Suspend::new(async move {
                     match user.await {
                         Ok(Some(u)) => {
@@ -86,8 +86,8 @@ pub fn ProfilePage() -> impl IntoView {
                             view! {
                                 <div class="flex flex-col gap-6">
                                     // Account info
-                                    <section class="bg-gray-900 border border-gray-700 rounded-lg p-6">
-                                        <h2 class="text-xl font-semibold text-white mb-4">"Account"</h2>
+                                    <section class="bg-surface border border-divider rounded-lg p-6">
+                                        <h2 class="text-xl font-semibold text-primary mb-4">"Account"</h2>
 
                                         {move || update_profile_action.value().get().map(|r| match r {
                                             Ok(()) => view! {
@@ -105,18 +105,18 @@ pub fn ProfilePage() -> impl IntoView {
                                         <ActionForm action=update_profile_action>
                                             <div class="flex flex-col gap-4">
                                                 <div>
-                                                    <label class="block text-gray-300 text-sm mb-1">"Username"</label>
+                                                    <label class="block text-secondary text-sm mb-1">"Username"</label>
                                                     <input
                                                         type="text"
                                                         name="username"
                                                         value=username
                                                         required
-                                                        class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                                        class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                                                     />
                                                 </div>
                                                 <button
                                                     type="submit"
-                                                    class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 transition-colors"
+                                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors"
                                                 >
                                                     "Save"
                                                 </button>
@@ -125,8 +125,8 @@ pub fn ProfilePage() -> impl IntoView {
                                     </section>
 
                                     // Riot account linking
-                                    <section class="bg-gray-900 border border-gray-700 rounded-lg p-6">
-                                        <h2 class="text-xl font-semibold text-white mb-4">"Riot Account"</h2>
+                                    <section class="bg-surface border border-divider rounded-lg p-6">
+                                        <h2 class="text-xl font-semibold text-primary mb-4">"Riot Account"</h2>
 
                                         {match riot_name {
                                             Some(name) => view! {
@@ -136,7 +136,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                 </p>
                                             }.into_any(),
                                             None => view! {
-                                                <p class="text-gray-400 text-sm mb-4">
+                                                <p class="text-muted text-sm mb-4">
                                                     "No Riot account linked."
                                                 </p>
                                             }.into_any(),
@@ -158,7 +158,7 @@ pub fn ProfilePage() -> impl IntoView {
                                         <ActionForm action=link_riot>
                                             <div class="flex flex-col gap-4">
                                                 <div>
-                                                    <label class="block text-gray-300 text-sm mb-1">
+                                                    <label class="block text-secondary text-sm mb-1">
                                                         "Riot ID (e.g. PlayerName#EUW)"
                                                     </label>
                                                     <input
@@ -166,7 +166,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                         name="riot_id"
                                                         placeholder="GameName#TAG"
                                                         required
-                                                        class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                                        class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
                                                     />
                                                 </div>
                                                 <button
@@ -180,21 +180,21 @@ pub fn ProfilePage() -> impl IntoView {
                                     </section>
 
                                     // Champion Pool summary + link
-                                    <section class="bg-gray-900 border border-gray-700 rounded-lg p-6">
+                                    <section class="bg-surface border border-divider rounded-lg p-6">
                                         <div class="flex items-center justify-between mb-3">
                                             <div>
-                                                <h2 class="text-xl font-semibold text-white">"Champion Pool"</h2>
-                                                <p class="text-gray-400 text-sm">"Champions you play, organized by role and tier."</p>
+                                                <h2 class="text-xl font-semibold text-primary">"Champion Pool"</h2>
+                                                <p class="text-muted text-sm">"Champions you play, organized by role and tier."</p>
                                             </div>
-                                            <a href="/champion-pool" class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 text-sm transition-colors">
+                                            <a href="/champion-pool" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors">
                                                 "Manage Pool"
                                             </a>
                                         </div>
-                                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
+                                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
                                             {move || pool_resource.get().map(|result| match result {
                                                 Ok(pool) => {
                                                     if pool.is_empty() {
-                                                        view! { <p class="text-gray-500 text-sm">"No champions in pool yet."</p> }.into_any()
+                                                        view! { <p class="text-dimmed text-sm">"No champions in pool yet."</p> }.into_any()
                                                     } else {
                                                         let counts: Vec<(&str, usize)> = POOL_ROLES.iter().map(|&role| {
                                                             let count = pool.iter().filter(|e| e.role == role).count();
@@ -203,9 +203,9 @@ pub fn ProfilePage() -> impl IntoView {
                                                         view! {
                                                             <div class="flex gap-3">
                                                                 {counts.into_iter().map(|(role, count)| view! {
-                                                                    <div class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5">
-                                                                        <span class="text-gray-400 text-xs">{role}</span>
-                                                                        <span class="text-white text-sm font-medium ml-1">{count}</span>
+                                                                    <div class="bg-elevated border border-divider rounded px-3 py-1.5">
+                                                                        <span class="text-muted text-xs">{role}</span>
+                                                                        <span class="text-primary text-sm font-medium ml-1">{count}</span>
                                                                     </div>
                                                                 }).collect_view()}
                                                             </div>
@@ -232,7 +232,7 @@ pub fn ProfilePage() -> impl IntoView {
                             }.into_any()
                         }
                         Ok(None) => view! {
-                            <p class="text-gray-400">"You are not logged in."</p>
+                            <p class="text-muted">"You are not logged in."</p>
                         }.into_any(),
                         Err(e) => view! {
                             <p class="text-red-400">{e.to_string()}</p>

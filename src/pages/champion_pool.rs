@@ -108,23 +108,23 @@ fn tier_label(tier: &str) -> &'static str {
 
 fn tier_color(tier: &str) -> &'static str {
     match tier {
-        "comfort" => "border-yellow-400/30 bg-yellow-400/5",
+        "comfort" => "border-accent/30 bg-accent/5",
         "match_ready" => "border-green-400/30 bg-green-400/5",
         "scrim_ready" => "border-blue-400/30 bg-blue-400/5",
         "practicing" => "border-purple-400/30 bg-purple-400/5",
         "to_practice" => "border-gray-400/30 bg-gray-400/5",
-        _ => "border-gray-700 bg-gray-800/50",
+        _ => "border-divider bg-elevated/50",
     }
 }
 
 fn tier_label_color(tier: &str) -> &'static str {
     match tier {
-        "comfort" => "text-yellow-400",
+        "comfort" => "text-accent",
         "match_ready" => "text-green-400",
         "scrim_ready" => "text-blue-400",
         "practicing" => "text-purple-400",
-        "to_practice" => "text-gray-400",
-        _ => "text-gray-400",
+        "to_practice" => "text-muted",
+        _ => "text-muted",
     }
 }
 
@@ -152,8 +152,8 @@ pub fn ChampionPoolPage() -> impl IntoView {
     view! {
         <div class="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
-                <h1 class="text-3xl font-bold text-white">"Champion Pool"</h1>
-                <p class="text-gray-400 text-sm mt-1">"Organize your champion pool by role and readiness tier"</p>
+                <h1 class="text-3xl font-bold text-primary">"Champion Pool"</h1>
+                <p class="text-muted text-sm mt-1">"Organize your champion pool by role and readiness tier"</p>
             </div>
 
             {move || status_msg.get().map(|msg| view! { <StatusMessage message=msg /> })}
@@ -164,9 +164,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     view! {
                         <button
                             class=move || if active_role.get() == role {
-                                "px-4 py-2 rounded-lg text-sm font-medium bg-yellow-400 text-gray-900 transition-colors cursor-pointer"
+                                "px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
                             } else {
-                                "px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
+                                "px-4 py-2 rounded-lg text-sm font-medium bg-elevated text-secondary hover:bg-overlay transition-colors cursor-pointer"
                             }
                             on:click=move |_| {
                                 set_active_role.set(role);
@@ -185,7 +185,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     // Add champion form
                     <div class="flex gap-2 items-end">
                         <div class="flex-1">
-                            <Suspense fallback=|| view! { <div class="h-10 bg-gray-700 rounded animate-pulse"></div> }>
+                            <Suspense fallback=|| view! { <div class="h-10 bg-overlay rounded animate-pulse"></div> }>
                                 {move || champions_resource.get().map(|result| {
                                     let champs = result.unwrap_or_default();
                                     view! {
@@ -199,7 +199,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                             </Suspense>
                         </div>
                         <button
-                            class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer"
+                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer"
                             on:click=move |_| {
                                 let champion = add_input_signal.get_untracked();
                                 let role = active_role.get_untracked().to_string();
@@ -218,7 +218,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     </div>
 
                     // Tier columns
-                    <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading pool..."</div> }>
+                    <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading pool..."</div> }>
                         {move || {
                             let role = active_role.get();
                             pool.get().map(move |result| {
@@ -230,7 +230,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                 if role_entries.is_empty() {
                                     return view! {
                                         <div class="flex-1 flex items-center justify-center">
-                                            <p class="text-gray-500 text-sm">"No champions in pool for this role. Add one above."</p>
+                                            <p class="text-dimmed text-sm">"No champions in pool for this role. Add one above."</p>
                                         </div>
                                     }.into_any();
                                 }
@@ -248,7 +248,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                 <div class=format!("border rounded-xl p-4 {}", tier_color(tier))>
                                                     <h3 class=format!("text-xs font-semibold uppercase tracking-wider mb-3 {}", tier_label_color(tier))>
                                                         {tier_label(tier)}
-                                                        <span class="text-gray-500 ml-1">{format!("({})", tier_entries.len())}</span>
+                                                        <span class="text-dimmed ml-1">{format!("({})", tier_entries.len())}</span>
                                                     </h3>
                                                     <div class="flex flex-wrap gap-2">
                                                         {tier_entries.into_iter().map(|entry| {
@@ -267,7 +267,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
 
                                                             view! {
                                                                 <div
-                                                                    class="flex items-center gap-1.5 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 hover:border-yellow-400/50 transition-colors cursor-pointer group"
+                                                                    class="flex items-center gap-1.5 bg-elevated border border-divider rounded-lg px-2.5 py-1.5 hover:border-accent/50 transition-colors cursor-pointer group"
                                                                     on:click=move |_| {
                                                                         set_selected_entry.set(Some((champ_for_select.clone(), role_for_select.clone())));
                                                                     }
@@ -279,9 +279,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                     } else {
                                                                         view! { <span></span> }.into_any()
                                                                     }}
-                                                                    <span class="text-white text-sm">{champ}</span>
+                                                                    <span class="text-primary text-sm">{champ}</span>
                                                                     <button
-                                                                        class="text-gray-600 hover:text-red-400 ml-0.5 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                                                                        class="text-overlay-strong hover:text-red-400 ml-0.5 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                                                                         title="Remove"
                                                                         on:click=move |ev| {
                                                                             ev.stop_propagation();
@@ -315,8 +315,8 @@ pub fn ChampionPoolPage() -> impl IntoView {
                         let sel = selected_entry.get();
                         match sel {
                             None => view! {
-                                <div class="bg-gray-800/30 border border-gray-700/30 rounded-xl p-6 flex items-center justify-center min-h-[200px]">
-                                    <p class="text-gray-500 text-sm text-center">"Click a champion to view details and change tier"</p>
+                                <div class="bg-elevated/30 border border-divider/30 rounded-xl p-6 flex items-center justify-center min-h-[200px]">
+                                    <p class="text-dimmed text-sm text-center">"Click a champion to view details and change tier"</p>
                                 </div>
                             }.into_any(),
                             Some((ref champ, ref role)) => {
@@ -342,7 +342,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                 set_notes_input.set(current_tier.1.clone());
 
                                 view! {
-                                    <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col gap-4">
+                                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
                                         <div class="flex items-center gap-3">
                                             {if !img_url.is_empty() {
                                                 view! { <img src=img_url alt=champ.clone() class="w-12 h-12 rounded-lg object-cover" /> }.into_any()
@@ -350,14 +350,14 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                 view! { <span></span> }.into_any()
                                             }}
                                             <div>
-                                                <h3 class="text-white font-semibold">{champ.clone()}</h3>
-                                                <p class="text-gray-400 text-xs capitalize">{role.clone()}</p>
+                                                <h3 class="text-primary font-semibold">{champ.clone()}</h3>
+                                                <p class="text-muted text-xs capitalize">{role.clone()}</p>
                                             </div>
                                         </div>
 
                                         // Tier selector
                                         <div>
-                                            <label class="block text-gray-400 text-xs font-medium mb-2">"Tier"</label>
+                                            <label class="block text-muted text-xs font-medium mb-2">"Tier"</label>
                                             <div class="flex flex-col gap-1">
                                                 {TIERS.iter().map(|&tier| {
                                                     let is_current = current_tier.0 == tier;
@@ -368,7 +368,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                             class=move || if is_current {
                                                                 format!("w-full text-left px-3 py-1.5 rounded text-sm font-medium {} cursor-pointer", tier_label_color(tier))
                                                             } else {
-                                                                "w-full text-left px-3 py-1.5 rounded text-sm text-gray-400 hover:bg-gray-700/50 transition-colors cursor-pointer".to_string()
+                                                                "w-full text-left px-3 py-1.5 rounded text-sm text-muted hover:bg-overlay/50 transition-colors cursor-pointer".to_string()
                                                             }
                                                             on:click=move |_| {
                                                                 let c = champ_t.clone();
@@ -392,16 +392,16 @@ pub fn ChampionPoolPage() -> impl IntoView {
 
                                         // Notes
                                         <div>
-                                            <label class="block text-gray-400 text-xs font-medium mb-1">"Notes"</label>
+                                            <label class="block text-muted text-xs font-medium mb-1">"Notes"</label>
                                             <textarea
                                                 rows="4"
-                                                class="w-full bg-gray-900/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 resize-none transition-colors"
+                                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
                                                 placeholder="Matchups, combos, notes..."
                                                 prop:value=move || notes_input.get()
                                                 on:input=move |ev| set_notes_input.set(event_target_value(&ev))
                                             />
                                             <button
-                                                class="mt-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                class="mt-2 bg-overlay hover:bg-overlay-strong text-secondary text-xs font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
                                                 on:click=move |_| {
                                                     let c = champ_for_notes.clone();
                                                     let r = role_for_notes.clone();

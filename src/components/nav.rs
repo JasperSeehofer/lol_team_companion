@@ -4,6 +4,7 @@ use leptos_router::components::A;
 use crate::pages::profile::{get_current_user, Logout};
 use crate::models::user::JoinRequest;
 use crate::pages::team::dashboard::handle_join_request;
+use crate::components::theme_toggle::ThemeToggle;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Notifications {
@@ -105,31 +106,31 @@ pub fn Nav() -> impl IntoView {
         let close6 = close.clone();
         let close7 = close.clone();
         view! {
-            <A href="/" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close()>
                 "Home"
             </A>
-            <A href="/team/dashboard" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/team/dashboard" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close2()>
                 "Team"
             </A>
-            <A href="/draft" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/draft" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close3()>
                 "Draft"
             </A>
-            <A href="/tree-drafter" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/tree-drafter" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close4()>
                 "Tree Drafter"
             </A>
-            <A href="/stats" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/stats" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close5()>
                 "Stats"
             </A>
-            <A href="/game-plan" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/game-plan" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close6()>
                 "Game Plan"
             </A>
-            <A href="/post-game" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+            <A href="/post-game" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
                 on:click=move |_| close7()>
                 "Post Game"
             </A>
@@ -137,12 +138,12 @@ pub fn Nav() -> impl IntoView {
     };
 
     view! {
-        <nav class="bg-gray-900/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+        <nav class="bg-surface/80 backdrop-blur-md border-b border-divider sticky top-0 z-50">
             <div class="max-w-7xl mx-auto px-4 sm:px-6">
                 <div class="flex items-center justify-between h-14">
                     // Logo
                     <A href="/" attr:class="flex items-center gap-2 shrink-0">
-                        <span class="text-yellow-400 font-bold text-lg tracking-wide">"LoL Team Companion"</span>
+                        <span class="text-accent font-bold text-lg tracking-wide">"LoL Team Companion"</span>
                     </A>
 
                     // Desktop nav links
@@ -150,8 +151,10 @@ pub fn Nav() -> impl IntoView {
                         {nav_links("")}
                     </div>
 
-                    // Right side: notifications + user menu
-                    <div class="flex items-center gap-3">
+                    // Right side: theme + notifications + user menu
+                    <div class="flex items-center gap-2">
+                        <ThemeToggle />
+
                         // Notifications bell
                         <Suspense fallback=|| ()>
                             {move || {
@@ -168,7 +171,7 @@ pub fn Nav() -> impl IntoView {
                                                 notif_open.update(|v| *v = !*v);
                                                 menu_open.set(false);
                                             }
-                                            class="relative text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-gray-800 cursor-pointer"
+                                            class="relative text-muted hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-elevated cursor-pointer"
                                             aria-label="Notifications"
                                         >
                                             // Bell SVG
@@ -182,24 +185,24 @@ pub fn Nav() -> impl IntoView {
 
                                         // Notifications dropdown
                                         <div
-                                            class="absolute right-0 mt-2 w-80 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-[60]"
+                                            class="absolute right-0 mt-2 w-80 bg-elevated border border-divider rounded-xl shadow-xl overflow-hidden z-[60]"
                                             style:display=move || if notif_open.get() { "block" } else { "none" }
                                         >
-                                            <div class="px-4 py-3 border-b border-gray-700">
-                                                <span class="text-white text-sm font-semibold">"Notifications"</span>
+                                            <div class="px-4 py-3 border-b border-divider">
+                                                <span class="text-primary text-sm font-semibold">"Notifications"</span>
                                             </div>
                                             <div class="max-h-64 overflow-y-auto">
                                                 {reqs.into_iter().map(|req| {
                                                     let req_id_accept = req.id.clone();
                                                     let req_id_decline = req.id.clone();
                                                     view! {
-                                                        <div class="px-4 py-3 border-b border-gray-700/50 flex items-center justify-between gap-2">
+                                                        <div class="px-4 py-3 border-b border-divider/50 flex items-center justify-between gap-2">
                                                             <div class="min-w-0">
-                                                                <p class="text-white text-sm font-medium truncate">{req.username}</p>
+                                                                <p class="text-primary text-sm font-medium truncate">{req.username}</p>
                                                                 {req.riot_summoner_name.map(|n| view! {
-                                                                    <p class="text-gray-400 text-xs truncate">{n}</p>
+                                                                    <p class="text-muted text-xs truncate">{n}</p>
                                                                 })}
-                                                                <p class="text-gray-500 text-xs">"Wants to join"</p>
+                                                                <p class="text-dimmed text-xs">"Wants to join"</p>
                                                             </div>
                                                             <div class="flex gap-1.5 flex-shrink-0">
                                                                 <button
@@ -219,7 +222,7 @@ pub fn Nav() -> impl IntoView {
                                                                     </svg>
                                                                 </button>
                                                                 <button
-                                                                    class="bg-gray-600 hover:bg-red-700 text-gray-300 hover:text-white text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer"
+                                                                    class="bg-overlay-strong hover:bg-red-700 text-secondary hover:text-primary text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer"
                                                                     title="Decline"
                                                                     on:click=move |_| {
                                                                         let id = req_id_decline.clone();
@@ -241,7 +244,7 @@ pub fn Nav() -> impl IntoView {
                                             </div>
                                             <A
                                                 href="/team/dashboard"
-                                                attr:class="block px-4 py-2.5 text-center text-gray-400 hover:text-white text-xs transition-colors"
+                                                attr:class="block px-4 py-2.5 text-center text-muted hover:text-primary text-xs transition-colors"
                                                 on:click=move |_| notif_open.set(false)
                                             >
                                                 "View all on Team Dashboard"
@@ -255,7 +258,7 @@ pub fn Nav() -> impl IntoView {
                         // User menu
                         <div class="relative text-sm">
                             <Suspense fallback=move || view! {
-                                <span class="text-gray-500 text-sm">"..."</span>
+                                <span class="text-dimmed text-sm">"..."</span>
                             }>
                                 {move || Suspend::new(async move {
                                     match user.await {
@@ -265,39 +268,39 @@ pub fn Nav() -> impl IntoView {
                                                     menu_open.update(|v| *v = !*v);
                                                     notif_open.set(false);
                                                 }
-                                                class="flex items-center gap-2 text-gray-300 hover:text-white transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-800"
+                                                class="flex items-center gap-2 text-secondary hover:text-primary transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-elevated"
                                             >
-                                                <span class="bg-yellow-400/20 text-yellow-400 rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold uppercase">
+                                                <span class="bg-accent/20 text-accent rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold uppercase">
                                                     {u.username.chars().next().unwrap_or('?').to_string()}
                                                 </span>
                                                 <span class="hidden sm:inline text-sm font-medium">{u.username}</span>
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-dimmed" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                                                 </svg>
                                             </button>
                                             <div
-                                                class="absolute right-0 mt-2 w-44 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-[60]"
+                                                class="absolute right-0 mt-2 w-44 bg-elevated border border-divider rounded-xl shadow-xl overflow-hidden z-[60]"
                                                 style:display=move || if menu_open.get() { "block" } else { "none" }
                                             >
                                                 <A
                                                     href="/profile"
-                                                    attr:class="block px-4 py-2.5 text-gray-300 hover:bg-gray-750 hover:text-white transition-colors text-sm"
+                                                    attr:class="block px-4 py-2.5 text-secondary hover:bg-elevated hover:text-primary transition-colors text-sm"
                                                     on:click=move |_| menu_open.set(false)
                                                 >
                                                     "Profile"
                                                 </A>
                                                 <A
                                                     href="/champion-pool"
-                                                    attr:class="block px-4 py-2.5 text-gray-300 hover:bg-gray-750 hover:text-white transition-colors text-sm"
+                                                    attr:class="block px-4 py-2.5 text-secondary hover:bg-elevated hover:text-primary transition-colors text-sm"
                                                     on:click=move |_| menu_open.set(false)
                                                 >
                                                     "Champion Pool"
                                                 </A>
-                                                <div class="border-t border-gray-700"></div>
+                                                <div class="border-t border-divider"></div>
                                                 <ActionForm action=logout_action>
                                                     <button
                                                         type="submit"
-                                                        class="block w-full text-left px-4 py-2.5 text-red-400 hover:bg-gray-750 hover:text-red-300 transition-colors cursor-pointer text-sm"
+                                                        class="block w-full text-left px-4 py-2.5 text-red-400 hover:bg-elevated hover:text-red-300 transition-colors cursor-pointer text-sm"
                                                     >
                                                         "Sign Out"
                                                     </button>
@@ -306,10 +309,10 @@ pub fn Nav() -> impl IntoView {
                                         }.into_any(),
                                         _ => view! {
                                             <div class="flex items-center gap-2 text-sm">
-                                                <A href="/auth/login" attr:class="text-gray-300 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-800">
+                                                <A href="/auth/login" attr:class="text-secondary hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-elevated">
                                                     "Sign In"
                                                 </A>
-                                                <A href="/auth/register" attr:class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                                                <A href="/auth/register" attr:class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-3 py-1.5 rounded-lg transition-colors">
                                                     "Register"
                                                 </A>
                                             </div>
@@ -322,7 +325,7 @@ pub fn Nav() -> impl IntoView {
                         // Mobile menu button
                         <button
                             on:click=move |_| mobile_open.update(|v| *v = !*v)
-                            class="md:hidden text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+                            class="md:hidden text-muted hover:text-primary p-1.5 rounded-lg hover:bg-elevated transition-colors cursor-pointer"
                             aria-label="Menu"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -335,11 +338,11 @@ pub fn Nav() -> impl IntoView {
 
             // Mobile nav
             <div
-                class="md:hidden border-t border-gray-800"
+                class="md:hidden border-t border-divider"
                 style:display=move || if mobile_open.get() { "block" } else { "none" }
             >
                 <div class="px-4 py-3 flex flex-col gap-2 text-sm">
-                    {nav_links("block py-2 px-3 rounded-lg hover:bg-gray-800")}
+                    {nav_links("block py-2 px-3 rounded-lg hover:bg-elevated")}
                 </div>
             </div>
         </nav>

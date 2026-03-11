@@ -28,11 +28,12 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <script>{r#"(function(){var t=localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');var a=localStorage.getItem('accent');if(a)document.documentElement.setAttribute('data-accent',a);})()"#}</script>
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
             </head>
-            <body class="bg-gray-950 min-h-screen">
+            <body class="bg-base min-h-screen text-primary">
                 <App />
             </body>
         </html>

@@ -50,11 +50,11 @@ pub fn DraftBoard(
                     let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
                     let is_active = active_slot.get() == Some(slot_idx);
                     if is_active && !filled {
-                        "w-10 h-10 rounded border-2 border-yellow-400 animate-pulse bg-gray-900 flex items-center justify-center cursor-pointer"
+                        "w-10 h-10 rounded border-2 border-accent animate-pulse bg-surface flex items-center justify-center cursor-pointer"
                     } else if filled {
-                        "w-10 h-10 rounded border border-gray-600 bg-gray-900 flex items-center justify-center relative overflow-hidden cursor-pointer hover:opacity-75"
+                        "w-10 h-10 rounded border border-outline bg-surface flex items-center justify-center relative overflow-hidden cursor-pointer hover:opacity-75"
                     } else {
-                        "w-10 h-10 rounded border border-dashed border-gray-600 bg-gray-900 flex items-center justify-center cursor-pointer hover:border-gray-400"
+                        "w-10 h-10 rounded border border-dashed border-outline bg-surface flex items-center justify-center cursor-pointer hover:border-gray-400"
                     }
                 }
                 on:click=move |_| on_slot_click.run(slot_idx)
@@ -89,7 +89,7 @@ pub fn DraftBoard(
                             </div>
                         }.into_any()
                     } else {
-                        view! { <span class="text-gray-600 text-xs leading-none text-center">{label}</span> }.into_any()
+                        view! { <span class="text-overlay-strong text-xs leading-none text-center">{label}</span> }.into_any()
                     }
                 }}
             </div>
@@ -108,13 +108,13 @@ pub fn DraftBoard(
                     let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
                     let is_active = active_slot.get() == Some(slot_idx);
                     if is_active && !filled {
-                        "h-16 rounded border-2 border-yellow-400 animate-pulse bg-gray-900 overflow-hidden cursor-pointer"
+                        "h-16 rounded border-2 border-accent animate-pulse bg-surface overflow-hidden cursor-pointer"
                     } else if filled && is_blue {
                         "h-16 rounded border border-blue-600 bg-blue-950 overflow-hidden cursor-pointer hover:opacity-75"
                     } else if filled {
                         "h-16 rounded border border-red-600 bg-red-950 overflow-hidden cursor-pointer hover:opacity-75"
                     } else {
-                        "h-16 rounded border border-dashed border-gray-600 bg-gray-900 overflow-hidden cursor-pointer hover:border-gray-400"
+                        "h-16 rounded border border-dashed border-outline bg-surface overflow-hidden cursor-pointer hover:border-gray-400"
                     }
                 }
                 on:click=move |_| on_slot_click.run(slot_idx)
@@ -149,18 +149,18 @@ pub fn DraftBoard(
                                 <div class="relative flex-shrink-0 h-full">
                                     <img src=icon_url alt=champ_name.clone() class="h-full aspect-square object-cover" />
                                     {is_first_pick.then(|| view! {
-                                        <div class="absolute top-0 left-0 bg-yellow-400 text-gray-900 text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
+                                        <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
                                     })}
                                 </div>
-                                <span class={if is_blue { "flex-1 flex items-center px-2 text-white text-sm font-medium truncate" } else { "flex-1 flex items-center justify-end px-2 text-white text-sm font-medium truncate" }}>{champ_name}</span>
+                                <span class={if is_blue { "flex-1 flex items-center px-2 text-primary text-sm font-medium truncate" } else { "flex-1 flex items-center justify-end px-2 text-primary text-sm font-medium truncate" }}>{champ_name}</span>
                             </div>
                         }.into_any()
                     } else {
                         view! {
                             <div class="flex items-center justify-between px-2 h-full w-full">
-                                <span class="text-gray-500 text-sm">{label}</span>
+                                <span class="text-dimmed text-sm">{label}</span>
                                 {is_first_pick.then(|| view! {
-                                    <span class="text-yellow-400 text-xs font-bold">"1st"</span>
+                                    <span class="text-accent text-xs font-bold">"1st"</span>
                                 })}
                             </div>
                         }.into_any()
@@ -186,9 +186,9 @@ pub fn DraftBoard(
             </div>
             <div class="flex items-center justify-center">
                 <div class="flex flex-col items-center gap-1">
-                    <span class="text-gray-400 text-xs font-medium">"First pick"</span>
+                    <span class="text-muted text-xs font-medium">"First pick"</span>
                     <button
-                        class="relative w-11 h-6 rounded-full bg-gray-800 border border-gray-600 hover:border-gray-500 cursor-pointer transition-colors"
+                        class="relative w-11 h-6 rounded-full bg-elevated border border-outline hover:border-outline cursor-pointer transition-colors"
                         title="Toggle first pick side"
                         on:click=move |_| set_first_pick_blue.update(|v| *v = !*v)
                     >
@@ -208,7 +208,7 @@ pub fn DraftBoard(
 
             // Row: Pick 1
             {render_pick_slot(6, true)}
-            <div class="flex items-center justify-center text-gray-500 font-bold text-sm">"VS"</div>
+            <div class="flex items-center justify-center text-dimmed font-bold text-sm">"VS"</div>
             {render_pick_slot(7, false)}
 
             // Row: Pick 2

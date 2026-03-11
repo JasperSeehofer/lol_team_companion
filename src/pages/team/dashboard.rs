@@ -264,8 +264,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
     view! {
         <div class="max-w-4xl mx-auto py-8 px-6">
-            <h1 class="text-3xl font-bold text-white mb-6">"Team Dashboard"</h1>
-            <Suspense fallback=|| view! { <div class="text-gray-400">"Loading..."</div> }>
+            <h1 class="text-3xl font-bold text-primary mb-6">"Team Dashboard"</h1>
+            <Suspense fallback=|| view! { <div class="text-muted">"Loading..."</div> }>
                 {move || dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
                         let is_leader = team.created_by == current_user_id;
@@ -297,13 +297,13 @@ pub fn TeamDashboard() -> impl IntoView {
                         view! {
                             <div class="flex flex-col gap-6">
                                 // Team info card
-                                <div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
+                                <div class="bg-elevated border border-divider rounded-lg p-6">
                                     <div class="flex items-start justify-between gap-4">
                                         <div>
-                                            <h2 class="text-xl font-bold text-yellow-400 mb-1">{team.name.clone()}</h2>
-                                            <p class="text-gray-400 text-sm">"Region: " {team.region.clone()}</p>
+                                            <h2 class="text-xl font-bold text-accent mb-1">{team.name.clone()}</h2>
+                                            <p class="text-muted text-sm">"Region: " {team.region.clone()}</p>
                                             {if is_leader {
-                                                view! { <span class="inline-block mt-1 text-xs text-yellow-400 font-medium bg-yellow-400/10 rounded px-1.5 py-0.5">"Team Leader"</span> }.into_any()
+                                                view! { <span class="inline-block mt-1 text-xs text-accent font-medium bg-accent/10 rounded px-1.5 py-0.5">"Team Leader"</span> }.into_any()
                                             } else {
                                                 view! { <span></span> }.into_any()
                                             }}
@@ -313,27 +313,27 @@ pub fn TeamDashboard() -> impl IntoView {
                                     // Leader: edit team details
                                     {if is_leader {
                                         view! {
-                                            <div class="mt-4 pt-4 border-t border-gray-700">
-                                                <h3 class="text-gray-300 text-sm font-medium mb-3">"Edit Team"</h3>
+                                            <div class="mt-4 pt-4 border-t border-divider">
+                                                <h3 class="text-secondary text-sm font-medium mb-3">"Edit Team"</h3>
                                                 {move || edit_msg.get().map(|m| {
                                                     view! { <div class="mb-3"><StatusMessage message=m /></div> }
                                                 })}
                                                 <div class="flex gap-3 items-end">
                                                     <div class="flex-1">
-                                                        <label class="block text-gray-400 text-xs mb-1">"Team Name"</label>
+                                                        <label class="block text-muted text-xs mb-1">"Team Name"</label>
                                                         <input
                                                             type="text"
                                                             prop:value=move || edit_name.get()
                                                             on:input=move |ev| set_edit_name.set(event_target_value(&ev))
-                                                            class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-400"
+                                                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label class="block text-gray-400 text-xs mb-1">"Region"</label>
+                                                        <label class="block text-muted text-xs mb-1">"Region"</label>
                                                         <select
                                                             prop:value=move || edit_region.get()
                                                             on:change=move |ev| set_edit_region.set(event_target_value(&ev))
-                                                            class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-400"
+                                                            class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
                                                         >
                                                             {["EUW","EUNE","NA","KR","BR"].iter().map(|&r| view! {
                                                                 <option value=r>{r}</option>
@@ -341,7 +341,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         </select>
                                                     </div>
                                                     <button
-                                                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer"
+                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer"
                                                         on:click=move |_| {
                                                             let name = edit_name.get_untracked();
                                                             let region = edit_region.get_untracked();
@@ -377,10 +377,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         view! { <span></span> }.into_any()
                                                     } else {
                                                         view! {
-                                                            <div class="bg-gray-800 border border-yellow-400/30 rounded-lg p-5">
-                                                                <h3 class="text-yellow-400 font-semibold mb-3 flex items-center gap-2">
+                                                            <div class="bg-elevated border border-accent/30 rounded-lg p-5">
+                                                                <h3 class="text-accent font-semibold mb-3 flex items-center gap-2">
                                                                     "Join Requests"
-                                                                    <span class="bg-yellow-400 text-gray-900 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                                                    <span class="bg-accent text-accent-contrast text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                                                                         {reqs.len()}
                                                                     </span>
                                                                 </h3>
@@ -389,11 +389,11 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                         let req_id_accept = req.id.clone();
                                                                         let req_id_decline = req.id.clone();
                                                                         view! {
-                                                                            <div class="flex items-center justify-between bg-gray-700 rounded px-4 py-3">
+                                                                            <div class="flex items-center justify-between bg-overlay rounded px-4 py-3">
                                                                                 <div>
-                                                                                    <span class="text-white font-medium">{req.username}</span>
+                                                                                    <span class="text-primary font-medium">{req.username}</span>
                                                                                     {req.riot_summoner_name.map(|n| view! {
-                                                                                        <span class="text-gray-400 text-sm ml-2">{n}</span>
+                                                                                        <span class="text-muted text-sm ml-2">{n}</span>
                                                                                     })}
                                                                                 </div>
                                                                                 <div class="flex gap-2">
@@ -409,7 +409,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                         }
                                                                                     >"Accept"</button>
                                                                                     <button
-                                                                                        class="bg-gray-600 hover:bg-red-700 text-gray-300 hover:text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                                                        class="bg-overlay-strong hover:bg-red-700 text-secondary hover:text-primary text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
                                                                                         on:click=move |_| {
                                                                                             let id = req_id_decline.clone();
                                                                                             leptos::task::spawn_local(async move {
@@ -436,7 +436,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Starting roster — 5 role slots
                                 <div>
-                                    <h3 class="text-lg font-semibold text-white mb-3">"Starting Roster"</h3>
+                                    <h3 class="text-lg font-semibold text-primary mb-3">"Starting Roster"</h3>
                                     <div class="grid grid-cols-5 gap-3">
                                         {STARTER_ROLES.iter().map(|&role| {
                                             let assigned = starters.iter().find(|m| m.role == role).cloned();
@@ -448,8 +448,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                             view! {
                                                 <div
                                                     class=move || format!(
-                                                        "bg-gray-800 border rounded-lg p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
-                                                        if drag_over.get() { "border-yellow-400 bg-gray-700" } else { "border-gray-700" }
+                                                        "bg-elevated border rounded-lg p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
+                                                        if drag_over.get() { "border-accent bg-overlay" } else { "border-divider" }
                                                     )
                                                     on:dragover=move |ev| {
                                                         ev.prevent_default();
@@ -479,7 +479,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         } else {
                                                             view! { <span></span> }.into_any()
                                                         }}
-                                                        <span class="text-gray-400 text-xs capitalize">{role_label2.clone()}</span>
+                                                        <span class="text-muted text-xs capitalize">{role_label2.clone()}</span>
                                                     </div>
 
                                                     // Assigned player or empty slot
@@ -489,15 +489,15 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         view! {
                                                             <div class="flex-1 flex flex-col items-center justify-center gap-1 w-full">
                                                                 <div class="flex items-center gap-1">
-                                                                    <span class="text-white text-sm font-medium text-center truncate">{m.username.clone()}</span>
+                                                                    <span class="text-primary text-sm font-medium text-center truncate">{m.username.clone()}</span>
                                                                     {is_member_leader.then(|| view! {
-                                                                        <span class="text-yellow-400 text-xs" title="Team Leader">"★"</span>
+                                                                        <span class="text-accent text-xs" title="Team Leader">"★"</span>
                                                                     })}
                                                                 </div>
                                                                 {if is_leader {
                                                                     view! {
                                                                         <button
-                                                                            class="text-gray-600 hover:text-red-400 text-xs transition-colors cursor-pointer"
+                                                                            class="text-overlay-strong hover:text-red-400 text-xs transition-colors cursor-pointer"
                                                                             title="Remove from slot"
                                                                             on:click=move |_| {
                                                                                 let uid = uid_for_unassign.clone();
@@ -516,7 +516,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     } else {
                                                         view! {
                                                             <div class="flex-1 flex items-center justify-center">
-                                                                <span class="text-gray-600 text-xs">"Empty"</span>
+                                                                <span class="text-overlay-strong text-xs">"Empty"</span>
                                                             </div>
                                                         }.into_any()
                                                     }}
@@ -525,7 +525,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                         }).collect_view()}
                                     </div>
                                     {if is_leader {
-                                        view! { <p class="text-gray-500 text-xs mt-2">"Drag players from the bench below to assign them to role slots."</p> }.into_any()
+                                        view! { <p class="text-dimmed text-xs mt-2">"Drag players from the bench below to assign them to role slots."</p> }.into_any()
                                     } else {
                                         view! { <span></span> }.into_any()
                                     }}
@@ -533,24 +533,24 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Coaches section
                                 <div>
-                                    <h3 class="text-lg font-semibold text-white mb-3">"Coaches"</h3>
+                                    <h3 class="text-lg font-semibold text-primary mb-3">"Coaches"</h3>
                                     {if coaches.is_empty() {
-                                        view! { <p class="text-gray-500 text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
+                                        view! { <p class="text-dimmed text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
                                     } else {
                                         view! {
                                             <div class="grid grid-cols-2 gap-3">
                                                 {coaches.into_iter().map(|m| {
                                                     let is_member_leader = m.user_id == created_by_for_coaches;
                                                     view! {
-                                                        <div class="bg-gray-800 border border-gray-700 rounded-lg p-3 flex items-center gap-3">
+                                                        <div class="bg-elevated border border-divider rounded-lg p-3 flex items-center gap-3">
                                                             <span class="bg-blue-500/20 text-blue-400 rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
                                                                 {m.username.chars().next().unwrap_or('?').to_string()}
                                                             </span>
                                                             <div>
                                                                 <div class="flex items-center gap-1">
-                                                                    <span class="text-white text-sm font-medium">{m.username}</span>
+                                                                    <span class="text-primary text-sm font-medium">{m.username}</span>
                                                                     {is_member_leader.then(|| view! {
-                                                                        <span class="text-yellow-400 text-xs" title="Team Leader">"★"</span>
+                                                                        <span class="text-accent text-xs" title="Team Leader">"★"</span>
                                                                     })}
                                                                 </div>
                                                                 <span class="text-blue-400 text-xs">"Coach"</span>
@@ -565,9 +565,9 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Substitute bench
                                 <div>
-                                    <h3 class="text-lg font-semibold text-white mb-3">"Bench / Substitutes"</h3>
+                                    <h3 class="text-lg font-semibold text-primary mb-3">"Bench / Substitutes"</h3>
                                     {if subs.is_empty() {
-                                        view! { <p class="text-gray-500 text-sm">"No players on the bench."</p> }.into_any()
+                                        view! { <p class="text-dimmed text-sm">"No players on the bench."</p> }.into_any()
                                     } else {
                                         view! {
                                             <div class="flex flex-col gap-2">
@@ -582,7 +582,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                                     view! {
                                                         <div
-                                                            class="bg-gray-800 border border-gray-700 rounded px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
+                                                            class="bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
                                                             draggable="true"
                                                             on:dragstart=move |ev| {
                                                                 let dt = ev.data_transfer().unwrap();
@@ -590,13 +590,13 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             }
                                                         >
                                                             <div class="flex items-center gap-2 min-w-0">
-                                                                <span class="text-gray-400 text-xs select-none" title="Drag to assign to a role slot">"⠿"</span>
-                                                                <span class="text-white font-medium truncate">{display_name}</span>
+                                                                <span class="text-muted text-xs select-none" title="Drag to assign to a role slot">"⠿"</span>
+                                                                <span class="text-primary font-medium truncate">{display_name}</span>
                                                                 {is_member_leader.then(|| view! {
-                                                                    <span class="text-yellow-400 text-xs" title="Team Leader">"★"</span>
+                                                                    <span class="text-accent text-xs" title="Team Leader">"★"</span>
                                                                 })}
                                                                 {m.riot_summoner_name.map(|n| view! {
-                                                                    <span class="text-gray-500 text-sm truncate">{n}</span>
+                                                                    <span class="text-dimmed text-sm truncate">{n}</span>
                                                                 })}
                                                                 {move || role_msg.get().map(|msg| view! {
                                                                     <span class="text-xs text-green-400">{msg}</span>
@@ -607,7 +607,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     let mid = m.user_id.clone();
                                                                     view! {
                                                                         <select
-                                                                            class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 text-sm focus:outline-none focus:border-yellow-400"
+                                                                            class="bg-overlay border border-outline rounded px-2 py-1 text-gray-200 text-sm focus:outline-none focus:border-accent"
                                                                             on:change=move |ev| {
                                                                                 let role = event_target_value(&ev);
                                                                                 let uid = mid.clone();
@@ -632,14 +632,14 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     }.into_any()
                                                                 } else {
                                                                     view! {
-                                                                        <span class="text-gray-400 text-sm capitalize">{current_role}</span>
+                                                                        <span class="text-muted text-sm capitalize">{current_role}</span>
                                                                     }.into_any()
                                                                 }}
 
                                                                 {if is_leader && !is_self {
                                                                     view! {
                                                                         <button
-                                                                            class="text-gray-600 hover:text-red-400 text-sm transition-colors cursor-pointer"
+                                                                            class="text-overlay-strong hover:text-red-400 text-sm transition-colors cursor-pointer"
                                                                             title="Remove from team"
                                                                             on:click=move |_| {
                                                                                 let uid = uid_kick.clone();
@@ -667,14 +667,14 @@ pub fn TeamDashboard() -> impl IntoView {
                                 // Leave team (non-leaders only)
                                 {if !is_leader {
                                     view! {
-                                        <div class="border-t border-gray-700 pt-4">
+                                        <div class="border-t border-divider pt-4">
                                             {move || leave_msg.get().map(|msg| view! {
                                                 <div class="mb-3"><StatusMessage message=msg /></div>
                                             })}
                                             {move || if leave_confirm.get() {
                                                 view! {
                                                     <div class="flex items-center gap-3">
-                                                        <span class="text-gray-300 text-sm">"Are you sure you want to leave this team?"</span>
+                                                        <span class="text-secondary text-sm">"Are you sure you want to leave this team?"</span>
                                                         <button
                                                             class="bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
                                                             on:click=move |_| {
@@ -691,7 +691,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             }
                                                         >"Yes, leave"</button>
                                                         <button
-                                                            class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                            class="bg-overlay hover:bg-overlay-strong text-secondary text-sm rounded px-3 py-1.5 transition-colors cursor-pointer"
                                                             on:click=move |_| set_leave_confirm.set(false)
                                                         >"Cancel"</button>
                                                     </div>
@@ -714,8 +714,8 @@ pub fn TeamDashboard() -> impl IntoView {
                     },
                     Ok(None) => view! {
                         <div class="text-center py-16">
-                            <p class="text-gray-400 mb-4">"You are not part of a team yet."</p>
-                            <a href="/team/roster" class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2">
+                            <p class="text-muted mb-4">"You are not part of a team yet."</p>
+                            <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2">
                                 "Create or Join a Team"
                             </a>
                         </div>

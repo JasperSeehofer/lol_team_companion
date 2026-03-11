@@ -32,7 +32,7 @@ pub fn StatusMessage(message: String) -> impl IntoView {
 pub fn EmptyState(message: &'static str) -> impl IntoView {
     view! {
         <div class="text-center py-12">
-            <p class="text-gray-500 text-sm">{message}</p>
+            <p class="text-dimmed text-sm">{message}</p>
         </div>
     }
 }
