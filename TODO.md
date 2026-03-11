@@ -1,6 +1,28 @@
 # TODOs
+## Open
+### General
+- [ ] it seems that often if a button click did not work, all subsequent clicks or links to different routes dont do anything. Please investigate and solve this issue in general.
+### Tree drafter
+- [ ] I would love to have a graph representation of the tree structure with the connection edges have a little champion Icon in the center on the connection edge that shows the champion that was banned or the champion that was left open
+### Design and Style
+- [ ] Please implement a dark/light mode switch and a color theme picker. Seek a modern approach.
+
 
 ## Completed
+
+### Section 7 – Bug Fixes & Feature Enhancements
+- [x] Nav dropdowns close on outside click (transparent backdrop), Escape key, and link click
+- [x] Removed duplicate "Team Settings" from profile menu
+- [x] Fixed game plan save "Connection uninitialised" error (missing `.check()`)
+- [x] Tree drafter: fixed Live Game button not activating immediately
+- [x] Tree drafter: enlarged node +/x buttons
+- [x] Notification dropdown: inline accept/decline for join requests
+- [x] Team dashboard: coach role slots, leave team, leader badge
+- [x] Drafts: blue/red side toggle, auto-populate game plan champions from draft
+- [x] Champion autocomplete component with icons (game plan champion inputs)
+- [x] Champion pool: standalone page (`/champion-pool`) with tiers (comfort, match ready, scrim ready, practicing, should be practiced) and notes
+- [x] Profile: champion pool summary with link to full pool page
+- [x] Tree drafter: "Branch from here" button to create branch from a selected draft position
 
 ### Section 1 – Teams & Existing Feature Gaps
 - [x] Join request system: players request to join, leader accepts/declines

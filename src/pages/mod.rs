@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod champion_pool;
 pub mod draft;
 pub mod game_plan;
 pub mod home;

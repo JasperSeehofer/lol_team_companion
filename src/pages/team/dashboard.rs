@@ -109,6 +109,33 @@ pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
 }
 
 #[server]
+pub async fn leave_team() -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let (team, _) = db::get_user_team_with_members(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    if team.created_by == user.id {
+        return Err(ServerFnError::new("Team leader cannot leave the team. Transfer leadership or delete the team first."));
+    }
+
+    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
+    db::remove_team_member(&db, &team_id, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
 pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -216,7 +243,7 @@ pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), Ser
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
-const MEMBER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support", "unassigned"];
+const MEMBER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support", "coach", "unassigned"];
 const STARTER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support"];
 
 fn role_icon_url(role: &str) -> &'static str {
@@ -242,19 +269,30 @@ pub fn TeamDashboard() -> impl IntoView {
                 {move || dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
                         let is_leader = team.created_by == current_user_id;
+                        let created_by = team.created_by.clone();
                         let (edit_name, set_edit_name) = signal(team.name.clone());
                         let (edit_region, set_edit_region) = signal(team.region.clone());
                         let (edit_msg, set_edit_msg) = signal(Option::<String>::None);
+                        let (leave_confirm, set_leave_confirm) = signal(false);
+                        let (leave_msg, set_leave_msg) = signal(Option::<String>::None);
 
                         // Partition members
                         let starters: Vec<TeamMember> = members.iter()
                             .filter(|m| m.roster_type == "starter")
                             .cloned()
                             .collect();
-                        let subs: Vec<TeamMember> = members.iter()
-                            .filter(|m| m.roster_type != "starter")
+                        let coaches: Vec<TeamMember> = members.iter()
+                            .filter(|m| m.role == "coach" && m.roster_type != "starter")
                             .cloned()
                             .collect();
+                        let subs: Vec<TeamMember> = members.iter()
+                            .filter(|m| m.roster_type != "starter" && m.role != "coach")
+                            .cloned()
+                            .collect();
+
+                        let created_by_for_starters = created_by.clone();
+                        let created_by_for_coaches = created_by.clone();
+                        let created_by_for_subs = created_by.clone();
 
                         view! {
                             <div class="flex flex-col gap-6">
@@ -303,7 +341,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         </select>
                                                     </div>
                                                     <button
-                                                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 text-sm transition-colors"
+                                                        class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer"
                                                         on:click=move |_| {
                                                             let name = edit_name.get_untracked();
                                                             let region = edit_region.get_untracked();
@@ -360,7 +398,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                 </div>
                                                                                 <div class="flex gap-2">
                                                                                     <button
-                                                                                        class="bg-green-700 hover:bg-green-600 text-white text-sm font-medium rounded px-3 py-1.5 transition-colors"
+                                                                                        class="bg-green-700 hover:bg-green-600 text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
                                                                                         on:click=move |_| {
                                                                                             let id = req_id_accept.clone();
                                                                                             leptos::task::spawn_local(async move {
@@ -371,7 +409,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                         }
                                                                                     >"Accept"</button>
                                                                                     <button
-                                                                                        class="bg-gray-600 hover:bg-red-700 text-gray-300 hover:text-white text-sm font-medium rounded px-3 py-1.5 transition-colors"
+                                                                                        class="bg-gray-600 hover:bg-red-700 text-gray-300 hover:text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
                                                                                         on:click=move |_| {
                                                                                             let id = req_id_decline.clone();
                                                                                             leptos::task::spawn_local(async move {
@@ -405,6 +443,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                             let role_label = role.to_string();
                                             let role_label2 = role_label.clone();
                                             let (drag_over, set_drag_over) = signal(false);
+                                            let leader_id = created_by_for_starters.clone();
 
                                             view! {
                                                 <div
@@ -446,13 +485,19 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     // Assigned player or empty slot
                                                     {if let Some(m) = assigned {
                                                         let uid_for_unassign = m.user_id.clone();
+                                                        let is_member_leader = m.user_id == leader_id;
                                                         view! {
                                                             <div class="flex-1 flex flex-col items-center justify-center gap-1 w-full">
-                                                                <span class="text-white text-sm font-medium text-center truncate w-full text-center">{m.username.clone()}</span>
+                                                                <div class="flex items-center gap-1">
+                                                                    <span class="text-white text-sm font-medium text-center truncate">{m.username.clone()}</span>
+                                                                    {is_member_leader.then(|| view! {
+                                                                        <span class="text-yellow-400 text-xs" title="Team Leader">"★"</span>
+                                                                    })}
+                                                                </div>
                                                                 {if is_leader {
                                                                     view! {
                                                                         <button
-                                                                            class="text-gray-600 hover:text-red-400 text-xs transition-colors"
+                                                                            class="text-gray-600 hover:text-red-400 text-xs transition-colors cursor-pointer"
                                                                             title="Remove from slot"
                                                                             on:click=move |_| {
                                                                                 let uid = uid_for_unassign.clone();
@@ -486,6 +531,38 @@ pub fn TeamDashboard() -> impl IntoView {
                                     }}
                                 </div>
 
+                                // Coaches section
+                                <div>
+                                    <h3 class="text-lg font-semibold text-white mb-3">"Coaches"</h3>
+                                    {if coaches.is_empty() {
+                                        view! { <p class="text-gray-500 text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="grid grid-cols-2 gap-3">
+                                                {coaches.into_iter().map(|m| {
+                                                    let is_member_leader = m.user_id == created_by_for_coaches;
+                                                    view! {
+                                                        <div class="bg-gray-800 border border-gray-700 rounded-lg p-3 flex items-center gap-3">
+                                                            <span class="bg-blue-500/20 text-blue-400 rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
+                                                                {m.username.chars().next().unwrap_or('?').to_string()}
+                                                            </span>
+                                                            <div>
+                                                                <div class="flex items-center gap-1">
+                                                                    <span class="text-white text-sm font-medium">{m.username}</span>
+                                                                    {is_member_leader.then(|| view! {
+                                                                        <span class="text-yellow-400 text-xs" title="Team Leader">"★"</span>
+                                                                    })}
+                                                                </div>
+                                                                <span class="text-blue-400 text-xs">"Coach"</span>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    }}
+                                </div>
+
                                 // Substitute bench
                                 <div>
                                     <h3 class="text-lg font-semibold text-white mb-3">"Bench / Substitutes"</h3>
@@ -498,6 +575,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     let uid_drag = m.user_id.clone();
                                                     let uid_kick = m.user_id.clone();
                                                     let is_self = m.user_id == current_user_id;
+                                                    let is_member_leader = m.user_id == created_by_for_subs;
                                                     let current_role = m.role.clone();
                                                     let display_name = m.username.clone();
                                                     let (role_msg, set_role_msg) = signal(Option::<String>::None);
@@ -514,6 +592,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             <div class="flex items-center gap-2 min-w-0">
                                                                 <span class="text-gray-400 text-xs select-none" title="Drag to assign to a role slot">"⠿"</span>
                                                                 <span class="text-white font-medium truncate">{display_name}</span>
+                                                                {is_member_leader.then(|| view! {
+                                                                    <span class="text-yellow-400 text-xs" title="Team Leader">"★"</span>
+                                                                })}
                                                                 {m.riot_summoner_name.map(|n| view! {
                                                                     <span class="text-gray-500 text-sm truncate">{n}</span>
                                                                 })}
@@ -558,7 +639,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 {if is_leader && !is_self {
                                                                     view! {
                                                                         <button
-                                                                            class="text-gray-600 hover:text-red-400 text-sm transition-colors"
+                                                                            class="text-gray-600 hover:text-red-400 text-sm transition-colors cursor-pointer"
                                                                             title="Remove from team"
                                                                             on:click=move |_| {
                                                                                 let uid = uid_kick.clone();
@@ -582,6 +663,52 @@ pub fn TeamDashboard() -> impl IntoView {
                                         }.into_any()
                                     }}
                                 </div>
+
+                                // Leave team (non-leaders only)
+                                {if !is_leader {
+                                    view! {
+                                        <div class="border-t border-gray-700 pt-4">
+                                            {move || leave_msg.get().map(|msg| view! {
+                                                <div class="mb-3"><StatusMessage message=msg /></div>
+                                            })}
+                                            {move || if leave_confirm.get() {
+                                                view! {
+                                                    <div class="flex items-center gap-3">
+                                                        <span class="text-gray-300 text-sm">"Are you sure you want to leave this team?"</span>
+                                                        <button
+                                                            class="bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                            on:click=move |_| {
+                                                                leptos::task::spawn_local(async move {
+                                                                    match leave_team().await {
+                                                                        Ok(_) => {
+                                                                            set_leave_msg.set(Some("You have left the team.".into()));
+                                                                            dashboard.refetch();
+                                                                        }
+                                                                        Err(e) => set_leave_msg.set(Some(format!("Error: {e}"))),
+                                                                    }
+                                                                });
+                                                                set_leave_confirm.set(false);
+                                                            }
+                                                        >"Yes, leave"</button>
+                                                        <button
+                                                            class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                            on:click=move |_| set_leave_confirm.set(false)
+                                                        >"Cancel"</button>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <button
+                                                        class="text-red-400 hover:text-red-300 text-sm transition-colors border border-red-400/20 hover:border-red-400/40 rounded-lg px-3 py-1.5 cursor-pointer"
+                                                        on:click=move |_| set_leave_confirm.set(true)
+                                                    >"Leave Team"</button>
+                                                }.into_any()
+                                            }}
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }}
                             </div>
                         }.into_any()
                     },

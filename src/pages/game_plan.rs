@@ -1,6 +1,9 @@
 use leptos::prelude::*;
+use crate::models::champion::Champion;
 use crate::models::game_plan::GamePlan;
 use crate::models::draft::Draft;
+use crate::components::champion_autocomplete::ChampionAutocomplete;
+use crate::components::draft_board::slot_meta;
 use crate::components::ui::{ErrorBanner, StatusMessage};
 
 // ---------------------------------------------------------------------------
@@ -114,6 +117,14 @@ pub async fn delete_plan(plan_id: String) -> Result<(), ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+#[server]
+pub async fn get_champions_for_game_plan() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::data_dragon;
+    data_dragon::fetch_champions()
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 // ---------------------------------------------------------------------------
 // Template generation
 // ---------------------------------------------------------------------------
@@ -170,14 +181,15 @@ fn input_class() -> &'static str {
 pub fn GamePlanPage() -> impl IntoView {
     let plans = Resource::new(|| (), |_| list_plans());
     let drafts = Resource::new(|| (), |_| list_team_drafts());
+    let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
     let (status_msg, set_status_msg) = signal(Option::<String>::None);
 
     // Editor state
     let (editing_id, set_editing_id) = signal(Option::<String>::None);
     let (plan_name, set_plan_name) = signal(String::new());
     let (draft_id, set_draft_id) = signal(String::new());
-    let (our_champs, set_our_champs) = signal(vec![String::new(); 5]);
-    let (enemy_champs, set_enemy_champs) = signal(vec![String::new(); 5]);
+    let our_champ_signals: Vec<RwSignal<String>> = (0..5).map(|_| RwSignal::new(String::new())).collect();
+    let enemy_champ_signals: Vec<RwSignal<String>> = (0..5).map(|_| RwSignal::new(String::new())).collect();
     let (win_conditions, set_win_conditions) = signal(String::new());
     let (obj_priority, set_obj_priority) = signal(String::new());
     let (teamfight, set_teamfight) = signal(String::new());
@@ -185,32 +197,40 @@ pub fn GamePlanPage() -> impl IntoView {
     let (role_strats, set_role_strats) = signal(vec![String::new(); 5]);
     let (notes, set_notes) = signal(String::new());
 
-    // Clear editor
-    let clear_editor = move || {
+    // Clear editor (Callback is Copy, safe in multiple closures)
+    let our_champ_signals_clone = our_champ_signals.clone();
+    let enemy_champ_signals_clone = enemy_champ_signals.clone();
+    let clear_editor = Callback::new(move |_: ()| {
         set_editing_id.set(None);
         set_plan_name.set(String::new());
         set_draft_id.set(String::new());
-        set_our_champs.set(vec![String::new(); 5]);
-        set_enemy_champs.set(vec![String::new(); 5]);
+        for s in &our_champ_signals_clone { s.set(String::new()); }
+        for s in &enemy_champ_signals_clone { s.set(String::new()); }
         set_win_conditions.set(String::new());
         set_obj_priority.set(String::new());
         set_teamfight.set(String::new());
         set_early_game.set(String::new());
         set_role_strats.set(vec![String::new(); 5]);
         set_notes.set(String::new());
-    };
+    });
 
-    // Load a plan into editor
-    let load_plan = move |p: &GamePlan| {
+    // Load a plan into editor (Callback is Copy, safe in reactive closures)
+    let our_sigs_for_load = our_champ_signals.clone();
+    let enemy_sigs_for_load = enemy_champ_signals.clone();
+    let load_plan = Callback::new(move |p: GamePlan| {
         set_editing_id.set(p.id.clone());
         set_plan_name.set(p.name.clone());
         set_draft_id.set(p.draft_id.clone().unwrap_or_default());
         let mut ours = p.our_champions.clone();
         ours.resize(5, String::new());
-        set_our_champs.set(ours);
+        for (i, s) in our_sigs_for_load.iter().enumerate() {
+            s.set(ours[i].clone());
+        }
         let mut theirs = p.enemy_champions.clone();
         theirs.resize(5, String::new());
-        set_enemy_champs.set(theirs);
+        for (i, s) in enemy_sigs_for_load.iter().enumerate() {
+            s.set(theirs[i].clone());
+        }
         set_win_conditions.set(p.win_conditions.join("\n"));
         set_obj_priority.set(p.objective_priority.join("\n"));
         set_teamfight.set(p.teamfight_strategy.clone());
@@ -223,8 +243,10 @@ pub fn GamePlanPage() -> impl IntoView {
             p.support_strategy.clone().unwrap_or_default(),
         ]);
         set_notes.set(p.notes.clone().unwrap_or_default());
-    };
+    });
 
+    let our_sigs_for_build = our_champ_signals.clone();
+    let enemy_sigs_for_build = enemy_champ_signals.clone();
     let build_plan = move || -> GamePlan {
         let strats = role_strats.get_untracked();
         GamePlan {
@@ -235,8 +257,8 @@ pub fn GamePlanPage() -> impl IntoView {
                 if d.is_empty() { None } else { Some(d) }
             },
             name: plan_name.get_untracked(),
-            our_champions: our_champs.get_untracked().into_iter().filter(|s| !s.is_empty()).collect(),
-            enemy_champions: enemy_champs.get_untracked().into_iter().filter(|s| !s.is_empty()).collect(),
+            our_champions: our_sigs_for_build.iter().map(|s| s.get_untracked()).filter(|s| !s.is_empty()).collect(),
+            enemy_champions: enemy_sigs_for_build.iter().map(|s| s.get_untracked()).filter(|s| !s.is_empty()).collect(),
             win_conditions: win_conditions.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
             objective_priority: obj_priority.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
             teamfight_strategy: teamfight.get_untracked(),
@@ -274,22 +296,24 @@ pub fn GamePlanPage() -> impl IntoView {
         });
     };
 
-    let do_delete = move |plan_id: String| {
+    let do_delete = Callback::new(move |plan_id: String| {
         leptos::task::spawn_local(async move {
             match delete_plan(plan_id).await {
                 Ok(_) => {
-                    clear_editor();
+                    clear_editor.run(());
                     set_status_msg.set(Some("Plan deleted.".into()));
                     plans.refetch();
                 }
                 Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
             }
         });
-    };
+    });
 
+    let our_sigs_for_template = our_champ_signals.clone();
+    let enemy_sigs_for_template = enemy_champ_signals.clone();
     let do_generate_template = move |_| {
-        let ours = our_champs.get_untracked();
-        let theirs = enemy_champs.get_untracked();
+        let ours: Vec<String> = our_sigs_for_template.iter().map(|s| s.get_untracked()).collect();
+        let theirs: Vec<String> = enemy_sigs_for_template.iter().map(|s| s.get_untracked()).collect();
         let (wc, obj, tf, eg) = generate_template(&ours, &theirs);
         set_win_conditions.set(wc.join("\n"));
         set_obj_priority.set(obj.join("\n"));
@@ -297,6 +321,13 @@ pub fn GamePlanPage() -> impl IntoView {
         set_early_game.set(eg);
         set_status_msg.set(Some("Template generated! Customize to your strategy.".into()));
     };
+
+    // Pre-clone for multiple move closures in view!
+    let our_champs_for_draft = our_champ_signals.clone();
+    let enemy_champs_for_draft = enemy_champ_signals.clone();
+    let our_champs_for_matchup = our_champ_signals.clone();
+    let enemy_champs_for_matchup = enemy_champ_signals.clone();
+    // our_champ_signals/enemy_champ_signals used last for role-specific section
 
     view! {
         <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
@@ -314,7 +345,7 @@ pub fn GamePlanPage() -> impl IntoView {
                 <div class="w-72 flex-shrink-0 flex flex-col gap-3">
                     <button
                         class="bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
-                        on:click=move |_| clear_editor()
+                        on:click=move |_| clear_editor.run(())
                     >"+ New Plan"</button>
 
                     <Suspense fallback=|| view! { <div class="text-gray-500 text-sm">"Loading..."</div> }>
@@ -347,7 +378,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                             }>
                                                 <button
                                                     class="w-full text-left"
-                                                    on:click=move |_| load_plan(&plan_for_load)
+                                                    on:click=move |_| load_plan.run(plan_for_load.clone())
                                                 >
                                                     <div class="text-white text-sm font-medium truncate">{name}</div>
                                                     {(!champ_summary.is_empty()).then(|| view! {
@@ -356,7 +387,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                 </button>
                                                 <button
                                                     class="text-red-400/50 hover:text-red-400 text-xs mt-1 transition-colors"
-                                                    on:click=move |_| do_delete(plan_id_for_delete.clone())
+                                                    on:click=move |_| do_delete.run(plan_id_for_delete.clone())
                                                 >"Delete"</button>
                                             </div>
                                         }
@@ -386,22 +417,54 @@ pub fn GamePlanPage() -> impl IntoView {
                             <div>
                                 <label class="block text-gray-400 text-xs font-medium mb-1">"Linked Draft (optional)"</label>
                                 <Suspense fallback=|| view! { <div class="h-9 bg-gray-700/50 rounded-lg animate-pulse"></div> }>
-                                    {move || drafts.get().map(|result| match result {
-                                        Ok(list) => view! {
-                                            <select class=input_class()
-                                                prop:value=move || draft_id.get()
-                                                on:change=move |ev| set_draft_id.set(event_target_value(&ev))
-                                            >
-                                                <option value="">"None"</option>
-                                                {list.into_iter().map(|d| {
-                                                    let id = d.id.clone().unwrap_or_default();
-                                                    let label = d.name.clone();
-                                                    view! { <option value=id>{label}</option> }
-                                                }).collect_view()}
-                                            </select>
-                                        }.into_any(),
-                                        Err(_) => view! { <p class="text-gray-500 text-sm">"No drafts"</p> }.into_any(),
-                                    })}
+                                    {move || {
+                                        let our_sigs = our_champs_for_draft.clone();
+                                        let enemy_sigs = enemy_champs_for_draft.clone();
+                                        drafts.get().map(move |result| match result {
+                                            Ok(list) => {
+                                                let list_for_handler = list.clone();
+                                                let our_sigs = our_sigs.clone();
+                                                let enemy_sigs = enemy_sigs.clone();
+                                                view! {
+                                                    <select class=input_class()
+                                                        prop:value=move || draft_id.get()
+                                                        on:change=move |ev| {
+                                                            let selected_id = event_target_value(&ev);
+                                                            set_draft_id.set(selected_id.clone());
+                                                            // Auto-populate champions from the selected draft
+                                                            if let Some(draft) = list_for_handler.iter().find(|d| d.id.as_deref() == Some(&selected_id)) {
+                                                                let our_side = &draft.our_side;
+                                                                let enemy_side = if our_side == "blue" { "red" } else { "blue" };
+                                                                let mut our_picks: Vec<String> = Vec::new();
+                                                                let mut enemy_picks: Vec<String> = Vec::new();
+                                                                for action in &draft.actions {
+                                                                    let (_side, kind, _) = slot_meta(action.order as usize);
+                                                                    if !kind.contains("pick") { continue; }
+                                                                    if action.side == *our_side {
+                                                                        our_picks.push(action.champion.clone());
+                                                                    } else if action.side == *enemy_side {
+                                                                        enemy_picks.push(action.champion.clone());
+                                                                    }
+                                                                }
+                                                                our_picks.resize(5, String::new());
+                                                                enemy_picks.resize(5, String::new());
+                                                                for (i, s) in our_sigs.iter().enumerate() { s.set(our_picks[i].clone()); }
+                                                                for (i, s) in enemy_sigs.iter().enumerate() { s.set(enemy_picks[i].clone()); }
+                                                            }
+                                                        }
+                                                    >
+                                                        <option value="">"None"</option>
+                                                        {list.into_iter().map(|d| {
+                                                            let id = d.id.clone().unwrap_or_default();
+                                                            let label = d.name.clone();
+                                                            view! { <option value=id>{label}</option> }
+                                                        }).collect_view()}
+                                                    </select>
+                                                }.into_any()
+                                            },
+                                            Err(_) => view! { <p class="text-gray-500 text-sm">"No drafts"</p> }.into_any(),
+                                        })
+                                    }}
                                 </Suspense>
                             </div>
                         </div>
@@ -412,57 +475,61 @@ pub fn GamePlanPage() -> impl IntoView {
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="text-white font-semibold text-sm">"Champion Matchup"</h3>
                             <button
-                                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                                 on:click=do_generate_template
                             >"Generate Template"</button>
                         </div>
-                        <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
-                            // Our team
-                            <div class="flex flex-col gap-2">
-                                <span class="text-blue-400 text-xs font-semibold uppercase">"Your Team"</span>
-                                {(0..5).map(|i| {
-                                    let role = ROLES[i];
+                        <Suspense fallback=|| view! { <div class="text-gray-500 text-sm py-4">"Loading champions..."</div> }>
+                            {move || {
+                                let our_sigs = our_champs_for_matchup.clone();
+                                let enemy_sigs = enemy_champs_for_matchup.clone();
+                                champions.get().map(move |result| {
+                                    let champ_list = result.unwrap_or_default();
+                                    let champ_list2 = champ_list.clone();
                                     view! {
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-gray-500 text-xs w-14">{role}</span>
-                                            <input type="text" class=input_class()
-                                                placeholder=format!("{role} champion")
-                                                prop:value=move || our_champs.get().get(i).cloned().unwrap_or_default()
-                                                on:input=move |ev| {
-                                                    let val = event_target_value(&ev);
-                                                    set_our_champs.update(|v| {
-                                                        if i < v.len() { v[i] = val; }
-                                                    });
-                                                }
-                                            />
+                                        <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+                                            // Our team
+                                            <div class="flex flex-col gap-2">
+                                                <span class="text-blue-400 text-xs font-semibold uppercase">"Your Team"</span>
+                                                {our_sigs.iter().enumerate().map(|(i, sig)| {
+                                                    let role = ROLES[i];
+                                                    let champs = champ_list.clone();
+                                                    view! {
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-gray-500 text-xs w-14">{role}</span>
+                                                            <ChampionAutocomplete
+                                                                champions=champs
+                                                                value=*sig
+                                                                placeholder=role
+                                                            />
+                                                        </div>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                            <div class="flex items-center justify-center self-center text-gray-500 font-bold text-sm pt-6">"VS"</div>
+                                            // Enemy team
+                                            <div class="flex flex-col gap-2">
+                                                <span class="text-red-400 text-xs font-semibold uppercase">"Enemy Team"</span>
+                                                {enemy_sigs.iter().enumerate().map(|(i, sig)| {
+                                                    let role = ROLES[i];
+                                                    let champs = champ_list2.clone();
+                                                    view! {
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-gray-500 text-xs w-14">{role}</span>
+                                                            <ChampionAutocomplete
+                                                                champions=champs
+                                                                value=*sig
+                                                                placeholder=role
+                                                            />
+                                                        </div>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
                                         </div>
                                     }
-                                }).collect_view()}
-                            </div>
-                            <div class="flex items-center justify-center self-center text-gray-500 font-bold text-sm pt-6">"VS"</div>
-                            // Enemy team
-                            <div class="flex flex-col gap-2">
-                                <span class="text-red-400 text-xs font-semibold uppercase">"Enemy Team"</span>
-                                {(0..5).map(|i| {
-                                    let role = ROLES[i];
-                                    view! {
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-gray-500 text-xs w-14">{role}</span>
-                                            <input type="text" class=input_class()
-                                                placeholder=format!("{role} champion")
-                                                prop:value=move || enemy_champs.get().get(i).cloned().unwrap_or_default()
-                                                on:input=move |ev| {
-                                                    let val = event_target_value(&ev);
-                                                    set_enemy_champs.update(|v| {
-                                                        if i < v.len() { v[i] = val; }
-                                                    });
-                                                }
-                                            />
-                                        </div>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        </div>
+                                })
+                            }}
+                        </Suspense>
                     </div>
 
                     // Macro strategy
@@ -509,22 +576,21 @@ pub fn GamePlanPage() -> impl IntoView {
                         <h3 class="text-white font-semibold text-sm">"Role-Specific Strategy"</h3>
                         <div class="grid grid-cols-1 gap-3">
                             {ROLES.iter().enumerate().map(|(i, &role)| {
-                                let our_idx = i;
-                                let enemy_idx = i;
+                                let our_sig = our_champ_signals[i];
+                                let enemy_sig = enemy_champ_signals[i];
                                 view! {
                                     <div class="flex gap-3 items-start">
                                         <div class="w-16 flex-shrink-0 pt-2">
                                             <span class="text-yellow-400 text-xs font-semibold">{role}</span>
                                             {move || {
-                                                let ours = our_champs.get();
-                                                let theirs = enemy_champs.get();
-                                                let our = ours.get(our_idx).filter(|s| !s.is_empty());
-                                                let their = theirs.get(enemy_idx).filter(|s| !s.is_empty());
-                                                match (our, their) {
-                                                    (Some(o), Some(t)) => view! {
+                                                let o = our_sig.get();
+                                                let t = enemy_sig.get();
+                                                if !o.is_empty() && !t.is_empty() {
+                                                    view! {
                                                         <div class="text-gray-500 text-xs mt-0.5">{format!("{o} vs {t}")}</div>
-                                                    }.into_any(),
-                                                    _ => view! { <div></div> }.into_any(),
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
                                                 }
                                             }}
                                         </div>
@@ -564,7 +630,7 @@ pub fn GamePlanPage() -> impl IntoView {
                         </button>
                         <button
                             class="bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
-                            on:click=move |_| clear_editor()
+                            on:click=move |_| clear_editor.run(())
                         >"Clear"</button>
                     </div>
                 </div>

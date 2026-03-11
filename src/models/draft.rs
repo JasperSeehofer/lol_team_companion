@@ -12,6 +12,8 @@ pub struct Draft {
     pub opponent: Option<String>,
     pub notes: Option<String>,
     pub rating: Option<String>,
+    /// "blue" or "red" — which side is our team
+    pub our_side: String,
     pub actions: Vec<DraftAction>,
     pub comments: Vec<String>,
 }

@@ -2,10 +2,12 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::pages::profile::{get_current_user, Logout};
+use crate::models::user::JoinRequest;
+use crate::pages::team::dashboard::handle_join_request;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Notifications {
-    pub pending_requests: usize,
+    pub pending_requests: Vec<JoinRequest>,
     pub is_leader: bool,
 }
 
@@ -35,17 +37,17 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
 
     let is_leader = team.created_by == user.id;
     if !is_leader {
-        return Ok(Notifications { pending_requests: 0, is_leader: false });
+        return Ok(Notifications { pending_requests: Vec::new(), is_leader: false });
     }
 
     let team_id = match team.id {
         Some(id) => id,
-        None => return Ok(Notifications { pending_requests: 0, is_leader: true }),
+        None => return Ok(Notifications { pending_requests: Vec::new(), is_leader: true }),
     };
 
-    let pending = db::count_pending_join_requests(&db, &team_id)
+    let pending = db::list_pending_join_requests(&db, &team_id)
         .await
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     Ok(Notifications { pending_requests: pending, is_leader: true })
 }
@@ -61,35 +63,74 @@ pub fn Nav() -> impl IntoView {
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
     let notifications = Resource::new(|| (), |_| get_notifications());
 
+    let close_all = move || {
+        menu_open.set(false);
+        notif_open.set(false);
+        mobile_open.set(false);
+    };
+
     Effect::new(move || {
         if logout_version.get() > 0 {
-            menu_open.set(false);
-            notif_open.set(false);
-            mobile_open.set(false);
+            close_all();
         }
     });
 
+    // Escape key listener to close all dropdowns
+    #[cfg(feature = "hydrate")]
+    {
+        let close_all_esc = close_all.clone();
+        Effect::new(move |_| {
+            use wasm_bindgen::closure::Closure;
+            use wasm_bindgen::JsCast;
+            let cb = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |ev: web_sys::KeyboardEvent| {
+                if ev.key() == "Escape" {
+                    close_all_esc();
+                }
+            });
+            let window = web_sys::window().unwrap();
+            window.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref()).unwrap();
+            cb.forget();
+        });
+    }
+
+    let any_dropdown_open = move || menu_open.get() || notif_open.get();
+
+    let close_all_for_link = close_all.clone();
     let nav_links = move |extra_class: &'static str| {
+        let close = close_all_for_link.clone();
+        let close2 = close.clone();
+        let close3 = close.clone();
+        let close4 = close.clone();
+        let close5 = close.clone();
+        let close6 = close.clone();
+        let close7 = close.clone();
         view! {
-            <A href="/" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close()>
                 "Home"
             </A>
-            <A href="/team/dashboard" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/team/dashboard" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close2()>
                 "Team"
             </A>
-            <A href="/draft" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/draft" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close3()>
                 "Draft"
             </A>
-            <A href="/tree-drafter" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/tree-drafter" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close4()>
                 "Tree Drafter"
             </A>
-            <A href="/stats" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/stats" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close5()>
                 "Stats"
             </A>
-            <A href="/game-plan" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/game-plan" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close6()>
                 "Game Plan"
             </A>
-            <A href="/post-game" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")>
+            <A href="/post-game" attr:class=format!("{extra_class} text-gray-300 hover:text-white transition-colors")
+                on:click=move |_| close7()>
                 "Post Game"
             </A>
         }
@@ -115,14 +156,18 @@ pub fn Nav() -> impl IntoView {
                         <Suspense fallback=|| ()>
                             {move || {
                                 let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
-                                let count = notifs.pending_requests;
+                                let count = notifs.pending_requests.len();
                                 if count == 0 {
                                     return view! { <span></span> }.into_any();
                                 }
+                                let reqs = notifs.pending_requests;
                                 view! {
                                     <div class="relative">
                                         <button
-                                            on:click=move |_| notif_open.update(|v| *v = !*v)
+                                            on:click=move |_| {
+                                                notif_open.update(|v| *v = !*v);
+                                                menu_open.set(false);
+                                            }
                                             class="relative text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-gray-800 cursor-pointer"
                                             aria-label="Notifications"
                                         >
@@ -137,24 +182,69 @@ pub fn Nav() -> impl IntoView {
 
                                         // Notifications dropdown
                                         <div
-                                            class="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden"
+                                            class="absolute right-0 mt-2 w-80 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-[60]"
                                             style:display=move || if notif_open.get() { "block" } else { "none" }
                                         >
                                             <div class="px-4 py-3 border-b border-gray-700">
                                                 <span class="text-white text-sm font-semibold">"Notifications"</span>
                                             </div>
-                                            <A href="/team/dashboard" attr:class="block px-4 py-3 hover:bg-gray-750 transition-colors">
-                                                <div class="flex items-center gap-3">
-                                                    <span class="bg-amber-500/20 text-amber-400 rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shrink-0">
-                                                        {count}
-                                                    </span>
-                                                    <div>
-                                                        <p class="text-white text-sm font-medium">
-                                                            {format!("Pending join request{}", if count == 1 { "" } else { "s" })}
-                                                        </p>
-                                                        <p class="text-gray-400 text-xs">"Review on Team Dashboard"</p>
-                                                    </div>
-                                                </div>
+                                            <div class="max-h-64 overflow-y-auto">
+                                                {reqs.into_iter().map(|req| {
+                                                    let req_id_accept = req.id.clone();
+                                                    let req_id_decline = req.id.clone();
+                                                    view! {
+                                                        <div class="px-4 py-3 border-b border-gray-700/50 flex items-center justify-between gap-2">
+                                                            <div class="min-w-0">
+                                                                <p class="text-white text-sm font-medium truncate">{req.username}</p>
+                                                                {req.riot_summoner_name.map(|n| view! {
+                                                                    <p class="text-gray-400 text-xs truncate">{n}</p>
+                                                                })}
+                                                                <p class="text-gray-500 text-xs">"Wants to join"</p>
+                                                            </div>
+                                                            <div class="flex gap-1.5 flex-shrink-0">
+                                                                <button
+                                                                    class="bg-green-700 hover:bg-green-600 text-white text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer"
+                                                                    title="Accept"
+                                                                    on:click=move |_| {
+                                                                        let id = req_id_accept.clone();
+                                                                        leptos::task::spawn_local(async move {
+                                                                            let _ = handle_join_request(id, true).await;
+                                                                            notifications.refetch();
+                                                                        });
+                                                                        notif_open.set(false);
+                                                                    }
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    class="bg-gray-600 hover:bg-red-700 text-gray-300 hover:text-white text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer"
+                                                                    title="Decline"
+                                                                    on:click=move |_| {
+                                                                        let id = req_id_decline.clone();
+                                                                        leptos::task::spawn_local(async move {
+                                                                            let _ = handle_join_request(id, false).await;
+                                                                            notifications.refetch();
+                                                                        });
+                                                                        notif_open.set(false);
+                                                                    }
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                            <A
+                                                href="/team/dashboard"
+                                                attr:class="block px-4 py-2.5 text-center text-gray-400 hover:text-white text-xs transition-colors"
+                                                on:click=move |_| notif_open.set(false)
+                                            >
+                                                "View all on Team Dashboard"
                                             </A>
                                         </div>
                                     </div>
@@ -171,7 +261,10 @@ pub fn Nav() -> impl IntoView {
                                     match user.await {
                                         Ok(Some(u)) => view! {
                                             <button
-                                                on:click=move |_| menu_open.update(|v| *v = !*v)
+                                                on:click=move |_| {
+                                                    menu_open.update(|v| *v = !*v);
+                                                    notif_open.set(false);
+                                                }
                                                 class="flex items-center gap-2 text-gray-300 hover:text-white transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-800"
                                             >
                                                 <span class="bg-yellow-400/20 text-yellow-400 rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold uppercase">
@@ -183,20 +276,22 @@ pub fn Nav() -> impl IntoView {
                                                 </svg>
                                             </button>
                                             <div
-                                                class="absolute right-0 mt-2 w-44 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden"
+                                                class="absolute right-0 mt-2 w-44 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-[60]"
                                                 style:display=move || if menu_open.get() { "block" } else { "none" }
                                             >
                                                 <A
                                                     href="/profile"
                                                     attr:class="block px-4 py-2.5 text-gray-300 hover:bg-gray-750 hover:text-white transition-colors text-sm"
+                                                    on:click=move |_| menu_open.set(false)
                                                 >
                                                     "Profile"
                                                 </A>
                                                 <A
-                                                    href="/team/dashboard"
+                                                    href="/champion-pool"
                                                     attr:class="block px-4 py-2.5 text-gray-300 hover:bg-gray-750 hover:text-white transition-colors text-sm"
+                                                    on:click=move |_| menu_open.set(false)
                                                 >
-                                                    "Team Settings"
+                                                    "Champion Pool"
                                                 </A>
                                                 <div class="border-t border-gray-700"></div>
                                                 <ActionForm action=logout_action>
@@ -248,5 +343,19 @@ pub fn Nav() -> impl IntoView {
                 </div>
             </div>
         </nav>
+
+        // Click-outside backdrop: covers full screen behind dropdowns
+        {move || {
+            if any_dropdown_open() {
+                view! {
+                    <div
+                        class="fixed inset-0 z-40"
+                        on:click=move |_| close_all()
+                    />
+                }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            }
+        }}
     }
 }

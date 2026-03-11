@@ -155,6 +155,8 @@ struct DbPoolEntry {
     user: RecordId,
     champion: String,
     role: String,
+    tier: String,
+    notes: Option<String>,
 }
 
 impl From<DbPoolEntry> for ChampionPoolEntry {
@@ -164,6 +166,8 @@ impl From<DbPoolEntry> for ChampionPoolEntry {
             user_id: e.user.to_sql(),
             champion: e.champion,
             role: e.role,
+            tier: e.tier,
+            notes: e.notes,
         }
     }
 }
@@ -206,6 +210,30 @@ pub async fn remove_from_champion_pool(db: &Surreal<Db>, user_id: &str, champion
         .bind(("user_key", user_key))
         .bind(("champion", champion))
         .bind(("role", role))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_champion_tier(db: &Surreal<Db>, user_id: &str, champion: &str, role: &str, tier: String) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE champion_pool SET tier = $tier WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role")
+        .bind(("user_key", user_key))
+        .bind(("champion", champion.to_string()))
+        .bind(("role", role.to_string()))
+        .bind(("tier", tier))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_champion_notes(db: &Surreal<Db>, user_id: &str, champion: &str, role: &str, notes: Option<String>) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE champion_pool SET notes = $notes WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role")
+        .bind(("user_key", user_key))
+        .bind(("champion", champion.to_string()))
+        .bind(("role", role.to_string()))
+        .bind(("notes", notes))
         .await?
         .check()?;
     Ok(())
@@ -502,6 +530,7 @@ struct DbDraft {
     opponent: Option<String>,
     notes: Option<String>,
     rating: Option<String>,
+    our_side: String,
     comments: Vec<String>,
 }
 
@@ -515,6 +544,7 @@ impl From<DbDraft> for Draft {
             opponent: d.opponent,
             notes: d.notes,
             rating: d.rating,
+            our_side: d.our_side,
             actions: Vec::new(),
             comments: d.comments,
         }
@@ -554,12 +584,13 @@ pub async fn save_draft(
     comments: Vec<String>,
     actions: Vec<DraftAction>,
     rating: Option<String>,
+    our_side: String,
 ) -> DbResult<String> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     let mut response = db
-        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating")
+        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side")
         .bind(("name", name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -567,6 +598,7 @@ pub async fn save_draft(
         .bind(("notes", notes))
         .bind(("comments", comments))
         .bind(("rating", rating))
+        .bind(("our_side", our_side))
         .await?;
 
     let row: Option<IdRecord> = response.take(0)?;
@@ -624,16 +656,18 @@ pub async fn update_draft(
     comments: Vec<String>,
     actions: Vec<DraftAction>,
     rating: Option<String>,
+    our_side: String,
 ) -> DbResult<()> {
     let draft_key = draft_id.strip_prefix("draft:").unwrap_or(draft_id).to_string();
 
-    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating")
+    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side")
         .bind(("draft_key", draft_key.clone()))
         .bind(("name", name))
         .bind(("opponent", opponent))
         .bind(("notes", notes))
         .bind(("comments", comments))
         .bind(("rating", rating))
+        .bind(("our_side", our_side))
         .await?
         .check()?;
 
@@ -1218,7 +1252,8 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .bind(("bot_strategy", plan.bot_strategy))
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
-        .await?;
+        .await?
+        .check()?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
         Some(r) => Ok(r.id.to_sql()),

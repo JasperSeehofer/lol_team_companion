@@ -60,6 +60,7 @@ DEFINE FIELD IF NOT EXISTS opponent ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS notes ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS comments ON draft TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS rating ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS our_side ON draft TYPE string DEFAULT 'blue';
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
 -- Picks/bans in a draft
@@ -108,6 +109,8 @@ DEFINE TABLE IF NOT EXISTS champion_pool SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS user ON champion_pool TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS champion ON champion_pool TYPE string;
 DEFINE FIELD IF NOT EXISTS role ON champion_pool TYPE string;
+DEFINE FIELD IF NOT EXISTS tier ON champion_pool TYPE string DEFAULT 'comfort';
+DEFINE FIELD IF NOT EXISTS notes ON champion_pool TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON champion_pool TYPE datetime DEFAULT time::now();
 
 -- Draft trees (branching draft plans)

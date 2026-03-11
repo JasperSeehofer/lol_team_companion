@@ -18,4 +18,6 @@ pub struct ChampionPoolEntry {
     pub user_id: String,
     pub champion: String,
     pub role: String,
+    pub tier: String,
+    pub notes: Option<String>,
 }

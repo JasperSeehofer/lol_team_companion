@@ -9,6 +9,7 @@ use crate::components::nav::Nav;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
     auth::{login::LoginPage, register::RegisterPage},
+    champion_pool::ChampionPoolPage,
     draft::DraftPage,
     game_plan::GamePlanPage,
     home::HomePage,
@@ -59,6 +60,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/draft") view=DraftPage />
                     <Route path=path!("/tree-drafter") view=TreeDrafterPage />
                     <Route path=path!("/stats") view=StatsPage />
+                    <Route path=path!("/champion-pool") view=ChampionPoolPage />
                     <Route path=path!("/team-builder") view=TeamBuilderPage />
                     <Route path=path!("/game-plan") view=GamePlanPage />
                     <Route path=path!("/post-game") view=PostGamePage />

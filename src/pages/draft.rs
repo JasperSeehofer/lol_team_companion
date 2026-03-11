@@ -23,6 +23,7 @@ pub async fn save_draft(
     actions_json: String,
     comments_json: String,
     rating: Option<String>,
+    our_side: Option<String>,
 ) -> Result<String, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -47,7 +48,7 @@ pub async fn save_draft(
             .ok_or_else(|| ServerFnError::new("You must be in a team to create a draft"))?,
     };
 
-    db::save_draft(&db, &resolved_team_id, &user.id, name, opponent, None, comments, actions, rating)
+    db::save_draft(&db, &resolved_team_id, &user.id, name, opponent, None, comments, actions, rating, our_side.unwrap_or_else(|| "blue".to_string()))
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
@@ -60,6 +61,7 @@ pub async fn update_draft(
     actions_json: String,
     comments_json: String,
     rating: Option<String>,
+    our_side: Option<String>,
 ) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -76,7 +78,7 @@ pub async fn update_draft(
     let comments: Vec<String> = serde_json::from_str(&comments_json)
         .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
 
-    db::update_draft(&db, &draft_id, name, opponent, None, comments, actions, rating)
+    db::update_draft(&db, &draft_id, name, opponent, None, comments, actions, rating, our_side.unwrap_or_else(|| "blue".to_string()))
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
@@ -158,6 +160,7 @@ pub fn DraftPage() -> impl IntoView {
     let (opponent, set_opponent) = signal(String::new());
     let (selected_team_id, set_selected_team_id) = signal(String::new());
     let (rating, set_rating) = signal(Option::<String>::None);
+    let (our_side, set_our_side) = signal("blue".to_string());
     let (draft_slots, set_draft_slots) = signal(vec![None::<String>; 20]);
     let (active_slot, set_active_slot) = signal(Some(0_usize));
     let (comments, set_comments) = signal(Vec::<String>::new());
@@ -242,6 +245,7 @@ pub fn DraftPage() -> impl IntoView {
         let opp = opponent.get_untracked();
         let tid = selected_team_id.get_untracked();
         let rate = rating.get_untracked();
+        let side = our_side.get_untracked();
         let actions = build_actions(draft_slots.get_untracked());
         let acts_json = serde_json::to_string(&actions).unwrap_or_default();
         let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
@@ -252,7 +256,7 @@ pub fn DraftPage() -> impl IntoView {
             let team_opt = if tid.is_empty() { None } else { Some(tid) };
 
             if let Some(draft_id) = existing_id {
-                match update_draft(draft_id, name, opp_opt, acts_json, cmts_json, rate).await {
+                match update_draft(draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side)).await {
                     Ok(_) => {
                         set_save_result.set(Some("Updated!".into()));
                         drafts.refetch();
@@ -260,7 +264,7 @@ pub fn DraftPage() -> impl IntoView {
                     Err(e) => set_save_result.set(Some(format!("Error: {e}"))),
                 }
             } else {
-                match save_draft(name, opp_opt, team_opt, acts_json, cmts_json, rate).await {
+                match save_draft(name, opp_opt, team_opt, acts_json, cmts_json, rate, Some(side)).await {
                     Ok(id) => {
                         set_save_result.set(Some("Saved!".into()));
                         set_loaded_draft_id.set(Some(id));
@@ -333,6 +337,29 @@ pub fn DraftPage() -> impl IntoView {
                         />
                     </div>
                 </div>
+                // Our Side toggle
+                <div class="flex items-center gap-4">
+                    <label class="text-gray-300 text-sm">"Our Side"</label>
+                    <div class="flex gap-1">
+                        <button
+                            class=move || if our_side.get() == "blue" {
+                                "px-3 py-1 rounded text-sm font-medium bg-blue-500 text-white cursor-pointer"
+                            } else {
+                                "px-3 py-1 rounded text-sm font-medium bg-gray-700 text-gray-400 hover:bg-gray-600 transition-colors cursor-pointer"
+                            }
+                            on:click=move |_| set_our_side.set("blue".to_string())
+                        >"Blue"</button>
+                        <button
+                            class=move || if our_side.get() == "red" {
+                                "px-3 py-1 rounded text-sm font-medium bg-red-500 text-white cursor-pointer"
+                            } else {
+                                "px-3 py-1 rounded text-sm font-medium bg-gray-700 text-gray-400 hover:bg-gray-600 transition-colors cursor-pointer"
+                            }
+                            on:click=move |_| set_our_side.set("red".to_string())
+                        >"Red"</button>
+                    </div>
+                </div>
+
                 // Rating picker
                 <div>
                     <label class="block text-gray-300 text-sm mb-2">"Rating"</label>
@@ -508,6 +535,7 @@ pub fn DraftPage() -> impl IntoView {
                                         let d_actions = d.actions.clone();
                                         let d_team_id = d.team_id.clone();
                                         let d_rating = d.rating.clone();
+                                        let d_our_side = d.our_side.clone();
 
                                         let icon_url = |a: &DraftAction| champ_map_sv.with_value(|m| m.get(&a.champion).cloned().unwrap_or_default());
 
@@ -658,6 +686,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         set_opponent.set(d_opp.clone());
                                                         set_selected_team_id.set(d_team_id.clone());
                                                         set_rating.set(d_rating.clone());
+                                                        set_our_side.set(d_our_side.clone());
                                                         set_comments.set(d_comments.clone());
                                                         set_save_result.set(None);
                                                         let mut slots = vec![None::<String>; 20];

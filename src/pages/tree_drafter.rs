@@ -412,6 +412,41 @@ pub fn TreeDrafterPage() -> impl IntoView {
         fill_slot(slot_idx, name);
     });
 
+    // Branch from position handler
+    let do_branch_from = Callback::new(move |slot_idx: usize| {
+        let tree_id = match selected_tree_id.get_untracked() {
+            Some(id) => id,
+            None => return,
+        };
+        let parent_id = selected_node_id.get_untracked();
+        let current_slots = draft_slots.get_untracked();
+        // Copy slots up to and including slot_idx
+        let mut branch_slots: Vec<Option<String>> = vec![None; 20];
+        for i in 0..=slot_idx.min(19) {
+            branch_slots[i] = current_slots[i].clone();
+        }
+        let actions = build_actions_from_slots(&branch_slots);
+        let actions_json = serde_json::to_string(&actions).unwrap_or_default();
+        let (side, kind, num) = slot_meta(slot_idx);
+        let label = format!("Branch after {} {} {}", side, kind, num);
+        let label_for_save = label.clone();
+
+        leptos::task::spawn_local(async move {
+            match add_branch(tree_id, parent_id, label).await {
+                Ok(new_node_id) => {
+                    match save_node(new_node_id.clone(), label_for_save, None, false, actions_json).await {
+                        Ok(_) => {
+                            set_status_msg.set(Some("Branch created from position!".into()));
+                            nodes_resource.refetch();
+                        }
+                        Err(e) => set_status_msg.set(Some(format!("Error saving branch: {e}"))),
+                    }
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error creating branch: {e}"))),
+            }
+        });
+    });
+
     let on_slot_click = Callback::new(move |slot_idx: usize| {
         let slots = draft_slots.get_untracked();
         if slots.get(slot_idx).and_then(|s| s.as_ref()).is_some() {
@@ -435,19 +470,23 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 <div class="flex gap-2">
                     <button
                         class=move || if mode.get() == "edit" {
-                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-yellow-400 text-gray-900"
+                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-yellow-400 text-gray-900 cursor-pointer"
                         } else {
-                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
                         }
                         on:click=move |_| set_mode.set("edit".to_string())
                     >"Edit"</button>
                     <button
                         class=move || if mode.get() == "live" {
-                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-emerald-500 text-white"
+                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-emerald-500 text-white cursor-pointer"
                         } else {
-                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
                         }
                         on:click=move |_| {
+                            if selected_tree_id.get_untracked().is_none() {
+                                set_status_msg.set(Some("Select a tree first to enter Live Game mode.".into()));
+                                return;
+                            }
                             set_mode.set("live".to_string());
                             set_nav_path.set(Vec::new());
                         }
@@ -668,6 +707,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     on_slot_click=on_slot_click
                                                     on_slot_drop=on_slot_drop
                                                     on_save=Callback::new(do_save_node)
+                                                    on_branch_from=do_branch_from
                                                 />
                                             }.into_any()
                                         }}
@@ -777,9 +817,9 @@ fn TreeNodeView(
                 </div>
 
                 // Action buttons (visible on hover)
-                <div class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                <div class="hidden group-hover:flex items-center gap-1 flex-shrink-0">
                     <button
-                        class="text-gray-400 hover:text-yellow-400 text-xs p-1 transition-colors"
+                        class="text-gray-400 hover:text-yellow-400 hover:bg-gray-700/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
                         title="Add branch"
                         on:click={
                             let nid = node_id_for_add.clone();
@@ -793,7 +833,7 @@ fn TreeNodeView(
                         let nid = node_id_for_delete.clone();
                         view! {
                             <button
-                                class="text-gray-400 hover:text-red-400 text-xs p-1 transition-colors"
+                                class="text-gray-400 hover:text-red-400 hover:bg-gray-700/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
                                 title="Delete node"
                                 on:click=move |ev: web_sys::MouseEvent| {
                                     ev.stop_propagation();
@@ -857,6 +897,7 @@ fn NodeEditor(
     on_slot_click: Callback<usize>,
     on_slot_drop: Callback<(usize, String)>,
     on_save: Callback<web_sys::MouseEvent>,
+    on_branch_from: Callback<usize>,
 ) -> impl IntoView {
     view! {
         <div class="flex flex-col gap-4">
@@ -925,6 +966,26 @@ fn NodeEditor(
                     })}
                 </Suspense>
             </div>
+
+            // Branch from position
+            {move || {
+                active_slot.get().map(|slot_idx| {
+                    let (side, kind, num) = slot_meta(slot_idx);
+                    view! {
+                        <div class="flex items-center gap-3 px-1">
+                            <button
+                                class="bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                on:click=move |_| on_branch_from.run(slot_idx)
+                            >
+                                "Branch from here"
+                            </button>
+                            <span class="text-gray-500 text-xs">
+                                {format!("Create branch copying through {} {} {}", side, kind, num)}
+                            </span>
+                        </div>
+                    }
+                })
+            }}
 
             // Champion picker
             <div class="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
