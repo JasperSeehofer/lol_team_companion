@@ -39,10 +39,13 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
     let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&surreal, &user.id)
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     let rows = db::get_team_match_stats(&surreal, &team_id)
         .await
@@ -84,10 +87,13 @@ pub async fn sync_team_stats() -> Result<String, ServerFnError> {
     let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&surreal, &user.id)
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Err(ServerFnError::new("You need to join or create a team first")),
+    };
 
     let members = db::get_roster_puuids(&surreal, &team_id)
         .await
@@ -178,6 +184,17 @@ fn format_date(game_end: &Option<String>) -> String {
 
 #[component]
 pub fn StatsPage() -> impl IntoView {
+    // Auth redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
     let api_key = Resource::new(|| (), |_| check_api_key());
     let stats = Resource::new(|| (), |_| get_team_stats());
     let (sync_result, set_sync_result) = signal(Option::<Result<String, String>>::None);
@@ -259,9 +276,12 @@ pub fn StatsPage() -> impl IntoView {
                         <ErrorBanner message=format!("Failed to load stats: {e}") />
                     }.into_any(),
                     Ok(rows) if rows.is_empty() => view! {
-                        <div class="flex flex-col items-center justify-center py-16">
+                        <div class="text-center py-12">
                             <p class="text-muted text-lg mb-2">"No match data yet"</p>
-                            <p class="text-dimmed text-sm">"Click Sync Matches to pull recent games from the Riot API."</p>
+                            <p class="text-dimmed text-sm mb-6">"Create or join a team, then click Sync Matches to pull recent games."</p>
+                            <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors">
+                                "Go to Team"
+                            </a>
                         </div>
                     }.into_any(),
                     Ok(rows) => {

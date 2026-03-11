@@ -259,6 +259,17 @@ fn role_icon_url(role: &str) -> &'static str {
 
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
+    // Auth redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
     let dashboard = Resource::new(|| (), |_| get_team_dashboard());
     let requests = Resource::new(|| (), |_| get_pending_requests());
 

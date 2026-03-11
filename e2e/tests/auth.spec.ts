@@ -65,26 +65,27 @@ test.describe("Full auth flow", () => {
     await page.fill("input[name=email]", flowEmail);
     await page.fill("input[name=password]", TEST_PASSWORD);
     await page.click("button[type=submit]");
-    await page.waitForLoadState("networkidle");
 
-    // Should be logged in — navigate to profile
+    // Should auto-login and redirect to /team/dashboard
+    await page.waitForURL("**/team/dashboard", { timeout: 10000 });
+
+    // Navigate to profile — should be accessible (not redirected to login)
     await page.goto("/profile");
     await page.waitForLoadState("networkidle");
-    // Profile page should load (not redirect to login)
     expect(page.url()).not.toContain("/auth/login");
+
+    // Verify username appears in the page
+    const bodyText = await page.textContent("body") || "";
+    expect(bodyText).toContain(flowUsername);
   });
 
-  // BUG: Logout doesn't actually invalidate the session. After clicking "Log Out",
-  // get_current_user() still returns the user. Needs investigation — either the
-  // ActionForm submission isn't reaching the server, or auth.logout() doesn't
-  // clear the session cookie. See also CLAUDE.md rule 8 (needs hard navigation).
-  test.fixme("logout clears session", async ({ page }) => {
+  test("logout clears session", async ({ page }) => {
     // Log in first
     await page.goto("/auth/login");
     await page.fill("input[name=email]", flowEmail);
     await page.fill("input[name=password]", TEST_PASSWORD);
     await page.click("button[type=submit]");
-    await page.waitForLoadState("networkidle");
+    await page.waitForURL("**/team/dashboard", { timeout: 10000 });
 
     // Navigate to profile where there's a visible "Log Out" button
     await page.goto("/profile");
@@ -94,13 +95,17 @@ test.describe("Full auth flow", () => {
     const logoutBtn = page.locator("button").filter({ hasText: /log\s*out/i }).first();
     await expect(logoutBtn).toBeVisible({ timeout: 5000 });
     await logoutBtn.click();
-    await page.waitForLoadState("networkidle");
 
-    // After logout, the nav should show "Sign In" instead of the username
-    // (need to reload to pick up cleared session state)
+    // Hard navigation to "/" should happen after logout
+    await page.waitForURL("**/", { timeout: 10000 });
+
+    // After logout, visiting profile should redirect to login
     await page.goto("/profile");
     await page.waitForLoadState("networkidle");
+    // Should either redirect to /auth/login or show "not logged in" text
+    const url = page.url();
     const bodyText = await page.textContent("body") || "";
-    expect(bodyText).toMatch(/not logged in|sign in/i);
+    const loggedOut = url.includes("/auth/login") || bodyText.match(/not logged in|sign in/i);
+    expect(loggedOut).toBeTruthy();
   });
 });

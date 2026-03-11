@@ -5,29 +5,20 @@
 ### Priority 1 — Critical Bugs (breaks core flow)
 
 #### Tree Drafter
-- [ ] **UI freeze after branching**: After creating a branch and clicking a champion for the next pick, the pick does not update and all subsequent clicks become unresponsive. Root cause: likely stale signal capture when `selected_node` changes while a closure holds an old reference. Investigate `selected_node` signal and the champion picker `on:click` in `tree_drafter.rs`. Key fix: switching nodes must fully re-initialize draft slot signals (consider keying the editor on `node_id`).
-- [ ] **Node switch bug**: Clicking node A then node B leaves the editor broken (stale closures). Full signal teardown on node change needed.
-- [ ] **Tree graph — too many icons on single edge**: SVG tree stacks multiple champion icons on one edge. Each pick/ban diff should show one icon, spaced or summarized. Fix edge rendering in `tree_graph.rs`.
-- [ ] **Cannot easily switch between drafts**: `selected_node` and `nodes_resource` go out of sync when switching trees. Ensure `nodes_resource` is keyed on `selected_tree_id`.
+- [x] **UI freeze after branching**: Fixed — auto-save Effect now captures all values eagerly (not lazily inside timer callback), and `suppress_autosave` flag prevents saving stale data during node switches.
+- [x] **Node switch bug**: Fixed — `select_node` now sets `suppress_autosave=true`, cancels pending timer, resets save status, then re-enables after a microtask. `cancel_autosave_timer` + `clear_editor` helpers added.
+- [x] **Tree graph — too many icons on single edge**: Fixed — `MAX_ICONS` reduced from 5 to 3, empty champion names filtered out of `diff_actions`.
+- [x] **Cannot easily switch between drafts**: Fixed — tree click handler now calls `clear_editor()` to reset all editor state, removed redundant `nodes_resource.refetch()` (resource already keyed on `selected_tree_id`).
 
 #### Auth / Session
-- [ ] **Logout doesn't clear session**: Clicking "Log Out" on the profile page (or "Sign Out" in the nav dropdown) does not actually end the session. After logout, navigating to `/profile` still shows the authenticated user's data. Root cause: the `logout()` server fn calls `auth.logout().await` + `redirect("/")`, but (1) the Leptos `ActionForm` submission may not properly propagate the session cookie deletion, and (2) there's no hard navigation after logout (violates CLAUDE.md rule 8). Fix: add `window.location().set_href("/")` in the client-side Effect after logout success, similar to the login flow in `login.rs`.
-- [ ] **Registration doesn't auto-login**: After registering, the user is redirected to `/auth/login` and must log in manually. The `register_action()` server fn only calls `redirect("/auth/login")` without calling `auth.login()`. Consider auto-login after registration for better UX.
+- [x] **Logout doesn't clear session**: Fixed — both nav.rs and profile.rs now hard-navigate to `/` after logout success, fully clearing session state.
+- [x] **Registration doesn't auto-login**: Fixed — `register_action()` now calls `auth.authenticate()` + `auth.login()` after creating the user, then redirects to `/team/dashboard` with hard navigation.
 
 #### Multiple Pages — Rule 44 Violations
-- [ ] **"No team" errors shown instead of empty state**: 9 server functions return `Err("No team")` when the user has no team, causing error banners to appear instead of empty-state UI. Violates CLAUDE.md rule 44. Affected functions (all should return `Ok(Vec::new())` or `Ok(empty_struct)`):
-  - `list_trees()` in `tree_drafter.rs` (line 37)
-  - `get_team_stats()` in `stats.rs` (line 45)
-  - `list_plans()` in `game_plan.rs` (line 28)
-  - `list_team_drafts()` in `game_plan.rs` (line 50)
-  - `list_reviews()` in `post_game.rs` (line 26)
-  - `list_plans_for_postgame()` in `post_game.rs` (line 48)
-  - `list_drafts_for_postgame()` in `post_game.rs` (line 70)
-  - `get_recent_match_ids()` in `post_game.rs` (line 92)
-  - `sync_team_stats()` in `stats.rs` (line 90) — mutation op, should show user-friendly error instead
+- [x] **"No team" errors shown instead of empty state**: Fixed — all 9 server functions now return `Ok(Vec::new())` when user has no team (except `sync_team_stats` which returns a user-friendly error). Empty-state CTAs added to tree drafter, stats, game plan, and post-game pages.
 
 #### Profile
-- [ ] **Missing `.check()` on UPDATE query**: `update_profile()` in `profile.rs` (lines 40-44) is missing `.check()` after `.await?`. Username updates can fail silently. Add `.check()?` after the `.await` call.
+- [x] **Missing `.check()` on UPDATE query**: Fixed — `.check()` added after the UPDATE query in `update_profile()`.
 
 #### CSS / Build
 - [ ] **Tailwind v4 `@import "tailwindcss"` 404**: The `input.css` file starts with `@import "tailwindcss"` (Tailwind v4 syntax). This is supposed to be processed by the Tailwind CLI at build time, but the raw import leaks through to the browser CSS, causing a 404 for `/pkg/tailwindcss` on every page load. The `tailwindcss` standalone binary is not present. Either install it or configure `cargo-leptos` to properly process the import.
@@ -61,8 +52,8 @@
 - [ ] **Team rename → pencil icon modal**: Remove the prominent rename form. Add a small pencil (✏) icon next to the team name that opens a modal to change name and region.
 
 #### Auth UX
-- [ ] **Protected pages show inline "not logged in" instead of redirecting**: Unauthenticated users who visit `/profile`, `/draft`, `/stats`, etc. see the page shell with a "not logged in" or error message instead of being redirected to `/auth/login`. Consider adding a client-side auth guard that checks `get_current_user()` and redirects to login if `None`.
-- [ ] **Nav shows all links regardless of auth state**: Team, Draft, Tree Drafter, Stats, Game Plan, Post Game links are always visible even for unauthenticated users. Consider hiding or dimming them when not logged in.
+- [x] **Protected pages show inline "not logged in" instead of redirecting**: Fixed — all protected pages now fetch `get_current_user()` on mount and redirect to `/auth/login` if the user is `None`.
+- [x] **Nav shows all links regardless of auth state**: Fixed — Team, Draft, Tree Drafter, Stats, Game Plan, Post Game links only show when authenticated.
 
 #### Team Builder
 - [ ] **Placeholder page**: `/team-builder` just shows "Composition builder coming in a future phase." — needs actual implementation or should be hidden from nav until ready.
@@ -263,18 +254,18 @@
 ## Known Bugs (from e2e audit 2026-03-11)
 
 ### Critical
-- **Logout broken**: Session not cleared after clicking Log Out / Sign Out. User remains authenticated. See Priority 1 auth section above.
+- ~~**Logout broken**~~: Fixed in v0.15.0 — hard navigation added after logout.
 
 ### Medium
-- **9 rule-44 violations**: Tree drafter, stats, game plan, and post-game pages show "error running server function: No team" instead of empty-state UI when user has no team. See Priority 1 above.
-- **Missing `.check()` on profile UPDATE**: Username changes can fail silently. See Priority 1 above.
-- **Registration doesn't auto-login**: User must manually log in after registering.
+- ~~**9 rule-44 violations**~~: Fixed in v0.15.0 — all return empty lists instead of errors.
+- ~~**Missing `.check()` on profile UPDATE**~~: Fixed in v0.15.0.
+- ~~**Registration doesn't auto-login**~~: Fixed in v0.15.0 — auto-login after registration.
 
 ### Low
 - **Tailwind CSS 404**: Every page loads `/pkg/tailwindcss` and gets 404. Harmless but noisy in console.
-- **Auth test false positive**: `auth.spec.ts` "register → auto-login → profile accessible" passes vacuously — it only checks the URL is `/profile`, not that the user is actually logged in. The profile page doesn't redirect unauthenticated users.
+- ~~**Auth test false positive**~~: Fixed in v0.15.0 — test now verifies redirect to `/team/dashboard` and username presence; profile page redirects unauthenticated users to `/auth/login`.
 
 ## E2E Test Status (2026-03-11)
-- 20/21 passing, 1 skipped (`logout clears session` — marked `test.fixme`)
-- Auth fixture fixed: now always registers then logs in (registration doesn't auto-login)
+- 21/21 passing (logout test un-skipped after hard-nav fix)
+- Auth fixture registers then logs in (registration now auto-logs in but fixture kept for compatibility)
 - Tailwind 404 filtered from error assertions (known dev-mode issue)

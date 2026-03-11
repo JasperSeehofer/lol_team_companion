@@ -20,10 +20,13 @@ pub async fn list_reviews() -> Result<Vec<PostGameLearning>, ServerFnError> {
     let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&surreal, &user.id)
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     db::list_post_game_learnings(&surreal, &team_id)
         .await
@@ -42,10 +45,13 @@ pub async fn list_plans_for_postgame() -> Result<Vec<GamePlan>, ServerFnError> {
     let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&surreal, &user.id)
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     db::list_game_plans(&surreal, &team_id)
         .await
@@ -64,10 +70,13 @@ pub async fn list_drafts_for_postgame() -> Result<Vec<Draft>, ServerFnError> {
     let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&surreal, &user.id)
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     db::list_drafts(&surreal, &team_id)
         .await
@@ -86,10 +95,13 @@ pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
     let surreal = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&surreal, &user.id)
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     let rows = db::get_team_match_stats(&surreal, &team_id)
         .await
@@ -212,6 +224,17 @@ fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<
 
 #[component]
 pub fn PostGamePage() -> impl IntoView {
+    // Auth redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
     let reviews = Resource::new(|| (), |_| list_reviews());
     let plans = Resource::new(|| (), |_| list_plans_for_postgame());
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
@@ -324,7 +347,13 @@ pub fn PostGamePage() -> impl IntoView {
                     <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
                         {move || reviews.get().map(|result| match result {
                             Ok(list) if list.is_empty() => view! {
-                                <p class="text-dimmed text-sm">"No reviews yet."</p>
+                                <div class="text-center py-6">
+                                    <p class="text-dimmed text-sm mb-3">"No post-game reviews yet"</p>
+                                    <p class="text-dimmed text-xs mb-4">"Create or join a team to get started."</p>
+                                    <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
+                                        "Go to Team"
+                                    </a>
+                                </div>
                             }.into_any(),
                             Ok(list) => {
                                 let list_for_patterns = list.clone();

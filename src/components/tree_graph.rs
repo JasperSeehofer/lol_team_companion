@@ -113,7 +113,7 @@ fn diff_actions(parent: &[DraftAction], child: &[DraftAction]) -> Vec<DiffChampi
 
     child
         .iter()
-        .filter(|a| !parent_set.contains(&(a.order, a.champion.as_str())))
+        .filter(|a| !a.champion.is_empty() && !parent_set.contains(&(a.order, a.champion.as_str())))
         .map(|a| DiffChampion {
             name: a.champion.clone(),
             is_ban: a.phase.starts_with("ban"),
@@ -233,8 +233,8 @@ pub fn TreeGraph(
                     let all_icons = edge.diff_champions.clone();
                     let icon_mid_x = (edge.from_x + edge.to_x) / 2.0;
                     let icon_mid_y = mid_y;
-                    // Cap at 5 icons; show overflow count as text
-                    const MAX_ICONS: usize = 5;
+                    // Cap at 3 icons; show overflow count as text
+                    const MAX_ICONS: usize = 3;
                     let overflow = all_icons.len().saturating_sub(MAX_ICONS);
                     let icons: Vec<_> = all_icons.into_iter().take(MAX_ICONS).collect();
                     let n = icons.len();

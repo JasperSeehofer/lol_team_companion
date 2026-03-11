@@ -394,10 +394,9 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 - **e2e tests (`just e2e`):** Regression suite. Run before committing or when validating multiple pages at once.
 
 **Auth for MCP sessions:**
-1. **Always register then log in** — registration does NOT auto-login. The `register_action()` server fn redirects to `/auth/login` without calling `auth.login()`.
-2. `browser_navigate` to `/auth/register`, fill form, submit. Then navigate to `/auth/login`, fill form, submit.
-3. After login, wait for the hard navigation to `/team/dashboard` to complete before visiting other pages.
-4. All subsequent navigations in the same browser session are authenticated.
+1. Registration auto-logs in and redirects to `/team/dashboard`. `browser_navigate` to `/auth/register`, fill form, submit, then wait for the hard navigation to `/team/dashboard` to complete.
+2. Alternatively, navigate to `/auth/login` directly if you already have credentials.
+3. All subsequent navigations in the same browser session are authenticated.
 
 **Common verification patterns:**
 - New page: navigate → snapshot → confirm page-specific content visible, no error banners
@@ -412,6 +411,13 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 - `just check-ssr` for a quick compile check when LSP is insufficient
 - **Always verify the affected page in the browser via MCP** — compiler checks alone miss rendering bugs, wrong CSS, missing data, and broken interactions
 
+### Debugging reactive bugs without a browser
+Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are **signal lifecycle issues** that the Rust compiler cannot catch. When diagnosing these:
+1. **Trace the signal flow** — read the Effect, identify which signals are tracked (`.get()`) vs read untracked (`.get_untracked()`), and check if any are read lazily inside delayed callbacks (`Closure::once`, `setTimeout`)
+2. **Check for stale captures** — if a closure captures a signal value lazily, another part of the code may have updated that signal by the time the closure runs (e.g. node switch updates `node_label` but the old timer callback reads `node_label.get_untracked()` → saves new node's data to old node's ID)
+3. **Look for missing teardown** — switching contexts (node, tree, tab) should cancel pending timers and suppress auto-save Effects before updating signals
+4. **Verify with both `cargo check --features ssr` and `cargo check --features hydrate --target wasm32-unknown-unknown`** — some bugs only surface in one target (e.g. unused variable warnings from `#[cfg(feature = "hydrate")]` guards)
+
 ### Periodic / before committing
 - `just verify` — check both targets + test + lint + fmt
 - `just smoke` — health check + API smoke tests (requires running server)
@@ -425,13 +431,32 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 
 47. **Tailwind v4 `@import "tailwindcss"` 404** — The `input.css` starts with `@import "tailwindcss"` which is Tailwind v4 build-time syntax. When the tailwind CLI doesn't fully process it, the browser resolves it as a relative URL `/pkg/tailwindcss` → 404. This is harmless but causes console errors on every page. E2e tests must filter out `404 (Not Found)` console errors.
 
-48. **E2e auth fixture must register then login** — Registration redirects to `/auth/login` without auto-login. The `authedPage` fixture must always do both steps. After login, `waitForURL("**/team/dashboard")` ensures the hard navigation completes before visiting other pages.
+48. **E2e auth fixture registers then logs in** — Registration now auto-logs in and redirects to `/team/dashboard`. The `authedPage` fixture still does both steps (register + login) for robustness. After login, `waitForURL("**/team/dashboard")` ensures the hard navigation completes before visiting other pages.
 
-49. **Logout does not hard-navigate** — The `logout()` server fn calls `auth.logout()` + `redirect("/")`, but the client-side `ActionForm` does not do a hard navigation (`window.location().set_href()`). This means client-side state (nav, resources) is not refreshed. Same issue as login (rule 8) but not yet fixed for logout.
+49. **Logout hard-navigates to `/`** — Both `nav.rs` and `profile.rs` watch `logout_action.value()` and call `window.location().set_href("/")` on success, ensuring session state is fully cleared (same pattern as login, rule 8).
 
-50. **Protected pages don't redirect unauthenticated users** — They show inline "not logged in" messages or error banners instead of redirecting to `/auth/login`. Server functions correctly reject unauthenticated requests, but the UI degrades rather than redirects. This is by design but should be documented in tests.
+50. **Protected pages redirect to `/auth/login`** — All protected page components (`profile.rs`, `draft.rs`, `tree_drafter.rs`, `stats.rs`, `game_plan.rs`, `post_game.rs`, `champion_pool.rs`, `team/dashboard.rs`, `team/roster.rs`, `team_builder.rs`) fetch `get_current_user()` on mount and redirect to `/auth/login` via `window.location().set_href()` if the user is `None`. The redirect is client-side only (`#[cfg(feature = "hydrate")]`).
 
-51. **`just` may not be installed** — `just` is a dev dependency. Fall back to running cargo/npx commands directly if `just` is not on PATH.
+51. **Registration auto-logs in** — `register_action()` in `register.rs` now calls `auth.authenticate()` + `auth.login()` after creating the user, then redirects to `/team/dashboard`. The `RegisterPage` component has a hard-nav Effect (same as `LoginPage`).
+
+52. **Auth-aware nav links** — The nav only shows Team/Draft/Tree Drafter/Stats/Game Plan/Post Game links when the user is authenticated. The `is_authed` signal derives from the `user` Resource. Home link is always visible.
+
+53. **`just` may not be installed** — `just` is a dev dependency. Fall back to running cargo/npx commands directly if `just` is not on PATH.
+
+54. **Auto-save Effects must capture values eagerly** — When using a debounced auto-save timer (`Closure::once` + `setTimeout`), capture ALL signal values in the Effect body (eagerly), not inside the timer callback (lazily via `get_untracked()`). Lazy reads inside the callback run after a delay and may read signals that have been updated by a node/tree switch, causing stale data to be saved to the wrong entity. Pattern:
+    ```rust
+    Effect::new(move |_| {
+        let val = my_signal.get();           // eagerly tracked + captured
+        let id = selected_id.get();          // eagerly tracked + captured
+        // ...
+        let cb = Closure::once(move || {
+            // use `val` and `id` directly — already captured
+            spawn_local(async move { save(id, val).await; });
+        });
+    });
+    ```
+
+55. **Suppress auto-save during batch signal updates** — When switching nodes/trees, multiple signals are updated in sequence. Each update re-triggers the auto-save Effect. Use a `suppress_autosave: RwSignal<bool>` guard: set `true` before batch updates, then re-enable after a `setTimeout(0)` microtask so the Effect skips all intermediate firings.
 
 ## Code Style
 

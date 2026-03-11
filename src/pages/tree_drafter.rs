@@ -31,10 +31,13 @@ pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
     let db = use_context::<Arc<Surreal<Db>>>()
         .ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let team_id = db::get_user_team_id(&db, &user.id)
+    let team_id = match db::get_user_team_id(&db, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
 
     db::list_draft_trees(&db, &team_id)
         .await
@@ -224,6 +227,17 @@ fn actions_to_slots(actions: &[DraftAction]) -> Vec<Option<String>> {
 
 #[component]
 pub fn TreeDrafterPage() -> impl IntoView {
+    // Auth redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
     // Mode: "edit" or "live"
     let (mode, set_mode) = signal("edit".to_string());
 
@@ -313,18 +327,72 @@ pub fn TreeDrafterPage() -> impl IntoView {
         });
     };
 
+    // Auto-save node timer (only used in hydrate/WASM builds)
+    #[allow(unused_variables)]
+    let auto_save_node_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    let (node_save_status, set_node_save_status) = signal(""); // "", "unsaved", "saved"
+    // Suppress auto-save during node/tree switches to avoid saving stale data
+    #[allow(unused_variables)]
+    let suppress_autosave: RwSignal<bool> = RwSignal::new(false);
+
+    // Helper: cancel any pending auto-save timer
+    let cancel_autosave_timer = move || {
+        #[cfg(feature = "hydrate")]
+        if let Some(timer_id) = auto_save_node_timer.get_untracked() {
+            if let Some(win) = web_sys::window() {
+                win.clear_timeout_with_handle(timer_id);
+            }
+            auto_save_node_timer.set(None);
+        }
+    };
+
+    // Helper: clear editor state (used when switching trees)
+    let clear_editor = move || {
+        cancel_autosave_timer();
+        set_selected_node_id.set(None);
+        set_node_label.set(String::new());
+        set_node_notes.set(String::new());
+        set_node_improvised.set(false);
+        set_draft_slots.set(vec![None; 20]);
+        set_active_slot.set(None);
+        set_highlighted_slot.set(None);
+        set_node_save_status.set("");
+    };
+
     // Select a node for editing
     let select_node = move |node: &DraftTreeNode| {
+        // Suppress auto-save while we update all editor signals to avoid saving stale data
+        suppress_autosave.set(true);
+        cancel_autosave_timer();
+        set_node_save_status.set("");
+
         set_selected_node_id.set(node.id.clone());
         set_node_label.set(node.label.clone());
         set_node_notes.set(node.notes.clone().unwrap_or_default());
         set_node_improvised.set(node.is_improvised);
-        set_highlighted_slot.set(None); // clear on node switch
-        set_active_slot.set(None);      // reset active slot on switch
+        set_highlighted_slot.set(None);
+        set_active_slot.set(None);
         let slots = actions_to_slots(&node.actions);
         let next = (0..20).find(|&i| slots[i].is_none());
         set_draft_slots.set(slots);
         set_active_slot.set(next);
+
+        // Re-enable auto-save after a microtask so the Effect doesn't fire for these batch updates
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::prelude::*;
+            let cb = Closure::once(move || {
+                suppress_autosave.set(false);
+            });
+            if let Some(win) = web_sys::window() {
+                let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(), 0,
+                );
+            }
+            cb.forget();
+        }
+        #[cfg(not(feature = "hydrate"))]
+        suppress_autosave.set(false);
     };
 
     // Save node handler
@@ -351,19 +419,26 @@ pub fn TreeDrafterPage() -> impl IntoView {
         });
     };
 
-    // Auto-save node timer (only used in hydrate/WASM builds)
-    #[allow(unused_variables)]
-    let auto_save_node_timer: RwSignal<Option<i32>> = RwSignal::new(None);
-    let (node_save_status, set_node_save_status) = signal(""); // "", "unsaved", "saved"
-
     Effect::new(move |_| {
-        let _ = draft_slots.get();
-        let _ = node_notes.get();
-        let _ = node_label.get();
+        // Track these signals so the effect re-runs when they change
+        // (values are used in #[cfg(feature = "hydrate")] block below)
+        #[allow(unused_variables)]
+        let current_slots = draft_slots.get();
+        #[allow(unused_variables)]
+        let current_notes = node_notes.get();
+        #[allow(unused_variables)]
+        let current_label = node_label.get();
+        #[allow(unused_variables)]
+        let current_improvised = node_improvised.get();
         let node_id = selected_node_id.get();
 
         #[allow(unused_variables)]
         let Some(node_id) = node_id else { return };
+
+        // Don't fire auto-save during node/tree switches
+        if suppress_autosave.get_untracked() {
+            return;
+        }
 
         #[cfg(feature = "hydrate")]
         if let Some(timer_id) = auto_save_node_timer.get_untracked() {
@@ -376,14 +451,15 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
         #[cfg(feature = "hydrate")]
         {
+            // Capture all values eagerly — do NOT read signals lazily inside the timer callback
+            let label = current_label;
+            let notes = if current_notes.trim().is_empty() { None } else { Some(current_notes) };
+            let improvised = current_improvised;
+            let actions = build_actions_from_slots(&current_slots);
+            let actions_json = serde_json::to_string(&actions).unwrap_or_default();
+
             use wasm_bindgen::prelude::*;
             let cb = Closure::once(move || {
-                let label = node_label.get_untracked();
-                let notes_raw = node_notes.get_untracked();
-                let notes = if notes_raw.trim().is_empty() { None } else { Some(notes_raw) };
-                let improvised = node_improvised.get_untracked();
-                let actions = build_actions_from_slots(&draft_slots.get_untracked());
-                let actions_json = serde_json::to_string(&actions).unwrap_or_default();
                 leptos::task::spawn_local(async move {
                     let _ = save_node(node_id, label, notes, improvised, actions_json).await;
                     set_node_save_status.set("saved");
@@ -611,7 +687,13 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         <Suspense fallback=|| view! { <div class="text-dimmed text-sm px-1">"Loading..."</div> }>
                             {move || trees.get().map(|result| match result {
                                 Ok(list) if list.is_empty() => view! {
-                                    <p class="text-dimmed text-sm px-1">"No trees yet."</p>
+                                    <div class="text-center py-6">
+                                        <p class="text-dimmed text-sm mb-3">"No draft trees yet"</p>
+                                        <p class="text-dimmed text-xs mb-4">"Create or join a team to get started."</p>
+                                        <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
+                                            "Go to Team"
+                                        </a>
+                                    </div>
                                 }.into_any(),
                                 Ok(list) => view! {
                                     <div class="flex flex-col gap-1.5">
@@ -631,10 +713,26 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                         }
                                                     }
                                                     on:click=move |_| {
+                                                        clear_editor();
+                                                        suppress_autosave.set(true);
                                                         set_selected_tree_id.set(Some(id_for_click.clone()));
-                                                        set_selected_node_id.set(None);
                                                         set_nav_path.set(Vec::new());
-                                                        nodes_resource.refetch();
+                                                        // Re-enable after microtask
+                                                        #[cfg(feature = "hydrate")]
+                                                        {
+                                                            use wasm_bindgen::prelude::*;
+                                                            let cb = Closure::once(move || {
+                                                                suppress_autosave.set(false);
+                                                            });
+                                                            if let Some(win) = web_sys::window() {
+                                                                let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                                                                    cb.as_ref().unchecked_ref(), 0,
+                                                                );
+                                                            }
+                                                            cb.forget();
+                                                        }
+                                                        #[cfg(not(feature = "hydrate"))]
+                                                        suppress_autosave.set(false);
                                                     }
                                                 >
                                                     <div class="text-primary text-sm font-medium truncate">{name}</div>

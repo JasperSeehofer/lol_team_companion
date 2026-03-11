@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-03-11
+
+### Fixed
+
+- Tree drafter UI freeze after branching: auto-save Effect now captures all signal values eagerly instead of reading lazily inside timer callback, preventing stale data saves
+- Tree drafter node switch bug: `select_node` now suppresses auto-save during signal batch updates via `suppress_autosave` flag + microtask re-enable, with `cancel_autosave_timer` and `clear_editor` helpers
+- Tree drafter cannot switch between trees: tree click handler now calls `clear_editor()` to fully reset editor state; removed redundant `nodes_resource.refetch()` (resource already keyed on `selected_tree_id`)
+- Tree graph too many icons on edge: reduced `MAX_ICONS` from 5 to 3; `diff_actions` now filters empty champion names
+
+## [0.15.0] - 2026-03-11
+
+### Added
+
+- Auth-aware nav: Team, Draft, Tree Drafter, Stats, Game Plan, and Post Game links only visible when logged in
+- Registration auto-login: `register_action()` now authenticates the user immediately after account creation, redirecting to `/team/dashboard`
+- Auth redirect on all protected pages: unauthenticated users are redirected to `/auth/login` instead of seeing broken/empty pages
+- Empty-state CTAs on team-dependent pages (tree drafter, stats, game plan, post-game): show "Create or join a team" message with link to `/team/roster` when no team exists
+- CLAUDE.md gotchas 51–52: registration auto-login, auth-aware nav links
+
+### Fixed
+
+- Logout now hard-navigates to `/` (both nav and profile page), fully clearing session state (CLAUDE.md rule 8/49)
+- 9 rule-44 violations: server functions now return empty lists instead of errors when user has no team (`list_trees`, `get_team_stats`, `list_plans`, `list_team_drafts`, `list_reviews`, `list_plans_for_postgame`, `list_drafts_for_postgame`, `get_recent_match_ids`); `sync_team_stats` returns user-friendly error
+- Missing `.check()` on profile UPDATE query — username changes no longer fail silently
+
+### Changed
+
+- CLAUDE.md: updated gotchas 49 (logout now fixed) and 50 (protected pages now redirect)
+- `e2e/tests/auth.spec.ts`: un-skipped "logout clears session" test; improved "register → auto-login" test to verify redirect and username presence
+
 ## [0.14.1] - 2026-03-11
 
 ### Added

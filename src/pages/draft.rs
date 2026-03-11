@@ -159,6 +159,17 @@ const TIERS: &[&str] = &["S+", "S", "A", "B", "C", "D"];
 
 #[component]
 pub fn DraftPage() -> impl IntoView {
+    // Auth redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
     let (draft_name, set_draft_name) = signal(String::new());
     let (opponent, set_opponent) = signal(String::new());
     let (selected_team_id, set_selected_team_id) = signal(String::new());

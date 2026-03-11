@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos::web_sys;
 use leptos_router::components::A;
 
 #[server]
@@ -7,7 +8,7 @@ pub async fn register_action(
     email: String,
     password: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::hash_password;
+    use crate::server::auth::{hash_password, AuthSession, Credentials};
     use crate::server::db;
     use leptos_axum::redirect;
     use std::sync::Arc;
@@ -18,17 +19,37 @@ pub async fn register_action(
 
     let password_hash = hash_password(&password).map_err(|e| ServerFnError::new(e))?;
 
-    db::create_user(&db, username, email, password_hash)
+    db::create_user(&db, username, email.clone(), password_hash)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    redirect("/auth/login");
+    // Auto-login after registration
+    let mut auth: AuthSession = leptos_axum::extract().await?;
+    let creds = Credentials { email, password };
+    match auth.authenticate(creds).await {
+        Ok(Some(user)) => {
+            let _ = auth.login(&user).await;
+        }
+        _ => {} // Registration succeeded but auto-login failed — not fatal
+    }
+
+    redirect("/team/dashboard");
     Ok(())
 }
 
 #[component]
 pub fn RegisterPage() -> impl IntoView {
     let register = ServerAction::<RegisterAction>::new();
+
+    // Hard navigate after successful registration + auto-login
+    Effect::new(move || {
+        if let Some(Ok(())) = register.value().get() {
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/team/dashboard");
+            }
+        }
+    });
+
     let error = move || {
         register.value().get().and_then(|r| r.err()).map(|e| e.to_string())
     };

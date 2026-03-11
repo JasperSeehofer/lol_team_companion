@@ -71,8 +71,12 @@ pub fn Nav() -> impl IntoView {
     };
 
     Effect::new(move || {
-        if logout_version.get() > 0 {
+        if let Some(Ok(())) = logout_action.value().get() {
             close_all();
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/");
+            }
         }
     });
 
@@ -97,44 +101,58 @@ pub fn Nav() -> impl IntoView {
 
     let any_dropdown_open = move || menu_open.get() || notif_open.get();
 
-    let close_all_for_link = close_all.clone();
+    let is_authed = move || {
+        user.get()
+            .and_then(|r| r.ok())
+            .flatten()
+            .is_some()
+    };
+
+    let close_link = Callback::new(move |_: ()| close_all());
+
     let nav_links = move |extra_class: &'static str| {
-        let close = close_all_for_link.clone();
-        let close2 = close.clone();
-        let close3 = close.clone();
-        let close4 = close.clone();
-        let close5 = close.clone();
-        let close6 = close.clone();
-        let close7 = close.clone();
+        let link_cls = format!("{extra_class} text-secondary hover:text-primary transition-colors");
+        let link_cls2 = link_cls.clone();
+        let link_cls3 = link_cls.clone();
+        let link_cls4 = link_cls.clone();
+        let link_cls5 = link_cls.clone();
+        let link_cls6 = link_cls.clone();
+        let link_cls7 = link_cls.clone();
         view! {
-            <A href="/" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close()>
+            <A href="/" attr:class=link_cls
+                on:click=move |_| close_link.run(())>
                 "Home"
             </A>
-            <A href="/team/dashboard" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close2()>
-                "Team"
-            </A>
-            <A href="/draft" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close3()>
-                "Draft"
-            </A>
-            <A href="/tree-drafter" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close4()>
-                "Tree Drafter"
-            </A>
-            <A href="/stats" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close5()>
-                "Stats"
-            </A>
-            <A href="/game-plan" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close6()>
-                "Game Plan"
-            </A>
-            <A href="/post-game" attr:class=format!("{extra_class} text-secondary hover:text-primary transition-colors")
-                on:click=move |_| close7()>
-                "Post Game"
-            </A>
+            {move || if is_authed() {
+                view! {
+                    <A href="/team/dashboard" attr:class=link_cls2.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Team"
+                    </A>
+                    <A href="/draft" attr:class=link_cls3.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Draft"
+                    </A>
+                    <A href="/tree-drafter" attr:class=link_cls4.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Tree Drafter"
+                    </A>
+                    <A href="/stats" attr:class=link_cls5.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Stats"
+                    </A>
+                    <A href="/game-plan" attr:class=link_cls6.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Game Plan"
+                    </A>
+                    <A href="/post-game" attr:class=link_cls7.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Post Game"
+                    </A>
+                }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            }}
         }
     };
 

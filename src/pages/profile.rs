@@ -41,6 +41,8 @@ pub async fn update_profile(username: String) -> Result<(), ServerFnError> {
         .bind(("user_key", user_key))
         .bind(("username", username))
         .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .check()
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     Ok(())
@@ -73,6 +75,26 @@ pub fn ProfilePage() -> impl IntoView {
     let logout_action = ServerAction::<Logout>::new();
 
     let pool_resource = Resource::new(|| (), |_| get_champion_pool());
+
+    // Hard-navigate on logout so session state is fully cleared
+    Effect::new(move || {
+        if let Some(Ok(())) = logout_action.value().get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/");
+            }
+        }
+    });
+
+    // Redirect to login if not authenticated
+    Effect::new(move || {
+        if let Some(Ok(None)) = user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
 
     view! {
         <div class="max-w-2xl mx-auto py-8 px-6">
