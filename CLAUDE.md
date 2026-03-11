@@ -41,7 +41,7 @@ cp .env.example .env   # Add RIOT_API_KEY, optionally SURREAL_DATA_DIR
 cargo leptos watch
 ```
 
-The app runs at `http://127.0.0.1:3000` with live-reload on port 3001.
+The app runs at `http://127.0.0.1:3002` with live-reload on port 3003.
 
 ## Architecture
 
@@ -74,22 +74,28 @@ src/
 │   ├── game_plan.rs     # GamePlan, PostGameLearning
 │   └── champion.rs      # Champion metadata
 ├── pages/               # Route components (each may contain #[server] fns)
-│   ├── home.rs          # Landing page
-│   ├── profile.rs       # Riot account linking
+│   ├── home.rs          # Landing page (auth-aware with CTA)
+│   ├── profile.rs       # Riot account linking, champion pool summary
 │   ├── auth/login.rs    # Login form
 │   ├── auth/register.rs # Registration form
-│   ├── team/dashboard.rs
-│   ├── team/roster.rs
+│   ├── team/dashboard.rs # Roster slots, coach slots, join requests
+│   ├── team/roster.rs   # Team creation/joining
 │   ├── team_builder.rs
-│   ├── draft.rs         # Draft planner with champion picker
+│   ├── draft.rs         # Draft planner with blue/red side toggle
+│   ├── tree_drafter.rs  # Tree-based draft planning with graph view
 │   ├── stats.rs         # Match history + stats
-│   ├── game_plan.rs     # Pre-game strategy
-│   └── post_game.rs     # Post-game review
+│   ├── champion_pool.rs # Tier-based champion pool management
+│   ├── game_plan.rs     # Pre-game strategy with champion autocomplete
+│   └── post_game.rs     # Post-game review with pattern analysis
 ├── components/          # Reusable UI
-│   ├── nav.rs           # Top navigation bar
-│   ├── champion_picker.rs
-│   ├── draft_board.rs
-│   └── stat_card.rs
+│   ├── nav.rs           # Top nav bar with notifications, theme toggle
+│   ├── champion_picker.rs # Grid-based champion selection
+│   ├── champion_autocomplete.rs # Text input with champion dropdown
+│   ├── draft_board.rs   # 20-slot draft board (picks + bans)
+│   ├── tree_graph.rs    # SVG tree visualization with champion edge icons
+│   ├── theme_toggle.rs  # Dark/light mode + accent color picker
+│   ├── stat_card.rs
+│   └── ui.rs            # ErrorBanner, StatusMessage
 schema.surql             # DB schema (loaded on startup via include_str!)
 ```
 
@@ -105,7 +111,9 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 | `/team/roster`     | RosterPage       | Yes           |
 | `/team-builder`    | TeamBuilderPage  | Yes           |
 | `/draft`           | DraftPage        | Yes           |
+| `/tree-drafter`    | TreeDrafterPage  | Yes           |
 | `/stats`           | StatsPage        | Yes           |
+| `/champion-pool`   | ChampionPoolPage | Yes           |
 | `/game-plan`       | GamePlanPage     | Yes           |
 | `/post-game`       | PostGamePage     | Yes           |
 
@@ -208,9 +216,9 @@ schema.surql             # DB schema (loaded on startup via include_str!)
            on:input=move |ev| set_signal.set(event_target_value(&ev)) />
     ```
 
-22. **`StoredValue` for non-reactive data shared across closures** — When you need to share a large non-`Copy` value (like a `HashMap`) across multiple closures without reactive tracking overhead, use `store_value()`:
+22. **`StoredValue` for non-reactive data shared across closures** — When you need to share a large non-`Copy` value (like a `HashMap`) across multiple closures without reactive tracking overhead, use `StoredValue::new()`:
     ```rust
-    let map = store_value(champion_map); // StoredValue<HashMap<...>>
+    let map = StoredValue::new(champion_map); // StoredValue<HashMap<...>>
     // later in closures:
     map.with_value(|m| m.get(&name).cloned())
     ```
@@ -273,9 +281,42 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 
 34. **`#[server]` ordering** — Server functions must be defined (or `use`d) before the `#[component]` that calls them in the same file, because the macro generates a client-side stub that must be in scope.
 
+### WASM Safety
+
+35. **Never `.unwrap()` in event handlers or WASM code** — A panic in WASM crashes the entire runtime, freezing all subsequent user interactions (clicks, navigation). Use `if let Some(...)`, `let Some(...) = ... else { return }`, or `.unwrap_or_default()`:
+    ```rust
+    // BAD: crashes WASM runtime if window() returns None
+    let window = web_sys::window().unwrap();
+    // GOOD: gracefully handles missing window
+    if let Some(window) = web_sys::window() { ... }
+    ```
+
+36. **`Callback::new()` for closures shared across reactive contexts** — Regular closures are not `Copy`. When a closure must be used in multiple `move` closures (iterators, multiple `on:click` handlers), wrap it in `Callback::new()` which is `Copy`:
+    ```rust
+    let do_action = Callback::new(move |id: String| { ... });
+    // Now `do_action` can be used in multiple closures
+    do_action.run("some_id".to_string());
+    ```
+
+37. **`wasm_bindgen::closure::Closure` for JS timers** — Use `Closure::once` + `web_sys::window().set_timeout_*` instead of depending on `gloo_timers`. Always guard with `#[cfg(feature = "hydrate")]`:
+    ```rust
+    #[cfg(feature = "hydrate")]
+    {
+        use wasm_bindgen::prelude::*;
+        let cb = Closure::once(move || { ... });
+        if let Some(win) = web_sys::window() {
+            let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.as_ref().unchecked_ref(), 150,
+            );
+        }
+        cb.forget();
+    }
+    ```
+
 ## Code Style
 
 - **Errors:** `thiserror` for custom error types, map to `ServerFnError` via `.map_err(|e| ServerFnError::new(e.to_string()))`
-- **Tailwind:** Dark theme by default (`bg-gray-950`, `text-white`), accent color `yellow-400`
-- **Forms:** Tailwind utility classes inline, `bg-gray-800` inputs with `border-gray-600`
+- **Theming:** Uses CSS custom properties via `@theme` in `input.css`. Dark theme is default. Use semantic tokens (`bg-base`, `bg-surface`, `bg-elevated`, `text-primary`, `text-secondary`, `text-muted`, `text-dimmed`, `border-divider`, `border-outline`, `bg-accent`, `text-accent-contrast`) instead of hardcoded colors.
+- **Exceptions to semantic tokens:** Colored buttons with white text (e.g. `bg-red-700 text-white`, `bg-blue-500 text-white`) keep `text-white` literally, not `text-primary`.
+- **Forms:** Tailwind utility classes inline, `bg-surface/50` inputs with `border-outline/50`
 - **Naming:** snake_case files and functions, PascalCase components
