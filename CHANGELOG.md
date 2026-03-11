@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-03-11
+
+### Added
+
+- Stats: "Minimum players" dropdown (2 → roster size) replaces the binary "full roster only" checkbox — shows all matches where ≥ N linked team members played together
+
+### Fixed
+
+- Draft list: `list_drafts` now returns an empty list (not `Err`) when the user has no team, preventing the saved drafts panel from erroring out entirely
+- Draft save: saving with an empty name now shows an inline error instead of silently creating an unnamed draft record
+- Tree graph edges: champion icons now centered around the edge midpoint (previously left-aligned from midpoint); capped at 5 with a `+N` overflow text badge when more icons are present
+- Team dashboard: starter role slots no longer show both the SVG role icon and a duplicate text label; icon is now 24 px with the role name as a `title` tooltip
+
 ## [0.12.0] - 2026-03-11
 
 ### Added

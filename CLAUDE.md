@@ -325,6 +325,51 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 
 41. **Tree assembly: use `children_of` map, not reversal heuristic** — Building a `HashMap<String, Vec<String>>` of parent→child IDs and doing a recursive DFS is correct regardless of DB return order. The old reverse-child_ids heuristic failed when sibling nodes shared the same `sort_order`.
 
+42. **Debounced auto-save with cancellable timer** — Store the JS timer handle in a `RwSignal<Option<i32>>`. In the `Effect`, cancel any pending timer before scheduling a new one:
+    ```rust
+    #[allow(unused_variables)]
+    let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+
+    Effect::new(move |_| {
+        let _ = some_signal.get(); // track
+
+        #[cfg(feature = "hydrate")]
+        if let Some(id) = auto_save_timer.get_untracked() {
+            if let Some(win) = web_sys::window() { win.clear_timeout_with_handle(id); }
+        }
+
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::prelude::*;
+            let cb = Closure::once(move || { /* do save */ });
+            if let Some(win) = web_sys::window() {
+                if let Ok(id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(), 2000,
+                ) { auto_save_timer.set(Some(id)); }
+            }
+            cb.forget();
+        }
+    });
+    ```
+
+43. **`#[allow(unused_variables)]` on hydrate-only signals** — A `RwSignal` that is only read/written inside `#[cfg(feature = "hydrate")]` blocks will trigger an unused-variable warning in SSR builds. Suppress it on the `let` declaration:
+    ```rust
+    #[allow(unused_variables)]
+    let timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    ```
+    Same applies to `let Some(x)` bindings where `x` is only used in a cfg block — prefix with `#[allow(unused_variables)]` on the binding line.
+
+44. **Return `Ok(Vec::new())` not `Err` when an optional resource is absent** — Server functions that list data scoped to a team (or other optional entity) should return an empty list when the user has no team, not an error. Returning `Err` propagates to the Suspense and replaces the UI with an error banner instead of an empty state:
+    ```rust
+    // BAD — errors out the whole panel if user has no team
+    let team_id = db::get_user_team_id(...).await?.ok_or_else(|| ServerFnError::new("No team"))?;
+    // GOOD — empty list is a valid state
+    let team_id = match db::get_user_team_id(...).await? {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+    ```
+
 ## Code Style
 
 - **Errors:** `thiserror` for custom error types, map to `ServerFnError` via `.map_err(|e| ServerFnError::new(e.to_string()))`
