@@ -1,8 +1,13 @@
 # TODOs
 ## Open
 ### General
-- [ ] it seems that often if a button click did not work, all subsequent clicks or links to different routes dont do anything. Please investigate and solve this issue in general.
+*(none currently tracked)*
 ## Completed
+
+### Section 10 – WASM Panic Hardening
+- [x] Replaced `.unwrap()` in nav Escape key listener with safe `if let Some(window)` pattern
+- [x] Replaced `.unwrap()` in drag-and-drop handlers (dashboard) with `let Some(dt) = ... else { return }`
+- [x] Fixed potential WASM runtime crash that froze all subsequent clicks and navigation
 
 ### Section 9 – Tree Graph Visualization
 - [x] SVG-based tree graph component (`src/components/tree_graph.rs`)

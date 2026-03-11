@@ -459,7 +459,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     on:drop=move |ev| {
                                                         ev.prevent_default();
                                                         set_drag_over.set(false);
-                                                        let dt = ev.data_transfer().unwrap();
+                                                        let Some(dt) = ev.data_transfer() else { return };
                                                         let uid = dt.get_data("text/plain").unwrap_or_default();
                                                         if !uid.is_empty() {
                                                             let r = role_label.clone();
@@ -585,8 +585,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             class="bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
                                                             draggable="true"
                                                             on:dragstart=move |ev| {
-                                                                let dt = ev.data_transfer().unwrap();
-                                                                dt.set_data("text/plain", &uid_drag).unwrap();
+                                                                if let Some(dt) = ev.data_transfer() {
+                                                                    let _ = dt.set_data("text/plain", &uid_drag);
+                                                                }
                                                             }
                                                         >
                                                             <div class="flex items-center gap-2 min-w-0">

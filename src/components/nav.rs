@@ -88,8 +88,9 @@ pub fn Nav() -> impl IntoView {
                     close_all_esc();
                 }
             });
-            let window = web_sys::window().unwrap();
-            window.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref()).unwrap();
+            if let Some(window) = web_sys::window() {
+                let _ = window.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
+            }
             cb.forget();
         });
     }
