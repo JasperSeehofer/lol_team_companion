@@ -27,7 +27,7 @@ async fn test_create_tree_creates_root_node() {
 
     let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
     assert_eq!(nodes.len(), 1, "should have auto-created root node");
-    assert_eq!(nodes[0].label, "Root");
+    assert_eq!(nodes[0].label, "My Tree");
     assert!(nodes[0].parent_id.is_none());
 }
 

@@ -240,6 +240,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let (node_improvised, set_node_improvised) = signal(false);
     let (draft_slots, set_draft_slots) = signal(vec![None::<String>; 20]);
     let (active_slot, set_active_slot) = signal(Some(0_usize));
+    let (highlighted_slot, set_highlighted_slot) = signal(Option::<usize>::None);
 
     // Branch adding
     let (adding_branch_to, set_adding_branch_to) = signal(Option::<String>::None);
@@ -270,7 +271,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     );
 
     // Create tree handler
-    let do_create_tree = move |_| {
+    let do_create_tree = Callback::new(move |_: ()| {
         let name = new_tree_name.get_untracked();
         if name.trim().is_empty() {
             set_status_msg.set(Some("Enter a tree name.".into()));
@@ -291,7 +292,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
             }
         });
-    };
+    });
 
     // Delete tree handler
     let do_delete_tree = move |_| {
@@ -318,6 +319,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
         set_node_label.set(node.label.clone());
         set_node_notes.set(node.notes.clone().unwrap_or_default());
         set_node_improvised.set(node.is_improvised);
+        set_highlighted_slot.set(None); // clear on node switch
+        set_active_slot.set(None);      // reset active slot on switch
         let slots = actions_to_slots(&node.actions);
         let next = (0..20).find(|&i| slots[i].is_none());
         set_draft_slots.set(slots);
@@ -347,6 +350,57 @@ pub fn TreeDrafterPage() -> impl IntoView {
             }
         });
     };
+
+    // Auto-save node timer (only used in hydrate/WASM builds)
+    #[allow(unused_variables)]
+    let auto_save_node_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    let (node_save_status, set_node_save_status) = signal(""); // "", "unsaved", "saved"
+
+    Effect::new(move |_| {
+        let _ = draft_slots.get();
+        let _ = node_notes.get();
+        let _ = node_label.get();
+        let node_id = selected_node_id.get();
+
+        #[allow(unused_variables)]
+        let Some(node_id) = node_id else { return };
+
+        #[cfg(feature = "hydrate")]
+        if let Some(timer_id) = auto_save_node_timer.get_untracked() {
+            if let Some(win) = web_sys::window() {
+                win.clear_timeout_with_handle(timer_id);
+            }
+        }
+
+        set_node_save_status.set("unsaved");
+
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::prelude::*;
+            let cb = Closure::once(move || {
+                let label = node_label.get_untracked();
+                let notes_raw = node_notes.get_untracked();
+                let notes = if notes_raw.trim().is_empty() { None } else { Some(notes_raw) };
+                let improvised = node_improvised.get_untracked();
+                let actions = build_actions_from_slots(&draft_slots.get_untracked());
+                let actions_json = serde_json::to_string(&actions).unwrap_or_default();
+                leptos::task::spawn_local(async move {
+                    let _ = save_node(node_id, label, notes, improvised, actions_json).await;
+                    set_node_save_status.set("saved");
+                    nodes_resource.refetch();
+                });
+            });
+            if let Some(win) = web_sys::window() {
+                match win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(), 2000,
+                ) {
+                    Ok(timer_id) => { auto_save_node_timer.set(Some(timer_id)); }
+                    Err(_) => {}
+                }
+            }
+            cb.forget();
+        }
+    });
 
     // Add branch handler
     let do_add_branch = move |_| {
@@ -401,6 +455,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
             return;
         }
         set_draft_slots.update(|s| s[slot_idx] = Some(champion_name));
+        set_highlighted_slot.set(None);
         let updated = draft_slots.get_untracked();
         let next = (0..20).find(|&i| updated[i].is_none());
         set_active_slot.set(next);
@@ -454,13 +509,27 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let on_slot_click = Callback::new(move |slot_idx: usize| {
         let slots = draft_slots.get_untracked();
         if slots.get(slot_idx).and_then(|s| s.as_ref()).is_some() {
-            set_draft_slots.update(|s| s[slot_idx] = None);
-            set_active_slot.set(Some(slot_idx));
+            let currently_highlighted = highlighted_slot.get_untracked();
+            if currently_highlighted == Some(slot_idx) {
+                // Second click: set as active_slot for champion replacement
+                set_active_slot.set(Some(slot_idx));
+            } else {
+                // First click: just highlight, set as active
+                set_highlighted_slot.set(Some(slot_idx));
+                set_active_slot.set(Some(slot_idx));
+            }
         } else {
+            set_highlighted_slot.set(None);
             set_active_slot.update(|a| {
                 *a = if *a == Some(slot_idx) { None } else { Some(slot_idx) };
             });
         }
+    });
+
+    let on_slot_clear = Callback::new(move |slot_idx: usize| {
+        set_draft_slots.update(|s| s[slot_idx] = None);
+        set_highlighted_slot.set(None);
+        set_active_slot.set(Some(slot_idx));
     });
 
     view! {
@@ -515,6 +584,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             placeholder="Tree name..."
                             prop:value=move || new_tree_name.get()
                             on:input=move |ev| set_new_tree_name.set(event_target_value(&ev))
+                            on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                if ev.key() == "Enter" { do_create_tree.run(()); }
+                            }
                             class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
                         />
                         <input
@@ -522,11 +594,14 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             placeholder="Opponent (optional)"
                             prop:value=move || new_tree_opponent.get()
                             on:input=move |ev| set_new_tree_opponent.set(event_target_value(&ev))
+                            on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                if ev.key() == "Enter" { do_create_tree.run(()); }
+                            }
                             class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
                         />
                         <button
                             class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
-                            on:click=do_create_tree
+                            on:click=move |_| do_create_tree.run(())
                         >"Create Tree"</button>
                     </div>
 
@@ -776,6 +851,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     set_draft_slots=set_draft_slots
                                                     active_slot=active_slot
                                                     set_active_slot=set_active_slot
+                                                    highlighted_slot=highlighted_slot
+                                                    on_slot_clear=on_slot_clear
                                                     champions_resource=champions_resource
                                                     used_champions=Signal::derive(used_champions)
                                                     on_champion_select=on_champion_select
@@ -783,6 +860,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     on_slot_drop=on_slot_drop
                                                     on_save=Callback::new(do_save_node)
                                                     on_branch_from=do_branch_from
+                                                    node_save_status=node_save_status
                                                 />
                                             }.into_any()
                                         }}
@@ -966,6 +1044,8 @@ fn NodeEditor(
     set_draft_slots: WriteSignal<Vec<Option<String>>>,
     active_slot: ReadSignal<Option<usize>>,
     set_active_slot: WriteSignal<Option<usize>>,
+    highlighted_slot: ReadSignal<Option<usize>>,
+    on_slot_clear: Callback<usize>,
     champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
     used_champions: Signal<Vec<String>>,
     on_champion_select: Callback<Champion>,
@@ -973,6 +1053,7 @@ fn NodeEditor(
     on_slot_drop: Callback<(usize, String)>,
     on_save: Callback<web_sys::MouseEvent>,
     on_branch_from: Callback<usize>,
+    node_save_status: ReadSignal<&'static str>,
 ) -> impl IntoView {
     view! {
         <div class="flex flex-col gap-4">
@@ -1035,6 +1116,8 @@ fn NodeEditor(
                                     active_slot=active_slot
                                     on_slot_click=on_slot_click
                                     on_slot_drop=on_slot_drop
+                                    highlighted_slot=highlighted_slot
+                                    on_slot_clear=on_slot_clear
                                 />
                             }.into_any()
                         }
@@ -1093,6 +1176,14 @@ fn NodeEditor(
                         set_active_slot.set(Some(0));
                     }
                 >"Clear Board"</button>
+                {move || {
+                    let status = node_save_status.get();
+                    match status {
+                        "saved" => view! { <span class="text-green-400 text-xs">"✓ Saved"</span> }.into_any(),
+                        "unsaved" => view! { <span class="text-amber-400 text-xs">"● Unsaved"</span> }.into_any(),
+                        _ => view! { <span></span> }.into_any(),
+                    }
+                }}
             </div>
         </div>
     }
@@ -1222,8 +1313,10 @@ fn LiveNavigator(
                                                         .collect();
                                                     let (ro_slots, _) = signal(slots.clone());
                                                     let (ro_active, _) = signal(None::<usize>);
+                                                    let (ro_highlighted, _) = signal(None::<usize>);
                                                     let noop_click = Callback::new(|_: usize| {});
                                                     let noop_drop = Callback::new(|_: (usize, String)| {});
+                                                    let noop_clear = Callback::new(|_: usize| {});
                                                     view! {
                                                         <DraftBoard
                                                             draft_slots=ro_slots
@@ -1231,6 +1324,8 @@ fn LiveNavigator(
                                                             active_slot=ro_active
                                                             on_slot_click=noop_click
                                                             on_slot_drop=noop_drop
+                                                            highlighted_slot=ro_highlighted
+                                                            on_slot_clear=noop_clear
                                                         />
                                                     }.into_any()
                                                 }

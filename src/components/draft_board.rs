@@ -36,12 +36,15 @@ pub fn DraftBoard(
     active_slot: ReadSignal<Option<usize>>,
     on_slot_click: Callback<usize>,
     on_slot_drop: Callback<(usize, String)>,
+    highlighted_slot: ReadSignal<Option<usize>>,
+    on_slot_clear: Callback<usize>,
 ) -> impl IntoView {
     let (first_pick_blue, set_first_pick_blue) = signal(true);
     let champion_map = StoredValue::new(champion_map);
 
     let render_ban_slot = move |slot_idx: usize| {
         let on_slot_drop = on_slot_drop.clone();
+        let on_slot_clear = on_slot_clear.clone();
         let (_, _, label) = slot_meta(slot_idx);
         view! {
             <div
@@ -49,8 +52,11 @@ pub fn DraftBoard(
                     let slots = draft_slots.get();
                     let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
                     let is_active = active_slot.get() == Some(slot_idx);
+                    let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                     if is_active && !filled {
                         "w-10 h-10 rounded border-2 border-accent animate-pulse bg-surface flex items-center justify-center cursor-pointer"
+                    } else if filled && is_highlighted {
+                        "w-10 h-10 rounded border-2 border-red-400 bg-surface flex items-center justify-center relative overflow-hidden cursor-pointer"
                     } else if filled {
                         "w-10 h-10 rounded border border-outline bg-surface flex items-center justify-center relative overflow-hidden cursor-pointer hover:opacity-75"
                     } else {
@@ -75,17 +81,32 @@ pub fn DraftBoard(
             >
                 {move || {
                     let slots = draft_slots.get();
+                    let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                     if let Some(Some(champ_name)) = slots.get(slot_idx) {
                         let champ_name = champ_name.clone();
                         let icon_url = champion_map.with_value(|m| {
                             m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
                         });
+                        let on_slot_clear = on_slot_clear.clone();
                         view! {
                             <div class="relative w-full h-full">
                                 <img src=icon_url alt=champ_name class="w-full h-full object-cover opacity-50 grayscale" />
                                 <div class="absolute inset-0 flex items-center justify-center">
                                     <div class="w-full h-0.5 bg-red-500 rotate-12"></div>
                                 </div>
+                                {if is_highlighted {
+                                    view! {
+                                        <button
+                                            class="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-xs rounded-bl flex items-center justify-center hover:bg-red-500 z-10 cursor-pointer"
+                                            on:click=move |ev| {
+                                                ev.stop_propagation();
+                                                on_slot_clear.run(slot_idx);
+                                            }
+                                        >"\u{00D7}"</button>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }}
                             </div>
                         }.into_any()
                     } else {
@@ -99,6 +120,7 @@ pub fn DraftBoard(
     // is_pick1_slot: slot 6 or 7 (first pick of each side)
     let render_pick_slot = move |slot_idx: usize, is_blue: bool| {
         let on_slot_drop = on_slot_drop.clone();
+        let on_slot_clear = on_slot_clear.clone();
         let (_, _, label) = slot_meta(slot_idx);
         let is_pick1_slot = slot_idx == 6 || slot_idx == 7;
         view! {
@@ -107,8 +129,13 @@ pub fn DraftBoard(
                     let slots = draft_slots.get();
                     let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
                     let is_active = active_slot.get() == Some(slot_idx);
+                    let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                     if is_active && !filled {
                         "h-16 rounded border-2 border-accent animate-pulse bg-surface overflow-hidden cursor-pointer"
+                    } else if filled && is_highlighted && is_blue {
+                        "h-16 rounded border-2 border-red-400 bg-blue-950 overflow-hidden cursor-pointer relative"
+                    } else if filled && is_highlighted {
+                        "h-16 rounded border-2 border-red-400 bg-red-950 overflow-hidden cursor-pointer relative"
                     } else if filled && is_blue {
                         "h-16 rounded border border-blue-600 bg-blue-950 overflow-hidden cursor-pointer hover:opacity-75"
                     } else if filled {
@@ -135,6 +162,7 @@ pub fn DraftBoard(
             >
                 {move || {
                     let slots = draft_slots.get();
+                    let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                     let is_first_pick = is_pick1_slot && (
                         (slot_idx == 6 && first_pick_blue.get()) ||
                         (slot_idx == 7 && !first_pick_blue.get())
@@ -144,15 +172,31 @@ pub fn DraftBoard(
                         let icon_url = champion_map.with_value(|m| {
                             m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
                         });
+                        let on_slot_clear = on_slot_clear.clone();
                         view! {
-                            <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>
-                                <div class="relative flex-shrink-0 h-full">
-                                    <img src=icon_url alt=champ_name.clone() class="h-full aspect-square object-cover" />
-                                    {is_first_pick.then(|| view! {
-                                        <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
-                                    })}
+                            <div class="relative h-full w-full">
+                                <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>
+                                    <div class="relative flex-shrink-0 h-full">
+                                        <img src=icon_url alt=champ_name.clone() class="h-full aspect-square object-cover" />
+                                        {is_first_pick.then(|| view! {
+                                            <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
+                                        })}
+                                    </div>
+                                    <span class={if is_blue { "flex-1 flex items-center px-2 text-primary text-sm font-medium truncate" } else { "flex-1 flex items-center justify-end px-2 text-primary text-sm font-medium truncate" }}>{champ_name}</span>
                                 </div>
-                                <span class={if is_blue { "flex-1 flex items-center px-2 text-primary text-sm font-medium truncate" } else { "flex-1 flex items-center justify-end px-2 text-primary text-sm font-medium truncate" }}>{champ_name}</span>
+                                {if is_highlighted {
+                                    view! {
+                                        <button
+                                            class="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-xs rounded-bl flex items-center justify-center hover:bg-red-500 z-10 cursor-pointer"
+                                            on:click=move |ev| {
+                                                ev.stop_propagation();
+                                                on_slot_clear.run(slot_idx);
+                                            }
+                                        >"\u{00D7}"</button>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }}
                             </div>
                         }.into_any()
                     } else {

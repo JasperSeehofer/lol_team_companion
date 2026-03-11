@@ -279,7 +279,7 @@ pub fn StatsPage() -> impl IntoView {
                             <StatsContent
                                 all_matches=all_matches
                                 unique_players=unique_players
-                                roster_size=roster_size
+                                _roster_size=roster_size
                                 filter_full_roster=filter_full_roster
                                 set_filter_full_roster=set_filter_full_roster
                                 filter_player=filter_player
@@ -297,7 +297,7 @@ pub fn StatsPage() -> impl IntoView {
 fn StatsContent(
     all_matches: Vec<MatchGroup>,
     unique_players: Vec<String>,
-    #[prop(optional)] roster_size: usize,
+    #[prop(optional)] _roster_size: usize,
     filter_full_roster: ReadSignal<bool>,
     set_filter_full_roster: WriteSignal<bool>,
     filter_player: ReadSignal<String>,

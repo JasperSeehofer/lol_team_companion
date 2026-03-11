@@ -149,6 +149,25 @@ pub fn ChampionPoolPage() -> impl IntoView {
         }
     });
 
+    let do_add = move || {
+        let champion = add_input_signal.get_untracked();
+        let role = active_role.get_untracked().to_string();
+        if champion.trim().is_empty() { return; }
+        leptos::task::spawn_local(async move {
+            match add_to_pool(champion, role).await {
+                Ok(_) => {
+                    add_input_signal.set(String::new());
+                    pool.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    let on_autocomplete_select = Callback::new(move |_name: String| {
+        do_add();
+    });
+
     view! {
         <div class="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
@@ -193,6 +212,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                             champions=champs
                                             value=add_input_signal
                                             placeholder="Add a champion..."
+                                            on_select=on_autocomplete_select
                                         />
                                     }
                                 })}
@@ -200,20 +220,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                         </div>
                         <button
                             class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer"
-                            on:click=move |_| {
-                                let champion = add_input_signal.get_untracked();
-                                let role = active_role.get_untracked().to_string();
-                                if champion.trim().is_empty() { return; }
-                                leptos::task::spawn_local(async move {
-                                    match add_to_pool(champion, role).await {
-                                        Ok(_) => {
-                                            add_input_signal.set(String::new());
-                                            pool.refetch();
-                                        }
-                                        Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
-                                    }
-                                });
-                            }
+                            on:click=move |_| do_add()
                         >"Add"</button>
                     </div>
 
@@ -227,80 +234,79 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     .filter(|e| e.role == role)
                                     .collect();
 
-                                if role_entries.is_empty() {
-                                    return view! {
-                                        <div class="flex-1 flex items-center justify-center">
-                                            <p class="text-dimmed text-sm">"No champions in pool for this role. Add one above."</p>
-                                        </div>
-                                    }.into_any();
-                                }
-
                                 view! {
                                     <div class="flex flex-col gap-3">
                                         {TIERS.iter().map(|&tier| {
                                             let tier_entries: Vec<&ChampionPoolEntry> = role_entries.iter()
                                                 .filter(|e| e.tier == tier)
                                                 .collect();
-                                            if tier_entries.is_empty() {
-                                                return view! { <div></div> }.into_any();
-                                            }
                                             view! {
                                                 <div class=format!("border rounded-xl p-4 {}", tier_color(tier))>
                                                     <h3 class=format!("text-xs font-semibold uppercase tracking-wider mb-3 {}", tier_label_color(tier))>
                                                         {tier_label(tier)}
-                                                        <span class="text-dimmed ml-1">{format!("({})", tier_entries.len())}</span>
+                                                        {(!tier_entries.is_empty()).then(|| view! {
+                                                            <span class="text-dimmed ml-1">{format!("({})", tier_entries.len())}</span>
+                                                        })}
                                                     </h3>
-                                                    <div class="flex flex-wrap gap-2">
-                                                        {tier_entries.into_iter().map(|entry| {
-                                                            let champ = entry.champion.clone();
-                                                            let role_val = entry.role.clone();
-                                                            let champ_for_select = champ.clone();
-                                                            let role_for_select = role_val.clone();
-                                                            let champ_for_remove = champ.clone();
-                                                            let role_for_remove = role_val.clone();
+                                                    {if tier_entries.is_empty() {
+                                                        view! {
+                                                            <p class="text-dimmed text-xs italic">"No champions yet"</p>
+                                                        }.into_any()
+                                                    } else {
+                                                        view! {
+                                                            <div class="flex flex-wrap gap-2">
+                                                                {tier_entries.into_iter().map(|entry| {
+                                                                    let champ = entry.champion.clone();
+                                                                    let role_val = entry.role.clone();
+                                                                    let champ_for_select = champ.clone();
+                                                                    let role_for_select = role_val.clone();
+                                                                    let champ_for_remove = champ.clone();
+                                                                    let role_for_remove = role_val.clone();
 
-                                                            let img_url = champions_resource.get()
-                                                                .and_then(|r| r.ok())
-                                                                .and_then(|champs| champs.into_iter().find(|c| c.name == champ))
-                                                                .map(|c| c.image_full)
-                                                                .unwrap_or_default();
+                                                                    let img_url = champions_resource.get()
+                                                                        .and_then(|r| r.ok())
+                                                                        .and_then(|champs| champs.into_iter().find(|c| c.name == champ))
+                                                                        .map(|c| c.image_full)
+                                                                        .unwrap_or_default();
 
-                                                            view! {
-                                                                <div
-                                                                    class="flex items-center gap-1.5 bg-elevated border border-divider rounded-lg px-2.5 py-1.5 hover:border-accent/50 transition-colors cursor-pointer group"
-                                                                    on:click=move |_| {
-                                                                        set_selected_entry.set(Some((champ_for_select.clone(), role_for_select.clone())));
-                                                                    }
-                                                                >
-                                                                    {if !img_url.is_empty() {
-                                                                        view! {
-                                                                            <img src=img_url alt=champ.clone() class="w-7 h-7 rounded object-cover" />
-                                                                        }.into_any()
-                                                                    } else {
-                                                                        view! { <span></span> }.into_any()
-                                                                    }}
-                                                                    <span class="text-primary text-sm">{champ}</span>
-                                                                    <button
-                                                                        class="text-overlay-strong hover:text-red-400 ml-0.5 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                                                                        title="Remove"
-                                                                        on:click=move |ev| {
-                                                                            ev.stop_propagation();
-                                                                            let c = champ_for_remove.clone();
-                                                                            let r = role_for_remove.clone();
-                                                                            leptos::task::spawn_local(async move {
-                                                                                match remove_from_pool(c, r).await {
-                                                                                    Ok(_) => pool.refetch(),
-                                                                                    Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                    view! {
+                                                                        <div
+                                                                            class="flex items-center gap-1.5 bg-elevated border border-divider rounded-lg px-2.5 py-1.5 hover:border-accent/50 transition-colors cursor-pointer group"
+                                                                            on:click=move |_| {
+                                                                                set_selected_entry.set(Some((champ_for_select.clone(), role_for_select.clone())));
+                                                                            }
+                                                                        >
+                                                                            {if !img_url.is_empty() {
+                                                                                view! {
+                                                                                    <img src=img_url alt=champ.clone() class="w-7 h-7 rounded object-cover" />
+                                                                                }.into_any()
+                                                                            } else {
+                                                                                view! { <span></span> }.into_any()
+                                                                            }}
+                                                                            <span class="text-primary text-sm">{champ}</span>
+                                                                            <button
+                                                                                class="text-overlay-strong hover:text-red-400 ml-0.5 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                                                                                title="Remove"
+                                                                                on:click=move |ev| {
+                                                                                    ev.stop_propagation();
+                                                                                    let c = champ_for_remove.clone();
+                                                                                    let r = role_for_remove.clone();
+                                                                                    leptos::task::spawn_local(async move {
+                                                                                        match remove_from_pool(c, r).await {
+                                                                                            Ok(_) => pool.refetch(),
+                                                                                            Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                                        }
+                                                                                    });
                                                                                 }
-                                                                            });
-                                                                        }
-                                                                    >"×"</button>
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
+                                                                            >"×"</button>
+                                                                        </div>
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        }.into_any()
+                                                    }}
                                                 </div>
-                                            }.into_any()
+                                            }
                                         }).collect_view()}
                                     </div>
                                 }.into_any()

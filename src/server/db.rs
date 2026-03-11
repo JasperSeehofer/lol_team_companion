@@ -266,7 +266,7 @@ pub async fn create_team(
 
     let team_key = team_id.strip_prefix("team:").unwrap_or(&team_id).to_string();
 
-    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'sub'")
+    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'")
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
         .await?
@@ -747,6 +747,7 @@ pub async fn create_draft_tree(
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
+    let root_label = name.clone();
     let mut response = db
         .query("CREATE draft_tree SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent")
         .bind(("name", name))
@@ -759,10 +760,11 @@ pub async fn create_draft_tree(
     match row {
         Some(r) => {
             let tree_id = r.id.to_sql();
-            // Auto-create a root node
+            // Auto-create a root node named after the tree
             let tree_key = tree_id.strip_prefix("draft_tree:").unwrap_or(&tree_id).to_string();
-            db.query("CREATE draft_tree_node SET tree = type::record('draft_tree', $tree_key), parent = NONE, label = 'Root', sort_order = 0")
+            db.query("CREATE draft_tree_node SET tree = type::record('draft_tree', $tree_key), parent = NONE, label = $label, sort_order = 0")
                 .bind(("tree_key", tree_key))
+                .bind(("label", root_label))
                 .await?
                 .check()?;
             Ok(tree_id)

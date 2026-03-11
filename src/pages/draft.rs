@@ -163,6 +163,7 @@ pub fn DraftPage() -> impl IntoView {
     let (our_side, set_our_side) = signal("blue".to_string());
     let (draft_slots, set_draft_slots) = signal(vec![None::<String>; 20]);
     let (active_slot, set_active_slot) = signal(Some(0_usize));
+    let (highlighted_slot, set_highlighted_slot) = signal(Option::<usize>::None);
     let (comments, set_comments) = signal(Vec::<String>::new());
     let (comment_input, set_comment_input) = signal(String::new());
     let (save_result, set_save_result) = signal(Option::<String>::None);
@@ -196,6 +197,7 @@ pub fn DraftPage() -> impl IntoView {
             return;
         }
         set_draft_slots.update(|s| s[slot_idx] = Some(champion_name));
+        set_highlighted_slot.set(None);
         let updated = draft_slots.get_untracked();
         let next = (0..20).find(|&i| updated[i].is_none());
         set_active_slot.set(next);
@@ -214,13 +216,27 @@ pub fn DraftPage() -> impl IntoView {
     let on_slot_click = Callback::new(move |slot_idx: usize| {
         let slots = draft_slots.get_untracked();
         if slots.get(slot_idx).and_then(|s| s.as_ref()).is_some() {
-            set_draft_slots.update(|s| s[slot_idx] = None);
-            set_active_slot.set(Some(slot_idx));
+            let currently_highlighted = highlighted_slot.get_untracked();
+            if currently_highlighted == Some(slot_idx) {
+                // Second click: set as active_slot for champion replacement
+                set_active_slot.set(Some(slot_idx));
+            } else {
+                // First click: just highlight, set as active
+                set_highlighted_slot.set(Some(slot_idx));
+                set_active_slot.set(Some(slot_idx));
+            }
         } else {
+            set_highlighted_slot.set(None);
             set_active_slot.update(|a| {
                 *a = if *a == Some(slot_idx) { None } else { Some(slot_idx) };
             });
         }
+    });
+
+    let on_slot_clear = Callback::new(move |slot_idx: usize| {
+        set_draft_slots.update(|s| s[slot_idx] = None);
+        set_highlighted_slot.set(None);
+        set_active_slot.set(Some(slot_idx));
     });
 
     let phase_label = move || match active_slot.get() {
@@ -276,13 +292,81 @@ pub fn DraftPage() -> impl IntoView {
         });
     };
 
+    // Auto-save timer handle (only used in hydrate/WASM builds)
+    #[allow(unused_variables)]
+    let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    let (auto_save_status, set_auto_save_status) = signal(""); // "", "unsaved", "saved"
+
+    Effect::new(move |_| {
+        // Track content signals
+        let _ = draft_slots.get();
+        let _ = comments.get();
+        let name = draft_name.get();
+        let existing_id = loaded_draft_id.get();
+
+        // Only auto-save if we have a name AND it's an existing draft
+        if name.trim().is_empty() || existing_id.is_none() {
+            return;
+        }
+
+        // Cancel pending timer
+        #[cfg(feature = "hydrate")]
+        if let Some(timer_id) = auto_save_timer.get_untracked() {
+            if let Some(win) = web_sys::window() {
+                win.clear_timeout_with_handle(timer_id);
+            }
+        }
+
+        set_auto_save_status.set("unsaved");
+
+        // Schedule new 2s auto-save
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::prelude::*;
+            let cb = Closure::once(move || {
+                let name = draft_name.get_untracked();
+                let opp = opponent.get_untracked();
+                let _tid = selected_team_id.get_untracked();
+                let rate = rating.get_untracked();
+                let side = our_side.get_untracked();
+                let actions = build_actions(draft_slots.get_untracked());
+                let acts_json = serde_json::to_string(&actions).unwrap_or_default();
+                let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
+
+                if let Some(draft_id) = loaded_draft_id.get_untracked() {
+                    let opp_opt = if opp.is_empty() { None } else { Some(opp) };
+                    leptos::task::spawn_local(async move {
+                        let _ = update_draft(draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side)).await;
+                        set_auto_save_status.set("saved");
+                        drafts.refetch();
+                    });
+                }
+            });
+            if let Some(win) = web_sys::window() {
+                match win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(), 2000,
+                ) {
+                    Ok(timer_id) => { auto_save_timer.set(Some(timer_id)); }
+                    Err(_) => {}
+                }
+            }
+            cb.forget();
+        }
+    });
+
     view! {
         <div class="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
             <div>
                 <h1 class="text-3xl font-bold text-primary">"Draft Planner"</h1>
                 <p class="text-accent font-medium mt-1">{phase_label}</p>
-                {move || loaded_draft_id.get().map(|_| view! {
-                    <p class="text-accent-hover/70 text-sm mt-0.5">"Editing saved draft — save to update"</p>
+                {move || loaded_draft_id.get().map(|_| {
+                    let status = auto_save_status.get();
+                    let (cls, text) = match status {
+                        "saved" => ("text-green-400 text-sm mt-0.5", "✓ Saved"),
+                        "unsaved" => ("text-amber-400 text-sm mt-0.5", "● Unsaved changes"),
+                        _ => ("text-muted text-sm mt-0.5", "Editing saved draft"),
+                    };
+                    view! { <p class=cls>{text}</p> }
                 })}
             </div>
 
@@ -411,6 +495,8 @@ pub fn DraftPage() -> impl IntoView {
                                         active_slot=active_slot
                                         on_slot_click=on_slot_click
                                         on_slot_drop=on_slot_drop
+                                        highlighted_slot=highlighted_slot
+                                        on_slot_clear=on_slot_clear
                                     />
                                 }.into_any()
                             }
@@ -494,6 +580,7 @@ pub fn DraftPage() -> impl IntoView {
                     on:click=move |_| {
                         set_draft_slots.set(vec![None; 20]);
                         set_active_slot.set(Some(0));
+                        set_highlighted_slot.set(None);
                         set_comments.set(Vec::new());
                         set_save_result.set(None);
                         set_loaded_draft_id.set(None);
@@ -689,6 +776,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         set_our_side.set(d_our_side.clone());
                                                         set_comments.set(d_comments.clone());
                                                         set_save_result.set(None);
+                                                        set_highlighted_slot.set(None);
                                                         let mut slots = vec![None::<String>; 20];
                                                         for action in &d_actions {
                                                             let o = action.order as usize;

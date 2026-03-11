@@ -6,6 +6,7 @@ pub fn ChampionAutocomplete(
     champions: Vec<Champion>,
     value: RwSignal<String>,
     #[prop(optional)] placeholder: &'static str,
+    #[prop(optional)] on_select: Option<Callback<String>>,
 ) -> impl IntoView {
     let (open, set_open) = signal(false);
     let (filter_text, set_filter_text) = signal(String::new());
@@ -28,8 +29,11 @@ pub fn ChampionAutocomplete(
 
     let select_champion = move |name: String| {
         value.set(name.clone());
-        set_filter_text.set(name);
+        set_filter_text.set(name.clone());
         set_open.set(false);
+        if let Some(cb) = on_select {
+            cb.run(name);
+        }
     };
 
     // Sync filter_text when value changes externally

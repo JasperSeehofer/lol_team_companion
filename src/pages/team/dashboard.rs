@@ -388,8 +388,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     {reqs.into_iter().map(|req| {
                                                                         let req_id_accept = req.id.clone();
                                                                         let req_id_decline = req.id.clone();
+                                                                        let (req_error, set_req_error) = signal(Option::<String>::None);
                                                                         view! {
-                                                                            <div class="flex items-center justify-between bg-overlay rounded px-4 py-3">
+                                                                            <div class="flex flex-col gap-1">
+                                                                                <div class="flex items-center justify-between bg-overlay rounded px-4 py-3">
                                                                                 <div>
                                                                                     <span class="text-primary font-medium">{req.username}</span>
                                                                                     {req.riot_summoner_name.map(|n| view! {
@@ -402,9 +404,14 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                         on:click=move |_| {
                                                                                             let id = req_id_accept.clone();
                                                                                             leptos::task::spawn_local(async move {
-                                                                                                let _ = handle_join_request(id, true).await;
-                                                                                                dashboard.refetch();
-                                                                                                requests.refetch();
+                                                                                                match handle_join_request(id, true).await {
+                                                                                                    Ok(_) => {
+                                                                                                        set_req_error.set(None);
+                                                                                                        dashboard.refetch();
+                                                                                                        requests.refetch();
+                                                                                                    }
+                                                                                                    Err(e) => set_req_error.set(Some(format!("Error: {e}"))),
+                                                                                                }
                                                                                             });
                                                                                         }
                                                                                     >"Accept"</button>
@@ -419,6 +426,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                         }
                                                                                     >"Decline"</button>
                                                                                 </div>
+                                                                            </div>
+                                                                            {move || req_error.get().map(|e| view! {
+                                                                                <p class="text-red-400 text-xs px-1">{e}</p>
+                                                                            })}
                                                                             </div>
                                                                         }
                                                                     }).collect_view()}
