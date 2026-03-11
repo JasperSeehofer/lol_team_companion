@@ -56,3 +56,81 @@ pub struct DraftTreeNode {
     pub actions: Vec<DraftAction>,
     pub children: Vec<DraftTreeNode>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn draft_round_trips_json() {
+        let d = Draft {
+            id: Some("draft:1".into()),
+            name: "Test Draft".into(),
+            team_id: "team:t1".into(),
+            created_by: "user:u1".into(),
+            opponent: Some("Team Evil".into()),
+            notes: None,
+            rating: None,
+            our_side: "blue".into(),
+            actions: vec![],
+            comments: vec!["nice play".into()],
+        };
+        let json = serde_json::to_string(&d).unwrap();
+        let back: Draft = serde_json::from_str(&json).unwrap();
+        assert_eq!(d, back);
+    }
+
+    #[test]
+    fn draft_action_round_trips_json() {
+        let a = DraftAction {
+            id: None,
+            draft_id: "draft:1".into(),
+            phase: "ban1".into(),
+            side: "blue".into(),
+            champion: "Azir".into(),
+            order: 0,
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        let back: DraftAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(a, back);
+    }
+
+    #[test]
+    fn draft_tree_round_trips_json() {
+        let t = DraftTree {
+            id: Some("draft_tree:1".into()),
+            name: "My Tree".into(),
+            team_id: "team:t1".into(),
+            created_by: "user:u1".into(),
+            opponent: None,
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        let back: DraftTree = serde_json::from_str(&json).unwrap();
+        assert_eq!(t, back);
+    }
+
+    #[test]
+    fn draft_tree_node_with_children_round_trips_json() {
+        let node = DraftTreeNode {
+            id: Some("draft_tree_node:1".into()),
+            tree_id: "draft_tree:1".into(),
+            parent_id: None,
+            label: "Root".into(),
+            notes: Some("root note".into()),
+            is_improvised: false,
+            sort_order: 0,
+            actions: vec![DraftAction {
+                id: None,
+                draft_id: String::new(),
+                phase: "pick1".into(),
+                side: "blue".into(),
+                champion: "Jinx".into(),
+                order: 1,
+            }],
+            children: vec![],
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let back: DraftTreeNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(node, back);
+    }
+}

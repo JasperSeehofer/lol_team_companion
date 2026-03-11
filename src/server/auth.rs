@@ -165,3 +165,35 @@ pub fn hash_password(password: &str) -> Result<String, String> {
         .map(|h| h.to_string())
         .map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hash_and_verify_password() {
+        use argon2::{Argon2, PasswordHash, PasswordVerifier};
+        let hash = hash_password("secret123").unwrap();
+        let parsed = PasswordHash::new(&hash).unwrap();
+        assert!(Argon2::default()
+            .verify_password(b"secret123", &parsed)
+            .is_ok());
+    }
+
+    #[test]
+    fn wrong_password_fails_verification() {
+        use argon2::{Argon2, PasswordHash, PasswordVerifier};
+        let hash = hash_password("correct_password").unwrap();
+        let parsed = PasswordHash::new(&hash).unwrap();
+        assert!(Argon2::default()
+            .verify_password(b"wrong_password", &parsed)
+            .is_err());
+    }
+
+    #[test]
+    fn hashes_are_non_deterministic() {
+        let h1 = hash_password("same_password").unwrap();
+        let h2 = hash_password("same_password").unwrap();
+        assert_ne!(h1, h2, "Argon2 should produce different hashes due to random salt");
+    }
+}

@@ -16,7 +16,7 @@ leptos_router = { version = "0.8" }
 leptos_axum = { version = "0.8", optional = true }
 axum = { version = "0.8", features = ["macros"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
-surrealdb = { version = "3", features = ["kv-surrealkv"], optional = true }
+surrealdb = { version = "3", features = ["kv-surrealkv", "kv-mem"], optional = true }
 surrealdb-types-derive = { version = "3", optional = true }
 tower-sessions = { version = "0.14", optional = true }
 tower-sessions-core = { version = "0.14", optional = true }
@@ -70,6 +70,9 @@ ssr = [
   "leptos_meta/ssr",
   "leptos_router/ssr",
 ]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
 
 [[bin]]
 name = "lol_team_companion"

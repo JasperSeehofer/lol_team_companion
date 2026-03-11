@@ -39,3 +39,50 @@ pub struct JoinRequest {
     pub username: String,
     pub riot_summoner_name: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn team_member_round_trips_json() {
+        let m = TeamMember {
+            user_id: "user:abc".into(),
+            username: "player1".into(),
+            role: "mid".into(),
+            roster_type: "starter".into(),
+            riot_summoner_name: Some("SummonerX".into()),
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let back: TeamMember = serde_json::from_str(&json).unwrap();
+        assert_eq!(m, back);
+    }
+
+    #[test]
+    fn team_member_no_summoner_round_trips() {
+        let m = TeamMember {
+            user_id: "user:1".into(),
+            username: "ghost".into(),
+            role: "sub".into(),
+            roster_type: "sub".into(),
+            riot_summoner_name: None,
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let back: TeamMember = serde_json::from_str(&json).unwrap();
+        assert_eq!(m, back);
+    }
+
+    #[test]
+    fn join_request_round_trips_json() {
+        let r = JoinRequest {
+            id: "join_request:1".into(),
+            team_id: "team:t1".into(),
+            user_id: "user:u1".into(),
+            username: "alice".into(),
+            riot_summoner_name: None,
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        let back: JoinRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(r, back);
+    }
+}

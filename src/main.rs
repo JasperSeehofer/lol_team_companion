@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 use axum::Router;
 use axum_login::{AuthManagerLayerBuilder, tower_sessions::SessionManagerLayer};
 use leptos::prelude::*;

@@ -1,0 +1,29 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check SSR target
+        run: cargo check --features ssr
+
+      - name: Check WASM/hydrate target
+        run: cargo check --features hydrate --target wasm32-unknown-unknown
+
+      - name: Run tests
+        run: cargo test --features ssr
+
+      - name: Clippy (SSR)
+        run: cargo clippy --features ssr -- -D warnings
+
+      - name: Format check
+        run: cargo fmt --check

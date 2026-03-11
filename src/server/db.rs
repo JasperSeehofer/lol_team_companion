@@ -437,7 +437,7 @@ pub async fn create_join_request(db: &Surreal<Db>, user_id: &str, team_id: &str)
 pub async fn list_pending_join_requests(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<JoinRequest>> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
-        .query("SELECT id, team, user.id as user_id, user.username as username, user.riot_summoner_name as riot_summoner_name FROM join_request WHERE team = type::record('team', $team_key) AND status = 'pending' ORDER BY created_at ASC")
+        .query("SELECT id, team, user.id as user_id, user.username as username, user.riot_summoner_name as riot_summoner_name FROM join_request WHERE team = type::record('team', $team_key) AND status = 'pending'")
         .bind(("team_key", team_key))
         .await?;
     let rows: Vec<DbJoinRequest> = r.take(0).unwrap_or_default();
@@ -852,51 +852,44 @@ pub async fn get_tree_nodes(db: &Surreal<Db>, tree_id: &str) -> DbResult<Vec<Dra
         })
         .collect();
 
-    // Build tree structure
+    // Build tree structure using a parent → [child_ids] map, then recursive DFS.
+    // This is correct regardless of the order flat_nodes are returned.
     let mut node_map: HashMap<String, DraftTreeNode> = HashMap::new();
     let mut root_ids: Vec<String> = Vec::new();
-    let mut child_ids: Vec<(String, String)> = Vec::new(); // (parent_id, child_id)
+    let mut children_of: HashMap<String, Vec<String>> = HashMap::new();
 
     for node in flat_nodes {
         let id = node.id.clone().unwrap_or_default();
-        if node.parent_id.is_none() {
-            root_ids.push(id.clone());
+        if let Some(ref pid) = node.parent_id {
+            children_of.entry(pid.clone()).or_default().push(id.clone());
         } else {
-            child_ids.push((node.parent_id.clone().unwrap_or_default(), id.clone()));
+            root_ids.push(id.clone());
         }
         node_map.insert(id, node);
     }
 
-    // Attach children bottom-up
-    // Sort child_ids so we process deepest nodes first (approximation: reverse order)
-    child_ids.reverse();
-    for (parent_id, child_id) in child_ids {
-        if let Some(child) = node_map.remove(&child_id) {
-            if let Some(parent) = node_map.get_mut(&parent_id) {
-                parent.children.push(child);
-            } else {
-                // Parent was already consumed, put child back
-                node_map.insert(child_id, child);
-            }
+    fn attach_children(
+        node_id: &str,
+        node_map: &mut HashMap<String, DraftTreeNode>,
+        children_of: &HashMap<String, Vec<String>>,
+    ) -> Option<DraftTreeNode> {
+        let mut node = node_map.remove(node_id)?;
+        if let Some(child_ids) = children_of.get(node_id) {
+            let mut children: Vec<DraftTreeNode> = child_ids
+                .iter()
+                .filter_map(|cid| attach_children(cid, node_map, children_of))
+                .collect();
+            children.sort_by_key(|c| c.sort_order);
+            node.children = children;
         }
-    }
-
-    // Sort children by sort_order
-    fn sort_children(node: &mut DraftTreeNode) {
-        node.children.sort_by_key(|c| c.sort_order);
-        for child in &mut node.children {
-            sort_children(child);
-        }
+        Some(node)
     }
 
     let mut roots: Vec<DraftTreeNode> = root_ids
-        .into_iter()
-        .filter_map(|id| node_map.remove(&id))
+        .iter()
+        .filter_map(|id| attach_children(id, &mut node_map, &children_of))
         .collect();
-
-    for root in &mut roots {
-        sort_children(root);
-    }
+    roots.sort_by_key(|r| r.sort_order);
 
     Ok(roots)
 }
@@ -1433,4 +1426,44 @@ pub async fn delete_post_game_learning(db: &Surreal<Db>, id: &str) -> DbResult<(
         .await?
         .check()?;
     Ok(())
+}
+
+pub async fn delete_draft(db: &Surreal<Db>, draft_id: &str) -> DbResult<()> {
+    let draft_key = draft_id.strip_prefix("draft:").unwrap_or(draft_id).to_string();
+    db.query("DELETE draft_action WHERE draft = type::record('draft', $draft_key); DELETE type::record('draft', $draft_key)")
+        .bind(("draft_key", draft_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn strip_user_prefix_with_prefix() {
+        let input = "user:abc123";
+        let result = input.strip_prefix("user:").unwrap_or(input).to_string();
+        assert_eq!(result, "abc123");
+    }
+
+    #[test]
+    fn strip_user_prefix_without_prefix() {
+        let input = "abc123";
+        let result = input.strip_prefix("user:").unwrap_or(input).to_string();
+        assert_eq!(result, "abc123");
+    }
+
+    #[test]
+    fn strip_team_prefix_with_prefix() {
+        let input = "team:xyz";
+        let result = input.strip_prefix("team:").unwrap_or(input).to_string();
+        assert_eq!(result, "xyz");
+    }
+
+    #[test]
+    fn strip_draft_prefix_without_prefix_is_identity() {
+        let input = "rawkey";
+        let result = input.strip_prefix("draft:").unwrap_or(input).to_string();
+        assert_eq!(result, "rawkey");
+    }
 }

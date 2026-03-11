@@ -37,3 +37,77 @@ pub struct PostGameLearning {
     pub open_notes: Option<String>,
     pub created_by: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn game_plan_all_options_none_round_trips() {
+        let plan = GamePlan {
+            id: None,
+            team_id: "team:t1".into(),
+            draft_id: None,
+            name: "Plan A".into(),
+            our_champions: vec!["Jinx".into()],
+            enemy_champions: vec!["Caitlyn".into()],
+            win_conditions: vec!["Teamfight".into()],
+            objective_priority: vec!["Dragon".into()],
+            teamfight_strategy: "Fight 5v5".into(),
+            early_game: None,
+            top_strategy: None,
+            jungle_strategy: None,
+            mid_strategy: None,
+            bot_strategy: None,
+            support_strategy: None,
+            notes: None,
+        };
+        let json = serde_json::to_string(&plan).unwrap();
+        let back: GamePlan = serde_json::from_str(&json).unwrap();
+        assert_eq!(plan, back);
+    }
+
+    #[test]
+    fn game_plan_all_options_some_round_trips() {
+        let plan = GamePlan {
+            id: Some("game_plan:1".into()),
+            team_id: "team:t1".into(),
+            draft_id: Some("draft:1".into()),
+            name: "Plan B".into(),
+            our_champions: vec![],
+            enemy_champions: vec![],
+            win_conditions: vec![],
+            objective_priority: vec![],
+            teamfight_strategy: "Poke".into(),
+            early_game: Some("Invade".into()),
+            top_strategy: Some("Split push".into()),
+            jungle_strategy: Some("Farm".into()),
+            mid_strategy: Some("Roam".into()),
+            bot_strategy: Some("Farm".into()),
+            support_strategy: Some("Engage".into()),
+            notes: Some("Important notes".into()),
+        };
+        let json = serde_json::to_string(&plan).unwrap();
+        let back: GamePlan = serde_json::from_str(&json).unwrap();
+        assert_eq!(plan, back);
+    }
+
+    #[test]
+    fn post_game_learning_round_trips_json() {
+        let pgl = PostGameLearning {
+            id: Some("post_game_learning:1".into()),
+            team_id: "team:t1".into(),
+            match_riot_id: Some("EUW1_1234".into()),
+            game_plan_id: None,
+            draft_id: None,
+            what_went_well: vec!["Dragon control".into()],
+            improvements: vec!["Baron timing".into()],
+            action_items: vec!["Review baron fight vod".into()],
+            open_notes: None,
+            created_by: "user:u1".into(),
+        };
+        let json = serde_json::to_string(&pgl).unwrap();
+        let back: PostGameLearning = serde_json::from_str(&json).unwrap();
+        assert_eq!(pgl, back);
+    }
+}
