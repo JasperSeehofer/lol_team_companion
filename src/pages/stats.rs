@@ -264,7 +264,7 @@ pub fn StatsPage() -> impl IntoView {
     let (min_players, set_min_players) = signal(2_usize);
     let (filter_player, set_filter_player) = signal(String::new());
     let (filter_queue, set_filter_queue) = signal(0_i32); // 0 = all queues
-    let (show_all, set_show_all) = signal(false); // false = team games only
+    let (show_all, set_show_all) = signal(true); // true = show all matches by default
 
     let do_sync = move |_| {
         set_syncing.set(true);
@@ -376,6 +376,35 @@ pub fn StatsPage() -> impl IntoView {
                 }.into_any(),
             })}
 
+            // All / Team toggle (always visible)
+            <div class="flex items-center gap-3">
+                <div class="flex rounded-lg overflow-hidden border border-outline/50">
+                    <button
+                        class=move || if show_all.get() {
+                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
+                        } else {
+                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
+                        }
+                        on:click=move |_| set_show_all.set(true)
+                    >"All Matches"</button>
+                    <button
+                        class=move || if !show_all.get() {
+                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
+                        } else {
+                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
+                        }
+                        on:click=move |_| set_show_all.set(false)
+                    >"Team Games"</button>
+                </div>
+                <span class="text-dimmed text-xs">
+                    {move || if show_all.get() {
+                        "Showing all matches including solo queue"
+                    } else {
+                        "Showing games with 2+ team members"
+                    }}
+                </span>
+            </div>
+
             // Stats content
             <Suspense fallback=|| view! { <div class="text-dimmed text-center py-8">"Loading stats..."</div> }>
                 {move || stats.get().map(|result| match result {
@@ -414,7 +443,6 @@ pub fn StatsPage() -> impl IntoView {
                                 filter_queue=filter_queue
                                 set_filter_queue=set_filter_queue
                                 show_all=show_all
-                                set_show_all=set_show_all
                             />
                         }.into_any()
                     }
@@ -436,7 +464,6 @@ fn StatsContent(
     filter_queue: ReadSignal<i32>,
     set_filter_queue: WriteSignal<i32>,
     show_all: ReadSignal<bool>,
-    set_show_all: WriteSignal<bool>,
 ) -> impl IntoView {
     let all_matches = StoredValue::new(all_matches);
     let unique_players_for_filter = unique_players.clone();
@@ -515,27 +542,7 @@ fn StatsContent(
         <div class="flex flex-col gap-6">
             // Filters
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
-                // All / Team toggle
-                <div class="flex rounded-lg overflow-hidden border border-outline/50">
-                    <button
-                        class=move || if !show_all.get() {
-                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
-                        } else {
-                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
-                        }
-                        on:click=move |_| set_show_all.set(false)
-                    >"Team Games"</button>
-                    <button
-                        class=move || if show_all.get() {
-                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
-                        } else {
-                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
-                        }
-                        on:click=move |_| set_show_all.set(true)
-                    >"All Matches"</button>
-                </div>
-
-                <span class="text-overlay-strong">"|"</span>
+                <span class="text-muted text-sm font-medium">"Filters:"</span>
 
                 // Queue type filter
                 <div class="flex items-center gap-2">
