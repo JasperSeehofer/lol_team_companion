@@ -29,6 +29,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             side: "blue".into(),
             champion: "Azir".into(),
             order: 0,
+            comment: None,
         },
         DraftAction {
             id: None,
@@ -37,6 +38,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             side: "blue".into(),
             champion: "Jinx".into(),
             order: 1,
+            comment: Some("strong ADC".into()),
         },
     ]
 }
@@ -58,6 +60,9 @@ async fn test_save_draft_with_actions() {
         actions,
         None,
         "blue".into(),
+        vec!["teamfight".into()],
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -68,6 +73,8 @@ async fn test_save_draft_with_actions() {
     assert_eq!(drafts.len(), 1);
     assert_eq!(drafts[0].name, "Draft 1");
     assert_eq!(drafts[0].actions.len(), 2);
+    assert_eq!(drafts[0].tags, vec!["teamfight".to_string()]);
+    assert_eq!(drafts[0].actions[1].comment, Some("strong ADC".into()));
 }
 
 #[tokio::test]
@@ -86,6 +93,9 @@ async fn test_update_draft_replaces_actions() {
         sample_actions(""),
         None,
         "blue".into(),
+        vec![],
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -98,6 +108,7 @@ async fn test_update_draft_replaces_actions() {
         side: "red".into(),
         champion: "Thresh".into(),
         order: 0,
+        comment: None,
     }];
 
     db::update_draft(
@@ -110,6 +121,9 @@ async fn test_update_draft_replaces_actions() {
         new_actions,
         Some("A".into()),
         "red".into(),
+        vec!["pick".into()],
+        Some("Win early".into()),
+        Some("Watch for scaling".into()),
     )
     .await
     .unwrap();
@@ -120,6 +134,9 @@ async fn test_update_draft_replaces_actions() {
     assert_eq!(drafts[0].our_side, "red");
     assert_eq!(drafts[0].actions.len(), 1, "old actions should be replaced");
     assert_eq!(drafts[0].actions[0].champion, "Thresh");
+    assert_eq!(drafts[0].tags, vec!["pick".to_string()]);
+    assert_eq!(drafts[0].win_conditions, Some("Win early".into()));
+    assert_eq!(drafts[0].watch_out, Some("Watch for scaling".into()));
 }
 
 #[tokio::test]
@@ -138,6 +155,9 @@ async fn test_list_drafts_aggregates_actions_correctly() {
         sample_actions(""),
         None,
         "blue".into(),
+        vec![],
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -153,6 +173,9 @@ async fn test_list_drafts_aggregates_actions_correctly() {
         vec![],
         None,
         "red".into(),
+        vec![],
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -181,6 +204,9 @@ async fn test_delete_draft() {
         sample_actions(""),
         None,
         "blue".into(),
+        vec![],
+        None,
+        None,
     )
     .await
     .unwrap();

@@ -61,6 +61,9 @@ DEFINE FIELD IF NOT EXISTS notes ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS comments ON draft TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS rating ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS our_side ON draft TYPE string DEFAULT 'blue';
+DEFINE FIELD IF NOT EXISTS tags ON draft TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS win_conditions ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS watch_out ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
 -- Picks/bans in a draft
@@ -70,11 +73,12 @@ DEFINE FIELD IF NOT EXISTS phase ON draft_action TYPE string;
 DEFINE FIELD IF NOT EXISTS side ON draft_action TYPE string;
 DEFINE FIELD IF NOT EXISTS champion ON draft_action TYPE string;
 DEFINE FIELD IF NOT EXISTS `order` ON draft_action TYPE int;
+DEFINE FIELD IF NOT EXISTS comment ON draft_action TYPE option<string>;
 
 -- Game plans
 DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON game_plan TYPE string DEFAULT '';
-DEFINE FIELD IF NOT EXISTS draft ON game_plan TYPE option<string>;
+DEFINE FIELD OVERWRITE draft ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS team ON game_plan TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS our_champions ON game_plan TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS enemy_champions ON game_plan TYPE array<string> DEFAULT [];
@@ -138,6 +142,15 @@ DEFINE FIELD IF NOT EXISTS phase ON tree_node_action TYPE string;
 DEFINE FIELD IF NOT EXISTS side ON tree_node_action TYPE string;
 DEFINE FIELD IF NOT EXISTS champion ON tree_node_action TYPE string;
 DEFINE FIELD IF NOT EXISTS `order` ON tree_node_action TYPE int;
+DEFINE FIELD IF NOT EXISTS comment ON tree_node_action TYPE option<string>;
+
+-- Ban priority list
+DEFINE TABLE IF NOT EXISTS ban_priority SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON ban_priority TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS champion ON ban_priority TYPE string;
+DEFINE FIELD IF NOT EXISTS rank ON ban_priority TYPE int;
+DEFINE FIELD IF NOT EXISTS reason ON ban_priority TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON ban_priority TYPE datetime DEFAULT time::now();
 
 -- Sessions (for tower-sessions-surrealdb-store)
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;

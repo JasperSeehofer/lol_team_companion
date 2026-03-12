@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Game plan save error when linking a draft: DB had stale `record<draft>` field type from old schema; `DEFINE FIELD IF NOT EXISTS` never overwrote it — changed to `DEFINE FIELD OVERWRITE`
 - Stats: matches not appearing after sync — `player_match` writes silently discarded by `.ok()` (now `.check()?`), and `get_team_match_stats` deserialization failed on `datetime` field (added `<string>` cast) and `match` record ref returned as `NONE` by `SELECT *` traversal (now `Option<RecordId>`)
 - Draft auto-save Effect: eagerly captures all signal values before timer closure (CLAUDE.md rule 54), preventing stale data saves for tags/win conditions/watch out/slot comments
 - 23 clippy warnings: unnecessary casts in riot.rs, clone-on-copy in draft_board.rs, redundant closure in register.rs, type complexity in post_game.rs, manual_memcpy in tree_drafter.rs, too_many_arguments in db.rs

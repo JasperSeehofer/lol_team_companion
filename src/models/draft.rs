@@ -16,6 +16,12 @@ pub struct Draft {
     pub our_side: String,
     pub actions: Vec<DraftAction>,
     pub comments: Vec<String>,
+    /// Composition tags like "teamfight", "split-push", etc.
+    pub tags: Vec<String>,
+    /// Win condition notes for this draft
+    pub win_conditions: Option<String>,
+    /// "Watch out for" notes
+    pub watch_out: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -29,6 +35,8 @@ pub struct DraftAction {
     pub side: String,
     pub champion: String,
     pub order: i32,
+    /// Per-pick rationale comment
+    pub comment: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +65,19 @@ pub struct DraftTreeNode {
     pub children: Vec<DraftTreeNode>,
 }
 
+// ---------------------------------------------------------------------------
+// Ban Priority
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct BanPriority {
+    pub id: Option<String>,
+    pub team_id: String,
+    pub champion: String,
+    pub rank: i32,
+    pub reason: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,6 +95,9 @@ mod tests {
             our_side: "blue".into(),
             actions: vec![],
             comments: vec!["nice play".into()],
+            tags: vec!["teamfight".into()],
+            win_conditions: None,
+            watch_out: None,
         };
         let json = serde_json::to_string(&d).unwrap();
         let back: Draft = serde_json::from_str(&json).unwrap();
@@ -89,6 +113,7 @@ mod tests {
             side: "blue".into(),
             champion: "Azir".into(),
             order: 0,
+            comment: None,
         };
         let json = serde_json::to_string(&a).unwrap();
         let back: DraftAction = serde_json::from_str(&json).unwrap();
@@ -126,6 +151,7 @@ mod tests {
                 side: "blue".into(),
                 champion: "Jinx".into(),
                 order: 1,
+                comment: Some("strong ADC pick".into()),
             }],
             children: vec![],
         };

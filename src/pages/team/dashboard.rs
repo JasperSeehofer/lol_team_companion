@@ -290,6 +290,69 @@ const MEMBER_ROLES: &[&str] = &[
 ];
 const STARTER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support"];
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct RecentMatch {
+    pub riot_match_id: String,
+    pub champion: String,
+    pub kills: i32,
+    pub deaths: i32,
+    pub assists: i32,
+    pub win: bool,
+    pub game_end: Option<String>,
+    pub username: String,
+}
+
+#[server]
+pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    let rows = db::get_team_match_stats(&db, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Group by riot_match_id, take most recent 3 unique matches
+    let mut seen = std::collections::HashSet::new();
+    let mut recent: Vec<RecentMatch> = Vec::new();
+    for r in rows {
+        if seen.contains(&r.riot_match_id) {
+            continue;
+        }
+        seen.insert(r.riot_match_id.clone());
+        recent.push(RecentMatch {
+            riot_match_id: r.riot_match_id,
+            champion: r.champion,
+            kills: r.kills,
+            deaths: r.deaths,
+            assists: r.assists,
+            win: r.win,
+            game_end: r.game_end,
+            username: r.username,
+        });
+        if recent.len() >= 3 {
+            break;
+        }
+    }
+    Ok(recent)
+}
+
 fn role_icon_url(role: &str) -> &'static str {
     match role {
         "top" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
@@ -316,6 +379,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
     let dashboard = Resource::new(|| (), |_| get_team_dashboard());
     let requests = Resource::new(|| (), |_| get_pending_requests());
+    let recent_matches = Resource::new(|| (), |_| get_recent_team_matches());
 
     view! {
         <div class="max-w-4xl mx-auto py-8 px-6">
@@ -801,6 +865,61 @@ pub fn TeamDashboard() -> impl IntoView {
                                             </div>
                                         }.into_any()
                                     }}
+                                </div>
+
+                                // Recent games
+                                <div>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h3 class="text-lg font-semibold text-primary">"Recent Games"</h3>
+                                        <A href="/stats" attr:class="text-accent text-sm hover:underline">"View all stats \u{2192}"</A>
+                                    </div>
+                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                        {move || recent_matches.get().map(|res| match res {
+                                            Ok(matches) if matches.is_empty() => {
+                                                view! { <p class="text-dimmed text-sm">"No matches synced yet. Go to Stats to sync match history."</p> }.into_any()
+                                            }
+                                            Ok(matches) => {
+                                                view! {
+                                                    <div class="flex flex-col gap-2">
+                                                        {matches.into_iter().map(|m| {
+                                                            let champ_img = format!(
+                                                                "https://ddragon.leagueoflegends.com/cdn/15.5.1/img/champion/{}.png",
+                                                                m.champion
+                                                            );
+                                                            let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
+                                                            let win = m.win;
+                                                            let date_str = m.game_end.unwrap_or_else(|| "Unknown".into());
+                                                            view! {
+                                                                <div class=if win {
+                                                                    "flex items-center gap-3 bg-blue-950/40 border border-blue-800/30 rounded-lg px-4 py-2.5"
+                                                                } else {
+                                                                    "flex items-center gap-3 bg-red-950/40 border border-red-800/30 rounded-lg px-4 py-2.5"
+                                                                }>
+                                                                    <img src=champ_img alt=m.champion.clone() class="w-8 h-8 rounded-full" />
+                                                                    <div class="flex-1 min-w-0">
+                                                                        <div class="flex items-center gap-2">
+                                                                            <span class="text-primary text-sm font-medium">{m.champion}</span>
+                                                                            <span class="text-muted text-xs">{m.username}</span>
+                                                                        </div>
+                                                                        <span class="text-dimmed text-xs">{date_str}</span>
+                                                                    </div>
+                                                                    <span class="text-secondary text-sm font-medium">{kda}</span>
+                                                                    <span class=if win {
+                                                                        "text-xs font-bold text-blue-400 bg-blue-500/20 rounded px-1.5 py-0.5"
+                                                                    } else {
+                                                                        "text-xs font-bold text-red-400 bg-red-500/20 rounded px-1.5 py-0.5"
+                                                                    }>
+                                                                        {if win { "W" } else { "L" }}
+                                                                    </span>
+                                                                </div>
+                                                            }
+                                                        }).collect_view()}
+                                                    </div>
+                                                }.into_any()
+                                            }
+                                            Err(_) => view! { <p class="text-dimmed text-sm">"Could not load recent matches."</p> }.into_any(),
+                                        })}
+                                    </Suspense>
                                 </div>
 
                                 // Leave team (non-leaders only)

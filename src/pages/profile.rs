@@ -115,6 +115,8 @@ pub fn ProfilePage() -> impl IntoView {
                         Ok(Some(u)) => {
                             let username = u.username.clone();
                             let riot_name = u.riot_summoner_name.clone();
+                            let (editing_username, set_editing_username) = signal(false);
+                            let username_for_edit = username.clone();
                             view! {
                                 <div class="flex flex-col gap-6">
                                     // Account info
@@ -134,26 +136,57 @@ pub fn ProfilePage() -> impl IntoView {
                                             }.into_any(),
                                         })}
 
-                                        <ActionForm action=update_profile_action>
-                                            <div class="flex flex-col gap-4">
-                                                <div>
-                                                    <label class="block text-secondary text-sm mb-1">"Username"</label>
-                                                    <input
-                                                        type="text"
-                                                        name="username"
-                                                        value=username
-                                                        required
-                                                        class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
-                                                    />
-                                                </div>
-                                                <button
-                                                    type="submit"
-                                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors"
-                                                >
-                                                    "Save"
-                                                </button>
-                                            </div>
-                                        </ActionForm>
+                                        <div>
+                                            <label class="block text-secondary text-sm mb-1">"Username"</label>
+                                            {move || {
+                                                if editing_username.get() {
+                                                    let username_val = username_for_edit.clone();
+                                                    view! {
+                                                        <div class="flex gap-2 items-center">
+                                                            <ActionForm action=update_profile_action>
+                                                                <div class="flex gap-2 items-center">
+                                                                    <input
+                                                                        type="text"
+                                                                        name="username"
+                                                                        value=username_val
+                                                                        required
+                                                                        class="bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
+                                                                    />
+                                                                    <button
+                                                                        type="submit"
+                                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-2 py-2 text-sm transition-colors"
+                                                                    >
+                                                                        "Save"
+                                                                    </button>
+                                                                </div>
+                                                            </ActionForm>
+                                                            <button
+                                                                class="text-muted hover:text-secondary transition-colors cursor-pointer"
+                                                                on:click=move |_| set_editing_username.set(false)
+                                                            >
+                                                                "Cancel"
+                                                            </button>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    let username_display = username_for_edit.clone();
+                                                    view! {
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-primary text-lg">{username_display}</span>
+                                                            <button
+                                                                class="text-muted hover:text-accent transition-colors cursor-pointer"
+                                                                title="Edit username"
+                                                                on:click=move |_| set_editing_username.set(true)
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    }.into_any()
+                                                }
+                                            }}
+                                        </div>
                                     </section>
 
                                     // Riot account linking

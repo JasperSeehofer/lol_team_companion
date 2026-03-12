@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::models::{
     champion::ChampionPoolEntry,
-    draft::{Draft, DraftAction, DraftTree, DraftTreeNode},
+    draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
     team::Team,
@@ -618,6 +618,9 @@ struct DbDraft {
     rating: Option<String>,
     our_side: String,
     comments: Vec<String>,
+    tags: Vec<String>,
+    win_conditions: Option<String>,
+    watch_out: Option<String>,
 }
 
 impl From<DbDraft> for Draft {
@@ -633,6 +636,9 @@ impl From<DbDraft> for Draft {
             our_side: d.our_side,
             actions: Vec::new(),
             comments: d.comments,
+            tags: d.tags,
+            win_conditions: d.win_conditions,
+            watch_out: d.watch_out,
         }
     }
 }
@@ -645,6 +651,7 @@ struct DbDraftAction {
     side: String,
     champion: String,
     order: i32,
+    comment: Option<String>,
 }
 
 impl From<DbDraftAction> for DraftAction {
@@ -656,6 +663,7 @@ impl From<DbDraftAction> for DraftAction {
             side: a.side,
             champion: a.champion,
             order: a.order,
+            comment: a.comment,
         }
     }
 }
@@ -672,12 +680,15 @@ pub async fn save_draft(
     actions: Vec<DraftAction>,
     rating: Option<String>,
     our_side: String,
+    tags: Vec<String>,
+    win_conditions: Option<String>,
+    watch_out: Option<String>,
 ) -> DbResult<String> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     let mut response = db
-        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side")
+        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out")
         .bind(("name", name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -686,6 +697,9 @@ pub async fn save_draft(
         .bind(("comments", comments))
         .bind(("rating", rating))
         .bind(("our_side", our_side))
+        .bind(("tags", tags))
+        .bind(("win_conditions", win_conditions))
+        .bind(("watch_out", watch_out))
         .await?;
 
     let row: Option<IdRecord> = response.take(0)?;
@@ -701,12 +715,13 @@ pub async fn save_draft(
 
     for action in actions {
         let dk = draft_key.clone();
-        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order")
+        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment")
             .bind(("draft_key", dk))
             .bind(("phase", action.phase))
             .bind(("side", action.side))
             .bind(("champion", action.champion))
             .bind(("order", action.order))
+            .bind(("comment", action.comment))
             .await?
             .check()?;
     }
@@ -754,13 +769,16 @@ pub async fn update_draft(
     actions: Vec<DraftAction>,
     rating: Option<String>,
     our_side: String,
+    tags: Vec<String>,
+    win_conditions: Option<String>,
+    watch_out: Option<String>,
 ) -> DbResult<()> {
     let draft_key = draft_id
         .strip_prefix("draft:")
         .unwrap_or(draft_id)
         .to_string();
 
-    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side")
+    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out")
         .bind(("draft_key", draft_key.clone()))
         .bind(("name", name))
         .bind(("opponent", opponent))
@@ -768,6 +786,9 @@ pub async fn update_draft(
         .bind(("comments", comments))
         .bind(("rating", rating))
         .bind(("our_side", our_side))
+        .bind(("tags", tags))
+        .bind(("win_conditions", win_conditions))
+        .bind(("watch_out", watch_out))
         .await?
         .check()?;
 
@@ -778,12 +799,13 @@ pub async fn update_draft(
 
     for action in actions {
         let dk = draft_key.clone();
-        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order")
+        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment")
             .bind(("draft_key", dk))
             .bind(("phase", action.phase))
             .bind(("side", action.side))
             .bind(("champion", action.champion))
             .bind(("order", action.order))
+            .bind(("comment", action.comment))
             .await?
             .check()?;
     }
@@ -835,6 +857,7 @@ struct DbTreeNodeAction {
     side: String,
     champion: String,
     order: i32,
+    comment: Option<String>,
 }
 
 pub async fn create_draft_tree(
@@ -946,6 +969,7 @@ pub async fn get_tree_nodes(db: &Surreal<Db>, tree_id: &str) -> DbResult<Vec<Dra
                 side: a.side,
                 champion: a.champion,
                 order: a.order,
+                comment: a.comment,
             });
     }
 
@@ -1097,12 +1121,13 @@ pub async fn update_tree_node(
 
     for action in actions {
         let nk = node_key.clone();
-        db.query("CREATE tree_node_action SET node = type::record('draft_tree_node', $node_key), phase = $phase, side = $side, champion = $champion, `order` = $order")
+        db.query("CREATE tree_node_action SET node = type::record('draft_tree_node', $node_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment")
             .bind(("node_key", nk))
             .bind(("phase", action.phase))
             .bind(("side", action.side))
             .bind(("champion", action.champion))
             .bind(("order", action.order))
+            .bind(("comment", action.comment))
             .await?
             .check()?;
     }
@@ -1619,6 +1644,74 @@ pub async fn delete_draft(db: &Surreal<Db>, draft_id: &str) -> DbResult<()> {
         .bind(("draft_key", draft_key))
         .await?
         .check()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Ban Priority
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbBanPriority {
+    id: RecordId,
+    team: RecordId,
+    champion: String,
+    rank: i32,
+    reason: Option<String>,
+}
+
+impl From<DbBanPriority> for BanPriority {
+    fn from(b: DbBanPriority) -> Self {
+        BanPriority {
+            id: Some(b.id.to_sql()),
+            team_id: b.team.to_sql(),
+            champion: b.champion,
+            rank: b.rank,
+            reason: b.reason,
+        }
+    }
+}
+
+pub async fn get_ban_priorities(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<BanPriority>> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+    let mut r = db
+        .query("SELECT * FROM ban_priority WHERE team = type::record('team', $team_key) ORDER BY rank ASC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbBanPriority> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(BanPriority::from).collect())
+}
+
+pub async fn set_ban_priorities(
+    db: &Surreal<Db>,
+    team_id: &str,
+    priorities: Vec<BanPriority>,
+) -> DbResult<()> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+
+    // Delete old + create new in transaction
+    let mut query = String::from("BEGIN TRANSACTION; DELETE ban_priority WHERE team = type::record('team', $team_key);");
+    for (i, _) in priorities.iter().enumerate() {
+        query.push_str(&format!(
+            " CREATE ban_priority SET team = type::record('team', $team_key), champion = $champ_{i}, rank = $rank_{i}, reason = $reason_{i};"
+        ));
+    }
+    query.push_str(" COMMIT TRANSACTION;");
+
+    let mut q = db.query(&query).bind(("team_key", team_key));
+    for (i, p) in priorities.iter().enumerate() {
+        q = q
+            .bind((format!("champ_{i}"), p.champion.clone()))
+            .bind((format!("rank_{i}"), p.rank))
+            .bind((format!("reason_{i}"), p.reason.clone()));
+    }
+    q.await?.check()?;
     Ok(())
 }
 

@@ -219,6 +219,7 @@ fn build_actions_from_slots(slots: &[Option<String>]) -> Vec<DraftAction> {
                     side: side.to_string(),
                     champion: champ.clone(),
                     order: i as i32,
+                    comment: None,
                 }
             })
         })

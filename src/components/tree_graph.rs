@@ -3,11 +3,11 @@ use crate::models::draft::{DraftAction, DraftTreeNode};
 use leptos::prelude::*;
 
 // Layout constants
-const NODE_W: f64 = 150.0;
-const NODE_H: f64 = 36.0;
-const LEVEL_H: f64 = 100.0;
-const H_GAP: f64 = 16.0;
-const ICON_SIZE: f64 = 22.0;
+const NODE_W: f64 = 180.0;
+const NODE_H: f64 = 42.0;
+const LEVEL_H: f64 = 120.0;
+const H_GAP: f64 = 24.0;
+const ICON_SIZE: f64 = 26.0;
 const SELECTED_STROKE_WIDTH: &str = "2.5";
 
 /// Positioned node for the layout algorithm
@@ -205,7 +205,7 @@ pub fn TreeGraph(
     }
 
     view! {
-        <div class="w-full overflow-auto bg-elevated/30 border border-divider/30 rounded-xl" style="max-height: 70vh;">
+        <div class="w-full overflow-auto bg-elevated/30 border border-divider/30 rounded-xl" style="max-height: 85vh;">
             <svg
                 width=format!("{canvas_w}")
                 height=format!("{canvas_h}")
@@ -223,6 +223,9 @@ pub fn TreeGraph(
                             <feMergeNode in="glow" />
                             <feMergeNode in="SourceGraphic" />
                         </feMerge>
+                    </filter>
+                    <filter id="grayscale-ban" color-interpolation-filters="sRGB">
+                        <feColorMatrix type="saturate" values="0"/>
                     </filter>
                 </defs>
                 // Edges
@@ -262,7 +265,7 @@ pub fn TreeGraph(
                                 m.get(&diff.name).map(|c| c.image_full.clone()).unwrap_or_default()
                             });
                             let border_color = if diff.is_ban {
-                                "var(--t-accent, #ef4444)"
+                                "var(--t-muted)"
                             } else {
                                 "var(--t-accent, #22c55e)"
                             };
@@ -277,23 +280,6 @@ pub fn TreeGraph(
                                         stroke=border_color
                                         stroke-width="1.5"
                                     />
-                                    // Ban cross overlay
-                                    {diff.is_ban.then(|| {
-                                        let cx = ix + ICON_SIZE / 2.0;
-                                        let cy = iy + ICON_SIZE / 2.0;
-                                        let r = ICON_SIZE / 2.0;
-                                        view! {
-                                            <line
-                                                x1=format!("{}", cx - r * 0.6)
-                                                y1=format!("{}", cy - r * 0.6)
-                                                x2=format!("{}", cx + r * 0.6)
-                                                y2=format!("{}", cy + r * 0.6)
-                                                stroke="#ef4444"
-                                                stroke-width="2"
-                                                stroke-linecap="round"
-                                            />
-                                        }
-                                    })}
                                     // Champion image (clipped to circle)
                                     <clipPath id=format!("clip-edge-{}-{}", ix as i32, iy as i32)>
                                         <circle
@@ -310,6 +296,8 @@ pub fn TreeGraph(
                                         height=format!("{ICON_SIZE}")
                                         clip-path=format!("url(#clip-edge-{}-{})", ix as i32, iy as i32)
                                         preserveAspectRatio="xMidYMid slice"
+                                        filter={if diff.is_ban { "url(#grayscale-ban)" } else { "" }}
+                                        opacity={if diff.is_ban { "0.5" } else { "1" }}
                                     />
                                 </g>
                             }
@@ -411,7 +399,7 @@ pub fn TreeGraph(
                             // Icon indicator
                             <text
                                 x=format!("{}", x + 10.0)
-                                y=format!("{}", y + NODE_H / 2.0 + 4.0)
+                                y=format!("{}", y + NODE_H / 2.0 + 5.0)
                                 font-size="10"
                                 fill={
                                     if is_improvised { "#fbbf24" }
@@ -427,8 +415,8 @@ pub fn TreeGraph(
                             // Label — reactive fill based on selection
                             <text
                                 x=format!("{}", x + 22.0)
-                                y=format!("{}", y + NODE_H / 2.0 + 4.0)
-                                font-size="11"
+                                y=format!("{}", y + NODE_H / 2.0 + 5.0)
+                                font-size="12"
                                 fill=move || {
                                     if selected_node_id.get().as_deref() == Some(nid_for_label_fill.as_str()) {
                                         "var(--t-accent-contrast)"
@@ -439,8 +427,8 @@ pub fn TreeGraph(
                                 class="select-none"
                             >
                                 // Truncate label to fit
-                                {if label.len() > 14 {
-                                    format!("{}...", &label[..12])
+                                {if label.len() > 18 {
+                                    format!("{}...", &label[..16])
                                 } else {
                                     label.clone()
                                 }}
@@ -448,20 +436,20 @@ pub fn TreeGraph(
 
                             // Action count badge
                             {(action_count > 0).then(|| {
-                                let badge_x = x + NODE_W - 24.0;
+                                let badge_x = x + NODE_W - 28.0;
                                 let badge_y = y + 6.0;
                                 view! {
                                     <rect
                                         x=format!("{badge_x}")
                                         y=format!("{badge_y}")
-                                        width="18"
-                                        height="14"
+                                        width="20"
+                                        height="16"
                                         rx="7"
                                         fill="var(--t-overlay-strong)"
                                     />
                                     <text
-                                        x=format!("{}", badge_x + 9.0)
-                                        y=format!("{}", badge_y + 10.5)
+                                        x=format!("{}", badge_x + 10.0)
+                                        y=format!("{}", badge_y + 12.0)
                                         font-size="9"
                                         text-anchor="middle"
                                         fill="var(--t-secondary)"
@@ -488,7 +476,7 @@ pub fn TreeGraph(
                                 />
                                 <text
                                     x=format!("{}", x + NODE_W + 2.0)
-                                    y=format!("{}", y + NODE_H / 2.0 + 4.0)
+                                    y=format!("{}", y + NODE_H / 2.0 + 5.0)
                                     font-size="12"
                                     text-anchor="middle"
                                     fill="var(--t-accent)"
