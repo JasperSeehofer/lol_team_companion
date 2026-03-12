@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos_router::components::A;
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
 use crate::components::ui::{ErrorBanner, StatusMessage};
@@ -284,8 +285,15 @@ pub fn TeamDashboard() -> impl IntoView {
                         let (edit_name, set_edit_name) = signal(team.name.clone());
                         let (edit_region, set_edit_region) = signal(team.region.clone());
                         let (edit_msg, set_edit_msg) = signal(Option::<String>::None);
+                        let (show_edit_modal, set_show_edit_modal) = signal(false);
                         let (leave_confirm, set_leave_confirm) = signal(false);
                         let (leave_msg, set_leave_msg) = signal(Option::<String>::None);
+
+                        // Check if current user has riot account linked
+                        let current_user_riot_linked = members.iter()
+                            .find(|m| m.user_id == current_user_id)
+                            .map(|m| m.riot_summoner_name.is_some())
+                            .unwrap_or(false);
 
                         // Partition members
                         let starters: Vec<TeamMember> = members.iter()
@@ -311,8 +319,26 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div class="bg-elevated border border-divider rounded-lg p-6">
                                     <div class="flex items-start justify-between gap-4">
                                         <div>
-                                            <h2 class="text-xl font-bold text-accent mb-1">{team.name.clone()}</h2>
-                                            <p class="text-muted text-sm">"Region: " {team.region.clone()}</p>
+                                            <div class="flex items-center gap-2">
+                                                <h2 class="text-xl font-bold text-accent">{team.name.clone()}</h2>
+                                                {if is_leader {
+                                                    view! {
+                                                        <button
+                                                            class="text-muted hover:text-accent transition-colors cursor-pointer p-1 rounded hover:bg-overlay"
+                                                            title="Edit team details"
+                                                            on:click=move |_| set_show_edit_modal.set(true)
+                                                        >
+                                                            // Pencil SVG icon
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                            </svg>
+                                                        </button>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <span></span> }.into_any()
+                                                }}
+                                            </div>
+                                            <p class="text-muted text-sm mt-1">"Region: " {team.region.clone()}</p>
                                             {if is_leader {
                                                 view! { <span class="inline-block mt-1 text-xs text-accent font-medium bg-accent/10 rounded px-1.5 py-0.5">"Team Leader"</span> }.into_any()
                                             } else {
@@ -321,22 +347,46 @@ pub fn TeamDashboard() -> impl IntoView {
                                         </div>
                                     </div>
 
-                                    // Leader: edit team details
-                                    {if is_leader {
+                                    // Riot account status notice
+                                    {if !current_user_riot_linked {
                                         view! {
                                             <div class="mt-4 pt-4 border-t border-divider">
-                                                <h3 class="text-secondary text-sm font-medium mb-3">"Edit Team"</h3>
+                                                <p class="text-muted text-sm">
+                                                    "Riot account not linked \u{2014} "
+                                                    <A href="/profile" attr:class="text-accent hover:underline">"link it in your profile"</A>
+                                                </p>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span></span> }.into_any()
+                                    }}
+                                </div>
+
+                                // Edit team modal (leader only)
+                                {move || if show_edit_modal.get() {
+                                    view! {
+                                        // Backdrop
+                                        <div
+                                            class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center"
+                                            on:click=move |_| set_show_edit_modal.set(false)
+                                        >
+                                            // Modal content — stop click propagation
+                                            <div
+                                                class="bg-elevated border border-divider rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
+                                                on:click=move |ev| ev.stop_propagation()
+                                            >
+                                                <h3 class="text-primary text-lg font-semibold mb-4">"Edit Team"</h3>
                                                 {move || edit_msg.get().map(|m| {
                                                     view! { <div class="mb-3"><StatusMessage message=m /></div> }
                                                 })}
-                                                <div class="flex gap-3 items-end">
-                                                    <div class="flex-1">
+                                                <div class="flex flex-col gap-4">
+                                                    <div>
                                                         <label class="block text-muted text-xs mb-1">"Team Name"</label>
                                                         <input
                                                             type="text"
                                                             prop:value=move || edit_name.get()
                                                             on:input=move |ev| set_edit_name.set(event_target_value(&ev))
-                                                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                            class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
                                                         />
                                                     </div>
                                                     <div>
@@ -344,38 +394,64 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         <select
                                                             prop:value=move || edit_region.get()
                                                             on:change=move |ev| set_edit_region.set(event_target_value(&ev))
-                                                            class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                            class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
                                                         >
                                                             {["EUW","EUNE","NA","KR","BR"].iter().map(|&r| view! {
                                                                 <option value=r>{r}</option>
                                                             }).collect_view()}
                                                         </select>
                                                     </div>
-                                                    <button
-                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer"
-                                                        on:click=move |_| {
-                                                            let name = edit_name.get_untracked();
-                                                            let region = edit_region.get_untracked();
-                                                            leptos::task::spawn_local(async move {
-                                                                match update_team_info(name, region).await {
-                                                                    Ok(_) => {
-                                                                        set_edit_msg.set(Some("Saved!".into()));
-                                                                        dashboard.refetch();
+                                                    <div class="flex justify-end gap-3 pt-2">
+                                                        <button
+                                                            class="text-secondary hover:text-primary text-sm px-4 py-2 rounded transition-colors cursor-pointer hover:bg-overlay"
+                                                            on:click=move |_| {
+                                                                set_show_edit_modal.set(false);
+                                                                set_edit_msg.set(None);
+                                                            }
+                                                        >
+                                                            "Cancel"
+                                                        </button>
+                                                        <button
+                                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer"
+                                                            on:click=move |_| {
+                                                                let name = edit_name.get_untracked();
+                                                                let region = edit_region.get_untracked();
+                                                                leptos::task::spawn_local(async move {
+                                                                    match update_team_info(name, region).await {
+                                                                        Ok(_) => {
+                                                                            set_edit_msg.set(Some("Saved!".into()));
+                                                                            dashboard.refetch();
+                                                                            // Close modal after a brief delay to show success
+                                                                            #[cfg(feature = "hydrate")]
+                                                                            {
+                                                                                use wasm_bindgen::prelude::*;
+                                                                                let cb = Closure::once(move || {
+                                                                                    set_show_edit_modal.set(false);
+                                                                                    set_edit_msg.set(None);
+                                                                                });
+                                                                                if let Some(win) = web_sys::window() {
+                                                                                    let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                                                                                        cb.as_ref().unchecked_ref(), 800,
+                                                                                    );
+                                                                                }
+                                                                                cb.forget();
+                                                                            }
+                                                                        }
+                                                                        Err(e) => set_edit_msg.set(Some(format!("Error: {e}"))),
                                                                     }
-                                                                    Err(e) => set_edit_msg.set(Some(format!("Error: {e}"))),
-                                                                }
-                                                            });
-                                                        }
-                                                    >
-                                                        "Save"
-                                                    </button>
+                                                                });
+                                                            }
+                                                        >
+                                                            "Save"
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }}
-                                </div>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }}
 
                                 // Join requests (leader only)
                                 {if is_leader {
