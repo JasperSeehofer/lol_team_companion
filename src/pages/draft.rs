@@ -1,11 +1,11 @@
-use leptos::prelude::*;
-use std::collections::HashMap;
+use crate::components::champion_picker::ChampionPicker;
+use crate::components::draft_board::{slot_meta, DraftBoard};
+use crate::components::ui::ErrorBanner;
 use crate::models::champion::Champion;
 use crate::models::draft::{Draft, DraftAction};
 use crate::models::team::Team;
-use crate::components::draft_board::{DraftBoard, slot_meta};
-use crate::components::champion_picker::ChampionPicker;
-use crate::components::ui::ErrorBanner;
+use leptos::prelude::*;
+use std::collections::HashMap;
 
 #[server]
 pub async fn get_champions() -> Result<Vec<Champion>, ServerFnError> {
@@ -31,9 +31,11 @@ pub async fn save_draft(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
         .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
@@ -48,9 +50,20 @@ pub async fn save_draft(
             .ok_or_else(|| ServerFnError::new("You must be in a team to create a draft"))?,
     };
 
-    db::save_draft(&db, &resolved_team_id, &user.id, name, opponent, None, comments, actions, rating, our_side.unwrap_or_else(|| "blue".to_string()))
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    db::save_draft(
+        &db,
+        &resolved_team_id,
+        &user.id,
+        name,
+        opponent,
+        None,
+        comments,
+        actions,
+        rating,
+        our_side.unwrap_or_else(|| "blue".to_string()),
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 #[server]
@@ -69,18 +82,30 @@ pub async fn update_draft(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
         .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
     let comments: Vec<String> = serde_json::from_str(&comments_json)
         .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
 
-    db::update_draft(&db, &draft_id, name, opponent, None, comments, actions, rating, our_side.unwrap_or_else(|| "blue".to_string()))
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    db::update_draft(
+        &db,
+        &draft_id,
+        name,
+        opponent,
+        None,
+        comments,
+        actions,
+        rating,
+        our_side.unwrap_or_else(|| "blue".to_string()),
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 #[server]
@@ -91,9 +116,11 @@ pub async fn list_drafts() -> Result<Vec<Draft>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
@@ -116,9 +143,11 @@ pub async fn list_user_teams() -> Result<Vec<Team>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::get_user_teams(&db, &user.id)
         .await
@@ -129,29 +158,31 @@ fn build_actions(slots: Vec<Option<String>>) -> Vec<DraftAction> {
     slots
         .into_iter()
         .enumerate()
-        .filter_map(|(i, opt)| opt.map(|champ| {
-            let (side, kind, label) = slot_meta(i);
-            DraftAction {
-                id: None,
-                draft_id: String::new(),
-                phase: format!("{}_{}", kind, label),
-                side: side.to_string(),
-                champion: champ,
-                order: i as i32,
-            }
-        }))
+        .filter_map(|(i, opt)| {
+            opt.map(|champ| {
+                let (side, kind, label) = slot_meta(i);
+                DraftAction {
+                    id: None,
+                    draft_id: String::new(),
+                    phase: format!("{}_{}", kind, label),
+                    side: side.to_string(),
+                    champion: champ,
+                    order: i as i32,
+                }
+            })
+        })
         .collect()
 }
 
 fn tier_badge_class(tier: &str) -> &'static str {
     match tier {
         "S+" => "bg-purple-500 text-white",
-        "S"  => "bg-accent text-accent-contrast",
-        "A"  => "bg-green-500 text-primary",
-        "B"  => "bg-blue-500 text-white",
-        "C"  => "bg-orange-500 text-primary",
-        "D"  => "bg-red-600 text-white",
-        _    => "bg-overlay-strong text-secondary",
+        "S" => "bg-accent text-accent-contrast",
+        "A" => "bg-green-500 text-primary",
+        "B" => "bg-blue-500 text-white",
+        "C" => "bg-orange-500 text-primary",
+        "D" => "bg-red-600 text-white",
+        _ => "bg-overlay-strong text-secondary",
     }
 }
 
@@ -199,7 +230,11 @@ pub fn DraftPage() -> impl IntoView {
     });
 
     let used_champions = move || {
-        draft_slots.get().into_iter().flatten().collect::<Vec<String>>()
+        draft_slots
+            .get()
+            .into_iter()
+            .flatten()
+            .collect::<Vec<String>>()
     };
 
     let fill_slot = move |slot_idx: usize, champion_name: String| {
@@ -242,7 +277,11 @@ pub fn DraftPage() -> impl IntoView {
         } else {
             set_highlighted_slot.set(None);
             set_active_slot.update(|a| {
-                *a = if *a == Some(slot_idx) { None } else { Some(slot_idx) };
+                *a = if *a == Some(slot_idx) {
+                    None
+                } else {
+                    Some(slot_idx)
+                };
             });
         }
     });
@@ -254,12 +293,12 @@ pub fn DraftPage() -> impl IntoView {
     });
 
     let phase_label = move || match active_slot.get() {
-        Some(0..=5)   => "Phase 1 — Bans",
-        Some(6..=11)  => "Phase 1 — Picks",
+        Some(0..=5) => "Phase 1 — Bans",
+        Some(6..=11) => "Phase 1 — Picks",
         Some(12..=15) => "Phase 2 — Bans",
         Some(16..=19) => "Phase 2 — Picks",
-        None          => "Draft Complete",
-        _             => "",
+        None => "Draft Complete",
+        _ => "",
     };
 
     let active_slot_label = move || {
@@ -290,7 +329,17 @@ pub fn DraftPage() -> impl IntoView {
             let team_opt = if tid.is_empty() { None } else { Some(tid) };
 
             if let Some(draft_id) = existing_id {
-                match update_draft(draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side)).await {
+                match update_draft(
+                    draft_id,
+                    name,
+                    opp_opt,
+                    acts_json,
+                    cmts_json,
+                    rate,
+                    Some(side),
+                )
+                .await
+                {
                     Ok(_) => {
                         set_save_result.set(Some("Updated!".into()));
                         drafts.refetch();
@@ -298,7 +347,17 @@ pub fn DraftPage() -> impl IntoView {
                     Err(e) => set_save_result.set(Some(format!("Error: {e}"))),
                 }
             } else {
-                match save_draft(name, opp_opt, team_opt, acts_json, cmts_json, rate, Some(side)).await {
+                match save_draft(
+                    name,
+                    opp_opt,
+                    team_opt,
+                    acts_json,
+                    cmts_json,
+                    rate,
+                    Some(side),
+                )
+                .await
+                {
                     Ok(id) => {
                         set_save_result.set(Some("Saved!".into()));
                         set_loaded_draft_id.set(Some(id));
@@ -349,12 +408,22 @@ pub fn DraftPage() -> impl IntoView {
                 let side = our_side.get_untracked();
                 let actions = build_actions(draft_slots.get_untracked());
                 let acts_json = serde_json::to_string(&actions).unwrap_or_default();
-                let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
+                let cmts_json =
+                    serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
 
                 if let Some(draft_id) = loaded_draft_id.get_untracked() {
                     let opp_opt = if opp.is_empty() { None } else { Some(opp) };
                     leptos::task::spawn_local(async move {
-                        let _ = update_draft(draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side)).await;
+                        let _ = update_draft(
+                            draft_id,
+                            name,
+                            opp_opt,
+                            acts_json,
+                            cmts_json,
+                            rate,
+                            Some(side),
+                        )
+                        .await;
                         set_auto_save_status.set("saved");
                         drafts.refetch();
                     });
@@ -362,9 +431,12 @@ pub fn DraftPage() -> impl IntoView {
             });
             if let Some(win) = web_sys::window() {
                 match win.set_timeout_with_callback_and_timeout_and_arguments_0(
-                    cb.as_ref().unchecked_ref(), 2000,
+                    cb.as_ref().unchecked_ref(),
+                    2000,
                 ) {
-                    Ok(timer_id) => { auto_save_timer.set(Some(timer_id)); }
+                    Ok(timer_id) => {
+                        auto_save_timer.set(Some(timer_id));
+                    }
                     Err(_) => {}
                 }
             }

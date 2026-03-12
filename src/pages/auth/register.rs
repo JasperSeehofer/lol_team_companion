@@ -14,10 +14,10 @@ pub async fn register_action(
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let password_hash = hash_password(&password).map_err(|e| ServerFnError::new(e))?;
+    let password_hash = hash_password(&password).map_err(ServerFnError::new)?;
 
     db::create_user(&db, username, email.clone(), password_hash)
         .await
@@ -26,11 +26,8 @@ pub async fn register_action(
     // Auto-login after registration
     let mut auth: AuthSession = leptos_axum::extract().await?;
     let creds = Credentials { email, password };
-    match auth.authenticate(creds).await {
-        Ok(Some(user)) => {
-            let _ = auth.login(&user).await;
-        }
-        _ => {} // Registration succeeded but auto-login failed — not fatal
+    if let Ok(Some(user)) = auth.authenticate(creds).await {
+        let _ = auth.login(&user).await;
     }
 
     redirect("/team/dashboard");
@@ -51,7 +48,11 @@ pub fn RegisterPage() -> impl IntoView {
     });
 
     let error = move || {
-        register.value().get().and_then(|r| r.err()).map(|e| e.to_string())
+        register
+            .value()
+            .get()
+            .and_then(|r| r.err())
+            .map(|e| e.to_string())
     };
 
     view! {

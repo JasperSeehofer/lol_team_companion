@@ -5,12 +5,15 @@ mod common;
 use lol_team_companion::models::draft::DraftAction;
 use lol_team_companion::server::db;
 
-async fn setup(
-    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
-) -> (String, String, String) {
-    let user_id = db::create_user(db, "drafter".into(), "drafter@example.com".into(), "h".into())
-        .await
-        .unwrap();
+async fn setup(db: &surrealdb::Surreal<surrealdb::engine::local::Db>) -> (String, String, String) {
+    let user_id = db::create_user(
+        db,
+        "drafter".into(),
+        "drafter@example.com".into(),
+        "h".into(),
+    )
+    .await
+    .unwrap();
     let team_id = db::create_team(db, &user_id, "DraftTeam".into(), "EUW".into())
         .await
         .unwrap();

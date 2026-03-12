@@ -1,11 +1,11 @@
-use leptos::prelude::*;
-use std::collections::HashMap;
-use crate::models::champion::Champion;
-use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
-use crate::components::draft_board::{DraftBoard, slot_meta};
 use crate::components::champion_picker::ChampionPicker;
+use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::tree_graph::TreeGraph;
 use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::models::champion::Champion;
+use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
+use leptos::prelude::*;
+use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -27,9 +27,11 @@ pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
@@ -45,19 +47,18 @@ pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
 }
 
 #[server]
-pub async fn create_tree(
-    name: String,
-    opponent: Option<String>,
-) -> Result<String, ServerFnError> {
+pub async fn create_tree(name: String, opponent: Option<String>) -> Result<String, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
@@ -77,9 +78,11 @@ pub async fn delete_tree(tree_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::delete_draft_tree(&db, &tree_id)
         .await
@@ -98,9 +101,11 @@ pub async fn update_tree_meta(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::update_draft_tree(&db, &tree_id, name, opponent)
         .await
@@ -115,9 +120,11 @@ pub async fn get_tree_nodes(tree_id: String) -> Result<Vec<DraftTreeNode>, Serve
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::get_tree_nodes(&db, &tree_id)
         .await
@@ -136,9 +143,11 @@ pub async fn add_branch(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::create_tree_node(&db, &tree_id, parent_id, label)
         .await
@@ -159,9 +168,11 @@ pub async fn save_node(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
         .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
@@ -179,9 +190,11 @@ pub async fn remove_node(node_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::delete_tree_node(&db, &node_id)
         .await
@@ -196,17 +209,19 @@ fn build_actions_from_slots(slots: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .iter()
         .enumerate()
-        .filter_map(|(i, opt)| opt.as_ref().map(|champ| {
-            let (side, kind, label) = slot_meta(i);
-            DraftAction {
-                id: None,
-                draft_id: String::new(),
-                phase: format!("{}_{}", kind, label),
-                side: side.to_string(),
-                champion: champ.clone(),
-                order: i as i32,
-            }
-        }))
+        .filter_map(|(i, opt)| {
+            opt.as_ref().map(|champ| {
+                let (side, kind, label) = slot_meta(i);
+                DraftAction {
+                    id: None,
+                    draft_id: String::new(),
+                    phase: format!("{}_{}", kind, label),
+                    side: side.to_string(),
+                    champion: champ.clone(),
+                    order: i as i32,
+                }
+            })
+        })
         .collect()
 }
 
@@ -331,7 +346,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     #[allow(unused_variables)]
     let auto_save_node_timer: RwSignal<Option<i32>> = RwSignal::new(None);
     let (node_save_status, set_node_save_status) = signal(""); // "", "unsaved", "saved"
-    // Suppress auto-save during node/tree switches to avoid saving stale data
+                                                               // Suppress auto-save during node/tree switches to avoid saving stale data
     #[allow(unused_variables)]
     let suppress_autosave: RwSignal<bool> = RwSignal::new(false);
 
@@ -386,7 +401,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
             });
             if let Some(win) = web_sys::window() {
                 let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
-                    cb.as_ref().unchecked_ref(), 0,
+                    cb.as_ref().unchecked_ref(),
+                    0,
                 );
             }
             cb.forget();
@@ -403,7 +419,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
         };
         let label = node_label.get_untracked();
         let notes_raw = node_notes.get_untracked();
-        let notes = if notes_raw.trim().is_empty() { None } else { Some(notes_raw) };
+        let notes = if notes_raw.trim().is_empty() {
+            None
+        } else {
+            Some(notes_raw)
+        };
         let improvised = node_improvised.get_untracked();
         let actions = build_actions_from_slots(&draft_slots.get_untracked());
         let actions_json = serde_json::to_string(&actions).unwrap_or_default();
@@ -433,7 +453,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
         let node_id = selected_node_id.get();
 
         #[allow(unused_variables)]
-        let Some(node_id) = node_id else { return };
+        let Some(node_id) = node_id
+        else {
+            return;
+        };
 
         // Don't fire auto-save during node/tree switches
         if suppress_autosave.get_untracked() {
@@ -453,7 +476,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
         {
             // Capture all values eagerly — do NOT read signals lazily inside the timer callback
             let label = current_label;
-            let notes = if current_notes.trim().is_empty() { None } else { Some(current_notes) };
+            let notes = if current_notes.trim().is_empty() {
+                None
+            } else {
+                Some(current_notes)
+            };
             let improvised = current_improvised;
             let actions = build_actions_from_slots(&current_slots);
             let actions_json = serde_json::to_string(&actions).unwrap_or_default();
@@ -468,9 +495,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
             });
             if let Some(win) = web_sys::window() {
                 match win.set_timeout_with_callback_and_timeout_and_arguments_0(
-                    cb.as_ref().unchecked_ref(), 2000,
+                    cb.as_ref().unchecked_ref(),
+                    2000,
                 ) {
-                    Ok(timer_id) => { auto_save_node_timer.set(Some(timer_id)); }
+                    Ok(timer_id) => {
+                        auto_save_node_timer.set(Some(timer_id));
+                    }
                     Err(_) => {}
                 }
             }
@@ -533,7 +563,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
     // Champion slot filling
     let used_champions = move || {
-        draft_slots.get().into_iter().flatten().collect::<Vec<String>>()
+        draft_slots
+            .get()
+            .into_iter()
+            .flatten()
+            .collect::<Vec<String>>()
     };
 
     let fill_slot = move |slot_idx: usize, champion_name: String| {
@@ -571,9 +605,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
         let current_slots = draft_slots.get_untracked();
         // Copy slots up to and including slot_idx
         let mut branch_slots: Vec<Option<String>> = vec![None; 20];
-        for i in 0..=slot_idx.min(19) {
-            branch_slots[i] = current_slots[i].clone();
-        }
+        let end = slot_idx.min(19) + 1;
+        branch_slots[..end].clone_from_slice(&current_slots[..end]);
         let actions = build_actions_from_slots(&branch_slots);
         let actions_json = serde_json::to_string(&actions).unwrap_or_default();
         let (side, kind, num) = slot_meta(slot_idx);
@@ -585,7 +618,15 @@ pub fn TreeDrafterPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match add_branch(tree_id, parent_id, label).await {
                 Ok(new_node_id) => {
-                    match save_node(new_node_id.clone(), label_for_save.clone(), None, false, actions_json).await {
+                    match save_node(
+                        new_node_id.clone(),
+                        label_for_save.clone(),
+                        None,
+                        false,
+                        actions_json,
+                    )
+                    .await
+                    {
                         Ok(_) => {
                             set_status_msg.set(Some("Branch created from position!".into()));
                             nodes_resource.refetch();
@@ -627,7 +668,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
         } else {
             set_highlighted_slot.set(None);
             set_active_slot.update(|a| {
-                *a = if *a == Some(slot_idx) { None } else { Some(slot_idx) };
+                *a = if *a == Some(slot_idx) {
+                    None
+                } else {
+                    Some(slot_idx)
+                };
             });
         }
     });
@@ -1341,7 +1386,9 @@ fn LiveNavigator(
         let mut current: Option<DraftTreeNode> = roots.into_iter().next();
         for step_id in &path {
             current = current.and_then(|n| {
-                n.children.into_iter().find(|c| c.id.as_deref() == Some(step_id.as_str()))
+                n.children
+                    .into_iter()
+                    .find(|c| c.id.as_deref() == Some(step_id.as_str()))
             });
         }
         current

@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use crate::models::team::Team;
+use leptos::prelude::*;
 
 #[server]
 pub async fn create_team(name: String, region: String) -> Result<(), ServerFnError> {
@@ -10,9 +10,11 @@ pub async fn create_team(name: String, region: String) -> Result<(), ServerFnErr
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::create_team(&db, &user.id, name, region)
         .await
@@ -30,13 +32,17 @@ pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let parts: Vec<&str> = riot_id.splitn(2, '#').collect();
     if parts.len() != 2 {
-        return Err(ServerFnError::new("Invalid Riot ID format (use GameName#TAG)"));
+        return Err(ServerFnError::new(
+            "Invalid Riot ID format (use GameName#TAG)",
+        ));
     }
     let (game_name, tag_line) = (parts[0], parts[1]);
 
@@ -57,8 +63,8 @@ pub async fn list_teams() -> Result<Vec<Team>, ServerFnError> {
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::list_all_teams(&db)
         .await
@@ -73,9 +79,11 @@ pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::create_join_request(&db, &user.id, &team_id)
         .await

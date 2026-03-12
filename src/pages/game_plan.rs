@@ -1,10 +1,10 @@
-use leptos::prelude::*;
-use crate::models::champion::Champion;
-use crate::models::game_plan::GamePlan;
-use crate::models::draft::Draft;
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
 use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::models::champion::Champion;
+use crate::models::draft::Draft;
+use crate::models::game_plan::GamePlan;
+use leptos::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -18,9 +18,11 @@ pub async fn list_plans() -> Result<Vec<GamePlan>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -43,9 +45,11 @@ pub async fn list_team_drafts() -> Result<Vec<Draft>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -68,9 +72,11 @@ pub async fn create_plan(plan_json: String) -> Result<String, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
@@ -94,9 +100,11 @@ pub async fn update_plan(plan_json: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let plan: GamePlan = serde_json::from_str(&plan_json)
         .map_err(|e| ServerFnError::new(format!("Invalid plan JSON: {e}")))?;
@@ -114,9 +122,11 @@ pub async fn delete_plan(plan_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::delete_game_plan(&surreal, &plan_id)
         .await
@@ -135,19 +145,32 @@ pub async fn get_champions_for_game_plan() -> Result<Vec<Champion>, ServerFnErro
 // Template generation
 // ---------------------------------------------------------------------------
 
-fn generate_template(our: &[String], enemy: &[String]) -> (Vec<String>, Vec<String>, String, String) {
+fn generate_template(
+    our: &[String],
+    enemy: &[String],
+) -> (Vec<String>, Vec<String>, String, String) {
     let mut win_conditions = Vec::new();
-    let objectives = vec!["Dragon".to_string(), "Rift Herald".to_string(), "Baron".to_string()];
+    let objectives = vec![
+        "Dragon".to_string(),
+        "Rift Herald".to_string(),
+        "Baron".to_string(),
+    ];
 
     // Simple heuristic based on champion count (placeholder for real analysis)
     if !our.is_empty() {
-        win_conditions.push(format!("Play around {} in teamfights", our.first().unwrap_or(&"carry".to_string())));
+        win_conditions.push(format!(
+            "Play around {} in teamfights",
+            our.first().unwrap_or(&"carry".to_string())
+        ));
     }
     if our.len() >= 3 {
         win_conditions.push("Control vision around neutral objectives before fights".to_string());
     }
     if !enemy.is_empty() {
-        win_conditions.push(format!("Deny {} from scaling", enemy.last().unwrap_or(&"enemy carry".to_string())));
+        win_conditions.push(format!(
+            "Deny {} from scaling",
+            enemy.last().unwrap_or(&"enemy carry".to_string())
+        ));
     }
     if win_conditions.is_empty() {
         win_conditions.push("Secure early game advantages through proactive plays".to_string());
@@ -155,7 +178,10 @@ fn generate_template(our: &[String], enemy: &[String]) -> (Vec<String>, Vec<Stri
     }
 
     let teamfight = if our.len() >= 5 {
-        format!("Front-to-back: protect {} while {} zones the enemy", our[3], our[0])
+        format!(
+            "Front-to-back: protect {} while {} zones the enemy",
+            our[3], our[0]
+        )
     } else {
         "Focus priority targets and peel for carries".to_string()
     };
@@ -205,8 +231,10 @@ pub fn GamePlanPage() -> impl IntoView {
     let (editing_id, set_editing_id) = signal(Option::<String>::None);
     let (plan_name, set_plan_name) = signal(String::new());
     let (draft_id, set_draft_id) = signal(String::new());
-    let our_champ_signals: Vec<RwSignal<String>> = (0..5).map(|_| RwSignal::new(String::new())).collect();
-    let enemy_champ_signals: Vec<RwSignal<String>> = (0..5).map(|_| RwSignal::new(String::new())).collect();
+    let our_champ_signals: Vec<RwSignal<String>> =
+        (0..5).map(|_| RwSignal::new(String::new())).collect();
+    let enemy_champ_signals: Vec<RwSignal<String>> =
+        (0..5).map(|_| RwSignal::new(String::new())).collect();
     let (win_conditions, set_win_conditions) = signal(String::new());
     let (obj_priority, set_obj_priority) = signal(String::new());
     let (teamfight, set_teamfight) = signal(String::new());
@@ -221,8 +249,12 @@ pub fn GamePlanPage() -> impl IntoView {
         set_editing_id.set(None);
         set_plan_name.set(String::new());
         set_draft_id.set(String::new());
-        for s in &our_champ_signals_clone { s.set(String::new()); }
-        for s in &enemy_champ_signals_clone { s.set(String::new()); }
+        for s in &our_champ_signals_clone {
+            s.set(String::new());
+        }
+        for s in &enemy_champ_signals_clone {
+            s.set(String::new());
+        }
         set_win_conditions.set(String::new());
         set_obj_priority.set(String::new());
         set_teamfight.set(String::new());
@@ -271,21 +303,92 @@ pub fn GamePlanPage() -> impl IntoView {
             team_id: String::new(), // filled by server
             draft_id: {
                 let d = draft_id.get_untracked();
-                if d.is_empty() { None } else { Some(d) }
+                if d.is_empty() {
+                    None
+                } else {
+                    Some(d)
+                }
             },
             name: plan_name.get_untracked(),
-            our_champions: our_sigs_for_build.iter().map(|s| s.get_untracked()).filter(|s| !s.is_empty()).collect(),
-            enemy_champions: enemy_sigs_for_build.iter().map(|s| s.get_untracked()).filter(|s| !s.is_empty()).collect(),
-            win_conditions: win_conditions.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-            objective_priority: obj_priority.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            our_champions: our_sigs_for_build
+                .iter()
+                .map(|s| s.get_untracked())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            enemy_champions: enemy_sigs_for_build
+                .iter()
+                .map(|s| s.get_untracked())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            win_conditions: win_conditions
+                .get_untracked()
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            objective_priority: obj_priority
+                .get_untracked()
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
             teamfight_strategy: teamfight.get_untracked(),
-            early_game: { let s = early_game.get_untracked(); if s.is_empty() { None } else { Some(s) } },
-            top_strategy: { let s = strats[0].clone(); if s.is_empty() { None } else { Some(s) } },
-            jungle_strategy: { let s = strats[1].clone(); if s.is_empty() { None } else { Some(s) } },
-            mid_strategy: { let s = strats[2].clone(); if s.is_empty() { None } else { Some(s) } },
-            bot_strategy: { let s = strats[3].clone(); if s.is_empty() { None } else { Some(s) } },
-            support_strategy: { let s = strats[4].clone(); if s.is_empty() { None } else { Some(s) } },
-            notes: { let s = notes.get_untracked(); if s.is_empty() { None } else { Some(s) } },
+            early_game: {
+                let s = early_game.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            top_strategy: {
+                let s = strats[0].clone();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            jungle_strategy: {
+                let s = strats[1].clone();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            mid_strategy: {
+                let s = strats[2].clone();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            bot_strategy: {
+                let s = strats[3].clone();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            support_strategy: {
+                let s = strats[4].clone();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            notes: {
+                let s = notes.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
         }
     };
 
@@ -305,7 +408,11 @@ pub fn GamePlanPage() -> impl IntoView {
                     if !is_update && !id.is_empty() {
                         set_editing_id.set(Some(id));
                     }
-                    set_status_msg.set(Some(if is_update { "Plan updated!".into() } else { "Plan created!".into() }));
+                    set_status_msg.set(Some(if is_update {
+                        "Plan updated!".into()
+                    } else {
+                        "Plan created!".into()
+                    }));
                     plans.refetch();
                 }
                 Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
@@ -329,14 +436,22 @@ pub fn GamePlanPage() -> impl IntoView {
     let our_sigs_for_template = our_champ_signals.clone();
     let enemy_sigs_for_template = enemy_champ_signals.clone();
     let do_generate_template = move |_| {
-        let ours: Vec<String> = our_sigs_for_template.iter().map(|s| s.get_untracked()).collect();
-        let theirs: Vec<String> = enemy_sigs_for_template.iter().map(|s| s.get_untracked()).collect();
+        let ours: Vec<String> = our_sigs_for_template
+            .iter()
+            .map(|s| s.get_untracked())
+            .collect();
+        let theirs: Vec<String> = enemy_sigs_for_template
+            .iter()
+            .map(|s| s.get_untracked())
+            .collect();
         let (wc, obj, tf, eg) = generate_template(&ours, &theirs);
         set_win_conditions.set(wc.join("\n"));
         set_obj_priority.set(obj.join("\n"));
         set_teamfight.set(tf);
         set_early_game.set(eg);
-        set_status_msg.set(Some("Template generated! Customize to your strategy.".into()));
+        set_status_msg.set(Some(
+            "Template generated! Customize to your strategy.".into(),
+        ));
     };
 
     // Pre-clone for multiple move closures in view!

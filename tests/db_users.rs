@@ -7,20 +7,38 @@ use lol_team_companion::server::db;
 #[tokio::test]
 async fn test_create_user_success() {
     let db = common::test_db().await;
-    let id = db::create_user(&db, "alice".into(), "alice@example.com".into(), "hash1".into())
-        .await
-        .unwrap();
-    assert!(id.starts_with("user:"), "id should have user: prefix, got {id}");
+    let id = db::create_user(
+        &db,
+        "alice".into(),
+        "alice@example.com".into(),
+        "hash1".into(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        id.starts_with("user:"),
+        "id should have user: prefix, got {id}"
+    );
 }
 
 #[tokio::test]
 async fn test_create_user_duplicate_email_fails() {
     let db = common::test_db().await;
-    db::create_user(&db, "alice".into(), "dup@example.com".into(), "hash1".into())
-        .await
-        .unwrap();
-    let result =
-        db::create_user(&db, "alice2".into(), "dup@example.com".into(), "hash2".into()).await;
+    db::create_user(
+        &db,
+        "alice".into(),
+        "dup@example.com".into(),
+        "hash1".into(),
+    )
+    .await
+    .unwrap();
+    let result = db::create_user(
+        &db,
+        "alice2".into(),
+        "dup@example.com".into(),
+        "hash2".into(),
+    )
+    .await;
     assert!(result.is_err(), "duplicate email should fail");
 }
 

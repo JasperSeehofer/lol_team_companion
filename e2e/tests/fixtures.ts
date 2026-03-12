@@ -8,31 +8,36 @@
 import { test as base, expect, type Page } from "@playwright/test";
 
 const TIMESTAMP = Date.now();
-const TEST_EMAIL = `pages_${TIMESTAMP}@test.invalid`;
 const TEST_PASSWORD = "Test1234!";
-const TEST_USERNAME = `pagesuser_${TIMESTAMP}`;
+let userCounter = 0;
 
-/** Register a new user, then log in. */
+/** Register a new user — registration auto-logs in and redirects to /team/dashboard. */
 async function authenticatePage(page: Page): Promise<void> {
-  // Step 1: Register (creates the user, redirects to /auth/login)
+  const id = ++userCounter;
+  const email = `pages_${TIMESTAMP}_${id}@test.invalid`;
+  const username = `pagesuser_${TIMESTAMP}_${id}`;
+
   await page.goto("/auth/register");
-  await page.fill("input[name=username]", TEST_USERNAME);
-  await page.fill("input[name=email]", TEST_EMAIL);
+  await page.fill("input[name=username]", username);
+  await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", TEST_PASSWORD);
   await page.click("button[type=submit]");
-  await page.waitForLoadState("networkidle");
 
-  // Step 2: Always log in — registration does not auto-login
-  await page.goto("/auth/login");
-  await page.fill("input[name=email]", TEST_EMAIL);
-  await page.fill("input[name=password]", TEST_PASSWORD);
-  await page.click("button[type=submit]");
-  await page.waitForLoadState("networkidle");
+  // Registration auto-logs in and fires window.location.set_href("/team/dashboard")
+  // via a WASM Effect. Wait for the URL to reach /team/dashboard.
+  await page.waitForURL("**/team/dashboard", { timeout: 20000 });
 
-  // Login triggers hard navigation to /team/dashboard — wait for it
-  await page.waitForURL("**/team/dashboard", { timeout: 5000 }).catch(() => {
-    // If redirect didn't happen, we may already be on the right page
-  });
+  // Critical: The WASM hydration on /team/dashboard may fire ANOTHER redirect
+  // (the register page's Effect can queue a redirect that fires after we land).
+  // Wait for the page to fully stabilize — no more navigations.
+  await page.waitForLoadState("load");
+  // Give WASM a moment to hydrate and fire any remaining Effects
+  await page.waitForTimeout(500);
+
+  // Now verify we're properly authenticated
+  if (page.url().includes("/auth/")) {
+    throw new Error(`Authentication failed — ended at ${page.url()}`);
+  }
 }
 
 type Fixtures = {

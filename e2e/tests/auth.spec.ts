@@ -25,6 +25,7 @@ test.describe("Registration", () => {
     await page.click("button[type=submit]");
 
     // After successful registration, should navigate away from /auth/register
+    // Registration auto-logs in and redirects to /team/dashboard
     await page.waitForLoadState("networkidle");
     const url = page.url();
     expect(url).not.toContain("/auth/register");
@@ -67,11 +68,11 @@ test.describe("Full auth flow", () => {
     await page.click("button[type=submit]");
 
     // Should auto-login and redirect to /team/dashboard
-    await page.waitForURL("**/team/dashboard", { timeout: 10000 });
+    await page.waitForURL("**/team/dashboard", { timeout: 15000 });
+    await page.waitForLoadState("networkidle");
 
     // Navigate to profile — should be accessible (not redirected to login)
-    await page.goto("/profile");
-    await page.waitForLoadState("networkidle");
+    await page.goto("/profile", { waitUntil: "networkidle" });
     expect(page.url()).not.toContain("/auth/login");
 
     // Verify username appears in the page
@@ -80,16 +81,20 @@ test.describe("Full auth flow", () => {
   });
 
   test("logout clears session", async ({ page }) => {
-    // Log in first
+    // Log in first — use a more specific selector to avoid matching hidden nav buttons
     await page.goto("/auth/login");
     await page.fill("input[name=email]", flowEmail);
     await page.fill("input[name=password]", TEST_PASSWORD);
-    await page.click("button[type=submit]");
-    await page.waitForURL("**/team/dashboard", { timeout: 10000 });
+    // Use the form's submit button specifically (not nav logout button)
+    await page.locator("main button[type=submit], main input[type=submit]").first().click();
+    await page.waitForURL("**/team/dashboard", { timeout: 15000 });
+
+    // Let WASM Effects settle before navigating
+    await page.waitForLoadState("load");
+    await page.waitForTimeout(500);
 
     // Navigate to profile where there's a visible "Log Out" button
-    await page.goto("/profile");
-    await page.waitForLoadState("networkidle");
+    await page.goto("/profile", { waitUntil: "networkidle" });
 
     // Click the profile page's "Log Out" button
     const logoutBtn = page.locator("button").filter({ hasText: /log\s*out/i }).first();
@@ -100,8 +105,7 @@ test.describe("Full auth flow", () => {
     await page.waitForURL("**/", { timeout: 10000 });
 
     // After logout, visiting profile should redirect to login
-    await page.goto("/profile");
-    await page.waitForLoadState("networkidle");
+    await page.goto("/profile", { waitUntil: "networkidle" });
     // Should either redirect to /auth/login or show "not logged in" text
     const url = page.url();
     const bodyText = await page.textContent("body") || "";

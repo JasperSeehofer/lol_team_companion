@@ -116,10 +116,7 @@ impl SessionStore for SurrealSessionStore {
         let id_str = session_id.to_string();
 
         self.db
-            .query(format!(
-                "DELETE type::record('{}', $id)",
-                self.table
-            ))
+            .query(format!("DELETE type::record('{}', $id)", self.table))
             .bind(("id", id_str))
             .await
             .map_err(|e| session_store::Error::Backend(e.to_string()))?;

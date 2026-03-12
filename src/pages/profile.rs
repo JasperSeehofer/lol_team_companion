@@ -1,6 +1,6 @@
-use leptos::prelude::*;
-use crate::models::user::PublicUser;
 use crate::models::champion::ChampionPoolEntry;
+use crate::models::user::PublicUser;
+use leptos::prelude::*;
 
 #[server]
 pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
@@ -20,7 +20,9 @@ pub async fn logout() -> Result<(), ServerFnError> {
     use leptos_axum::redirect;
 
     let mut auth: AuthSession = leptos_axum::extract().await?;
-    auth.logout().await.map_err(|e| ServerFnError::new(e.to_string()))?;
+    auth.logout()
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
     redirect("/");
     Ok(())
 }
@@ -32,11 +34,17 @@ pub async fn update_profile(username: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    let user_key = user.id.strip_prefix("user:").unwrap_or(&user.id).to_string();
+    let user_key = user
+        .id
+        .strip_prefix("user:")
+        .unwrap_or(&user.id)
+        .to_string();
     db.query("UPDATE type::record('user', $user_key) SET username = $username")
         .bind(("user_key", user_key))
         .bind(("username", username))
@@ -56,9 +64,11 @@ pub async fn get_champion_pool() -> Result<Vec<ChampionPoolEntry>, ServerFnError
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::get_champion_pool(&db, &user.id)
         .await

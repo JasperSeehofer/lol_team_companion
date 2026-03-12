@@ -458,6 +458,8 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 
 55. **Suppress auto-save during batch signal updates** — When switching nodes/trees, multiple signals are updated in sequence. Each update re-triggers the auto-save Effect. Use a `suppress_autosave: RwSignal<bool>` guard: set `true` before batch updates, then re-enable after a `setTimeout(0)` microtask so the Effect skips all intermediate firings.
 
+56. **E2e WASM Effect settle delay** — After registration or login, the hard-nav Effect (`window.location().set_href()`) fires asynchronously via WASM hydration. In Playwright tests, subsequent `page.goto()` calls can be interrupted by this delayed redirect. Fix: add `await page.waitForTimeout(500)` after `waitForURL` to let the Effect fire before navigating.
+
 ## Plugins & MCP Servers
 
 - **Playwright MCP** — interactive browser testing (navigate, snapshot, click)

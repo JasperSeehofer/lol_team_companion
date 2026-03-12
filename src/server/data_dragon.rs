@@ -10,10 +10,14 @@ pub enum DataDragonError {
 }
 
 async fn fetch_latest_version() -> Result<String, DataDragonError> {
-    let versions: Vec<String> = reqwest::get(
-        "https://ddragon.leagueoflegends.com/api/versions.json"
-    ).await?.json().await?;
-    versions.into_iter().next()
+    let versions: Vec<String> =
+        reqwest::get("https://ddragon.leagueoflegends.com/api/versions.json")
+            .await?
+            .json()
+            .await?;
+    versions
+        .into_iter()
+        .next()
         .ok_or_else(|| DataDragonError::Parse("Empty versions list".into()))
 }
 
@@ -43,16 +47,18 @@ pub async fn fetch_champions() -> Result<Vec<Champion>, DataDragonError> {
                 .iter()
                 .filter_map(|t| t.as_str().map(|s| s.to_string()))
                 .collect();
-            let image_filename = v
-                .get("image")?
-                .get("full")?
-                .as_str()?
-                .to_string();
+            let image_filename = v.get("image")?.get("full")?.as_str()?.to_string();
             let image_full = format!(
                 "https://ddragon.leagueoflegends.com/cdn/{}/img/champion/{}",
                 version, image_filename
             );
-            Some(Champion { id, name, title, tags, image_full })
+            Some(Champion {
+                id,
+                name,
+                title,
+                tags,
+                image_full,
+            })
         })
         .collect();
 

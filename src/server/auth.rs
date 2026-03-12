@@ -2,7 +2,11 @@ use async_trait::async_trait;
 use axum_login::AuthUser;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use surrealdb::{engine::local::Db, types::{RecordId, SurrealValue, ToSql}, Surreal};
+use surrealdb::{
+    engine::local::Db,
+    types::{RecordId, SurrealValue, ToSql},
+    Surreal,
+};
 
 // ---------------------------------------------------------------------------
 // AuthUser implementation
@@ -106,10 +110,14 @@ impl axum_login::AuthnBackend for AuthBackend {
 
         let user: AppUser = db_user.into();
 
-        let hash = PasswordHash::new(&user.password_hash).map_err(|e| AuthError::Hash(e.to_string()))?;
+        let hash =
+            PasswordHash::new(&user.password_hash).map_err(|e| AuthError::Hash(e.to_string()))?;
         let argon2 = Argon2::default();
 
-        if argon2.verify_password(creds.password.as_bytes(), &hash).is_ok() {
+        if argon2
+            .verify_password(creds.password.as_bytes(), &hash)
+            .is_ok()
+        {
             Ok(Some(user))
         } else {
             Ok(None)
@@ -194,6 +202,9 @@ mod tests {
     fn hashes_are_non_deterministic() {
         let h1 = hash_password("same_password").unwrap();
         let h2 = hash_password("same_password").unwrap();
-        assert_ne!(h1, h2, "Argon2 should produce different hashes due to random salt");
+        assert_ne!(
+            h1, h2,
+            "Argon2 should produce different hashes due to random salt"
+        );
     }
 }

@@ -14,7 +14,8 @@ pub fn ErrorTemplate(
     };
 
     let error_list = move || {
-        errors.get()
+        errors
+            .get()
             .into_iter()
             .map(|(_, e)| {
                 let e_string = e.to_string();

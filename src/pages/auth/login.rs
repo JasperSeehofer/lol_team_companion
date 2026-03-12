@@ -11,7 +11,9 @@ pub async fn login_action(email: String, password: String) -> Result<(), ServerF
     let creds = Credentials { email, password };
     match auth.authenticate(creds).await {
         Ok(Some(user)) => {
-            auth.login(&user).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+            auth.login(&user)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
             redirect("/team/dashboard");
             Ok(())
         }
@@ -34,7 +36,11 @@ pub fn LoginPage() -> impl IntoView {
     });
 
     let error = move || {
-        login.value().get().and_then(|r| r.err()).map(|e| e.to_string())
+        login
+            .value()
+            .get()
+            .and_then(|r| r.err())
+            .map(|e| e.to_string())
     };
 
     view! {

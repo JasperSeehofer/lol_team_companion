@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-commit docs check skill (`/pre-commit-docs`) — reviews CHANGELOG, TODO, CLAUDE.md, INSTRUCTIONS.md before every commit
 - `GITHUB_TOKEN` in `.env.example` for GitHub MCP server
 - "Plugins & MCP Servers" section in CLAUDE.md
+- Team dashboard: pencil-icon modal for renaming team (replaces inline form), conditional Riot account notice with link to profile
+- Tree graph: reactive SVG node highlighting with accent color glow filter; two-way graph/editor sync (click graph node selects in editor and vice versa); new branches auto-select after creation
+- Stats page: queue type selector (Solo/Duo, Flex, All Queues) for match sync; OP.GG-style match history layout with champion icons, KDA, CS, vision, damage, win/loss row tinting; expandable match detail panel showing team members' stats per match
+- `verify-implementation` skill for post-implementation testing (compile, browser, e2e, regression sweep)
+
+### Fixed
+
+- 23 clippy warnings: unnecessary casts in riot.rs, clone-on-copy in draft_board.rs, redundant closure in register.rs, type complexity in post_game.rs, manual_memcpy in tree_drafter.rs, too_many_arguments in db.rs
+- E2e test fixture: updated for registration auto-login (no longer does register+login two-step)
+- E2e WASM Effect race condition: added 500ms settle delay after registration redirect to prevent `window.location.set_href` from interrupting subsequent navigations
+- Playwright MCP config: changed browser from `chrome` to `chromium` in `.mcp.json`
 
 ## [0.16.0] - 2026-03-11
 

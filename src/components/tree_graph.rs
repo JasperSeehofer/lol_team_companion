@@ -1,6 +1,6 @@
-use leptos::prelude::*;
-use crate::models::draft::{DraftTreeNode, DraftAction};
 use crate::models::champion::Champion;
+use crate::models::draft::{DraftAction, DraftTreeNode};
+use leptos::prelude::*;
 
 // Layout constants
 const NODE_W: f64 = 150.0;
@@ -69,11 +69,7 @@ fn compute_widths(node: &mut LayoutNode) {
     for child in &mut node.children {
         compute_widths(child);
     }
-    let children_width: f64 = node
-        .children
-        .iter()
-        .map(|c| c.width)
-        .sum::<f64>()
+    let children_width: f64 = node.children.iter().map(|c| c.width).sum::<f64>()
         + H_GAP * (node.children.len() as f64 - 1.0).max(0.0);
     node.width = children_width.max(NODE_W);
 }
@@ -87,11 +83,7 @@ fn assign_positions(node: &mut LayoutNode, x: f64, y: f64) {
         return;
     }
 
-    let children_total: f64 = node
-        .children
-        .iter()
-        .map(|c| c.width)
-        .sum::<f64>()
+    let children_total: f64 = node.children.iter().map(|c| c.width).sum::<f64>()
         + H_GAP * (node.children.len() as f64 - 1.0).max(0.0);
 
     let start_x = x + (node.width - children_total) / 2.0;

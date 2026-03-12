@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use crate::models::champion::{Champion, ChampionPoolEntry};
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::ui::StatusMessage;
+use crate::models::champion::{Champion, ChampionPoolEntry};
+use leptos::prelude::*;
 
 #[server]
 pub async fn get_pool() -> Result<Vec<ChampionPoolEntry>, ServerFnError> {
@@ -11,9 +11,11 @@ pub async fn get_pool() -> Result<Vec<ChampionPoolEntry>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::get_champion_pool(&db, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
@@ -35,9 +37,11 @@ pub async fn add_to_pool(champion: String, role: String) -> Result<(), ServerFnE
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::add_to_champion_pool(&db, &user.id, champion, role)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
@@ -51,41 +55,55 @@ pub async fn remove_from_pool(champion: String, role: String) -> Result<(), Serv
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::remove_from_champion_pool(&db, &user.id, champion, role)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 #[server]
-pub async fn set_champion_tier(champion: String, role: String, tier: String) -> Result<(), ServerFnError> {
+pub async fn set_champion_tier(
+    champion: String,
+    role: String,
+    tier: String,
+) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::update_champion_tier(&db, &user.id, &champion, &role, tier)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 #[server]
-pub async fn set_champion_notes(champion: String, role: String, notes: String) -> Result<(), ServerFnError> {
+pub async fn set_champion_notes(
+    champion: String,
+    role: String,
+    notes: String,
+) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     let notes_opt = if notes.is_empty() { None } else { Some(notes) };
     db::update_champion_notes(&db, &user.id, &champion, &role, notes_opt)
         .await
@@ -93,7 +111,13 @@ pub async fn set_champion_notes(champion: String, role: String, notes: String) -
 }
 
 const POOL_ROLES: &[&str] = &["Top", "Jungle", "Mid", "ADC", "Support"];
-const TIERS: &[&str] = &["comfort", "match_ready", "scrim_ready", "practicing", "to_practice"];
+const TIERS: &[&str] = &[
+    "comfort",
+    "match_ready",
+    "scrim_ready",
+    "practicing",
+    "to_practice",
+];
 
 fn tier_label(tier: &str) -> &'static str {
     match tier {
@@ -163,7 +187,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let do_add = move || {
         let champion = add_input_signal.get_untracked();
         let role = active_role.get_untracked().to_string();
-        if champion.trim().is_empty() { return; }
+        if champion.trim().is_empty() {
+            return;
+        }
         leptos::task::spawn_local(async move {
             match add_to_pool(champion, role).await {
                 Ok(_) => {

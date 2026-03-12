@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use std::collections::{HashMap, HashSet};
 use crate::components::stat_card::StatCard;
 use crate::components::ui::ErrorBanner;
+use leptos::prelude::*;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TeamMatchRow {
@@ -36,9 +36,11 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -53,23 +55,26 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     // Convert db type to page type
-    Ok(rows.into_iter().map(|r| TeamMatchRow {
-        match_db_id: r.match_db_id,
-        user_id: r.user_id,
-        username: r.username,
-        riot_match_id: r.riot_match_id,
-        queue_id: r.queue_id,
-        game_duration: r.game_duration,
-        game_end: r.game_end,
-        champion: r.champion,
-        kills: r.kills,
-        deaths: r.deaths,
-        assists: r.assists,
-        cs: r.cs,
-        vision_score: r.vision_score,
-        damage: r.damage,
-        win: r.win,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| TeamMatchRow {
+            match_db_id: r.match_db_id,
+            user_id: r.user_id,
+            username: r.username,
+            riot_match_id: r.riot_match_id,
+            queue_id: r.queue_id,
+            game_duration: r.game_duration,
+            game_end: r.game_end,
+            champion: r.champion,
+            kills: r.kills,
+            deaths: r.deaths,
+            assists: r.assists,
+            cs: r.cs,
+            vision_score: r.vision_score,
+            damage: r.damage,
+            win: r.win,
+        })
+        .collect())
 }
 
 #[server]
@@ -81,20 +86,28 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
     use surrealdb::{engine::local::Db, Surreal};
 
     if !riot::has_api_key() {
-        return Err(ServerFnError::new("RIOT_API_KEY not configured. Set it in .env to enable match syncing."));
+        return Err(ServerFnError::new(
+            "RIOT_API_KEY not configured. Set it in .env to enable match syncing.",
+        ));
     }
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
     {
         Some(id) => id,
-        None => return Err(ServerFnError::new("You need to join or create a team first")),
+        None => {
+            return Err(ServerFnError::new(
+                "You need to join or create a team first",
+            ))
+        }
     };
 
     let members = db::get_roster_puuids(&surreal, &team_id)
@@ -133,7 +146,10 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
         }
     }
 
-    let linked_count = members.iter().filter(|(_, _, p)| p.as_ref().map(|s| !s.is_empty()).unwrap_or(false)).count();
+    let linked_count = members
+        .iter()
+        .filter(|(_, _, p)| p.as_ref().map(|s| !s.is_empty()).unwrap_or(false))
+        .count();
     let mut msg = format!("Synced {total_synced} {queue_label} matches for {synced_players}/{linked_count} linked players.");
     if !errors.is_empty() {
         msg.push_str(&format!(" Errors: {}", errors.join("; ")));
@@ -155,20 +171,26 @@ struct MatchGroup {
 fn group_matches(rows: &[TeamMatchRow]) -> Vec<MatchGroup> {
     let mut by_match: HashMap<String, Vec<TeamMatchRow>> = HashMap::new();
     for r in rows {
-        by_match.entry(r.riot_match_id.clone()).or_default().push(r.clone());
+        by_match
+            .entry(r.riot_match_id.clone())
+            .or_default()
+            .push(r.clone());
     }
 
-    let mut groups: Vec<MatchGroup> = by_match.into_iter().map(|(riot_id, players)| {
-        let first = &players[0];
-        MatchGroup {
-            riot_match_id: riot_id,
-            queue_id: first.queue_id,
-            game_end: first.game_end.clone(),
-            game_duration: first.game_duration,
-            win: first.win,
-            players,
-        }
-    }).collect();
+    let mut groups: Vec<MatchGroup> = by_match
+        .into_iter()
+        .map(|(riot_id, players)| {
+            let first = &players[0];
+            MatchGroup {
+                riot_match_id: riot_id,
+                queue_id: first.queue_id,
+                game_end: first.game_end.clone(),
+                game_duration: first.game_duration,
+                win: first.win,
+                players,
+            }
+        })
+        .collect();
 
     // Sort by game_end descending
     groups.sort_by(|a, b| b.game_end.cmp(&a.game_end));
@@ -185,7 +207,11 @@ fn format_date(game_end: &Option<String>) -> String {
     match game_end {
         Some(d) => {
             // Trim to just date portion
-            if d.len() >= 10 { d[..10].to_string() } else { d.clone() }
+            if d.len() >= 10 {
+                d[..10].to_string()
+            } else {
+                d.clone()
+            }
         }
         None => "Unknown".to_string(),
     }
@@ -394,21 +420,27 @@ fn StatsContent(
         let queue_filter = filter_queue.get();
 
         all_matches.with_value(|matches| {
-            matches.iter().filter(|m| {
-                // Minimum players filter
-                if m.players.len() < min {
-                    return false;
-                }
-                // Player filter
-                if !player_filter.is_empty() && !m.players.iter().any(|p| p.username == player_filter) {
-                    return false;
-                }
-                // Queue filter
-                if queue_filter != 0 && m.queue_id != queue_filter {
-                    return false;
-                }
-                true
-            }).cloned().collect::<Vec<_>>()
+            matches
+                .iter()
+                .filter(|m| {
+                    // Minimum players filter
+                    if m.players.len() < min {
+                        return false;
+                    }
+                    // Player filter
+                    if !player_filter.is_empty()
+                        && !m.players.iter().any(|p| p.username == player_filter)
+                    {
+                        return false;
+                    }
+                    // Queue filter
+                    if queue_filter != 0 && m.queue_id != queue_filter {
+                        return false;
+                    }
+                    true
+                })
+                .cloned()
+                .collect::<Vec<_>>()
         })
     };
 
@@ -423,14 +455,18 @@ fn StatsContent(
             format!("{:.0}%", wins as f64 / total_games as f64 * 100.0)
         };
 
-        let all_players: Vec<&TeamMatchRow> = matches.iter().flat_map(|m| m.players.iter()).collect();
+        let all_players: Vec<&TeamMatchRow> =
+            matches.iter().flat_map(|m| m.players.iter()).collect();
         let total_entries = all_players.len();
         let avg_kda = if total_entries == 0 {
             "N/A".to_string()
         } else {
-            let k: f64 = all_players.iter().map(|p| p.kills as f64).sum::<f64>() / total_entries as f64;
-            let d: f64 = all_players.iter().map(|p| p.deaths as f64).sum::<f64>() / total_entries as f64;
-            let a: f64 = all_players.iter().map(|p| p.assists as f64).sum::<f64>() / total_entries as f64;
+            let k: f64 =
+                all_players.iter().map(|p| p.kills as f64).sum::<f64>() / total_entries as f64;
+            let d: f64 =
+                all_players.iter().map(|p| p.deaths as f64).sum::<f64>() / total_entries as f64;
+            let a: f64 =
+                all_players.iter().map(|p| p.assists as f64).sum::<f64>() / total_entries as f64;
             format!("{k:.1}/{d:.1}/{a:.1}")
         };
 

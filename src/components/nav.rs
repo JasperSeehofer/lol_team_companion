@@ -1,10 +1,10 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::pages::profile::{get_current_user, Logout};
-use crate::models::user::JoinRequest;
-use crate::pages::team::dashboard::handle_join_request;
 use crate::components::theme_toggle::ThemeToggle;
+use crate::models::user::JoinRequest;
+use crate::pages::profile::{get_current_user, Logout};
+use crate::pages::team::dashboard::handle_join_request;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Notifications {
@@ -24,8 +24,8 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
         Some(u) => u,
         None => return Ok(Notifications::default()),
     };
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let result = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -38,19 +38,30 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
 
     let is_leader = team.created_by == user.id;
     if !is_leader {
-        return Ok(Notifications { pending_requests: Vec::new(), is_leader: false });
+        return Ok(Notifications {
+            pending_requests: Vec::new(),
+            is_leader: false,
+        });
     }
 
     let team_id = match team.id {
         Some(id) => id,
-        None => return Ok(Notifications { pending_requests: Vec::new(), is_leader: true }),
+        None => {
+            return Ok(Notifications {
+                pending_requests: Vec::new(),
+                is_leader: true,
+            })
+        }
     };
 
     let pending = db::list_pending_join_requests(&db, &team_id)
         .await
         .unwrap_or_default();
 
-    Ok(Notifications { pending_requests: pending, is_leader: true })
+    Ok(Notifications {
+        pending_requests: pending,
+        is_leader: true,
+    })
 }
 
 #[component]
@@ -87,13 +98,16 @@ pub fn Nav() -> impl IntoView {
         Effect::new(move |_| {
             use wasm_bindgen::closure::Closure;
             use wasm_bindgen::JsCast;
-            let cb = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |ev: web_sys::KeyboardEvent| {
-                if ev.key() == "Escape" {
-                    close_all_esc();
-                }
-            });
+            let cb = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+                move |ev: web_sys::KeyboardEvent| {
+                    if ev.key() == "Escape" {
+                        close_all_esc();
+                    }
+                },
+            );
             if let Some(window) = web_sys::window() {
-                let _ = window.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
+                let _ =
+                    window.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
             }
             cb.forget();
         });
@@ -101,12 +115,7 @@ pub fn Nav() -> impl IntoView {
 
     let any_dropdown_open = move || menu_open.get() || notif_open.get();
 
-    let is_authed = move || {
-        user.get()
-            .and_then(|r| r.ok())
-            .flatten()
-            .is_some()
-    };
+    let is_authed = move || user.get().and_then(|r| r.ok()).flatten().is_some();
 
     let close_link = Callback::new(move |_: ()| close_all());
 

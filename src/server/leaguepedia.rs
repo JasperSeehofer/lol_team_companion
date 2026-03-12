@@ -19,7 +19,10 @@ pub struct ProGame {
 
 /// Fetch recent tournament games from Leaguepedia Cargo API.
 /// Returns an empty list on error (non-critical feature).
-pub async fn fetch_recent_games(tournament: &str, limit: u32) -> Result<Vec<ProGame>, LeaguepediaError> {
+pub async fn fetch_recent_games(
+    tournament: &str,
+    limit: u32,
+) -> Result<Vec<ProGame>, LeaguepediaError> {
     let url = format!(
         "https://lol.fandom.com/api.php?action=cargoquery&format=json&limit={limit}&tables=PicksAndBansS7&fields=Team1,Team2,Winner,Team1Picks,Team2Picks&where=Tournament=%27{tournament}%27&order_by=GameId+DESC",
     );
@@ -37,7 +40,8 @@ pub async fn fetch_recent_games(tournament: &str, limit: u32) -> Result<Vec<ProG
         .filter_map(|item| {
             let title = item.get("title")?;
             let parse_picks = |field: &str| -> Vec<String> {
-                title.get(field)
+                title
+                    .get(field)
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .split(',')

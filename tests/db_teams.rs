@@ -5,9 +5,14 @@ mod common;
 use lol_team_companion::server::db;
 
 async fn make_user(db: &surrealdb::Surreal<surrealdb::engine::local::Db>, name: &str) -> String {
-    db::create_user(db, name.into(), format!("{name}@example.com"), "hash".into())
-        .await
-        .unwrap()
+    db::create_user(
+        db,
+        name.into(),
+        format!("{name}@example.com"),
+        "hash".into(),
+    )
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -45,7 +50,10 @@ async fn test_join_team_already_member_fails() {
         .unwrap();
     // u1 is already a member from create_team
     let result = db::join_team(&db, &u1, &team_id).await;
-    assert!(result.is_err(), "joining a team you're already in should fail");
+    assert!(
+        result.is_err(),
+        "joining a team you're already in should fail"
+    );
 }
 
 #[tokio::test]
@@ -139,9 +147,11 @@ async fn test_assign_to_slot_bumps_existing_starter() {
         .unwrap()
         .unwrap();
 
-    let u2_member = members.iter().find(|m| m.user_id.contains("slot_u2") || {
-        // user_id is a RecordId SQL string like "user:xxx"
-        m.username == "slot_u2"
+    let u2_member = members.iter().find(|m| {
+        m.user_id.contains("slot_u2") || {
+            // user_id is a RecordId SQL string like "user:xxx"
+            m.username == "slot_u2"
+        }
     });
     let u3_member = members.iter().find(|m| m.username == "slot_u3");
 
@@ -163,7 +173,9 @@ async fn test_remove_from_slot() {
         .await
         .unwrap();
     db::join_team(&db, &player, &team_id).await.unwrap();
-    db::assign_to_slot(&db, &team_id, &player, "top").await.unwrap();
+    db::assign_to_slot(&db, &team_id, &player, "top")
+        .await
+        .unwrap();
     db::remove_from_slot(&db, &team_id, &player).await.unwrap();
 
     let (_, members) = db::get_user_team_with_members(&db, &owner)

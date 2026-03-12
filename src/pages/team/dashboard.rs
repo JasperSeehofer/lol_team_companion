@@ -1,24 +1,30 @@
-use leptos::prelude::*;
-use leptos_router::components::A;
+use crate::components::ui::{ErrorBanner, StatusMessage};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
-use crate::components::ui::{ErrorBanner, StatusMessage};
+use leptos::prelude::*;
+use leptos_router::components::A;
 
 /// Returns (team, members, current_user_id) so the client can check leadership.
 #[server]
-pub async fn get_team_dashboard() -> Result<Option<(Team, Vec<TeamMember>, String)>, ServerFnError> {
+pub async fn get_team_dashboard() -> Result<Option<(Team, Vec<TeamMember>, String)>, ServerFnError>
+{
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let user_id = user.id.clone();
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
-    match db::get_user_team_with_members(&db, &user.id).await.map_err(|e| ServerFnError::new(e.to_string()))? {
+    match db::get_user_team_with_members(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
         Some((team, members)) => Ok(Some((team, members, user_id))),
         None => Ok(None),
     }
@@ -32,9 +38,11 @@ pub async fn update_team_info(name: String, region: String) -> Result<(), Server
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -42,7 +50,9 @@ pub async fn update_team_info(name: String, region: String) -> Result<(), Server
         .ok_or_else(|| ServerFnError::new("No team"))?;
 
     if team.created_by != user.id {
-        return Err(ServerFnError::new("Only the team leader can edit team details"));
+        return Err(ServerFnError::new(
+            "Only the team leader can edit team details",
+        ));
     }
 
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
@@ -59,9 +69,11 @@ pub async fn set_member_role(member_user_id: String, role: String) -> Result<(),
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -86,9 +98,11 @@ pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -96,7 +110,9 @@ pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
         .ok_or_else(|| ServerFnError::new("No team"))?;
 
     if team.created_by != user.id {
-        return Err(ServerFnError::new("Only the team leader can remove members"));
+        return Err(ServerFnError::new(
+            "Only the team leader can remove members",
+        ));
     }
 
     if member_user_id == user.id {
@@ -117,9 +133,11 @@ pub async fn leave_team() -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -127,7 +145,9 @@ pub async fn leave_team() -> Result<(), ServerFnError> {
         .ok_or_else(|| ServerFnError::new("No team"))?;
 
     if team.created_by == user.id {
-        return Err(ServerFnError::new("Team leader cannot leave the team. Transfer leadership or delete the team first."));
+        return Err(ServerFnError::new(
+            "Team leader cannot leave the team. Transfer leadership or delete the team first.",
+        ));
     }
 
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
@@ -144,9 +164,11 @@ pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -171,9 +193,11 @@ pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(),
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -181,7 +205,9 @@ pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(),
         .ok_or_else(|| ServerFnError::new("No team"))?;
 
     if team.created_by != user.id {
-        return Err(ServerFnError::new("Only the team leader can respond to requests"));
+        return Err(ServerFnError::new(
+            "Only the team leader can respond to requests",
+        ));
     }
 
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
@@ -191,16 +217,21 @@ pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(),
 }
 
 #[server]
-pub async fn assign_member_to_slot(member_user_id: String, role: String) -> Result<(), ServerFnError> {
+pub async fn assign_member_to_slot(
+    member_user_id: String,
+    role: String,
+) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -225,9 +256,11 @@ pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), Ser
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
@@ -235,7 +268,9 @@ pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), Ser
         .ok_or_else(|| ServerFnError::new("No team"))?;
 
     if team.created_by != user.id {
-        return Err(ServerFnError::new("Only the team leader can unassign slots"));
+        return Err(ServerFnError::new(
+            "Only the team leader can unassign slots",
+        ));
     }
 
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
@@ -244,7 +279,15 @@ pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), Ser
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
-const MEMBER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support", "coach", "unassigned"];
+const MEMBER_ROLES: &[&str] = &[
+    "top",
+    "jungle",
+    "mid",
+    "bot",
+    "support",
+    "coach",
+    "unassigned",
+];
 const STARTER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support"];
 
 fn role_icon_url(role: &str) -> &'static str {

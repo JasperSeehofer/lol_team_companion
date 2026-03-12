@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use crate::models::champion::Champion;
+use leptos::prelude::*;
 
 #[component]
 pub fn ChampionAutocomplete(
@@ -44,7 +44,11 @@ pub fn ChampionAutocomplete(
         }
     });
 
-    let placeholder = if placeholder.is_empty() { "Champion..." } else { placeholder };
+    let placeholder = if placeholder.is_empty() {
+        "Champion..."
+    } else {
+        placeholder
+    };
 
     view! {
         <div class="relative">

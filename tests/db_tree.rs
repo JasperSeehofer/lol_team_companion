@@ -43,10 +43,9 @@ async fn test_add_child_node() {
     let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
     let root_id = nodes[0].id.clone().unwrap();
 
-    let child_id =
-        db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Child A".into())
-            .await
-            .unwrap();
+    let child_id = db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Child A".into())
+        .await
+        .unwrap();
 
     assert!(child_id.starts_with("draft_tree_node:"));
 
@@ -111,7 +110,10 @@ async fn test_delete_node_cascades_to_children() {
 
     let tree = db::get_tree_nodes(&db, &tree_id).await.unwrap();
     assert_eq!(tree.len(), 1, "only root should remain");
-    assert!(tree[0].children.is_empty(), "child and grandchild should be deleted");
+    assert!(
+        tree[0].children.is_empty(),
+        "child and grandchild should be deleted"
+    );
 }
 
 #[tokio::test]

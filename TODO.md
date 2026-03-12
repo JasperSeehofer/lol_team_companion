@@ -40,7 +40,7 @@
 - [x] **Click-to-select slot (not delete)**: First click highlights slot with red border + × badge; clicking × removes the champion. Click elsewhere to deselect.
 - [x] **Auto-save node on edit**: Debounced 2 s after last change. Shows "✓ Saved" / "● Unsaved changes" indicator.
 - [ ] **Drag-and-drop picks/bans within node editor**: Champions in draft slots should be draggable between slots (swap on drop).
-- [ ] **Interactive tree graph**: Clicking a node in the SVG tree should select it in the editor (two-way sync). Highlight selected node.
+- [x] **Interactive tree graph**: Clicking a node in the SVG tree selects it in the editor (two-way sync). Selected node highlighted with accent color glow filter. New branches auto-select after creation.
 
 #### Draft
 - [x] **Auto-save**: When a draft has a name and is an existing saved draft, auto-saves debounced 2 s after any pick/ban/comment change. Shows "✓ Saved" / "● Unsaved changes" status in header.
@@ -48,8 +48,8 @@
 
 #### Team Section
 - [x] **Role icons — remove duplicate text**: Starter slots now show only the SVG role icon (larger, 24px) with the role name as a `title` tooltip. Text label removed.
-- [ ] **Remove "Link Riot account" from team dashboard**: Belongs in Profile. Replace with a notice + link: "Riot account not linked — link it in your profile" if not yet connected.
-- [ ] **Team rename → pencil icon modal**: Remove the prominent rename form. Add a small pencil (✏) icon next to the team name that opens a modal to change name and region.
+- [x] **Remove "Link Riot account" from team dashboard**: Replaced with conditional notice + link to Profile if Riot account not linked.
+- [x] **Team rename → pencil icon modal**: Inline form replaced with pencil icon next to team name; opens modal with name + region fields (leader-only).
 
 #### Auth UX
 - [x] **Protected pages show inline "not logged in" instead of redirecting**: Fixed — all protected pages now fetch `get_current_user()` on mount and redirect to `/auth/login` if the user is `None`.
@@ -83,16 +83,9 @@
 
 #### Stats
 - [x] **Show partial-team matches**: "Minimum players" dropdown (2–roster size) replaces the old "full roster only" checkbox. Shows all matches where ≥ N linked members played together.
-- [ ] **Solo Queue sync**: Add a queue type selector to `sync_team_stats()`:
-  - 420 — Ranked Solo/Duo
-  - 440 — Ranked Flex (current default)
-  - 0 — All queues (Normal)
-- [ ] **Standard match history layout**: Align with established OP.GG / League client conventions:
-  - Left: champion icon, spells, runes
-  - Centre: KDA, CS, vision score, items
-  - Right: W/L badge, match duration, date
-  - Row tint: blue for win, red for loss
-- [ ] **Match detail expand**: Click a match row to expand into a full scoreboard (all 10 players, damage, vision, items).
+- [x] **Solo Queue sync**: Queue type selector added (Solo/Duo 420, Flex 440, All Queues). `fetch_match_history` accepts `Option<i32>` queue filter.
+- [x] **Standard match history layout**: OP.GG-style rows with champion icon (Data Dragon CDN), KDA, CS, vision, damage, win/loss badge + row tinting (blue/red).
+- [x] **Match detail expand**: Click a match row to expand team members' scoreboard (team members only; full 10-player data not yet available).
 
 ---
 

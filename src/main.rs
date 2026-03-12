@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 
-use axum::{Router, extract::State, routing::get};
-use axum_login::{AuthManagerLayerBuilder, tower_sessions::SessionManagerLayer};
+use axum::{extract::State, routing::get, Router};
+use axum_login::{tower_sessions::SessionManagerLayer, AuthManagerLayerBuilder};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use std::sync::Arc;
@@ -16,9 +16,7 @@ struct AppState {
     auth_backend: AuthBackend,
 }
 
-async fn health_handler(
-    State(state): State<AppState>,
-) -> axum::Json<serde_json::Value> {
+async fn health_handler(State(state): State<AppState>) -> axum::Json<serde_json::Value> {
     let db_ok = state.db.query("RETURN true").await.is_ok();
     axum::Json(serde_json::json!({
         "status": "ok",
@@ -52,10 +50,7 @@ async fn main() {
     let routes = generate_route_list(App);
 
     // Sessions
-    let session_store = SurrealSessionStore::new(
-        Arc::clone(&surreal_db),
-        "sessions".to_string(),
-    );
+    let session_store = SurrealSessionStore::new(Arc::clone(&surreal_db), "sessions".to_string());
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
         .with_expiry(tower_sessions::Expiry::OnInactivity(
@@ -95,5 +90,7 @@ async fn main() {
 
     tracing::info!("Listening on http://{}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app.into_make_service()).await.unwrap();
+    axum::serve(listener, app.into_make_service())
+        .await
+        .unwrap();
 }

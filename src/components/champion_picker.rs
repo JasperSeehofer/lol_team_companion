@@ -1,14 +1,14 @@
-use leptos::prelude::*;
 use crate::models::champion::Champion;
+use leptos::prelude::*;
 
 fn role_tags(role: &str) -> &'static [&'static str] {
     match role {
-        "Top"     => &["Fighter", "Tank"],
-        "Jungle"  => &["Fighter", "Assassin", "Tank"],
-        "Mid"     => &["Mage", "Assassin"],
-        "ADC"     => &["Marksman"],
+        "Top" => &["Fighter", "Tank"],
+        "Jungle" => &["Fighter", "Assassin", "Tank"],
+        "Mid" => &["Mage", "Assassin"],
+        "ADC" => &["Marksman"],
         "Support" => &["Support"],
-        _         => &[],
+        _ => &[],
     }
 }
 
@@ -42,7 +42,9 @@ pub fn ChampionPicker(
                 .filter(|c| c.name.to_lowercase().contains(&q))
                 .filter(|c| match &role {
                     None => true,
-                    Some(r) => role_tags(r).iter().any(|tag| c.tags.contains(&tag.to_string())),
+                    Some(r) => role_tags(r)
+                        .iter()
+                        .any(|tag| c.tags.contains(&tag.to_string())),
                 })
                 .cloned()
                 .collect::<Vec<_>>()

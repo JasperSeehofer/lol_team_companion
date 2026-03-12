@@ -1,31 +1,31 @@
+use crate::models::champion::Champion;
 use leptos::prelude::*;
 use std::collections::HashMap;
-use crate::models::champion::Champion;
 
 /// Returns (side, kind, label) for each of the 20 draft slots in official LoL order.
 pub fn slot_meta(idx: usize) -> (&'static str, &'static str, &'static str) {
     match idx {
-        0  => ("blue", "ban",  "Ban 1"),
-        1  => ("red",  "ban",  "Ban 1"),
-        2  => ("blue", "ban",  "Ban 2"),
-        3  => ("red",  "ban",  "Ban 2"),
-        4  => ("blue", "ban",  "Ban 3"),
-        5  => ("red",  "ban",  "Ban 3"),
-        6  => ("blue", "pick", "Pick 1"),
-        7  => ("red",  "pick", "Pick 1"),
-        8  => ("red",  "pick", "Pick 2"),
-        9  => ("blue", "pick", "Pick 2"),
+        0 => ("blue", "ban", "Ban 1"),
+        1 => ("red", "ban", "Ban 1"),
+        2 => ("blue", "ban", "Ban 2"),
+        3 => ("red", "ban", "Ban 2"),
+        4 => ("blue", "ban", "Ban 3"),
+        5 => ("red", "ban", "Ban 3"),
+        6 => ("blue", "pick", "Pick 1"),
+        7 => ("red", "pick", "Pick 1"),
+        8 => ("red", "pick", "Pick 2"),
+        9 => ("blue", "pick", "Pick 2"),
         10 => ("blue", "pick", "Pick 3"),
-        11 => ("red",  "pick", "Pick 3"),
-        12 => ("red",  "ban",  "Ban 4"),
-        13 => ("blue", "ban",  "Ban 4"),
-        14 => ("red",  "ban",  "Ban 5"),
-        15 => ("blue", "ban",  "Ban 5"),
-        16 => ("red",  "pick", "Pick 4"),
+        11 => ("red", "pick", "Pick 3"),
+        12 => ("red", "ban", "Ban 4"),
+        13 => ("blue", "ban", "Ban 4"),
+        14 => ("red", "ban", "Ban 5"),
+        15 => ("blue", "ban", "Ban 5"),
+        16 => ("red", "pick", "Pick 4"),
         17 => ("blue", "pick", "Pick 4"),
         18 => ("blue", "pick", "Pick 5"),
-        19 => ("red",  "pick", "Pick 5"),
-        _  => ("blue", "ban",  "?"),
+        19 => ("red", "pick", "Pick 5"),
+        _ => ("blue", "ban", "?"),
     }
 }
 
@@ -43,8 +43,6 @@ pub fn DraftBoard(
     let champion_map = StoredValue::new(champion_map);
 
     let render_ban_slot = move |slot_idx: usize| {
-        let on_slot_drop = on_slot_drop.clone();
-        let on_slot_clear = on_slot_clear.clone();
         let (_, _, label) = slot_meta(slot_idx);
         view! {
             <div
@@ -66,7 +64,7 @@ pub fn DraftBoard(
                 on:click=move |_| on_slot_click.run(slot_idx)
                 on:dragover=move |ev: web_sys::DragEvent| ev.prevent_default()
                 on:drop={
-                    let on_slot_drop = on_slot_drop.clone();
+                    let on_slot_drop = on_slot_drop;
                     move |ev: web_sys::DragEvent| {
                         ev.prevent_default();
                         if let Some(dt) = ev.data_transfer() {
@@ -87,7 +85,7 @@ pub fn DraftBoard(
                         let icon_url = champion_map.with_value(|m| {
                             m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
                         });
-                        let on_slot_clear = on_slot_clear.clone();
+                        let on_slot_clear = on_slot_clear;
                         view! {
                             <div class="relative w-full h-full">
                                 <img src=icon_url alt=champ_name class="w-full h-full object-cover opacity-50 grayscale" />
@@ -119,8 +117,6 @@ pub fn DraftBoard(
 
     // is_pick1_slot: slot 6 or 7 (first pick of each side)
     let render_pick_slot = move |slot_idx: usize, is_blue: bool| {
-        let on_slot_drop = on_slot_drop.clone();
-        let on_slot_clear = on_slot_clear.clone();
         let (_, _, label) = slot_meta(slot_idx);
         let is_pick1_slot = slot_idx == 6 || slot_idx == 7;
         view! {
@@ -147,7 +143,7 @@ pub fn DraftBoard(
                 on:click=move |_| on_slot_click.run(slot_idx)
                 on:dragover=move |ev: web_sys::DragEvent| ev.prevent_default()
                 on:drop={
-                    let on_slot_drop = on_slot_drop.clone();
+                    let on_slot_drop = on_slot_drop;
                     move |ev: web_sys::DragEvent| {
                         ev.prevent_default();
                         if let Some(dt) = ev.data_transfer() {
@@ -172,7 +168,7 @@ pub fn DraftBoard(
                         let icon_url = champion_map.with_value(|m| {
                             m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
                         });
-                        let on_slot_clear = on_slot_clear.clone();
+                        let on_slot_clear = on_slot_clear;
                         view! {
                             <div class="relative h-full w-full">
                                 <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>

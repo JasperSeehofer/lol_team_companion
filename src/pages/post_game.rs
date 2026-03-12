@@ -1,8 +1,8 @@
+use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::models::draft::Draft;
+use crate::models::game_plan::{GamePlan, PostGameLearning};
 use leptos::prelude::*;
 use std::collections::HashMap;
-use crate::models::game_plan::{GamePlan, PostGameLearning};
-use crate::models::draft::Draft;
-use crate::components::ui::{ErrorBanner, StatusMessage};
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -16,9 +16,11 @@ pub async fn list_reviews() -> Result<Vec<PostGameLearning>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -41,9 +43,11 @@ pub async fn list_plans_for_postgame() -> Result<Vec<GamePlan>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -66,9 +70,11 @@ pub async fn list_drafts_for_postgame() -> Result<Vec<Draft>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -91,9 +97,11 @@ pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
@@ -108,7 +116,8 @@ pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     let mut seen = std::collections::HashSet::new();
-    let ids: Vec<String> = rows.into_iter()
+    let ids: Vec<String> = rows
+        .into_iter()
         .filter(|r| seen.insert(r.riot_match_id.clone()))
         .map(|r| r.riot_match_id)
         .collect();
@@ -123,9 +132,11 @@ pub async fn create_review(review_json: String) -> Result<String, ServerFnError>
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
@@ -150,9 +161,11 @@ pub async fn update_review(review_json: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let review: PostGameLearning = serde_json::from_str(&review_json)
         .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
@@ -170,9 +183,11 @@ pub async fn delete_review(review_id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     db::delete_post_game_learning(&surreal, &review_id)
         .await
@@ -192,6 +207,7 @@ fn input_class() -> &'static str {
 }
 
 /// Basic pattern analysis: find recurring themes across reviews
+#[allow(clippy::type_complexity)]
 fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<(String, usize)>) {
     let mut good_counts: HashMap<String, usize> = HashMap::new();
     let mut improve_counts: HashMap<String, usize> = HashMap::new();
@@ -208,11 +224,14 @@ fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<
     }
 
     let mut good: Vec<(String, usize)> = good_counts.into_iter().filter(|(_, c)| *c >= 2).collect();
-    good.sort_by(|a, b| b.1.cmp(&a.1));
+    good.sort_by_key(|a| std::cmp::Reverse(a.1));
     good.truncate(5);
 
-    let mut bad: Vec<(String, usize)> = improve_counts.into_iter().filter(|(_, c)| *c >= 2).collect();
-    bad.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut bad: Vec<(String, usize)> = improve_counts
+        .into_iter()
+        .filter(|(_, c)| *c >= 2)
+        .collect();
+    bad.sort_by_key(|a| std::cmp::Reverse(a.1));
     bad.truncate(5);
 
     (good, bad)
@@ -276,13 +295,56 @@ pub fn PostGamePage() -> impl IntoView {
         PostGameLearning {
             id: editing_id.get_untracked(),
             team_id: String::new(),
-            match_riot_id: { let s = match_riot_id.get_untracked(); if s.is_empty() { None } else { Some(s) } },
-            game_plan_id: { let s = game_plan_id.get_untracked(); if s.is_empty() { None } else { Some(s) } },
-            draft_id: { let s = draft_id.get_untracked(); if s.is_empty() { None } else { Some(s) } },
-            what_went_well: went_well.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-            improvements: improvements.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-            action_items: action_items.get_untracked().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-            open_notes: { let s = open_notes.get_untracked(); if s.is_empty() { None } else { Some(s) } },
+            match_riot_id: {
+                let s = match_riot_id.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            game_plan_id: {
+                let s = game_plan_id.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            draft_id: {
+                let s = draft_id.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
+            what_went_well: went_well
+                .get_untracked()
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            improvements: improvements
+                .get_untracked()
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            action_items: action_items
+                .get_untracked()
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            open_notes: {
+                let s = open_notes.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
             created_by: String::new(),
         }
     };
@@ -303,7 +365,11 @@ pub fn PostGamePage() -> impl IntoView {
                     if !is_update && !id.is_empty() {
                         set_editing_id.set(Some(id));
                     }
-                    set_status_msg.set(Some(if is_update { "Review updated!".into() } else { "Review created!".into() }));
+                    set_status_msg.set(Some(if is_update {
+                        "Review updated!".into()
+                    } else {
+                        "Review created!".into()
+                    }));
                     reviews.refetch();
                 }
                 Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),

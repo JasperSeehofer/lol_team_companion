@@ -43,7 +43,10 @@ pub async fn get_puuid(game_name: &str, tag_line: &str) -> Result<String, RiotEr
     Ok(account.puuid)
 }
 
-pub async fn fetch_match_history(puuid: &str, queue_id: Option<i32>) -> Result<Vec<MatchData>, RiotError> {
+pub async fn fetch_match_history(
+    puuid: &str,
+    queue_id: Option<i32>,
+) -> Result<Vec<MatchData>, RiotError> {
     let api = api();
 
     let queue_filter = queue_id.map(|q| riven::consts::Queue::from(q as u16));
@@ -73,11 +76,7 @@ pub async fn fetch_match_history(puuid: &str, queue_id: Option<i32>) -> Result<V
             continue;
         };
 
-        let participant = m
-            .info
-            .participants
-            .iter()
-            .find(|p| p.puuid == puuid);
+        let participant = m.info.participants.iter().find(|p| p.puuid == puuid);
 
         let Some(p) = participant else { continue };
 
@@ -87,12 +86,12 @@ pub async fn fetch_match_history(puuid: &str, queue_id: Option<i32>) -> Result<V
             game_duration: m.info.game_duration as i32,
             game_end_epoch_ms: m.info.game_end_timestamp,
             champion: p.champion_name.clone(),
-            kills: p.kills as i32,
-            deaths: p.deaths as i32,
-            assists: p.assists as i32,
-            cs: (p.total_minions_killed + p.neutral_minions_killed) as i32,
-            vision_score: p.vision_score as i32,
-            damage: p.total_damage_dealt_to_champions as i32,
+            kills: p.kills,
+            deaths: p.deaths,
+            assists: p.assists,
+            cs: p.total_minions_killed + p.neutral_minions_killed,
+            vision_score: p.vision_score,
+            damage: p.total_damage_dealt_to_champions,
             win: p.win,
         });
     }

@@ -32,26 +32,28 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
     let auth: AuthSession = leptos_axum::extract().await?;
     let user = match auth.user {
         Some(u) => u,
-        None => return Ok(DashboardData {
-            logged_in: false,
-            username: String::new(),
-            has_team: false,
-            team_name: None,
-            roster_count: 0,
-            pending_requests: 0,
-            is_leader: false,
-            draft_count: 0,
-            tree_count: 0,
-            plan_count: 0,
-            review_count: 0,
-            recent_games: 0,
-            recent_win_rate: None,
-            has_riot_key: riot::has_api_key(),
-        }),
+        None => {
+            return Ok(DashboardData {
+                logged_in: false,
+                username: String::new(),
+                has_team: false,
+                team_name: None,
+                roster_count: 0,
+                pending_requests: 0,
+                is_leader: false,
+                draft_count: 0,
+                tree_count: 0,
+                plan_count: 0,
+                review_count: 0,
+                recent_games: 0,
+                recent_win_rate: None,
+                has_riot_key: riot::has_api_key(),
+            })
+        }
     };
 
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     let team_data = db::get_user_team_with_members(&surreal, &user.id)
         .await
@@ -69,38 +71,60 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
 
     let pending_requests = if is_leader {
         if let Some(ref tid) = team_id_opt {
-            db::count_pending_join_requests(&surreal, tid).await.unwrap_or(0)
-        } else { 0 }
-    } else { 0 };
-
-    let (draft_count, tree_count, plan_count, review_count, recent_games, recent_win_rate) = match &team_id_opt {
-        Some(tid) => {
-            let drafts = db::list_drafts(&surreal, tid).await.unwrap_or_default();
-            let trees = db::list_draft_trees(&surreal, tid).await.unwrap_or_default();
-            let plans = db::list_game_plans(&surreal, tid).await.unwrap_or_default();
-            let reviews = db::list_post_game_learnings(&surreal, tid).await.unwrap_or_default();
-            let match_rows = db::get_team_match_stats(&surreal, tid).await.unwrap_or_default();
-
-            // Compute recent win rate from unique matches
-            let mut seen = std::collections::HashSet::new();
-            let mut wins = 0usize;
-            let mut total = 0usize;
-            for r in &match_rows {
-                if seen.insert(r.riot_match_id.clone()) {
-                    total += 1;
-                    if r.win { wins += 1; }
-                }
-            }
-            let wr = if total > 0 {
-                Some(format!("{:.0}%", wins as f64 / total as f64 * 100.0))
-            } else {
-                None
-            };
-
-            (drafts.len(), trees.len(), plans.len(), reviews.len(), total, wr)
+            db::count_pending_join_requests(&surreal, tid)
+                .await
+                .unwrap_or(0)
+        } else {
+            0
         }
-        None => (0, 0, 0, 0, 0, None),
+    } else {
+        0
     };
+
+    let (draft_count, tree_count, plan_count, review_count, recent_games, recent_win_rate) =
+        match &team_id_opt {
+            Some(tid) => {
+                let drafts = db::list_drafts(&surreal, tid).await.unwrap_or_default();
+                let trees = db::list_draft_trees(&surreal, tid)
+                    .await
+                    .unwrap_or_default();
+                let plans = db::list_game_plans(&surreal, tid).await.unwrap_or_default();
+                let reviews = db::list_post_game_learnings(&surreal, tid)
+                    .await
+                    .unwrap_or_default();
+                let match_rows = db::get_team_match_stats(&surreal, tid)
+                    .await
+                    .unwrap_or_default();
+
+                // Compute recent win rate from unique matches
+                let mut seen = std::collections::HashSet::new();
+                let mut wins = 0usize;
+                let mut total = 0usize;
+                for r in &match_rows {
+                    if seen.insert(r.riot_match_id.clone()) {
+                        total += 1;
+                        if r.win {
+                            wins += 1;
+                        }
+                    }
+                }
+                let wr = if total > 0 {
+                    Some(format!("{:.0}%", wins as f64 / total as f64 * 100.0))
+                } else {
+                    None
+                };
+
+                (
+                    drafts.len(),
+                    trees.len(),
+                    plans.len(),
+                    reviews.len(),
+                    total,
+                    wr,
+                )
+            }
+            None => (0, 0, 0, 0, 0, None),
+        };
 
     Ok(DashboardData {
         logged_in: true,
@@ -199,7 +223,11 @@ fn LandingPage() -> impl IntoView {
 #[component]
 fn Dashboard(data: DashboardData) -> impl IntoView {
     let recent_games_display = if data.recent_games > 0 {
-        format!("{} ({})", data.recent_games, data.recent_win_rate.clone().unwrap_or("–".into()))
+        format!(
+            "{} ({})",
+            data.recent_games,
+            data.recent_win_rate.clone().unwrap_or("–".into())
+        )
     } else {
         "–".into()
     };
@@ -308,7 +336,12 @@ fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoV
 }
 
 #[component]
-fn NavCard(href: &'static str, title: &'static str, desc: &'static str, accent: &'static str) -> impl IntoView {
+fn NavCard(
+    href: &'static str,
+    title: &'static str,
+    desc: &'static str,
+    accent: &'static str,
+) -> impl IntoView {
     view! {
         <A href=href>
             <div class=format!("bg-elevated/50 border border-divider/50 border-l-4 {accent} rounded-xl p-5 hover:bg-elevated transition-colors cursor-pointer h-full")>
