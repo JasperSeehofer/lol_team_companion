@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Context7 MCP server for live library documentation lookup (Leptos, SurrealDB, Axum, etc.)
+- GitHub MCP server for rich GitHub integration (issues, PRs, code search) via `GITHUB_TOKEN`
+- GSD (Get Shit Done) planning system with `/gsd:*` slash commands for spec-driven development
+- Skill-Creator meta-skill for building custom Claude Code slash commands
+- Pre-commit docs check skill (`/pre-commit-docs`) — reviews CHANGELOG, TODO, CLAUDE.md, INSTRUCTIONS.md before every commit
+- `GITHUB_TOKEN` in `.env.example` for GitHub MCP server
+- "Plugins & MCP Servers" section in CLAUDE.md
+
 ## [0.16.0] - 2026-03-11
 
 ### Fixed

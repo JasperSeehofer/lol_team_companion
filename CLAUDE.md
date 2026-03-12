@@ -458,6 +458,12 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 
 55. **Suppress auto-save during batch signal updates** — When switching nodes/trees, multiple signals are updated in sequence. Each update re-triggers the auto-save Effect. Use a `suppress_autosave: RwSignal<bool>` guard: set `true` before batch updates, then re-enable after a `setTimeout(0)` microtask so the Effect skips all intermediate firings.
 
+## Plugins & MCP Servers
+
+- **Playwright MCP** — interactive browser testing (navigate, snapshot, click)
+- **Context7** — up-to-date library docs; add "use context7" to prompts for live documentation lookup
+- **GitHub MCP** — rich GitHub integration (PRs, issues, code search) via `GITHUB_TOKEN` env var
+
 ## Code Style
 
 - **Errors:** `thiserror` for custom error types, map to `ServerFnError` via `.map_err(|e| ServerFnError::new(e.to_string()))`
