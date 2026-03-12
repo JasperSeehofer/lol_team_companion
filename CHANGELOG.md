@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tree graph: reactive SVG node highlighting with accent color glow filter; two-way graph/editor sync (click graph node selects in editor and vice versa); new branches auto-select after creation
 - Stats page: queue type selector (Solo/Duo, Flex, All Queues) for match sync; OP.GG-style match history layout with champion icons, KDA, CS, vision, damage, win/loss row tinting; expandable match detail panel showing team members' stats per match
 - `verify-implementation` skill for post-implementation testing (compile, browser, e2e, regression sweep)
+- Stats page: animated spinner on Sync button + blue progress banner during match sync; "Team Games / All Matches" segmented toggle to switch between team-only (min_players≥2) and all matches (including solo queue)
 
 ### Fixed
 

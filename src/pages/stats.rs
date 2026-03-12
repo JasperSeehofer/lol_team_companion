@@ -264,6 +264,7 @@ pub fn StatsPage() -> impl IntoView {
     let (min_players, set_min_players) = signal(2_usize);
     let (filter_player, set_filter_player) = signal(String::new());
     let (filter_queue, set_filter_queue) = signal(0_i32); // 0 = all queues
+    let (show_all, set_show_all) = signal(false); // false = team games only
 
     let do_sync = move |_| {
         set_syncing.set(true);
@@ -309,14 +310,24 @@ pub fn StatsPage() -> impl IntoView {
                     </select>
                     <button
                         class=move || if syncing.get() {
-                            "bg-overlay-strong text-muted font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed"
+                            "bg-overlay-strong text-muted font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed flex items-center gap-2"
                         } else {
-                            "bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg px-5 py-2.5 text-sm transition-colors"
+                            "bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg px-5 py-2.5 text-sm transition-colors flex items-center gap-2"
                         }
                         on:click=do_sync
                         disabled=move || syncing.get()
                     >
-                        {move || if syncing.get() { "Syncing..." } else { "Sync Matches" }}
+                        {move || if syncing.get() {
+                            view! {
+                                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                <span>"Syncing..."</span>
+                            }.into_any()
+                        } else {
+                            view! { <span>"Sync Matches"</span> }.into_any()
+                        }}
                     </button>
                 </div>
             </div>
@@ -339,6 +350,21 @@ pub fn StatsPage() -> impl IntoView {
                     }
                 })}
             </Suspense>
+
+            // Sync progress banner
+            {move || if syncing.get() {
+                view! {
+                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <svg class="animate-spin h-4 w-4 text-blue-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        <span class="text-blue-400 text-sm">"Syncing matches from Riot API... This may take a moment."</span>
+                    </div>
+                }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
 
             // Sync result
             {move || sync_result.get().map(|r| match r {
@@ -387,6 +413,8 @@ pub fn StatsPage() -> impl IntoView {
                                 set_filter_player=set_filter_player
                                 filter_queue=filter_queue
                                 set_filter_queue=set_filter_queue
+                                show_all=show_all
+                                set_show_all=set_show_all
                             />
                         }.into_any()
                     }
@@ -407,6 +435,8 @@ fn StatsContent(
     set_filter_player: WriteSignal<String>,
     filter_queue: ReadSignal<i32>,
     set_filter_queue: WriteSignal<i32>,
+    show_all: ReadSignal<bool>,
+    set_show_all: WriteSignal<bool>,
 ) -> impl IntoView {
     let all_matches = StoredValue::new(all_matches);
     let unique_players_for_filter = unique_players.clone();
@@ -418,13 +448,14 @@ fn StatsContent(
         let min = min_players.get();
         let player_filter = filter_player.get();
         let queue_filter = filter_queue.get();
+        let all = show_all.get();
 
         all_matches.with_value(|matches| {
             matches
                 .iter()
                 .filter(|m| {
-                    // Minimum players filter
-                    if m.players.len() < min {
+                    // Minimum players filter (skip when showing all)
+                    if !all && m.players.len() < min {
                         return false;
                     }
                     // Player filter
@@ -484,7 +515,27 @@ fn StatsContent(
         <div class="flex flex-col gap-6">
             // Filters
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
-                <span class="text-muted text-sm font-medium">"Filters:"</span>
+                // All / Team toggle
+                <div class="flex rounded-lg overflow-hidden border border-outline/50">
+                    <button
+                        class=move || if !show_all.get() {
+                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
+                        } else {
+                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
+                        }
+                        on:click=move |_| set_show_all.set(false)
+                    >"Team Games"</button>
+                    <button
+                        class=move || if show_all.get() {
+                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
+                        } else {
+                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
+                        }
+                        on:click=move |_| set_show_all.set(true)
+                    >"All Matches"</button>
+                </div>
+
+                <span class="text-overlay-strong">"|"</span>
 
                 // Queue type filter
                 <div class="flex items-center gap-2">
@@ -503,28 +554,33 @@ fn StatsContent(
                     </select>
                 </div>
 
-                <span class="text-overlay-strong">"|"</span>
-
-                // Min players dropdown
-                <div class="flex items-center gap-2">
-                    <span class="text-secondary text-sm">"Min. players:"</span>
-                    <select
-                        class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
-                        on:change=move |ev| {
-                            let v: usize = event_target_value(&ev).parse().unwrap_or(2);
-                            set_min_players.set(v);
-                        }
-                    >
-                        {(2..=roster_size.max(2)).map(|n| {
-                            let label = if n == roster_size && roster_size >= 5 {
-                                format!("{n} (full roster)")
-                            } else {
-                                n.to_string()
-                            };
-                            view! { <option value=n.to_string()>{label}</option> }
-                        }).collect_view()}
-                    </select>
-                </div>
+                // Min players dropdown (hidden when showing all matches)
+                {move || if !show_all.get() {
+                    view! {
+                        <span class="text-overlay-strong">"|"</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-secondary text-sm">"Min. players:"</span>
+                            <select
+                                class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
+                                on:change=move |ev| {
+                                    let v: usize = event_target_value(&ev).parse().unwrap_or(2);
+                                    set_min_players.set(v);
+                                }
+                            >
+                                {(2..=roster_size.max(2)).map(|n| {
+                                    let label = if n == roster_size && roster_size >= 5 {
+                                        format!("{n} (full roster)")
+                                    } else {
+                                        n.to_string()
+                                    };
+                                    view! { <option value=n.to_string()>{label}</option> }
+                                }).collect_view()}
+                            </select>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
 
                 <span class="text-overlay-strong">"|"</span>
 
