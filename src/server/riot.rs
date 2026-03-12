@@ -43,8 +43,10 @@ pub async fn get_puuid(game_name: &str, tag_line: &str) -> Result<String, RiotEr
     Ok(account.puuid)
 }
 
-pub async fn fetch_match_history(puuid: &str, queue_id: i32) -> Result<Vec<MatchData>, RiotError> {
+pub async fn fetch_match_history(puuid: &str, queue_id: Option<i32>) -> Result<Vec<MatchData>, RiotError> {
     let api = api();
+
+    let queue_filter = queue_id.map(|q| riven::consts::Queue::from(q as u16));
 
     let match_ids = api
         .match_v5()
@@ -53,7 +55,7 @@ pub async fn fetch_match_history(puuid: &str, queue_id: i32) -> Result<Vec<Match
             puuid,
             Some(20),
             None,
-            Some(riven::consts::Queue::from(queue_id as u16)),
+            queue_filter,
             None,
             None,
             None,
@@ -81,7 +83,7 @@ pub async fn fetch_match_history(puuid: &str, queue_id: i32) -> Result<Vec<Match
 
         results.push(MatchData {
             match_id: mid,
-            queue_id,
+            queue_id: u16::from(m.info.queue_id) as i32,
             game_duration: m.info.game_duration as i32,
             game_end_epoch_ms: m.info.game_end_timestamp,
             champion: p.champion_name.clone(),
