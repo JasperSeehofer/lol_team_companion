@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stats: matches not appearing after sync — `player_match` writes silently discarded by `.ok()` (now `.check()?`), and `get_team_match_stats` deserialization failed on `datetime` field (added `<string>` cast) and `match` record ref returned as `NONE` by `SELECT *` traversal (now `Option<RecordId>`)
 - 23 clippy warnings: unnecessary casts in riot.rs, clone-on-copy in draft_board.rs, redundant closure in register.rs, type complexity in post_game.rs, manual_memcpy in tree_drafter.rs, too_many_arguments in db.rs
 - E2e test fixture: updated for registration auto-login (no longer does register+login two-step)
 - E2e WASM Effect race condition: added 500ms settle delay after registration redirect to prevent `window.location.set_href` from interrupting subsequent navigations

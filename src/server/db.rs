@@ -1233,8 +1233,8 @@ pub async fn store_matches(
             .bind(("vision_score", m.vision_score))
             .bind(("damage", m.damage))
             .bind(("win", m.win))
-            .await
-            .ok();
+            .await?
+            .check()?;
     }
     Ok(())
 }
@@ -1269,7 +1269,7 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
         .join(", ");
 
     let query = format!(
-        "SELECT *, match.match_id as riot_match_id, match.queue_id as queue_id, match.game_duration as game_duration, match.game_end as game_end, user.username as username FROM player_match WHERE user IN [{user_id_list}] ORDER BY match.game_end DESC LIMIT 200"
+        "SELECT *, match.match_id as riot_match_id, match.queue_id as queue_id, match.game_duration as game_duration, <string> match.game_end as game_end, user.username as username FROM player_match WHERE user IN [{user_id_list}] ORDER BY match.game_end DESC LIMIT 200"
     );
 
     let mut result = db.query(&query).await?;
@@ -1281,7 +1281,7 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
 struct DbTeamMatchRow {
     id: RecordId,
     #[serde(rename = "match")]
-    match_ref: RecordId,
+    match_ref: Option<RecordId>,
     user: RecordId,
     username: String,
     riot_match_id: String,
@@ -1320,7 +1320,7 @@ pub struct TeamMatchRow {
 impl From<DbTeamMatchRow> for TeamMatchRow {
     fn from(r: DbTeamMatchRow) -> Self {
         TeamMatchRow {
-            match_db_id: r.match_ref.to_sql(),
+            match_db_id: r.match_ref.map(|m| m.to_sql()).unwrap_or_default(),
             user_id: r.user.to_sql(),
             username: r.username,
             riot_match_id: r.riot_match_id,
