@@ -8,6 +8,7 @@ const NODE_H: f64 = 36.0;
 const LEVEL_H: f64 = 100.0;
 const H_GAP: f64 = 16.0;
 const ICON_SIZE: f64 = 22.0;
+const SELECTED_STROKE_WIDTH: &str = "2.5";
 
 /// Positioned node for the layout algorithm
 #[derive(Clone, Debug)]
@@ -220,6 +221,18 @@ pub fn TreeGraph(
                 xmlns="http://www.w3.org/2000/svg"
                 class="block"
             >
+                // SVG filter for selected node glow
+                <defs>
+                    <filter id="selected-glow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur" />
+                        <feFlood flood-color="var(--color-accent, #6366f1)" flood-opacity="0.5" result="color" />
+                        <feComposite in="color" in2="blur" operator="in" result="glow" />
+                        <feMerge>
+                            <feMergeNode in="glow" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
                 // Edges
                 {all_edges.into_iter().map(|edge| {
                     let mid_y = (edge.from_y + edge.to_y) / 2.0;
@@ -330,7 +343,11 @@ pub fn TreeGraph(
                     let nid = n.id.clone();
                     let nid_for_click = nid.clone();
                     let nid_for_add = nid.clone();
-                    let nid_for_selected = nid.clone();
+                    let nid_for_rect_fill = nid.clone();
+                    let nid_for_rect_stroke = nid.clone();
+                    let nid_for_rect_sw = nid.clone();
+                    let nid_for_rect_filter = nid.clone();
+                    let nid_for_label_fill = nid.clone();
                     let label = n.label.clone();
                     let is_improvised = n.is_improvised;
                     let is_root = n.is_root;
@@ -361,7 +378,7 @@ pub fn TreeGraph(
                                 });
                             }
                         >
-                            // Node rectangle
+                            // Node rectangle — reactive fill/stroke/filter based on selected_node_id
                             <rect
                                 x=format!("{x}")
                                 y=format!("{y}")
@@ -369,15 +386,34 @@ pub fn TreeGraph(
                                 height=format!("{NODE_H}")
                                 rx="8"
                                 ry="8"
-                                fill={
-                                    let selected = selected_node_id.get_untracked().as_deref() == Some(&nid_for_selected);
-                                    if selected { "var(--t-accent)" } else { "var(--t-elevated)" }
+                                fill=move || {
+                                    if selected_node_id.get().as_deref() == Some(nid_for_rect_fill.as_str()) {
+                                        "var(--t-accent)"
+                                    } else {
+                                        "var(--t-elevated)"
+                                    }
                                 }
-                                stroke={
-                                    let selected = selected_node_id.get_untracked().as_deref() == Some(&nid_for_selected);
-                                    if selected { "var(--t-accent-hover)" } else { "var(--t-divider)" }
+                                stroke=move || {
+                                    if selected_node_id.get().as_deref() == Some(nid_for_rect_stroke.as_str()) {
+                                        "var(--t-accent-hover)"
+                                    } else {
+                                        "var(--t-divider)"
+                                    }
                                 }
-                                stroke-width="1.5"
+                                stroke-width=move || {
+                                    if selected_node_id.get().as_deref() == Some(nid_for_rect_sw.as_str()) {
+                                        SELECTED_STROKE_WIDTH
+                                    } else {
+                                        "1.5"
+                                    }
+                                }
+                                filter=move || {
+                                    if selected_node_id.get().as_deref() == Some(nid_for_rect_filter.as_str()) {
+                                        "url(#selected-glow)"
+                                    } else {
+                                        ""
+                                    }
+                                }
                             />
 
                             // Icon indicator
@@ -396,14 +432,17 @@ pub fn TreeGraph(
                                  else { "\u{251C}" }}
                             </text>
 
-                            // Label
+                            // Label — reactive fill based on selection
                             <text
                                 x=format!("{}", x + 22.0)
                                 y=format!("{}", y + NODE_H / 2.0 + 4.0)
                                 font-size="11"
-                                fill={
-                                    let selected = selected_node_id.get_untracked().as_deref() == Some(&nid);
-                                    if selected { "var(--t-accent-contrast)" } else { "var(--t-primary)" }
+                                fill=move || {
+                                    if selected_node_id.get().as_deref() == Some(nid_for_label_fill.as_str()) {
+                                        "var(--t-accent-contrast)"
+                                    } else {
+                                        "var(--t-primary)"
+                                    }
                                 }
                                 class="select-none"
                             >
