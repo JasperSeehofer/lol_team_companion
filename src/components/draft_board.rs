@@ -38,6 +38,7 @@ pub fn DraftBoard(
     on_slot_drop: Callback<(usize, String)>,
     highlighted_slot: ReadSignal<Option<usize>>,
     on_slot_clear: Callback<usize>,
+    #[prop(optional)] slot_comments: Option<ReadSignal<Vec<Option<String>>>>,
 ) -> impl IntoView {
     let (first_pick_blue, set_first_pick_blue) = signal(true);
     let champion_map = StoredValue::new(champion_map);
@@ -89,9 +90,6 @@ pub fn DraftBoard(
                         view! {
                             <div class="relative w-full h-full">
                                 <img src=icon_url alt=champ_name class="w-full h-full object-cover opacity-50 grayscale" />
-                                <div class="absolute inset-0 flex items-center justify-center">
-                                    <div class="w-full h-0.5 bg-red-500 rotate-12"></div>
-                                </div>
                                 {if is_highlighted {
                                     view! {
                                         <button
@@ -178,7 +176,22 @@ pub fn DraftBoard(
                                             <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
                                         })}
                                     </div>
-                                    <span class={if is_blue { "flex-1 flex items-center px-2 text-primary text-sm font-medium truncate" } else { "flex-1 flex items-center justify-end px-2 text-primary text-sm font-medium truncate" }}>{champ_name}</span>
+                                    <div class={if is_blue { "flex-1 flex flex-col justify-center px-2 min-w-0" } else { "flex-1 flex flex-col justify-center items-end px-2 min-w-0" }}>
+                                        <span class="text-primary text-sm font-medium truncate">{champ_name}</span>
+                                        {move || {
+                                            slot_comments.and_then(|sc| {
+                                                let comments = sc.get();
+                                                comments.get(slot_idx).cloned().flatten().map(|c| {
+                                                    let truncated = if c.len() > 20 {
+                                                        format!("{}...", &c[..20])
+                                                    } else {
+                                                        c
+                                                    };
+                                                    view! { <span class="text-muted text-xs truncate">{truncated}</span> }
+                                                })
+                                            })
+                                        }}
+                                    </div>
                                 </div>
                                 {if is_highlighted {
                                     view! {
@@ -235,7 +248,7 @@ pub fn DraftBoard(
                         <span class=move || if first_pick_blue.get() {
                             "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-blue-400 transition-all duration-300"
                         } else {
-                            "absolute top-0.5 left-[1.375rem] w-5 h-5 rounded-full bg-red-400 transition-all duration-300"
+                            "absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-400 transition-all duration-300"
                         }></span>
                     </button>
                 </div>

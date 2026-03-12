@@ -2,7 +2,7 @@ use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::ui::ErrorBanner;
 use crate::models::champion::Champion;
-use crate::models::draft::{Draft, DraftAction};
+use crate::models::draft::{BanPriority, Draft, DraftAction};
 use crate::models::team::Team;
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -24,6 +24,9 @@ pub async fn save_draft(
     comments_json: String,
     rating: Option<String>,
     our_side: Option<String>,
+    tags_json: String,
+    win_conditions: Option<String>,
+    watch_out: Option<String>,
 ) -> Result<String, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -41,6 +44,8 @@ pub async fn save_draft(
         .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
     let comments: Vec<String> = serde_json::from_str(&comments_json)
         .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
 
     let resolved_team_id = match team_id.filter(|s| !s.is_empty()) {
         Some(tid) => tid,
@@ -61,6 +66,9 @@ pub async fn save_draft(
         actions,
         rating,
         our_side.unwrap_or_else(|| "blue".to_string()),
+        tags,
+        win_conditions,
+        watch_out,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))
@@ -75,6 +83,9 @@ pub async fn update_draft(
     comments_json: String,
     rating: Option<String>,
     our_side: Option<String>,
+    tags_json: String,
+    win_conditions: Option<String>,
+    watch_out: Option<String>,
 ) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -92,6 +103,8 @@ pub async fn update_draft(
         .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
     let comments: Vec<String> = serde_json::from_str(&comments_json)
         .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
 
     db::update_draft(
         &db,
@@ -103,6 +116,9 @@ pub async fn update_draft(
         actions,
         rating,
         our_side.unwrap_or_else(|| "blue".to_string()),
+        tags,
+        win_conditions,
+        watch_out,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))
@@ -154,7 +170,61 @@ pub async fn list_user_teams() -> Result<Vec<Team>, ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
-fn build_actions(slots: Vec<Option<String>>) -> Vec<DraftAction> {
+#[server]
+pub async fn get_ban_priorities() -> Result<Vec<BanPriority>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::get_ban_priorities(&db, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn save_ban_priorities(priorities_json: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    let priorities: Vec<BanPriority> = serde_json::from_str(&priorities_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+
+    db::set_ban_priorities(&db, &team_id, priorities)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .into_iter()
         .enumerate()
@@ -168,11 +238,22 @@ fn build_actions(slots: Vec<Option<String>>) -> Vec<DraftAction> {
                     side: side.to_string(),
                     champion: champ,
                     order: i as i32,
+                    comment: slot_comments.get(i).cloned().flatten(),
                 }
             })
         })
         .collect()
 }
+
+const COMPOSITION_TAGS: &[&str] = &[
+    "teamfight",
+    "split-push",
+    "poke",
+    "pick",
+    "scaling",
+    "early-game",
+    "protect-the-carry",
+];
 
 fn tier_badge_class(tier: &str) -> &'static str {
     match tier {
@@ -213,6 +294,23 @@ pub fn DraftPage() -> impl IntoView {
     let (comment_input, set_comment_input) = signal(String::new());
     let (save_result, set_save_result) = signal(Option::<String>::None);
     let (loaded_draft_id, set_loaded_draft_id) = signal(Option::<String>::None);
+    // Per-slot rationale comments (Phase 1)
+    let (slot_comments, set_slot_comments) = signal(vec![None::<String>; 20]);
+    let (slot_comment_input, set_slot_comment_input) = signal(String::new());
+    // Composition tags + win conditions (Phase 2)
+    let (tags, set_tags) = signal(Vec::<String>::new());
+    let (win_conditions, set_win_conditions) = signal(String::new());
+    let (watch_out, set_watch_out) = signal(String::new());
+    // Tag filter for saved drafts list
+    let (filter_tag, set_filter_tag) = signal(String::new());
+    // Ban priorities (Phase 4)
+    let ban_priorities = Resource::new(|| (), |_| get_ban_priorities());
+    let (ban_panel_open, set_ban_panel_open) = signal(false);
+    let (editing_bans, set_editing_bans) = signal(false);
+    let (ban_edit_list, set_ban_edit_list) = signal(Vec::<BanPriority>::new());
+    let (ban_new_champ, set_ban_new_champ) = signal(String::new());
+    let (ban_new_reason, set_ban_new_reason) = signal(String::new());
+    let (ban_status, set_ban_status) = signal(Option::<String>::None);
 
     let champions_resource = Resource::new(|| (), |_| get_champions());
     let drafts = Resource::new(|| (), |_| list_drafts());
@@ -319,9 +417,13 @@ pub fn DraftPage() -> impl IntoView {
         let tid = selected_team_id.get_untracked();
         let rate = rating.get_untracked();
         let side = our_side.get_untracked();
-        let actions = build_actions(draft_slots.get_untracked());
+        let sc = slot_comments.get_untracked();
+        let actions = build_actions(draft_slots.get_untracked(), &sc);
         let acts_json = serde_json::to_string(&actions).unwrap_or_default();
         let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
+        let tags_json = serde_json::to_string(&tags.get_untracked()).unwrap_or_default();
+        let wc = { let s = win_conditions.get_untracked(); if s.is_empty() { None } else { Some(s) } };
+        let wo = { let s = watch_out.get_untracked(); if s.is_empty() { None } else { Some(s) } };
         let existing_id = loaded_draft_id.get_untracked();
 
         leptos::task::spawn_local(async move {
@@ -330,13 +432,8 @@ pub fn DraftPage() -> impl IntoView {
 
             if let Some(draft_id) = existing_id {
                 match update_draft(
-                    draft_id,
-                    name,
-                    opp_opt,
-                    acts_json,
-                    cmts_json,
-                    rate,
-                    Some(side),
+                    draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
+                    tags_json, wc, wo,
                 )
                 .await
                 {
@@ -348,13 +445,8 @@ pub fn DraftPage() -> impl IntoView {
                 }
             } else {
                 match save_draft(
-                    name,
-                    opp_opt,
-                    team_opt,
-                    acts_json,
-                    cmts_json,
-                    rate,
-                    Some(side),
+                    name, opp_opt, team_opt, acts_json, cmts_json, rate, Some(side),
+                    tags_json, wc, wo,
                 )
                 .await
                 {
@@ -369,17 +461,36 @@ pub fn DraftPage() -> impl IntoView {
         });
     };
 
+    // Sync slot_comment_input when highlighted_slot changes
+    Effect::new(move |_| {
+        let hl = highlighted_slot.get();
+        if let Some(idx) = hl {
+            let sc = slot_comments.get_untracked();
+            set_slot_comment_input.set(sc.get(idx).cloned().flatten().unwrap_or_default());
+        } else {
+            set_slot_comment_input.set(String::new());
+        }
+    });
+
     // Auto-save timer handle (only used in hydrate/WASM builds)
     #[allow(unused_variables)]
     let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
     let (auto_save_status, set_auto_save_status) = signal(""); // "", "unsaved", "saved"
 
+    #[allow(unused_variables)]
     Effect::new(move |_| {
-        // Track content signals
-        let _ = draft_slots.get();
-        let _ = comments.get();
+        // Eagerly track + capture ALL content signals (CLAUDE.md rule 54)
+        let slots_val = draft_slots.get();
+        let comments_val = comments.get();
         let name = draft_name.get();
         let existing_id = loaded_draft_id.get();
+        let opp = opponent.get();
+        let rate = rating.get();
+        let side = our_side.get();
+        let sc = slot_comments.get();
+        let tags_val = tags.get();
+        let wc_val = win_conditions.get();
+        let wo_val = watch_out.get();
 
         // Only auto-save if we have a name AND it's an existing draft
         if name.trim().is_empty() || existing_id.is_none() {
@@ -399,29 +510,22 @@ pub fn DraftPage() -> impl IntoView {
         // Schedule new 2s auto-save
         #[cfg(feature = "hydrate")]
         {
+            // Pre-compute all values before the closure
+            let actions = build_actions(slots_val, &sc);
+            let acts_json = serde_json::to_string(&actions).unwrap_or_default();
+            let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
+            let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
+            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
+            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
+            let opp_opt = if opp.is_empty() { None } else { Some(opp) };
+
             use wasm_bindgen::prelude::*;
             let cb = Closure::once(move || {
-                let name = draft_name.get_untracked();
-                let opp = opponent.get_untracked();
-                let _tid = selected_team_id.get_untracked();
-                let rate = rating.get_untracked();
-                let side = our_side.get_untracked();
-                let actions = build_actions(draft_slots.get_untracked());
-                let acts_json = serde_json::to_string(&actions).unwrap_or_default();
-                let cmts_json =
-                    serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
-
-                if let Some(draft_id) = loaded_draft_id.get_untracked() {
-                    let opp_opt = if opp.is_empty() { None } else { Some(opp) };
+                if let Some(draft_id) = existing_id {
                     leptos::task::spawn_local(async move {
                         let _ = update_draft(
-                            draft_id,
-                            name,
-                            opp_opt,
-                            acts_json,
-                            cmts_json,
-                            rate,
-                            Some(side),
+                            draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
+                            tags_json, wc, wo,
                         )
                         .await;
                         set_auto_save_status.set("saved");
@@ -430,14 +534,11 @@ pub fn DraftPage() -> impl IntoView {
                 }
             });
             if let Some(win) = web_sys::window() {
-                match win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                if let Ok(timer_id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
                     cb.as_ref().unchecked_ref(),
                     2000,
                 ) {
-                    Ok(timer_id) => {
-                        auto_save_timer.set(Some(timer_id));
-                    }
-                    Err(_) => {}
+                    auto_save_timer.set(Some(timer_id));
                 }
             }
             cb.forget();
@@ -563,6 +664,66 @@ pub fn DraftPage() -> impl IntoView {
                         }).collect_view()}
                     </div>
                 </div>
+
+                // Composition tags
+                <div>
+                    <label class="block text-secondary text-sm mb-2">"Composition Tags"</label>
+                    <div class="flex flex-wrap gap-1.5">
+                        {COMPOSITION_TAGS.iter().map(|&tag| {
+                            let tag_str = tag.to_string();
+                            let tag_for_class = tag_str.clone();
+                            let tag_for_click = tag_str.clone();
+                            view! {
+                                <button
+                                    class=move || {
+                                        let selected = tags.get().contains(&tag_for_class);
+                                        if selected {
+                                            "rounded px-3 py-1 text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
+                                        } else {
+                                            "rounded px-3 py-1 text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
+                                        }
+                                    }
+                                    on:click=move |_| {
+                                        let tag_val = tag_for_click.clone();
+                                        set_tags.update(|t| {
+                                            if let Some(pos) = t.iter().position(|x| x == &tag_val) {
+                                                t.remove(pos);
+                                            } else {
+                                                t.push(tag_val);
+                                            }
+                                        });
+                                    }
+                                >
+                                    {tag}
+                                </button>
+                            }
+                        }).collect_view()}
+                    </div>
+                </div>
+
+                // Win condition + watch out textareas
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-secondary text-sm mb-1">"How We Win"</label>
+                        <textarea
+                            rows="3"
+                            placeholder="Win condition notes..."
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus:border-accent resize-none"
+                            prop:value=move || win_conditions.get()
+                            on:input=move |ev| set_win_conditions.set(event_target_value(&ev))
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-secondary text-sm mb-1">"Watch Out For"</label>
+                        <textarea
+                            rows="3"
+                            placeholder="Threats to be aware of..."
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus:border-accent resize-none"
+                            prop:value=move || watch_out.get()
+                            on:input=move |ev| set_watch_out.set(event_target_value(&ev))
+                        />
+                    </div>
+                </div>
             </div>
 
             // Board + Comments
@@ -587,11 +748,56 @@ pub fn DraftPage() -> impl IntoView {
                                         on_slot_drop=on_slot_drop
                                         highlighted_slot=highlighted_slot
                                         on_slot_clear=on_slot_clear
+                                        slot_comments=slot_comments
                                     />
                                 }.into_any()
                             }
                         })}
                     </Suspense>
+                    // Per-slot comment editor (visible when a pick slot is highlighted)
+                    {move || {
+                        let hl = highlighted_slot.get();
+                        hl.and_then(|idx| {
+                            let (_, kind, _) = slot_meta(idx);
+                            if kind != "pick" { return None; }
+                            let slots = draft_slots.get();
+                            let filled = slots.get(idx).and_then(|s| s.as_ref()).is_some();
+                            if !filled { return None; }
+                            let champ = slots[idx].clone().unwrap_or_default();
+                            Some(view! {
+                                <div class="mt-2 flex items-center gap-2">
+                                    <span class="text-secondary text-sm flex-shrink-0">{format!("{} comment:", champ)}</span>
+                                    <input
+                                        type="text"
+                                        placeholder="Pick rationale..."
+                                        class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus:border-accent"
+                                        prop:value=move || slot_comment_input.get()
+                                        on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
+                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                            if ev.key() == "Enter" {
+                                                if let Some(slot_idx) = highlighted_slot.get_untracked() {
+                                                    let val = slot_comment_input.get_untracked();
+                                                    let comment = if val.trim().is_empty() { None } else { Some(val) };
+                                                    set_slot_comments.update(|sc| {
+                                                        if slot_idx < sc.len() { sc[slot_idx] = comment; }
+                                                    });
+                                                }
+                                            }
+                                        }
+                                        on:blur=move |_| {
+                                            if let Some(slot_idx) = highlighted_slot.get_untracked() {
+                                                let val = slot_comment_input.get_untracked();
+                                                let comment = if val.trim().is_empty() { None } else { Some(val) };
+                                                set_slot_comments.update(|sc| {
+                                                    if slot_idx < sc.len() { sc[slot_idx] = comment; }
+                                                });
+                                            }
+                                        }
+                                    />
+                                </div>
+                            })
+                        })
+                    }}
                 </div>
 
                 // Comments sidebar
@@ -677,6 +883,11 @@ pub fn DraftPage() -> impl IntoView {
                         set_draft_name.set(String::new());
                         set_opponent.set(String::new());
                         set_rating.set(None);
+                        set_tags.set(Vec::new());
+                        set_win_conditions.set(String::new());
+                        set_watch_out.set(String::new());
+                        set_slot_comments.set(vec![None; 20]);
+                        set_slot_comment_input.set(String::new());
                         // Keep selected_team_id — the user probably wants the same team
                     }
                 >
@@ -690,6 +901,32 @@ pub fn DraftPage() -> impl IntoView {
             // Saved Drafts
             <div>
                 <h2 class="text-xl font-bold text-primary mb-3">"Saved Drafts"</h2>
+                // Tag filter buttons
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    <button
+                        class=move || if filter_tag.get().is_empty() {
+                            "rounded px-2.5 py-0.5 text-xs font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
+                        } else {
+                            "rounded px-2.5 py-0.5 text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
+                        }
+                        on:click=move |_| set_filter_tag.set(String::new())
+                    >"All"</button>
+                    {COMPOSITION_TAGS.iter().map(|&tag| {
+                        let tag_str = tag.to_string();
+                        let tag_for_class = tag_str.clone();
+                        let tag_for_click = tag_str.clone();
+                        view! {
+                            <button
+                                class=move || if filter_tag.get() == tag_for_class {
+                                    "rounded px-2.5 py-0.5 text-xs font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
+                                } else {
+                                    "rounded px-2.5 py-0.5 text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
+                                }
+                                on:click=move |_| set_filter_tag.set(tag_for_click.clone())
+                            >{tag}</button>
+                        }
+                    }).collect_view()}
+                </div>
                 <Suspense fallback=|| view! { <div class="text-muted">"Loading..."</div> }>
                     {move || {
                         let champ_url_map: HashMap<String, String> = champions_resource.get()
@@ -702,9 +939,21 @@ pub fn DraftPage() -> impl IntoView {
                             Ok(list) if list.is_empty() => view! {
                                 <p class="text-dimmed">"No drafts yet."</p>
                             }.into_any(),
-                            Ok(list) => view! {
+                            Ok(list) => {
+                                let ft = filter_tag.get();
+                                let filtered: Vec<Draft> = if ft.is_empty() {
+                                    list
+                                } else {
+                                    list.into_iter().filter(|d| d.tags.contains(&ft)).collect()
+                                };
+                                if filtered.is_empty() {
+                                    return view! {
+                                        <p class="text-dimmed">"No drafts match this filter."</p>
+                                    }.into_any();
+                                }
+                                view! {
                                 <div class="flex flex-col gap-2">
-                                    {list.into_iter().map(|d| {
+                                    {filtered.into_iter().map(|d| {
                                         let d_id = d.id.clone();
                                         let d_name = d.name.clone();
                                         let d_opp = d.opponent.clone().unwrap_or_default();
@@ -713,6 +962,9 @@ pub fn DraftPage() -> impl IntoView {
                                         let d_team_id = d.team_id.clone();
                                         let d_rating = d.rating.clone();
                                         let d_our_side = d.our_side.clone();
+                                        let d_tags = d.tags.clone();
+                                        let d_win_conditions = d.win_conditions.clone().unwrap_or_default();
+                                        let d_watch_out = d.watch_out.clone().unwrap_or_default();
 
                                         let icon_url = |a: &DraftAction| champ_map_sv.with_value(|m| m.get(&a.champion).cloned().unwrap_or_default());
 
@@ -752,6 +1004,7 @@ pub fn DraftPage() -> impl IntoView {
                                         let display_name = d.name.clone();
                                         let display_opp = d.opponent.clone();
                                         let display_rating = d_rating.clone();
+                                        let display_tags = d.tags.clone();
 
                                         view! {
                                             <div class="bg-elevated border border-divider rounded px-4 py-3 flex items-center gap-4">
@@ -766,6 +1019,9 @@ pub fn DraftPage() -> impl IntoView {
                                                             let cls = format!("rounded px-1.5 py-0.5 text-xs font-bold {}", tier_badge_class(&r));
                                                             view! { <span class=cls>{r}</span> }
                                                         })}
+                                                        {display_tags.into_iter().map(|tag| {
+                                                            view! { <span class="rounded px-1.5 py-0.5 text-xs font-medium bg-overlay-strong text-secondary">{tag}</span> }
+                                                        }).collect_view()}
                                                     </div>
                                                     // Icon summary: [blue bans] | [picks] | [red bans]
                                                     <div class="flex items-center gap-0.5 flex-wrap">
@@ -865,17 +1121,24 @@ pub fn DraftPage() -> impl IntoView {
                                                         set_rating.set(d_rating.clone());
                                                         set_our_side.set(d_our_side.clone());
                                                         set_comments.set(d_comments.clone());
+                                                        set_tags.set(d_tags.clone());
+                                                        set_win_conditions.set(d_win_conditions.clone());
+                                                        set_watch_out.set(d_watch_out.clone());
                                                         set_save_result.set(None);
                                                         set_highlighted_slot.set(None);
                                                         let mut slots = vec![None::<String>; 20];
+                                                        let mut sc = vec![None::<String>; 20];
                                                         for action in &d_actions {
                                                             let o = action.order as usize;
                                                             if o < 20 {
                                                                 slots[o] = Some(action.champion.clone());
+                                                                sc[o] = action.comment.clone();
                                                             }
                                                         }
                                                         let next = (0..20).find(|&i| slots[i].is_none());
                                                         set_draft_slots.set(slots);
+                                                        set_slot_comments.set(sc);
+                                                        set_slot_comment_input.set(String::new());
                                                         set_active_slot.set(next);
                                                     }
                                                 >
@@ -885,13 +1148,189 @@ pub fn DraftPage() -> impl IntoView {
                                         }
                                     }).collect_view()}
                                 </div>
-                            }.into_any(),
+                                }.into_any()
+                            },
                             Err(e) => view! {
                                 <ErrorBanner message=format!("Failed to load drafts: {e}") />
                             }.into_any(),
                         })
                     }}
                 </Suspense>
+            </div>
+
+            // Ban Priority Panel
+            <div class="bg-elevated border border-divider rounded-lg">
+                <button
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
+                    on:click=move |_| set_ban_panel_open.update(|v| *v = !*v)
+                >
+                    <h2 class="text-xl font-bold text-primary">"Ban Priorities"</h2>
+                    <span class="text-muted">{move || if ban_panel_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
+                </button>
+                {move || ban_panel_open.get().then(|| {
+                    let is_editing = editing_bans.get();
+                    view! {
+                        <div class="px-4 pb-4 flex flex-col gap-3">
+                            {if is_editing {
+                                view! {
+                                    <div class="flex flex-col gap-2">
+                                        // Existing items
+                                        {move || {
+                                            let items = ban_edit_list.get();
+                                            if items.is_empty() {
+                                                view! { <p class="text-dimmed text-sm">"No ban priorities yet."</p> }.into_any()
+                                            } else {
+                                                view! {
+                                                    <div class="flex flex-col gap-1">
+                                                        {items.into_iter().enumerate().map(|(i, bp)| {
+                                                            let champ = bp.champion.clone();
+                                                            let reason = bp.reason.clone().unwrap_or_default();
+                                                            view! {
+                                                                <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
+                                                                    <span class="text-accent font-bold text-sm w-6">{format!("#{}", i + 1)}</span>
+                                                                    <span class="text-primary font-medium flex-1">{champ}</span>
+                                                                    <span class="text-muted text-sm flex-1 truncate">{reason}</span>
+                                                                    <button
+                                                                        class="text-red-400 hover:text-red-300 text-sm cursor-pointer"
+                                                                        on:click=move |_| {
+                                                                            set_ban_edit_list.update(|list| {
+                                                                                if i < list.len() { list.remove(i); }
+                                                                                // Re-rank
+                                                                                for (j, item) in list.iter_mut().enumerate() {
+                                                                                    item.rank = j as i32;
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    >"Remove"</button>
+                                                                </div>
+                                                            }
+                                                        }).collect_view()}
+                                                    </div>
+                                                }.into_any()
+                                            }
+                                        }}
+                                        // Add new entry
+                                        <div class="flex gap-2 items-end">
+                                            <div class="flex-1">
+                                                <label class="block text-secondary text-xs mb-1">"Champion"</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Champion name..."
+                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    prop:value=move || ban_new_champ.get()
+                                                    on:input=move |ev| set_ban_new_champ.set(event_target_value(&ev))
+                                                />
+                                            </div>
+                                            <div class="flex-1">
+                                                <label class="block text-secondary text-xs mb-1">"Reason (optional)"</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Why ban?"
+                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    prop:value=move || ban_new_reason.get()
+                                                    on:input=move |ev| set_ban_new_reason.set(event_target_value(&ev))
+                                                />
+                                            </div>
+                                            <button
+                                                class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1 transition-colors cursor-pointer"
+                                                on:click=move |_| {
+                                                    let champ = ban_new_champ.get_untracked();
+                                                    if champ.trim().is_empty() { return; }
+                                                    let reason_val = ban_new_reason.get_untracked();
+                                                    let reason = if reason_val.trim().is_empty() { None } else { Some(reason_val) };
+                                                    set_ban_edit_list.update(|list| {
+                                                        let rank = list.len() as i32;
+                                                        list.push(BanPriority {
+                                                            id: None,
+                                                            team_id: String::new(),
+                                                            champion: champ.trim().to_string(),
+                                                            rank,
+                                                            reason,
+                                                        });
+                                                    });
+                                                    set_ban_new_champ.set(String::new());
+                                                    set_ban_new_reason.set(String::new());
+                                                }
+                                            >"+ Add"</button>
+                                        </div>
+                                        // Save / Cancel
+                                        <div class="flex gap-2 mt-1">
+                                            <button
+                                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
+                                                on:click=move |_| {
+                                                    let list = ban_edit_list.get_untracked();
+                                                    let json = serde_json::to_string(&list).unwrap_or_default();
+                                                    leptos::task::spawn_local(async move {
+                                                        match save_ban_priorities(json).await {
+                                                            Ok(_) => {
+                                                                set_ban_status.set(Some("Saved!".into()));
+                                                                ban_priorities.refetch();
+                                                                set_editing_bans.set(false);
+                                                            }
+                                                            Err(e) => set_ban_status.set(Some(format!("Error: {e}"))),
+                                                        }
+                                                    });
+                                                }
+                                            >"Save"</button>
+                                            <button
+                                                class="bg-overlay hover:bg-overlay-strong text-secondary rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
+                                                on:click=move |_| set_editing_bans.set(false)
+                                            >"Cancel"</button>
+                                            {move || ban_status.get().map(|msg| view! {
+                                                <span class="text-green-300 text-sm self-center">{msg}</span>
+                                            })}
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                // View mode
+                                view! {
+                                    <div class="flex flex-col gap-2">
+                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading..."</div> }>
+                                            {move || ban_priorities.get().map(|result| match result {
+                                                Ok(list) if list.is_empty() => view! {
+                                                    <p class="text-dimmed text-sm">"No ban priorities set."</p>
+                                                }.into_any(),
+                                                Ok(list) => view! {
+                                                    <div class="flex flex-col gap-1">
+                                                        {list.iter().map(|bp| {
+                                                            let champ = bp.champion.clone();
+                                                            let reason = bp.reason.clone().unwrap_or_default();
+                                                            let rank = bp.rank + 1;
+                                                            view! {
+                                                                <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
+                                                                    <span class="text-accent font-bold text-sm w-6">{format!("#{rank}")}</span>
+                                                                    <span class="text-primary font-medium flex-1">{champ}</span>
+                                                                    <span class="text-muted text-sm flex-1 truncate">{reason}</span>
+                                                                </div>
+                                                            }
+                                                        }).collect_view()}
+                                                    </div>
+                                                }.into_any(),
+                                                Err(e) => view! {
+                                                    <ErrorBanner message=format!("Failed to load ban priorities: {e}") />
+                                                }.into_any(),
+                                            })}
+                                        </Suspense>
+                                        <button
+                                            class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1.5 transition-colors self-start cursor-pointer"
+                                            on:click=move |_| {
+                                                // Copy current priorities into edit list
+                                                if let Some(Ok(list)) = ban_priorities.get_untracked() {
+                                                    set_ban_edit_list.set(list);
+                                                } else {
+                                                    set_ban_edit_list.set(Vec::new());
+                                                }
+                                                set_ban_status.set(None);
+                                                set_editing_bans.set(true);
+                                            }
+                                        >"Edit"</button>
+                                    </div>
+                                }.into_any()
+                            }}
+                        </div>
+                    }
+                })}
             </div>
         </div>
     }

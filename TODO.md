@@ -2,263 +2,196 @@
 
 ## Open
 
-### Priority 1 — Critical Bugs (breaks core flow)
+### Priority 1 — Bugs & Blockers
 
-#### Tree Drafter
-- [x] **UI freeze after branching**: Fixed — auto-save Effect now captures all values eagerly (not lazily inside timer callback), and `suppress_autosave` flag prevents saving stale data during node switches.
-- [x] **Node switch bug**: Fixed — `select_node` now sets `suppress_autosave=true`, cancels pending timer, resets save status, then re-enables after a microtask. `cancel_autosave_timer` + `clear_editor` helpers added.
-- [x] **Tree graph — too many icons on single edge**: Fixed — `MAX_ICONS` reduced from 5 to 3, empty champion names filtered out of `diff_actions`.
-- [x] **Cannot easily switch between drafts**: Fixed — tree click handler now calls `clear_editor()` to reset all editor state, removed redundant `nodes_resource.refetch()` (resource already keyed on `selected_tree_id`).
-
-#### Auth / Session
-- [x] **Logout doesn't clear session**: Fixed — both nav.rs and profile.rs now hard-navigate to `/` after logout success, fully clearing session state.
-- [x] **Registration doesn't auto-login**: Fixed — `register_action()` now calls `auth.authenticate()` + `auth.login()` after creating the user, then redirects to `/team/dashboard` with hard navigation.
-
-#### Multiple Pages — Rule 44 Violations
-- [x] **"No team" errors shown instead of empty state**: Fixed — all 9 server functions now return `Ok(Vec::new())` when user has no team (except `sync_team_stats` which returns a user-friendly error). Empty-state CTAs added to tree drafter, stats, game plan, and post-game pages.
-
-#### Profile
-- [x] **Missing `.check()` on UPDATE query**: Fixed — `.check()` added after the UPDATE query in `update_profile()`.
+#### Riot API (401 Unauthorized)
+- [ ] **Riot API key expired/invalid**: Profile linking (`Lylaend#EUW`) and Stats sync both return 401. The key in `.env` needs to be refreshed — Riot development keys expire every 24h. Get a new key from [developer.riotgames.com](https://developer.riotgames.com). Once fixed, re-test:
+  - Profile → Link Account → should succeed
+  - Stats → Sync Matches → should pull match history
+  - Dashboard → "Riot account not linked" notice should disappear after linking
 
 #### CSS / Build
-- [ ] **Tailwind v4 `@import "tailwindcss"` 404**: The `input.css` file starts with `@import "tailwindcss"` (Tailwind v4 syntax). This is supposed to be processed by the Tailwind CLI at build time, but the raw import leaks through to the browser CSS, causing a 404 for `/pkg/tailwindcss` on every page load. The `tailwindcss` standalone binary is not present. Either install it or configure `cargo-leptos` to properly process the import.
+- [ ] **Tailwind v4 `@import "tailwindcss"` 404**: The `input.css` starts with `@import "tailwindcss"` (Tailwind v4 build-time syntax). The raw import leaks through to browser CSS, causing a 404 for `/pkg/tailwindcss` on every page load. Harmless but noisy in console. Fix: ensure `tailwindcss` standalone binary is present and `cargo-leptos` processes the import.
 
-#### Team Section
-- [x] **Accept join request — member does not appear**: Fixed by surfacing the error from `handle_join_request` and calling `dashboard.refetch()` + `requests.refetch()` on success.
-- [x] **Team owner missing from roster/bench**: Fixed `create_team()` in `db.rs` — owner now inserted as `team_member` with `role = 'unassigned', roster_type = 'sub'`.
-
-#### Draft & Game Plan
-- [x] **Draft not saving / not appearing in saved list**: Fixed two root causes — (1) `list_drafts` returned `Err("No team")` instead of an empty list when user has no team, hiding the saved drafts panel; (2) no name guard before saving meant empty-name drafts were created silently. Both fixed.
+#### Team Dashboard
+- [ ] **"Available players" not visible**: The bench section shows players with `roster_type = 'sub'`. If members joined but haven't been accepted via join requests, they won't appear. Verify: accept join requests first, then check bench. May also be a display issue if all members are assigned to starter/coach slots already.
 
 ---
 
 ### Priority 2 — High Value UX
 
-#### Tree Drafter
-- [x] **Enter key creates tree**: Pressing Enter in tree name or opponent inputs triggers Create Tree.
-- [x] **Root node name = tree name**: Root node is now automatically labelled with the tree name.
-- [x] **Click-to-select slot (not delete)**: First click highlights slot with red border + × badge; clicking × removes the champion. Click elsewhere to deselect.
-- [x] **Auto-save node on edit**: Debounced 2 s after last change. Shows "✓ Saved" / "● Unsaved changes" indicator.
-- [ ] **Drag-and-drop picks/bans within node editor**: Champions in draft slots should be draggable between slots (swap on drop).
-- [x] **Interactive tree graph**: Clicking a node in the SVG tree selects it in the editor (two-way sync). Selected node highlighted with accent color glow filter. New branches auto-select after creation.
-
 #### Draft
-- [x] **Auto-save**: When a draft has a name and is an existing saved draft, auto-saves debounced 2 s after any pick/ban/comment change. Shows "✓ Saved" / "● Unsaved changes" status in header.
-- [ ] **Drag-and-drop picks/bans**: Same as tree drafter — drag champions between slots.
+- [x] **Per-pick rationale comments**: Click a pick slot to annotate with rationale; shown truncated on board, persisted via auto-save.
+- [x] **Composition identity tags**: Toggle buttons for teamfight, split-push, poke, pick, scaling, early-game, protect-the-carry. Filter saved drafts by tag.
+- [x] **Win condition notes**: "How We Win" and "Watch Out For" textareas per draft, saved alongside draft data.
+- [ ] **Drag-and-drop picks/bans**: Champions in draft slots should be draggable between slots (swap on drop).
+
+#### Tree Drafter
+- [ ] **Branch edge redesign**: Edges should show the branching reason — a single champion icon (round, full color if open; greyed out if banned) with a small label. Node configuration (label + notes) sets the champion and ban/open state displayed on the inbound edge. Significant UX rework.
+- [ ] **Node-level annotations**: Rich text notes per node explaining branching rationale ("if they pick Azir, we flex mid Tristana because...").
+- [ ] **Conditional edge labels**: Text labels on edges ("enemy picks engage support", "enemy bans our ADC pool") making the tree self-documenting.
+- [ ] **Priority branch markers**: Flag branches as "preferred" or "backup" with visual indicators (color, thickness, star).
+- [ ] **Drag-and-drop picks/bans within node editor**: Same as draft — drag champions between slots.
+- [ ] **Collapse/expand subtrees**: For large trees, collapse branches not being actively worked on.
+
+#### Champion Pool
+- [ ] **Drag-and-drop between tiers**: Champions draggable from one tier card to another. On drop, call tier-update server function.
+- [ ] **Left-side champion grid**: Show all available champions in a grid with search bar. Drag directly from grid into any tier.
+- [ ] **Larger champion icons**: Increase icon size to ~48–56 px so the image fills the full card height.
 
 #### Team Section
-- [x] **Role icons — remove duplicate text**: Starter slots now show only the SVG role icon (larger, 24px) with the role name as a `title` tooltip. Text label removed.
-- [x] **Remove "Link Riot account" from team dashboard**: Replaced with conditional notice + link to Profile if Riot account not linked.
-- [x] **Team rename → pencil icon modal**: Inline form replaced with pencil icon next to team name; opens modal with name + region fields (leader-only).
-
-#### Auth UX
-- [x] **Protected pages show inline "not logged in" instead of redirecting**: Fixed — all protected pages now fetch `get_current_user()` on mount and redirect to `/auth/login` if the user is `None`.
-- [x] **Nav shows all links regardless of auth state**: Fixed — Team, Draft, Tree Drafter, Stats, Game Plan, Post Game links only show when authenticated.
+- [ ] **Drag-and-drop roster management**: Players in bench/coach/starter slots draggable between slots. Show role selector on drop into starter slot.
 
 #### Team Builder
-- [ ] **Placeholder page**: `/team-builder` just shows "Composition builder coming in a future phase." — needs actual implementation or should be hidden from nav until ready.
-
-#### Champion Pool
-- [x] **Click-to-add champion**: Selecting a champion in the autocomplete dropdown now immediately adds it to the pool.
-- [x] **Tier list visible from start**: All tiers always render; empty tiers show "No champions yet" placeholder.
+- [ ] **Placeholder page**: `/team-builder` shows placeholder text — needs actual composition builder implementation or should be hidden from nav until ready.
 
 ---
 
-### Priority 3 — UI Polish & Medium Features
+### Priority 3 — Medium Features
 
-#### Champion Pool
-- [ ] **Drag-and-drop between tiers**: Champions are draggable from one tier card to another. On drop, call the tier-update server function.
-- [ ] **Left-side champion grid**: Show all available champions in a grid with a search bar on the left side. Drag directly from this grid into any tier.
-- [ ] **Larger champion icons**: Increase icon size to ~48–56 px so the image fills the full card height.
-- [ ] **Expanded notes section**: Replace single text area with structured fields per champion entry:
-  - Short summary / strengths
-  - Key mechanics & combos to learn
-  - Important matchup-specific warnings
-  - Win conditions
-  - Common mistakes / things to watch out for
-  - Learning resources (free-text link/notes field)
+#### Champion Pool — Structured Notes
+Replace single textarea with structured fields per champion (informed by research — see `.planning/research/competitive_league_research.md` R3):
+- [ ] **Comfort level** (1-5 scale) alongside existing tier
+- [ ] **Matchup notes**: Per-opponent entries with difficulty rating, lane strategy, items to adjust, personal notes
+- [ ] **Lessons learned journal**: Timestamped entries after games ("realized I need to save W for disengage")
+- [ ] **Power spikes**: Repeatable entries (timing + description, e.g. "Level 6: ult enables tower dives")
+- [ ] **Combos**: Named sequences with notes (e.g. "Basic trade: Q > AA > W > AA — use in short trades")
+- [ ] **Teamfight role & positioning notes**
 
-#### Team Section
-- [ ] **Drag-and-drop roster management**: Players in bench/coach/starter slots should be draggable between slots. Show role selector on drop into a starter slot.
-
-#### Stats
-- [x] **Show partial-team matches**: "Minimum players" dropdown (2–roster size) replaces the old "full roster only" checkbox. Shows all matches where ≥ N linked members played together.
-- [x] **Solo Queue sync**: Queue type selector added (Solo/Duo 420, Flex 440, All Queues). `fetch_match_history` accepts `Option<i32>` queue filter.
-- [x] **Standard match history layout**: OP.GG-style rows with champion icon (Data Dragon CDN), KDA, CS, vision, damage, win/loss badge + row tinting (blue/red).
-- [x] **Match detail expand**: Click a match row to expand team members' scoreboard (team members only; full 10-player data not yet available).
-
----
-
-### Priority 4 — New Features & Suggestions
-
-#### Champion Pool
-- [ ] **Initial pool from Riot API**: On first link or on-demand button, fetch champion mastery or recent ranked match history (last 100–200 matches) and suggest an initial pool:
-  - Mastery ≥ 5 → suggest "comfort"; ≥ 4 → "practicing"; ≥ 3 → "to_practice"
-  - ≥ 10 ranked games last season → suggest "match_ready"
-  - Present as a confirmation dialog — user accepts or rejects each suggestion individually
-- [ ] **Per-champion stats inline**: Show win rate, KDA, and games played (from synced match history) on each champion card in the pool
-- [ ] **Role filter tab "All"**: A tab that shows the entire pool across all roles in one view
-- [ ] **Tier description tooltips**: Small (?) next to each tier name explaining its meaning
-
-#### Team
-- [ ] **Invite link**: Generate a shareable UUID join link so the leader can invite players without them searching
-- [ ] **Leave team button**: Non-owner members can leave the team
+#### Draft Tools
+- [ ] **Fearless draft mode**: Track previously picked/banned champions across a series (BO3/BO5), gray them out in subsequent games
+- [ ] **Series-level draft grouping**: Group multiple drafts into a "series" with a single shareable view
+- [ ] **Matchup context inline**: Show basic counter/synergy info when a champion is picked
+- [x] **Ban priority list**: Collapsible panel with ranked champion list, add/remove entries with reason, save/cancel edit mode
+- [ ] **Saved counter-picks**: Per champion, "our go-to answers" as a quick-reference overlay during draft phase
 
 #### Stats
 - [ ] **Per-champion stats breakdown**: Top 5 played champions per player with win rate, avg KDA, avg CS/min
 - [ ] **Win/loss streak indicator**: Visual W/L streak on the match list
 - [ ] **Aggregate graphs**: Line chart of team win rate over time; bar chart of most played champions together
 
-#### Tree Drafter
-- [ ] **Collapse/expand subtrees**: Collapse branches in the tree view to reduce clutter on deep trees
-- [ ] **Branch labels on edges**: Show a short decision label (e.g., "Enemy picks Yasuo") on the connecting edge rather than just champion icons
-
 #### Game Plan
 - [ ] **Auto-save**: Same 2 s debounce + 30 s hard save as draft and tree sections
-- [ ] **Template from champion pool**: Pre-fill role strategy fields from the selected champion's notes in the pool
+- [ ] **Template from champion pool**: Pre-fill role strategy fields from selected champion's notes
 
 #### Scouting & Opponent Prep
-- [ ] **Opponent team profile**: Before a match, fill in the enemy roster (5 summoner names). Auto-fetch their recent champion picks from the Riot API so you know their comfort picks going in. Link to the game plan for context.
-- [ ] **Champion matchup notes**: Per-champion card in the pool with a "Matchup notes" sub-section — short bullet points on how to play into specific counters (e.g. "vs Zed: build Seeker's early, respect level 6"). Searchable by opponent champion name.
-- [ ] **Patch tracking**: Record which patch each game was played on (auto-detected from match data or manual dropdown). Show patch label on match cards and allow filtering by patch to isolate meta-specific performance.
+- [ ] **Opponent team profile**: Fill in enemy roster (5 summoner names), auto-fetch their recent champion picks from Riot API. Link to game plan.
+- [ ] **Champion matchup notes integration**: Surface champion pool matchup notes during draft when facing specific opponents
+- [ ] **Patch tracking**: Record which patch each game was played on, show patch label on match cards, filter by patch
+
+---
+
+### Priority 4 — New Features
+
+#### Champion Pool
+- [ ] **Initial pool from Riot API**: Fetch champion mastery/recent ranked history on first link, suggest initial pool with confirmation dialog
+- [ ] **Per-champion stats inline**: Show win rate, KDA, games played on each champion card
+- [ ] **Role filter tab "All"**: Tab showing entire pool across all roles
+- [ ] **Tier description tooltips**: Small (?) next to each tier name explaining its meaning
+
+#### Team
+- [ ] **Invite link**: Generate shareable UUID join link
+- [ ] **PrimeLeague manual import**: No public API exists (IP-whitelisted internal API only). Build CSV/JSON roster import instead. See research: `.planning/research/competitive_league_research.md` R1
+
+#### Tree Drafter
+- [ ] **Opponent scouting integration**: Link tree to opponent team, pre-populate likely picks from their champion pool data
+- [ ] **Tree comparison view**: Side-by-side two trees for different opponents to spot overlapping flex picks
+- [ ] **Snapshot/version history**: Save tree versions before/after scrims
 
 #### Practice & Scheduling
-- [ ] **Scrim log**: Separate from ranked stats — log scrimmage results (opponent team name, score, date, format). Each scrim session links to drafts and post-game reviews from that session. Useful for tracking practice-vs-ranked performance separately.
-- [ ] **Pre-game checklist**: Customisable checklist that appears before a match (e.g. "Reviewed their ban pattern", "Agreed on win condition", "Called primary/secondary champions"). Mark items as done during draft prep. Resets per session.
-- [ ] **Practice priority queue**: In the champion pool, mark 1–3 champions per role as "focus this week". Shown prominently on the dashboard as a quick reminder of what each player should be grinding.
+- [ ] **Scrim log**: Log scrimmage results (opponent, score, date, format) linked to drafts and post-game reviews
+- [ ] **Pre-game checklist**: Customisable checklist before matches ("Reviewed ban pattern", "Agreed on win condition")
+- [ ] **Practice priority queue**: Mark 1-3 champions per role as "focus this week", shown on dashboard
 
 #### Draft Tools
-- [ ] **Draft simulator**: Play both sides of a draft against yourself (or AI). Blue side picks → Red side picks, alternating as per tournament format. Useful for preparing pick/ban sequences without needing a partner.
-- [ ] **Saved counter-picks**: Per champion, maintain a list of "our go-to answers" — e.g. "When enemy picks Zed → our mid plays Malzahar or Lissandra". Displayed as a quick-reference overlay during the draft phase.
-- [ ] **Ban priority list**: A ranked list of 5–10 champions the team wants to ban every game, with a short "why ban" note. Shown in the sidebar during drafting to guide ban phase decisions.
+- [ ] **Draft simulator**: Play both sides against yourself for practice
+- [ ] **Side preference history**: Record which side was chosen and why per match
 
 #### Communication
-- [ ] **VoD link on post-game**: Attach a YouTube or Twitch timestamp link to a post-game review so the team can watch the replay together. Mark specific timestamps with notes (e.g. "dragon fight at 18:00 — poor positioning").
-- [ ] **Team announcements**: A simple pinboard on the team dashboard where the leader can post short text announcements (practice schedule, meta notes, role changes). Shown in the notification dropdown.
+- [ ] **VoD link on post-game**: Attach YouTube/Twitch timestamp links with per-timestamp notes
+- [ ] **Team announcements**: Pinboard on dashboard for leader to post short text announcements
 
 ---
 
 ### Priority 5 — Nice to Have
-- [ ] **Draft versioning**: Keep last 5 auto-save snapshots per draft for rollback
-- [ ] **Draft keyboard shortcuts**: `1`–`5` select pick slots, `b` toggles ban mode
+- [ ] **Draft versioning**: Last 5 auto-save snapshots per draft for rollback
+- [ ] **Draft keyboard shortcuts**: `1`-`5` select pick slots, `b` toggles ban mode
 - [ ] **Export draft as image**: Screenshot draft board as PNG for Discord sharing
 - [ ] **Export tree as PDF/image**: For sharing scouting reports
-- [ ] **Match timeline mini-graph**: Small gold/XP lead chart per match (if Riot timeline endpoint is used)
-- [ ] **Post-game link from game plan**: After completing a game plan, prompt to create a linked post-game review
+- [ ] **Match timeline mini-graph**: Gold/XP lead chart per match (Riot timeline endpoint)
+- [ ] **Post-game link from game plan**: Prompt to create linked post-game review after completing a game plan
 
 ---
 
-## Completed
+## Research Findings (2026-03-12)
 
-### Section 10 – WASM Panic Hardening
-- [x] Replaced `.unwrap()` in nav Escape key listener with safe `if let Some(window)` pattern
-- [x] Replaced `.unwrap()` in drag-and-drop handlers (dashboard) with `let Some(dt) = ... else { return }`
-- [x] Fixed potential WASM runtime crash that froze all subsequent clicks and navigation
+Full research document: `.planning/research/competitive_league_research.md`
 
-### Section 9 – Tree Graph Visualization
-- [x] SVG-based tree graph component (`src/components/tree_graph.rs`)
-- [x] Top-down layout algorithm with automatic node positioning
-- [x] Champion icons on connection edges showing picks/bans diff between parent and child
-- [x] Ban indicators (red border + cross overlay) vs pick indicators (green border)
-- [x] List/graph view toggle in tree structure panel header
-- [x] Graph panel auto-expands to fill width; list view stays as fixed sidebar
-- [x] Clickable nodes to select for editing, hover + button to add branches
+### PrimeLeague Integration — Skip
+No public API. The primeleague.gg internal API requires IP whitelisting. Freaks 4U Gaming (operator) filed for insolvency in 2024 (license renewed through 2027). **Recommendation**: Skip automated integration, build manual CSV/JSON roster import instead. Liquipedia scraping is a viable fallback if demand materializes.
 
-### Section 8 – Theming System
-- [x] CSS custom property-based theme system with semantic color tokens
-- [x] Dark/light mode toggle (moon/sun icon) with localStorage persistence
-- [x] Anti-FOUC inline script in HTML head
-- [x] Accent color picker (yellow, blue, purple, emerald, rose)
-- [x] Replaced ~285 hardcoded color references with semantic tokens across all pages and components
+### Draft Tool Landscape
+Analyzed 10 tools (ProComps, DraftGap, iTero, Drafter.lol, ScoutAhead, etc.). Key gaps our app can fill: per-pick rationale annotations (most requested coaching feature), composition identity tags, and Fearless draft mode. See Priority 2-3 items above.
 
-### Section 7 – Bug Fixes & Feature Enhancements
-- [x] Nav dropdowns close on outside click (transparent backdrop), Escape key, and link click
-- [x] Removed duplicate "Team Settings" from profile menu
-- [x] Fixed game plan save "Connection uninitialised" error (missing `.check()`)
-- [x] Tree drafter: fixed Live Game button not activating immediately
-- [x] Tree drafter: enlarged node +/x buttons
-- [x] Notification dropdown: inline accept/decline for join requests
-- [x] Team dashboard: coach role slots, leave team, leader badge
-- [x] Drafts: blue/red side toggle, auto-populate game plan champions from draft
-- [x] Champion autocomplete component with icons (game plan champion inputs)
-- [x] Champion pool: standalone page (`/champion-pool`) with tiers (comfort, match ready, scrim ready, practicing, should be practiced) and notes
-- [x] Profile: champion pool summary with link to full pool page
-- [x] Tree drafter: "Branch from here" button to create branch from a selected draft position
-
-### Section 1 – Teams & Existing Feature Gaps
-- [x] Join request system: players request to join, leader accepts/declines
-- [x] Nav badge: red dot on Team link shows pending request count (leaders only)
-- [x] Substitute roster: members land on the bench after joining
-- [x] Starter slots: 5 role slots (Top/Jungle/Mid/Bot/Support) with drag-and-drop assignment
-- [x] Leader can kick members and edit team name/region
-- [x] Role dropdown per bench member
-
-### Section 2 – Draft Tree System (`/tree-drafter`)
-- [x] New page at /tree-drafter (do NOT touch existing /draft)
-- [x] Tree data model: DraftTree + DraftTreeNode (parent/child)
-- [x] Create tree, add branches (child nodes)
-- [x] Tree visualisation: indented list with expand/collapse
-- [x] Node editor: full draft board per node + notes
-- [x] Live game navigator: step-by-step branch selection
-- [x] Improvisation mode: create branch mid-game, tag as improvised
-
-### Section 3 – Stats & League API
-- [x] Pull match history from Riot API (manual refresh only)
-- [x] Filter for all-5-roster-player games
-- [x] Stats dashboard with date/opponent filters
-- [x] Flag clearly if RIOT_API_KEY is missing
-
-### Section 4 – Game Plan System
-- [x] Create plans linked to a specific matchup (your 5 champs vs enemy 5)
-- [x] Macro strategy section (team-wide)
-- [x] 5 role-specific sections
-- [x] Link to a draft
-- [x] Template-based auto-generation
-
-### Section 5 – Postgame Analysis
-- [x] Link to actual match from stats
-- [x] Link to original game plan and draft
-- [x] Structured feedback fields
-- [x] Open-ended notes
-- [x] Pattern analysis
-
-### Earlier Work
-- [x] Saved drafts display bans left/right of picks, phase groups separated
-- [x] Draft rating (S+ to D tier picker)
-- [x] Team selection on draft form
-- [x] Sliding first-pick toggle with colour animation
-- [x] Role filter icons via Community Dragon CDN
-- [x] Champion pool on profile page (per role, add/remove)
-- [x] Link Riot account (name#tag → PUUID)
-- [x] Create/join team from roster page
-
-### Section 6 – Full Integration & UI Polish
-- [x] Dashboard: team summary, draft/plan/review counts, recent game stats, win rate
-- [x] Landing page for unauthenticated users with CTA
-- [x] Alert banners: pending join requests, no team, missing API key
-- [x] Consistent header: sticky nav, backdrop blur, notifications dropdown, user avatar menu
-- [x] Mobile-responsive nav with hamburger menu
-- [x] Reusable ErrorBanner and StatusMessage UI components
-- [x] Consistent error display across all pages (standardized to ErrorBanner)
-- [x] Dark theme by default (app-wide `bg-gray-950`)
+### Champion Learning Notes
+Proposed structured `ChampionNote` schema with sub-records for power spikes, combos, matchups (with personal difficulty rating), teamfight role, synergies, and timestamped lessons journal. MVP: comfort level, matchup notes, lessons learned. Full schema in research doc.
 
 ---
 
-## Known Bugs (from e2e audit 2026-03-11)
+## Recently Completed (Section 18 — Triage & Polish)
 
-### Critical
-- ~~**Logout broken**~~: Fixed in v0.15.0 — hard navigation added after logout.
+### UI Polish
+- [x] **First pick toggle alignment**: Changed red-side indicator from `left-[1.375rem]` to `right-0.5` for symmetric padding
+- [x] **Ban icon red bars removed**: Deleted red strikethrough overlay on draft board ban slots; grayscale + opacity-50 is sufficient
+- [x] **Ban icons greyscale in tree graph**: Replaced red accent border + cross overlay with muted border + SVG grayscale filter + 50% opacity for ban icons on edges
+- [x] **Tree graph canvas enlarged**: Increased `NODE_W` 150→180, `NODE_H` 36→42, `LEVEL_H` 100→120, `H_GAP` 16→24, `ICON_SIZE` 22→26. Container max-height 70vh→85vh. Proportional text/badge adjustments.
+- [x] **Profile username pencil edit**: Replaced always-visible form with display + pencil icon toggle. Click pencil → inline edit with Save/Cancel.
+- [x] **Recent games on dashboard**: 3 most recent matches shown as condensed cards (champion icon, KDA, W/L badge, date) with "View all stats →" link. Empty state for no matches.
 
-### Medium
-- ~~**9 rule-44 violations**~~: Fixed in v0.15.0 — all return empty lists instead of errors.
-- ~~**Missing `.check()` on profile UPDATE**~~: Fixed in v0.15.0.
-- ~~**Registration doesn't auto-login**~~: Fixed in v0.15.0 — auto-login after registration.
+### Triage Resolution
+- [x] **Draft saving**: Already fixed in Section 17 (rule 44 + empty name guard)
+- [x] **Tree drafter freeze**: Already fixed in Section 17 (eager capture + suppress_autosave)
+- [x] **Riot API 401**: API key issue — needs fresh key from Riot developer portal (not a code bug)
+- [x] **PrimeLeague**: Researched — no public API, skip automated integration
 
-### Low
-- **Tailwind CSS 404**: Every page loads `/pkg/tailwindcss` and gets 404. Harmless but noisy in console.
-- ~~**Auth test false positive**~~: Fixed in v0.15.0 — test now verifies redirect to `/team/dashboard` and username presence; profile page redirects unauthenticated users to `/auth/login`.
+---
+
+## Completed (Previous Sections)
+
+### Section 17 — Team Polish, Interactive Tree Graph, Stats Overhaul
+- [x] UI freeze after branching (auto-save eager capture)
+- [x] Node switch bug (suppress_autosave + cancel timer)
+- [x] Tree graph too many icons on edge (MAX_ICONS = 3)
+- [x] Interactive tree graph (click-to-select, accent glow)
+- [x] Auto-save for drafts and tree nodes (2s debounce)
+- [x] Click-to-select-then-delete pattern (draft board)
+- [x] Role icons deduplicated, team rename pencil modal
+- [x] Protected page redirects, auth-aware nav
+- [x] Stats: queue selector, OP.GG layout, expandable details, partial-team matches
+- [x] Rule 44 violations fixed across 9 server functions
+
+### Section 10 — WASM Panic Hardening
+- [x] Safe `.unwrap()` replacements in nav, drag-and-drop handlers
+
+### Section 9 — Tree Graph Visualization
+- [x] SVG tree component, layout algorithm, champion icons on edges, clickable nodes
+
+### Section 8 — Theming System
+- [x] CSS custom properties, dark/light toggle, accent color picker, 285 token replacements
+
+### Section 7 — Bug Fixes & Feature Enhancements
+- [x] Nav dropdowns, game plan save fix, tree drafter UX, champion autocomplete, champion pool page
+
+### Sections 1-6 — Core Features
+- [x] Teams, join requests, roster management, draft tree system, stats & Riot API, game plan, postgame analysis, dashboard integration, landing page, theming
+
+---
+
+## Known Bugs
+
+- **Tailwind CSS 404**: Every page loads `/pkg/tailwindcss` → 404. Harmless, filtered in e2e tests.
 
 ## E2E Test Status (2026-03-11)
-- 21/21 passing (logout test un-skipped after hard-nav fix)
-- Auth fixture registers then logs in (registration now auto-logs in but fixture kept for compatibility)
-- Tailwind 404 filtered from error assertions (known dev-mode issue)
+- 21/21 passing
+- Auth fixture registers then logs in
+- Tailwind 404 filtered from error assertions

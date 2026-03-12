@@ -21,10 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stats page: queue type selector (Solo/Duo, Flex, All Queues) for match sync; OP.GG-style match history layout with champion icons, KDA, CS, vision, damage, win/loss row tinting; expandable match detail panel showing team members' stats per match
 - `verify-implementation` skill for post-implementation testing (compile, browser, e2e, regression sweep)
 - Stats page: animated spinner on Sync button + blue progress banner during match sync; "Team Games / All Matches" segmented toggle to switch between team-only (min_players≥2) and all matches (including solo queue)
+- Draft planner: composition tags (teamfight, split-push, poke, etc.) with toggle buttons and saved-drafts filter
+- Draft planner: "How We Win" and "Watch Out For" textarea notes per draft
+- Draft planner: per-pick rationale comments — click a pick slot to annotate, shown truncated on board
+- Draft planner: tag badges on saved draft cards
+- Draft planner: collapsible ban priority panel with ranked list, add/remove, save/cancel
 
 ### Fixed
 
 - Stats: matches not appearing after sync — `player_match` writes silently discarded by `.ok()` (now `.check()?`), and `get_team_match_stats` deserialization failed on `datetime` field (added `<string>` cast) and `match` record ref returned as `NONE` by `SELECT *` traversal (now `Option<RecordId>`)
+- Draft auto-save Effect: eagerly captures all signal values before timer closure (CLAUDE.md rule 54), preventing stale data saves for tags/win conditions/watch out/slot comments
 - 23 clippy warnings: unnecessary casts in riot.rs, clone-on-copy in draft_board.rs, redundant closure in register.rs, type complexity in post_game.rs, manual_memcpy in tree_drafter.rs, too_many_arguments in db.rs
 - E2e test fixture: updated for registration auto-login (no longer does register+login two-step)
 - E2e WASM Effect race condition: added 500ms settle delay after registration redirect to prevent `window.location.set_href` from interrupting subsequent navigations
