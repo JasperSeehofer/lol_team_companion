@@ -1137,7 +1137,7 @@ pub async fn get_team_match_stats(
         .join(", ");
 
     let query = format!(
-        "SELECT *, match.match_id as riot_match_id, match.game_duration as game_duration, match.game_end as game_end, user.username as username FROM player_match WHERE user IN [{user_id_list}] ORDER BY match.game_end DESC LIMIT 200"
+        "SELECT *, match.match_id as riot_match_id, match.queue_id as queue_id, match.game_duration as game_duration, match.game_end as game_end, user.username as username FROM player_match WHERE user IN [{user_id_list}] ORDER BY match.game_end DESC LIMIT 200"
     );
 
     let mut result = db.query(&query).await?;
@@ -1153,6 +1153,7 @@ struct DbTeamMatchRow {
     user: RecordId,
     username: String,
     riot_match_id: String,
+    queue_id: i32,
     game_duration: i32,
     game_end: Option<String>,
     champion: String,
@@ -1171,6 +1172,7 @@ pub struct TeamMatchRow {
     pub user_id: String,
     pub username: String,
     pub riot_match_id: String,
+    pub queue_id: i32,
     pub game_duration: i32,
     pub game_end: Option<String>,
     pub champion: String,
@@ -1190,6 +1192,7 @@ impl From<DbTeamMatchRow> for TeamMatchRow {
             user_id: r.user.to_sql(),
             username: r.username,
             riot_match_id: r.riot_match_id,
+            queue_id: r.queue_id,
             game_duration: r.game_duration,
             game_end: r.game_end,
             champion: r.champion,
