@@ -490,13 +490,27 @@ pub fn TreeDrafterPage() -> impl IntoView {
             set_status_msg.set(Some("Enter a branch label.".into()));
             return;
         }
+        let tree_id_for_select = tree_id.clone();
         leptos::task::spawn_local(async move {
-            match add_branch(tree_id, parent, label).await {
-                Ok(_) => {
+            match add_branch(tree_id, parent, label.clone()).await {
+                Ok(new_node_id) => {
                     set_new_branch_label.set(String::new());
                     set_adding_branch_to.set(None);
                     set_status_msg.set(Some("Branch added!".into()));
                     nodes_resource.refetch();
+                    // Select the newly created node
+                    let new_node = DraftTreeNode {
+                        id: Some(new_node_id),
+                        tree_id: tree_id_for_select,
+                        label,
+                        notes: None,
+                        is_improvised: false,
+                        parent_id: None, // not needed for select_node
+                        sort_order: 0,
+                        actions: Vec::new(),
+                        children: Vec::new(),
+                    };
+                    select_node(&new_node);
                 }
                 Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
             }
@@ -566,13 +580,29 @@ pub fn TreeDrafterPage() -> impl IntoView {
         let label = format!("Branch after {} {} {}", side, kind, num);
         let label_for_save = label.clone();
 
+        let branch_slots_for_select = branch_slots.clone();
+        let tree_id_for_select = tree_id.clone();
         leptos::task::spawn_local(async move {
             match add_branch(tree_id, parent_id, label).await {
                 Ok(new_node_id) => {
-                    match save_node(new_node_id.clone(), label_for_save, None, false, actions_json).await {
+                    match save_node(new_node_id.clone(), label_for_save.clone(), None, false, actions_json).await {
                         Ok(_) => {
                             set_status_msg.set(Some("Branch created from position!".into()));
                             nodes_resource.refetch();
+                            // Select the newly created node with its actions
+                            let actions = build_actions_from_slots(&branch_slots_for_select);
+                            let new_node = DraftTreeNode {
+                                id: Some(new_node_id),
+                                tree_id: tree_id_for_select,
+                                label: label_for_save,
+                                notes: None,
+                                is_improvised: false,
+                                parent_id: None,
+                                sort_order: 0,
+                                actions,
+                                children: Vec::new(),
+                            };
+                            select_node(&new_node);
                         }
                         Err(e) => set_status_msg.set(Some(format!("Error saving branch: {e}"))),
                     }
