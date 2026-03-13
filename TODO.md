@@ -51,12 +51,12 @@
 
 #### Champion Pool — Structured Notes
 Replace single textarea with structured fields per champion (informed by research — see `.planning/research/competitive_league_research.md` R3):
-- [ ] **Comfort level** (1-5 scale) alongside existing tier
-- [ ] **Matchup notes**: Per-opponent entries with difficulty rating, lane strategy, items to adjust, personal notes
-- [ ] **Lessons learned journal**: Timestamped entries after games ("realized I need to save W for disengage")
-- [ ] **Power spikes**: Repeatable entries (timing + description, e.g. "Level 6: ult enables tower dives")
-- [ ] **Combos**: Named sequences with notes (e.g. "Basic trade: Q > AA > W > AA — use in short trades")
-- [ ] **Teamfight role & positioning notes**
+- [x] **Comfort level** (1-5 scale) alongside existing tier
+- [x] **Matchup notes**: Per-opponent entries with difficulty rating, lane strategy, items to adjust, personal notes
+- [x] **Lessons learned journal**: Timestamped entries after games ("realized I need to save W for disengage")
+- [x] **Power spikes**: Repeatable entries (timing + description, e.g. "Level 6: ult enables tower dives")
+- [x] **Combos**: Named sequences with notes (e.g. "Basic trade: Q > AA > W > AA — use in short trades")
+- [x] **Teamfight role & positioning notes**
 
 #### Draft Tools
 - [ ] **Fearless draft mode**: Track previously picked/banned champions across a series (BO3/BO5), gray them out in subsequent games
@@ -71,7 +71,7 @@ Replace single textarea with structured fields per champion (informed by researc
 - [ ] **Aggregate graphs**: Line chart of team win rate over time; bar chart of most played champions together
 
 #### Game Plan
-- [ ] **Auto-save**: Same 2 s debounce + 30 s hard save as draft and tree sections
+- [x] **Auto-save**: Same 2 s debounce + 30 s hard save as draft and tree sections
 - [ ] **Template from champion pool**: Pre-fill role strategy fields from selected champion's notes
 
 #### Scouting & Opponent Prep

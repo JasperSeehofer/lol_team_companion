@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Draft planner: per-pick rationale comments — click a pick slot to annotate, shown truncated on board
 - Draft planner: tag badges on saved draft cards
 - Draft planner: collapsible ban priority panel with ranked list, add/remove, save/cancel
+- Champion pool: structured notes system with tabbed detail panel (Overview, Matchups, Notes, Journal)
+- Champion pool: comfort level (1-5 stars) per champion with clickable star rating
+- Champion pool: meta fitness tags (Strong/Neutral/Weak) per champion with toggle badges
+- Champion pool: matchup notes with per-opponent difficulty ratings (1-5), create/edit/delete
+- Champion pool: power spikes, combos, synergies, and positioning note categories
+- Champion pool: lessons learned journal with timestamped entries
+- Champion pool: `champion_note` DB table for extensible structured note storage
+- Champion pool: selected champion highlighting in tier list cards, comfort stars and meta badges on cards
+- Champion pool: responsive layout (stacked on mobile, side panel on desktop)
+- Game plan: 2s debounced auto-save for existing plans (same pattern as draft/tree drafter)
+- Game plan: "Saved" / "Unsaved changes" status indicator next to save button
 
 ### Fixed
 

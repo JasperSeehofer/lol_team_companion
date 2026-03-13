@@ -392,6 +392,87 @@ pub fn GamePlanPage() -> impl IntoView {
         }
     };
 
+    // Auto-save timer + status (same pattern as draft.rs / tree_drafter.rs)
+    #[allow(unused_variables)]
+    let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    let (auto_save_status, set_auto_save_status) = signal("");
+
+    let our_sigs_for_autosave = our_champ_signals.clone();
+    let enemy_sigs_for_autosave = enemy_champ_signals.clone();
+
+    #[allow(unused_variables)]
+    Effect::new(move |_| {
+        // === RULE 54: Eagerly track + capture ALL signals ===
+        let name_val = plan_name.get();
+        let existing_id = editing_id.get();
+        let draft_val = draft_id.get();
+        let wc_val = win_conditions.get();
+        let obj_val = obj_priority.get();
+        let tf_val = teamfight.get();
+        let eg_val = early_game.get();
+        let strats_val = role_strats.get();
+        let notes_val = notes.get();
+        let our_vals: Vec<String> = our_sigs_for_autosave.iter().map(|s| s.get()).collect();
+        let enemy_vals: Vec<String> = enemy_sigs_for_autosave.iter().map(|s| s.get()).collect();
+
+        // Only auto-save if we have a name AND it's an existing plan
+        if name_val.trim().is_empty() || existing_id.is_none() {
+            return;
+        }
+
+        // Cancel pending timer
+        #[cfg(feature = "hydrate")]
+        if let Some(timer_id) = auto_save_timer.get_untracked() {
+            if let Some(win) = web_sys::window() {
+                win.clear_timeout_with_handle(timer_id);
+            }
+        }
+
+        set_auto_save_status.set("unsaved");
+
+        #[cfg(feature = "hydrate")]
+        {
+            // Build plan from eagerly captured values
+            let plan = GamePlan {
+                id: existing_id,
+                team_id: String::new(),
+                draft_id: if draft_val.is_empty() { None } else { Some(draft_val) },
+                name: name_val,
+                our_champions: our_vals.into_iter().filter(|s| !s.is_empty()).collect(),
+                enemy_champions: enemy_vals.into_iter().filter(|s| !s.is_empty()).collect(),
+                win_conditions: wc_val.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                objective_priority: obj_val.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                teamfight_strategy: tf_val,
+                early_game: if eg_val.is_empty() { None } else { Some(eg_val) },
+                top_strategy: if strats_val[0].is_empty() { None } else { Some(strats_val[0].clone()) },
+                jungle_strategy: if strats_val[1].is_empty() { None } else { Some(strats_val[1].clone()) },
+                mid_strategy: if strats_val[2].is_empty() { None } else { Some(strats_val[2].clone()) },
+                bot_strategy: if strats_val[3].is_empty() { None } else { Some(strats_val[3].clone()) },
+                support_strategy: if strats_val[4].is_empty() { None } else { Some(strats_val[4].clone()) },
+                notes: if notes_val.is_empty() { None } else { Some(notes_val) },
+            };
+            let plan_json = serde_json::to_string(&plan).unwrap_or_default();
+
+            use wasm_bindgen::prelude::*;
+            let cb = Closure::once(move || {
+                leptos::task::spawn_local(async move {
+                    let _ = update_plan(plan_json).await;
+                    set_auto_save_status.set("saved");
+                    plans.refetch();
+                });
+            });
+            if let Some(win) = web_sys::window() {
+                if let Ok(timer_id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    2000,
+                ) {
+                    auto_save_timer.set(Some(timer_id));
+                }
+            }
+            cb.forget();
+        }
+    });
+
     let do_save = move |_| {
         let plan = build_plan();
         let plan_json = serde_json::to_string(&plan).unwrap_or_default();
@@ -758,7 +839,7 @@ pub fn GamePlanPage() -> impl IntoView {
                         />
                     </div>
 
-                    // Save buttons
+                    // Save buttons + auto-save status
                     <div class="flex gap-3 items-center">
                         <button
                             class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
@@ -770,6 +851,18 @@ pub fn GamePlanPage() -> impl IntoView {
                             class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
                             on:click=move |_| clear_editor.run(())
                         >"Clear"</button>
+                        {move || {
+                            let status = auto_save_status.get();
+                            match status {
+                                "saved" => view! {
+                                    <span class="text-green-400 text-xs font-medium">"\u{2713} Saved"</span>
+                                }.into_any(),
+                                "unsaved" => view! {
+                                    <span class="text-accent text-xs font-medium">"\u{25cf} Unsaved changes"</span>
+                                }.into_any(),
+                                _ => view! { <span></span> }.into_any(),
+                            }
+                        }}
                     </div>
                 </div>
             </div>

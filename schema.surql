@@ -115,7 +115,20 @@ DEFINE FIELD IF NOT EXISTS champion ON champion_pool TYPE string;
 DEFINE FIELD IF NOT EXISTS role ON champion_pool TYPE string;
 DEFINE FIELD IF NOT EXISTS tier ON champion_pool TYPE string DEFAULT 'comfort';
 DEFINE FIELD IF NOT EXISTS notes ON champion_pool TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS comfort_level ON champion_pool TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS meta_tag ON champion_pool TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON champion_pool TYPE datetime DEFAULT time::now();
+
+-- Champion notes (structured knowledge base per champion)
+DEFINE TABLE IF NOT EXISTS champion_note SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON champion_note TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS champion ON champion_note TYPE string;
+DEFINE FIELD IF NOT EXISTS role ON champion_note TYPE string;
+DEFINE FIELD IF NOT EXISTS note_type ON champion_note TYPE string;
+DEFINE FIELD IF NOT EXISTS title ON champion_note TYPE string;
+DEFINE FIELD IF NOT EXISTS content ON champion_note TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS difficulty ON champion_note TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS created_at ON champion_note TYPE datetime DEFAULT time::now();
 
 -- Draft trees (branching draft plans)
 DEFINE TABLE IF NOT EXISTS draft_tree SCHEMAFULL;

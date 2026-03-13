@@ -9,7 +9,7 @@ use surrealdb::{
 use thiserror::Error;
 
 use crate::models::{
-    champion::ChampionPoolEntry,
+    champion::{ChampionNote, ChampionPoolEntry},
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
@@ -173,6 +173,8 @@ struct DbPoolEntry {
     role: String,
     tier: String,
     notes: Option<String>,
+    comfort_level: Option<i64>,
+    meta_tag: Option<String>,
 }
 
 impl From<DbPoolEntry> for ChampionPoolEntry {
@@ -184,6 +186,37 @@ impl From<DbPoolEntry> for ChampionPoolEntry {
             role: e.role,
             tier: e.tier,
             notes: e.notes,
+            comfort_level: e.comfort_level.map(|v| v as u8),
+            meta_tag: e.meta_tag,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbChampionNote {
+    id: RecordId,
+    user: RecordId,
+    champion: String,
+    role: String,
+    note_type: String,
+    title: String,
+    content: String,
+    difficulty: Option<i64>,
+    created_at: String,
+}
+
+impl From<DbChampionNote> for ChampionNote {
+    fn from(e: DbChampionNote) -> Self {
+        ChampionNote {
+            id: Some(e.id.to_sql()),
+            user_id: e.user.to_sql(),
+            champion: e.champion,
+            role: e.role,
+            note_type: e.note_type,
+            title: e.title,
+            content: e.content,
+            difficulty: e.difficulty.map(|v| v as u8),
+            created_at: Some(e.created_at),
         }
     }
 }
@@ -275,6 +308,120 @@ pub async fn update_champion_notes(
         .bind(("champion", champion.to_string()))
         .bind(("role", role.to_string()))
         .bind(("notes", notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_champion_comfort(
+    db: &Surreal<Db>,
+    user_id: &str,
+    champion: &str,
+    role: &str,
+    comfort_level: Option<i64>,
+) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE champion_pool SET comfort_level = $comfort_level WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role")
+        .bind(("user_key", user_key))
+        .bind(("champion", champion.to_string()))
+        .bind(("role", role.to_string()))
+        .bind(("comfort_level", comfort_level))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_champion_meta_tag(
+    db: &Surreal<Db>,
+    user_id: &str,
+    champion: &str,
+    role: &str,
+    meta_tag: Option<String>,
+) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE champion_pool SET meta_tag = $meta_tag WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role")
+        .bind(("user_key", user_key))
+        .bind(("champion", champion.to_string()))
+        .bind(("role", role.to_string()))
+        .bind(("meta_tag", meta_tag))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Champion Notes
+// ---------------------------------------------------------------------------
+
+pub async fn get_champion_notes(
+    db: &Surreal<Db>,
+    user_id: &str,
+    champion: &str,
+    role: &str,
+) -> DbResult<Vec<ChampionNote>> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let mut r = db
+        .query("SELECT *, <string>created_at AS created_at FROM champion_note WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role ORDER BY note_type, created_at DESC")
+        .bind(("user_key", user_key))
+        .bind(("champion", champion.to_string()))
+        .bind(("role", role.to_string()))
+        .await?;
+    let entries: Vec<DbChampionNote> = r.take(0).unwrap_or_default();
+    Ok(entries.into_iter().map(ChampionNote::from).collect())
+}
+
+pub async fn add_champion_note(
+    db: &Surreal<Db>,
+    user_id: &str,
+    note: ChampionNote,
+) -> DbResult<String> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let mut r = db
+        .query("CREATE champion_note SET user = type::record('user', $user_key), champion = $champion, role = $role, note_type = $note_type, title = $title, content = $content, difficulty = $difficulty")
+        .bind(("user_key", user_key))
+        .bind(("champion", note.champion))
+        .bind(("role", note.role))
+        .bind(("note_type", note.note_type))
+        .bind(("title", note.title))
+        .bind(("content", note.content))
+        .bind(("difficulty", note.difficulty.map(|v| v as i64)))
+        .await?
+        .check()?;
+    let created: Option<IdRecord> = r.take(0)?;
+    Ok(created
+        .map(|r| r.id.to_sql())
+        .unwrap_or_default())
+}
+
+pub async fn update_champion_note(
+    db: &Surreal<Db>,
+    note: ChampionNote,
+) -> DbResult<()> {
+    let note_id = note.id.unwrap_or_default();
+    let note_key = note_id
+        .strip_prefix("champion_note:")
+        .unwrap_or(&note_id)
+        .to_string();
+    db.query("UPDATE type::record('champion_note', $note_key) SET title = $title, content = $content, difficulty = $difficulty")
+        .bind(("note_key", note_key))
+        .bind(("title", note.title))
+        .bind(("content", note.content))
+        .bind(("difficulty", note.difficulty.map(|v| v as i64)))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_champion_note(
+    db: &Surreal<Db>,
+    note_id: &str,
+) -> DbResult<()> {
+    let note_key = note_id
+        .strip_prefix("champion_note:")
+        .unwrap_or(note_id)
+        .to_string();
+    db.query("DELETE type::record('champion_note', $note_key)")
+        .bind(("note_key", note_key))
         .await?
         .check()?;
     Ok(())
