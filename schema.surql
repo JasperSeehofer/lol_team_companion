@@ -94,6 +94,7 @@ DEFINE FIELD IF NOT EXISTS mid_strategy ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS bot_strategy ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS support_strategy ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS notes ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS win_condition_tag ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_by ON game_plan TYPE option<record<user>>;
 DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::now();
 

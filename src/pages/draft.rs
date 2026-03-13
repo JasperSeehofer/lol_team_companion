@@ -448,6 +448,101 @@ pub async fn get_matchup_notes_for_champion(
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+// ---------------------------------------------------------------------------
+// Analytics data types + server functions (Phase 7a-c)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct DraftTendency {
+    pub champion: String,
+    pub phase: String,
+    pub order: i32,
+    pub count: i32,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct DraftAnalytics {
+    pub blue_games: i32,
+    pub blue_wins: i32,
+    pub red_games: i32,
+    pub red_wins: i32,
+    pub tag_stats: Vec<(String, i32, i32)>,
+    pub first_pick_stats: Vec<(String, i32, i32)>,
+}
+
+#[server]
+pub async fn get_draft_tendency_data() -> Result<Vec<DraftTendency>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    let raw = db::get_draft_tendencies(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(raw
+        .into_iter()
+        .map(|(champion, phase, order, count)| DraftTendency {
+            champion,
+            phase,
+            order,
+            count,
+        })
+        .collect())
+}
+
+#[server]
+pub async fn get_draft_analytics() -> Result<DraftAnalytics, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(DraftAnalytics::default()),
+    };
+
+    let data = db::get_draft_outcome_stats(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(DraftAnalytics {
+        blue_games: data.blue_games,
+        blue_wins: data.blue_wins,
+        red_games: data.red_games,
+        red_wins: data.red_wins,
+        tag_stats: data.tag_stats,
+        first_pick_stats: data.first_pick_stats,
+    })
+}
+
 fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .into_iter()
@@ -580,6 +675,12 @@ pub fn DraftPage() -> impl IntoView {
     let champions_resource = Resource::new(|| (), |_| get_champions());
     let drafts = Resource::new(|| (), |_| list_drafts());
     let teams_resource = Resource::new(|| (), |_| list_user_teams());
+
+    // Analytics resources (Phase 7a + 7c)
+    let (tendencies_open, set_tendencies_open) = signal(false);
+    let (analytics_open, set_analytics_open) = signal(false);
+    let tendency_data = Resource::new(|| (), |_| get_draft_tendency_data());
+    let analytics_data = Resource::new(|| (), |_| get_draft_analytics());
 
     // Auto-select first team when resource loads
     Effect::new(move |_| {
@@ -2093,6 +2194,245 @@ pub fn DraftPage() -> impl IntoView {
                         })
                     }}
                 </Suspense>
+            </div>
+
+            // Draft Tendencies Panel (Phase 7a)
+            <div class="bg-elevated border border-divider rounded-lg">
+                <button
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
+                    on:click=move |_| set_tendencies_open.update(|v| *v = !*v)
+                >
+                    <h2 class="text-xl font-bold text-primary">"Draft Tendencies"</h2>
+                    <span class="text-muted">{move || if tendencies_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
+                </button>
+                {move || tendencies_open.get().then(|| {
+                    view! {
+                        <div class="px-4 pb-4">
+                            <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading tendencies..."</div> }>
+                                {move || tendency_data.get().map(|result| match result {
+                                    Ok(tendencies) => {
+                                        // Filter to champions with 2+ appearances
+                                        let mut champ_totals: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+                                        for t in &tendencies {
+                                            *champ_totals.entry(t.champion.clone()).or_insert(0) += t.count;
+                                        }
+                                        let mut champs: Vec<(String, i32)> = champ_totals.into_iter().filter(|(_, c)| *c >= 2).collect();
+                                        champs.sort_by(|a, b| b.1.cmp(&a.1));
+
+                                        if champs.is_empty() {
+                                            return view! {
+                                                <p class="text-dimmed text-sm">"Not enough draft data yet (need 2+ appearances for a champion)."</p>
+                                            }.into_any();
+                                        }
+
+                                        // Build position counts per champion
+                                        let mut champ_position_counts: std::collections::HashMap<String, std::collections::HashMap<i32, i32>> = std::collections::HashMap::new();
+                                        for t in &tendencies {
+                                            champ_position_counts
+                                                .entry(t.champion.clone())
+                                                .or_default()
+                                                .insert(t.order, t.count);
+                                        }
+
+                                        // Detect predictable patterns (70%+ in same position, 3+ games)
+                                        let mut warnings: Vec<String> = Vec::new();
+                                        for (champ, total) in &champs {
+                                            if let Some(positions) = champ_position_counts.get(champ) {
+                                                for (&order, &count) in positions {
+                                                    if *total >= 3 && (count as f64 / *total as f64) >= 0.7 {
+                                                        let (side, kind, _) = crate::components::draft_board::slot_meta(order as usize);
+                                                        warnings.push(format!("{champ}: {:.0}% in {side} {kind} (slot {})", count as f64 / *total as f64 * 100.0, order + 1));
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        let warnings_clone = warnings.clone();
+
+                                        view! {
+                                            <div class="flex flex-col gap-3">
+                                                // Warnings
+                                                {if !warnings_clone.is_empty() {
+                                                    view! {
+                                                        <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                                                            <p class="text-yellow-400 text-xs font-semibold mb-1">"Predictable Patterns Detected"</p>
+                                                            {warnings_clone.into_iter().map(|w| view! {
+                                                                <p class="text-yellow-300/80 text-xs">{w}</p>
+                                                            }).collect_view()}
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+
+                                                // Heatmap table
+                                                <div class="overflow-x-auto">
+                                                    <table class="text-xs w-full">
+                                                        <thead>
+                                                            <tr>
+                                                                <th class="text-left text-muted px-2 py-1 sticky left-0 bg-elevated">"Champion"</th>
+                                                                <th class="text-muted px-1 py-1">"Total"</th>
+                                                                {(0..20).map(|i| {
+                                                                    let (side, kind, _) = crate::components::draft_board::slot_meta(i);
+                                                                    let label = format!("{}{}", &side[..1].to_uppercase(), if kind.contains("ban") { "B" } else { "P" });
+                                                                    view! { <th class="text-muted px-0.5 py-1 text-center" title=format!("{side} {kind}")>{label}</th> }
+                                                                }).collect_view()}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {champs.into_iter().map(|(champ, total)| {
+                                                                let positions = champ_position_counts.get(&champ).cloned().unwrap_or_default();
+                                                                view! {
+                                                                    <tr class="border-t border-divider/30">
+                                                                        <td class="text-primary px-2 py-1 font-medium sticky left-0 bg-elevated whitespace-nowrap">{champ.clone()}</td>
+                                                                        <td class="text-secondary px-1 py-1 text-center">{total}</td>
+                                                                        {(0..20).map(|i| {
+                                                                            let count = positions.get(&i).copied().unwrap_or(0);
+                                                                            let opacity = if count == 0 {
+                                                                                "bg-transparent"
+                                                                            } else if count == 1 {
+                                                                                "bg-accent/20"
+                                                                            } else if count == 2 {
+                                                                                "bg-accent/40"
+                                                                            } else if count == 3 {
+                                                                                "bg-accent/60"
+                                                                            } else {
+                                                                                "bg-accent/80"
+                                                                            };
+                                                                            view! {
+                                                                                <td class=format!("px-0.5 py-1 text-center {opacity} rounded-sm")>
+                                                                                    {if count > 0 { format!("{count}") } else { String::new() }}
+                                                                                </td>
+                                                                            }
+                                                                        }).collect_view()}
+                                                                    </tr>
+                                                                }
+                                                            }).collect_view()}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        }.into_any()
+                                    },
+                                    Err(e) => view! {
+                                        <ErrorBanner message=format!("Failed to load tendencies: {e}") />
+                                    }.into_any(),
+                                })}
+                            </Suspense>
+                        </div>
+                    }
+                })}
+            </div>
+
+            // Draft Analytics Panel (Phase 7c)
+            <div class="bg-elevated border border-divider rounded-lg">
+                <button
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
+                    on:click=move |_| set_analytics_open.update(|v| *v = !*v)
+                >
+                    <h2 class="text-xl font-bold text-primary">"Draft Analytics"</h2>
+                    <span class="text-muted">{move || if analytics_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
+                </button>
+                {move || analytics_open.get().then(|| {
+                    view! {
+                        <div class="px-4 pb-4">
+                            <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading analytics..."</div> }>
+                                {move || analytics_data.get().map(|result| match result {
+                                    Ok(data) => {
+                                        let has_data = data.blue_games + data.red_games > 0
+                                            || !data.tag_stats.is_empty()
+                                            || !data.first_pick_stats.is_empty();
+
+                                        if !has_data {
+                                            return view! {
+                                                <p class="text-dimmed text-sm">"No draft outcome data yet. Link drafts to post-game reviews to see analytics."</p>
+                                            }.into_any();
+                                        }
+
+                                        let blue_wr = if data.blue_games > 0 { data.blue_wins as f64 / data.blue_games as f64 * 100.0 } else { 0.0 };
+                                        let red_wr = if data.red_games > 0 { data.red_wins as f64 / data.red_games as f64 * 100.0 } else { 0.0 };
+
+                                        let tag_stats = data.tag_stats.clone();
+                                        let fp_stats = data.first_pick_stats.clone();
+
+                                        view! {
+                                            <div class="flex flex-col gap-4">
+                                                // Side win rates
+                                                {if data.blue_games + data.red_games > 0 {
+                                                    view! {
+                                                        <div class="grid grid-cols-2 gap-3">
+                                                            <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-center">
+                                                                <p class="text-blue-400 text-xs font-semibold uppercase mb-1">"Blue Side"</p>
+                                                                <p class="text-primary text-lg font-bold">{format!("{blue_wr:.0}% WR")}</p>
+                                                                <p class="text-muted text-xs">{format!("{}-{}", data.blue_wins, data.blue_games - data.blue_wins)}</p>
+                                                            </div>
+                                                            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-center">
+                                                                <p class="text-red-400 text-xs font-semibold uppercase mb-1">"Red Side"</p>
+                                                                <p class="text-primary text-lg font-bold">{format!("{red_wr:.0}% WR")}</p>
+                                                                <p class="text-muted text-xs">{format!("{}-{}", data.red_wins, data.red_games - data.red_wins)}</p>
+                                                            </div>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+
+                                                // Tag stats
+                                                {if !tag_stats.is_empty() {
+                                                    view! {
+                                                        <div>
+                                                            <h3 class="text-secondary text-sm font-semibold mb-2">"Composition Tag Win Rates"</h3>
+                                                            <div class="flex flex-col gap-1">
+                                                                {tag_stats.into_iter().map(|(tag, games, wins)| {
+                                                                    let wr = if games > 0 { wins as f64 / games as f64 * 100.0 } else { 0.0 };
+                                                                    view! {
+                                                                        <div class="flex items-center gap-3 bg-surface/30 rounded px-3 py-1.5">
+                                                                            <span class="text-primary text-sm font-medium w-32">{tag}</span>
+                                                                            <span class="text-secondary text-sm w-16 text-right">{format!("{wr:.0}%")}</span>
+                                                                            <span class="text-muted text-xs">{format!("({wins}-{})", games - wins)}</span>
+                                                                        </div>
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+
+                                                // First pick stats
+                                                {if !fp_stats.is_empty() {
+                                                    view! {
+                                                        <div>
+                                                            <h3 class="text-secondary text-sm font-semibold mb-2">"First Pick Win Rates"</h3>
+                                                            <div class="flex flex-col gap-1">
+                                                                {fp_stats.into_iter().map(|(champ, games, wins)| {
+                                                                    let wr = if games > 0 { wins as f64 / games as f64 * 100.0 } else { 0.0 };
+                                                                    view! {
+                                                                        <div class="flex items-center gap-3 bg-surface/30 rounded px-3 py-1.5">
+                                                                            <span class="text-primary text-sm font-medium w-32">{champ}</span>
+                                                                            <span class="text-secondary text-sm w-16 text-right">{format!("{wr:.0}%")}</span>
+                                                                            <span class="text-muted text-xs">{format!("({wins}-{})", games - wins)}</span>
+                                                                        </div>
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                            </div>
+                                        }.into_any()
+                                    },
+                                    Err(e) => view! {
+                                        <ErrorBanner message=format!("Failed to load analytics: {e}") />
+                                    }.into_any(),
+                                })}
+                            </Suspense>
+                        </div>
+                    }
+                })}
             </div>
 
             // Ban Priority Panel

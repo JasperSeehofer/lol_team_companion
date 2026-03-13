@@ -383,9 +383,46 @@ fn generate_template(
     (win_conditions, objectives, teamfight, early)
 }
 
+#[server]
+pub async fn get_strategy_win_rates() -> Result<Vec<(String, i32, i32)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::get_win_condition_stats(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const STRATEGY_TAGS: &[&str] = &[
+    "teamfight",
+    "split-push",
+    "poke",
+    "pick",
+    "scaling",
+    "early-game",
+    "protect-the-carry",
+];
 
 const ROLES: [&str; 5] = ["Top", "Jungle", "Mid", "Bot", "Support"];
 
@@ -433,6 +470,8 @@ pub fn GamePlanPage() -> impl IntoView {
     let (early_game, set_early_game) = signal(String::new());
     let (role_strats, set_role_strats) = signal(vec![String::new(); 5]);
     let (notes, set_notes) = signal(String::new());
+    let (win_condition_tag, set_win_condition_tag) = signal(String::new());
+    let strategy_win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
 
     // Clear editor (Callback is Copy, safe in multiple closures)
     let our_champ_signals_clone = our_champ_signals.clone();
@@ -453,6 +492,7 @@ pub fn GamePlanPage() -> impl IntoView {
         set_early_game.set(String::new());
         set_role_strats.set(vec![String::new(); 5]);
         set_notes.set(String::new());
+        set_win_condition_tag.set(String::new());
     });
 
     // Load a plan into editor (Callback is Copy, safe in reactive closures)
@@ -484,6 +524,7 @@ pub fn GamePlanPage() -> impl IntoView {
             p.support_strategy.clone().unwrap_or_default(),
         ]);
         set_notes.set(p.notes.clone().unwrap_or_default());
+        set_win_condition_tag.set(p.win_condition_tag.clone().unwrap_or_default());
     });
 
     let our_sigs_for_build = our_champ_signals.clone();
@@ -581,6 +622,14 @@ pub fn GamePlanPage() -> impl IntoView {
                     Some(s)
                 }
             },
+            win_condition_tag: {
+                let s = win_condition_tag.get_untracked();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            },
         }
     };
 
@@ -604,6 +653,7 @@ pub fn GamePlanPage() -> impl IntoView {
         let eg_val = early_game.get();
         let strats_val = role_strats.get();
         let notes_val = notes.get();
+        let wct_val = win_condition_tag.get();
         let our_vals: Vec<String> = our_sigs_for_autosave.iter().map(|s| s.get()).collect();
         let enemy_vals: Vec<String> = enemy_sigs_for_autosave.iter().map(|s| s.get()).collect();
 
@@ -642,6 +692,7 @@ pub fn GamePlanPage() -> impl IntoView {
                 bot_strategy: if strats_val[3].is_empty() { None } else { Some(strats_val[3].clone()) },
                 support_strategy: if strats_val[4].is_empty() { None } else { Some(strats_val[4].clone()) },
                 notes: if notes_val.is_empty() { None } else { Some(notes_val) },
+                win_condition_tag: if wct_val.is_empty() { None } else { Some(wct_val) },
             };
             let plan_json = serde_json::to_string(&plan).unwrap_or_default();
 
@@ -651,6 +702,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     let _ = update_plan(plan_json).await;
                     set_auto_save_status.set("saved");
                     plans.refetch();
+                    strategy_win_rates.refetch();
                 });
             });
             if let Some(win) = web_sys::window() {
@@ -937,6 +989,70 @@ pub fn GamePlanPage() -> impl IntoView {
                                                 }).collect_view()}
                                             </div>
                                         </div>
+                                    }
+                                })
+                            }}
+                        </Suspense>
+                    </div>
+
+                    // Strategy Tag
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                        <h3 class="text-primary font-semibold text-sm">"Strategy Tag"</h3>
+                        <div class="flex flex-wrap gap-2">
+                            {STRATEGY_TAGS.iter().map(|&tag| {
+                                let tag_str = tag.to_string();
+                                let tag_for_cls = tag_str.clone();
+                                view! {
+                                    <button
+                                        class=move || {
+                                            let current = win_condition_tag.get();
+                                            if current == tag_for_cls {
+                                                "px-3 py-1.5 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
+                                            } else {
+                                                "px-3 py-1.5 rounded-lg text-sm font-medium bg-overlay hover:bg-overlay-strong text-secondary transition-colors cursor-pointer"
+                                            }
+                                        }
+                                        on:click=move |_| {
+                                            let current = win_condition_tag.get_untracked();
+                                            if current == tag_str {
+                                                set_win_condition_tag.set(String::new());
+                                            } else {
+                                                set_win_condition_tag.set(tag_str.clone());
+                                            }
+                                        }
+                                    >{tag}</button>
+                                }
+                            }).collect_view()}
+                        </div>
+                        // Show historical win rate for selected tag
+                        <Suspense fallback=|| ()>
+                            {move || {
+                                let tag = win_condition_tag.get();
+                                if tag.is_empty() {
+                                    return None;
+                                }
+                                strategy_win_rates.get().map(|result| {
+                                    match result {
+                                        Ok(rates) => {
+                                            if let Some((_, games, wins)) = rates.iter().find(|(t, _, _)| *t == tag) {
+                                                if *games > 0 {
+                                                    view! {
+                                                        <div class="text-sm text-muted">
+                                                            {format!("Your team is {wins}-{losses} with this strategy", losses = games - wins)}
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! {
+                                                        <div class="text-sm text-dimmed">"No game results yet for this strategy"</div>
+                                                    }.into_any()
+                                                }
+                                            } else {
+                                                view! {
+                                                    <div class="text-sm text-dimmed">"No game results yet for this strategy"</div>
+                                                }.into_any()
+                                            }
+                                        },
+                                        Err(_) => view! { <div></div> }.into_any(),
                                     }
                                 })
                             }}

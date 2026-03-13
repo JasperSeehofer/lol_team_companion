@@ -22,6 +22,8 @@ pub struct GamePlan {
     pub support_strategy: Option<String>,
     // Notes
     pub notes: Option<String>,
+    // Strategy tag (e.g. "teamfight", "split-push", "poke")
+    pub win_condition_tag: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -79,6 +81,7 @@ mod tests {
             bot_strategy: None,
             support_strategy: None,
             notes: None,
+            win_condition_tag: None,
         };
         let json = serde_json::to_string(&plan).unwrap();
         let back: GamePlan = serde_json::from_str(&json).unwrap();
@@ -104,6 +107,7 @@ mod tests {
             bot_strategy: Some("Farm".into()),
             support_strategy: Some("Engage".into()),
             notes: Some("Important notes".into()),
+            win_condition_tag: Some("teamfight".into()),
         };
         let json = serde_json::to_string(&plan).unwrap();
         let back: GamePlan = serde_json::from_str(&json).unwrap();

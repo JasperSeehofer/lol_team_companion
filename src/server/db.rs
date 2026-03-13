@@ -1630,7 +1630,7 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .unwrap_or(&plan.team_id)
         .to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, created_by = type::record('user', $user_key)")
+    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, created_by = type::record('user', $user_key)")
         .bind(("name", plan.name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -1647,6 +1647,7 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .bind(("bot_strategy", plan.bot_strategy))
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
+        .bind(("win_condition_tag", plan.win_condition_tag))
         .await?
         .check()?;
     let row: Option<IdRecord> = response.take(0)?;
@@ -1665,7 +1666,7 @@ pub async fn update_game_plan(db: &Surreal<Db>, plan: GamePlan) -> DbResult<()> 
         .strip_prefix("game_plan:")
         .unwrap_or(plan_id)
         .to_string();
-    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes")
+    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag")
         .bind(("plan_key", plan_key))
         .bind(("name", plan.name))
         .bind(("draft_id", plan.draft_id))
@@ -1681,6 +1682,7 @@ pub async fn update_game_plan(db: &Surreal<Db>, plan: GamePlan) -> DbResult<()> 
         .bind(("bot_strategy", plan.bot_strategy))
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
+        .bind(("win_condition_tag", plan.win_condition_tag))
         .await?
         .check()?;
     Ok(())
@@ -1704,6 +1706,7 @@ struct DbGamePlan {
     bot_strategy: Option<String>,
     support_strategy: Option<String>,
     notes: Option<String>,
+    win_condition_tag: Option<String>,
 }
 
 impl From<DbGamePlan> for GamePlan {
@@ -1725,6 +1728,7 @@ impl From<DbGamePlan> for GamePlan {
             bot_strategy: p.bot_strategy,
             support_strategy: p.support_strategy,
             notes: p.notes,
+            win_condition_tag: p.win_condition_tag,
         }
     }
 }
@@ -2899,6 +2903,312 @@ pub async fn delete_team_note(db: &Surreal<Db>, note_id: &str) -> DbResult<()> {
         .await?
         .check()?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Analytics: Draft Tendencies, Win Condition Stats, Draft Outcomes
+// ---------------------------------------------------------------------------
+
+/// Returns Vec<(champion, phase, order, count)> for the team's drafts.
+pub async fn get_draft_tendencies(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<(String, String, i32, i32)>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // Fetch all draft actions for this team's drafts
+    let mut result = db
+        .query("SELECT * FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE team = type::record('team', $team_key)) ORDER BY `order` ASC")
+        .bind(("team_key", team_key))
+        .await?;
+    let actions: Vec<DbDraftAction> = result.take(0).unwrap_or_default();
+
+    // Aggregate in Rust: (champion, phase, order) -> count
+    let mut counts: HashMap<(String, String, i32), i32> = HashMap::new();
+    for a in actions {
+        let key = (a.champion.clone(), a.phase.clone(), a.order);
+        *counts.entry(key).or_insert(0) += 1;
+    }
+
+    let mut tendencies: Vec<(String, String, i32, i32)> = counts
+        .into_iter()
+        .map(|((champ, phase, order), count)| (champ, phase, order, count))
+        .collect();
+    tendencies.sort_by(|a, b| b.3.cmp(&a.3));
+    Ok(tendencies)
+}
+
+/// Returns Vec<(tag, total_games, wins)> for game plans with win_condition_tag set.
+/// Correlates with post_game_learning outcomes.
+pub async fn get_win_condition_stats(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<(String, i32, i32)>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // Get all game plans with a win_condition_tag
+    let mut result = db
+        .query("SELECT id, win_condition_tag FROM game_plan WHERE team = type::record('team', $team_key) AND win_condition_tag != NONE; SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key); SELECT match_id, id FROM match WHERE team_id = type::record('team', $team_key); SELECT * FROM player_match")
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PlanTag {
+        id: RecordId,
+        win_condition_tag: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPostGame {
+        id: RecordId,
+        game_plan_id: Option<String>,
+        match_riot_id: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbMatchRef {
+        match_id: String,
+        id: RecordId,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPlayerMatch {
+        #[serde(rename = "match")]
+        match_ref: RecordId,
+        win: bool,
+    }
+
+    let plans: Vec<PlanTag> = result.take(0).unwrap_or_default();
+    let post_games: Vec<DbPostGame> = result.take(1).unwrap_or_default();
+    let matches: Vec<DbMatchRef> = result.take(2).unwrap_or_default();
+    let player_matches: Vec<DbPlayerMatch> = result.take(3).unwrap_or_default();
+
+    // Build lookup: match_riot_id -> win (any player win means team won)
+    let match_id_to_record: HashMap<String, String> = matches
+        .iter()
+        .map(|m| (m.match_id.clone(), m.id.to_sql()))
+        .collect();
+
+    let mut match_record_wins: HashMap<String, bool> = HashMap::new();
+    for pm in &player_matches {
+        let match_sql = pm.match_ref.to_sql();
+        if pm.win {
+            match_record_wins.insert(match_sql, true);
+        } else {
+            match_record_wins.entry(match_sql).or_insert(false);
+        }
+    }
+
+    // Build lookup: game_plan_id -> (tag, has_outcome, won)
+    let plan_tags: HashMap<String, String> = plans
+        .iter()
+        .filter_map(|p| {
+            p.win_condition_tag
+                .as_ref()
+                .map(|tag| (p.id.to_sql(), tag.clone()))
+        })
+        .collect();
+
+    // Aggregate: tag -> (total, wins)
+    let mut tag_stats: HashMap<String, (i32, i32)> = HashMap::new();
+
+    for pg in &post_games {
+        if let Some(ref gp_id) = pg.game_plan_id {
+            if let Some(tag) = plan_tags.get(gp_id) {
+                if let Some(ref riot_id) = pg.match_riot_id {
+                    if let Some(record_id) = match_id_to_record.get(riot_id) {
+                        let won = match_record_wins.get(record_id).copied().unwrap_or(false);
+                        let entry = tag_stats.entry(tag.clone()).or_insert((0, 0));
+                        entry.0 += 1;
+                        if won {
+                            entry.1 += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Also count plans with tag that have no outcome yet (as games without result)
+    for (plan_id, tag) in &plan_tags {
+        let has_post_game = post_games
+            .iter()
+            .any(|pg| pg.game_plan_id.as_deref() == Some(plan_id));
+        if !has_post_game {
+            // Count as a game played but with no outcome data
+            tag_stats.entry(tag.clone()).or_insert((0, 0));
+        }
+    }
+
+    let mut stats: Vec<(String, i32, i32)> = tag_stats
+        .into_iter()
+        .map(|(tag, (total, wins))| (tag, total, wins))
+        .collect();
+    stats.sort_by(|a, b| b.1.cmp(&a.1));
+    Ok(stats)
+}
+
+/// Draft outcome statistics: side win rates, tag win rates, first pick win rates.
+pub async fn get_draft_outcome_stats(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<DraftOutcomeData> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    let mut result = db
+        .query("SELECT * FROM draft WHERE team = type::record('team', $team_key); SELECT * FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE team = type::record('team', $team_key)) ORDER BY `order` ASC; SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key); SELECT match_id, id FROM match WHERE team_id = type::record('team', $team_key); SELECT * FROM player_match")
+        .bind(("team_key", team_key))
+        .await?;
+
+    let db_drafts: Vec<DbDraft> = result.take(0).unwrap_or_default();
+    let db_actions: Vec<DbDraftAction> = result.take(1).unwrap_or_default();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPostGame2 {
+        draft_id: Option<String>,
+        match_riot_id: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbMatchRef2 {
+        match_id: String,
+        id: RecordId,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPlayerMatch2 {
+        #[serde(rename = "match")]
+        match_ref: RecordId,
+        win: bool,
+    }
+
+    let post_games: Vec<DbPostGame2> = result.take(2).unwrap_or_default();
+    let matches: Vec<DbMatchRef2> = result.take(3).unwrap_or_default();
+    let player_matches: Vec<DbPlayerMatch2> = result.take(4).unwrap_or_default();
+
+    // Build match outcome lookup
+    let match_id_to_record: HashMap<String, String> = matches
+        .iter()
+        .map(|m| (m.match_id.clone(), m.id.to_sql()))
+        .collect();
+
+    let mut match_record_wins: HashMap<String, bool> = HashMap::new();
+    for pm in &player_matches {
+        let match_sql = pm.match_ref.to_sql();
+        if pm.win {
+            match_record_wins.insert(match_sql, true);
+        } else {
+            match_record_wins.entry(match_sql).or_insert(false);
+        }
+    }
+
+    // Build draft_id -> outcome lookup via post_game_learning
+    let mut draft_outcome: HashMap<String, bool> = HashMap::new();
+    for pg in &post_games {
+        if let (Some(ref did), Some(ref riot_id)) = (&pg.draft_id, &pg.match_riot_id) {
+            if let Some(record_id) = match_id_to_record.get(riot_id) {
+                if let Some(&won) = match_record_wins.get(record_id) {
+                    draft_outcome.insert(did.clone(), won);
+                }
+            }
+        }
+    }
+
+    // Build actions-by-draft map
+    let mut actions_by_draft: HashMap<String, Vec<DraftAction>> = HashMap::new();
+    for a in db_actions {
+        let draft_id = a.draft.to_sql();
+        actions_by_draft
+            .entry(draft_id)
+            .or_default()
+            .push(DraftAction::from(a));
+    }
+
+    let mut blue_games = 0i32;
+    let mut blue_wins = 0i32;
+    let mut red_games = 0i32;
+    let mut red_wins = 0i32;
+    let mut tag_counts: HashMap<String, (i32, i32)> = HashMap::new();
+    let mut first_pick_counts: HashMap<String, (i32, i32)> = HashMap::new();
+
+    for d in &db_drafts {
+        let draft_id = d.id.to_sql();
+        let won = match draft_outcome.get(&draft_id) {
+            Some(&w) => w,
+            None => continue, // No outcome data for this draft
+        };
+
+        // Side stats
+        if d.our_side == "blue" {
+            blue_games += 1;
+            if won {
+                blue_wins += 1;
+            }
+        } else {
+            red_games += 1;
+            if won {
+                red_wins += 1;
+            }
+        }
+
+        // Tag stats
+        for tag in &d.tags {
+            let entry = tag_counts.entry(tag.clone()).or_insert((0, 0));
+            entry.0 += 1;
+            if won {
+                entry.1 += 1;
+            }
+        }
+
+        // First pick: find the first pick action on our side
+        if let Some(actions) = actions_by_draft.get(&draft_id) {
+            let first_pick = actions
+                .iter()
+                .filter(|a| a.phase.contains("pick") && a.side == d.our_side)
+                .min_by_key(|a| a.order);
+            if let Some(fp) = first_pick {
+                let entry = first_pick_counts
+                    .entry(fp.champion.clone())
+                    .or_insert((0, 0));
+                entry.0 += 1;
+                if won {
+                    entry.1 += 1;
+                }
+            }
+        }
+    }
+
+    let mut tag_stats: Vec<(String, i32, i32)> = tag_counts
+        .into_iter()
+        .map(|(tag, (g, w))| (tag, g, w))
+        .collect();
+    tag_stats.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut fp_stats: Vec<(String, i32, i32)> = first_pick_counts
+        .into_iter()
+        .map(|(champ, (g, w))| (champ, g, w))
+        .collect();
+    fp_stats.sort_by(|a, b| b.1.cmp(&a.1));
+
+    Ok(DraftOutcomeData {
+        blue_games,
+        blue_wins,
+        red_games,
+        red_wins,
+        tag_stats,
+        first_pick_stats: fp_stats,
+    })
+}
+
+/// Data structure for draft outcome analytics
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct DraftOutcomeData {
+    pub blue_games: i32,
+    pub blue_wins: i32,
+    pub red_games: i32,
+    pub red_wins: i32,
+    pub tag_stats: Vec<(String, i32, i32)>,
+    pub first_pick_stats: Vec<(String, i32, i32)>,
 }
 
 #[cfg(test)]
