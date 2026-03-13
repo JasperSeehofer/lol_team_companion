@@ -1,8 +1,10 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::ui::ErrorBanner;
-use crate::models::champion::Champion;
+use crate::models::champion::{Champion, ChampionNote};
 use crate::models::draft::{BanPriority, Draft, DraftAction};
+use crate::models::opponent::OpponentPlayer;
+use crate::models::series::Series;
 use crate::models::team::Team;
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -27,6 +29,8 @@ pub async fn save_draft(
     tags_json: String,
     win_conditions: Option<String>,
     watch_out: Option<String>,
+    series_id: Option<String>,
+    game_number: Option<i32>,
 ) -> Result<String, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -69,6 +73,8 @@ pub async fn save_draft(
         tags,
         win_conditions,
         watch_out,
+        series_id,
+        game_number,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))
@@ -86,6 +92,8 @@ pub async fn update_draft(
     tags_json: String,
     win_conditions: Option<String>,
     watch_out: Option<String>,
+    series_id: Option<String>,
+    game_number: Option<i32>,
 ) -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -119,6 +127,8 @@ pub async fn update_draft(
         tags,
         win_conditions,
         watch_out,
+        series_id,
+        game_number,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))
@@ -224,6 +234,184 @@ pub async fn save_ban_priorities(priorities_json: String) -> Result<(), ServerFn
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+#[server]
+pub async fn list_series_fn() -> Result<Vec<crate::models::series::Series>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::list_series(&db, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn create_series_fn(
+    name: String,
+    opponent_name: Option<String>,
+    format: String,
+    is_fearless: bool,
+) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    db::create_series(
+        &db,
+        &team_id,
+        &user.id,
+        name,
+        None,
+        opponent_name,
+        format,
+        is_fearless,
+        None,
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn get_fearless_champions(
+    series_id: String,
+    exclude_draft: Option<String>,
+) -> Result<Vec<String>, ServerFnError> {
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::get_fearless_used_champions(&db, &series_id, exclude_draft.as_deref())
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+/// Get champion pool entries for all starters on the user's team.
+/// Returns Vec<(username, role, pool_entries)>.
+#[server]
+pub async fn get_team_pools(
+) -> Result<Vec<(String, String, Vec<crate::models::champion::ChampionPoolEntry>)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let _team_id = match db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    let (_, members) = match db::get_user_team_with_members(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(t) => t,
+        None => return Ok(Vec::new()),
+    };
+
+    let mut result = Vec::new();
+    for member in members.iter().filter(|m| m.roster_type == "starter") {
+        let pool = db::get_champion_pool(&db, &member.user_id)
+            .await
+            .unwrap_or_default();
+        result.push((member.username.clone(), member.role.clone(), pool));
+    }
+
+    Ok(result)
+}
+
+/// Get opponent players for a given opponent ID.
+#[server]
+pub async fn get_opponent_intel(
+    opponent_id: String,
+) -> Result<Vec<crate::models::opponent::OpponentPlayer>, ServerFnError> {
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    match db::get_opponent(&db, &opponent_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some((_, players)) => Ok(players),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Get all matchup notes from team members that mention a specific champion.
+#[server]
+pub async fn get_matchup_notes_for_champion(
+    champion: String,
+) -> Result<Vec<(String, crate::models::champion::ChampionNote)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::get_team_matchup_notes(&db, &team_id, &champion)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .into_iter()
@@ -303,6 +491,18 @@ pub fn DraftPage() -> impl IntoView {
     let (watch_out, set_watch_out) = signal(String::new());
     // Tag filter for saved drafts list
     let (filter_tag, set_filter_tag) = signal(String::new());
+    // Series mode (Phase 3 - Fearless Draft)
+    let (series_panel_open, set_series_panel_open) = signal(false);
+    let (active_series, set_active_series) = signal(Option::<Series>::None);
+    let (active_game_number, set_active_game_number) = signal(1_i32);
+    let (fearless_used, set_fearless_used) = signal(Vec::<String>::new());
+    let (series_name_input, set_series_name_input) = signal(String::new());
+    let (series_opponent_input, set_series_opponent_input) = signal(String::new());
+    let (series_format_input, set_series_format_input) = signal("bo3".to_string());
+    let (series_fearless_input, set_series_fearless_input) = signal(false);
+    let (series_status, set_series_status) = signal(Option::<String>::None);
+    let series_resource = Resource::new(|| (), |_| list_series_fn());
+
     // Ban priorities (Phase 4)
     let ban_priorities = Resource::new(|| (), |_| get_ban_priorities());
     let (ban_panel_open, set_ban_panel_open) = signal(false);
@@ -311,6 +511,34 @@ pub fn DraftPage() -> impl IntoView {
     let (ban_new_champ, set_ban_new_champ) = signal(String::new());
     let (ban_new_reason, set_ban_new_reason) = signal(String::new());
     let (ban_status, set_ban_status) = signal(Option::<String>::None);
+
+    // Intel sidebar (Phase 5 — Pool Awareness & Matchup Surfacing)
+    let (intel_open, set_intel_open) = signal(false);
+    let (intel_tab, set_intel_tab) = signal("pools".to_string());
+    let (selected_opponent_id, set_selected_opponent_id) = signal(String::new());
+    let (matchup_champion, set_matchup_champion) = signal(Option::<String>::None);
+
+    let team_pools = Resource::new(|| (), |_| get_team_pools());
+    let opponents_list = Resource::new(|| (), |_| crate::pages::opponents::get_opponents());
+    let opponent_players = Resource::new(
+        move || selected_opponent_id.get(),
+        move |opp_id| async move {
+            if opp_id.is_empty() {
+                Ok(Vec::<OpponentPlayer>::new())
+            } else {
+                get_opponent_intel(opp_id).await
+            }
+        },
+    );
+    let matchup_notes = Resource::new(
+        move || matchup_champion.get(),
+        move |champ_opt| async move {
+            match champ_opt {
+                Some(champ) if !champ.is_empty() => get_matchup_notes_for_champion(champ).await,
+                _ => Ok(Vec::<(String, ChampionNote)>::new()),
+            }
+        },
+    );
 
     let champions_resource = Resource::new(|| (), |_| get_champions());
     let drafts = Resource::new(|| (), |_| list_drafts());
@@ -328,11 +556,18 @@ pub fn DraftPage() -> impl IntoView {
     });
 
     let used_champions = move || {
-        draft_slots
+        let mut used: Vec<String> = draft_slots
             .get()
             .into_iter()
             .flatten()
-            .collect::<Vec<String>>()
+            .collect();
+        // In fearless mode, also include champions used in prior series games
+        for champ in fearless_used.get() {
+            if !used.contains(&champ) {
+                used.push(champ);
+            }
+        }
+        used
     };
 
     let fill_slot = move |slot_idx: usize, champion_name: String| {
@@ -425,6 +660,8 @@ pub fn DraftPage() -> impl IntoView {
         let wc = { let s = win_conditions.get_untracked(); if s.is_empty() { None } else { Some(s) } };
         let wo = { let s = watch_out.get_untracked(); if s.is_empty() { None } else { Some(s) } };
         let existing_id = loaded_draft_id.get_untracked();
+        let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
+        let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
 
         leptos::task::spawn_local(async move {
             let opp_opt = if opp.is_empty() { None } else { Some(opp) };
@@ -433,7 +670,7 @@ pub fn DraftPage() -> impl IntoView {
             if let Some(draft_id) = existing_id {
                 match update_draft(
                     draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
-                    tags_json, wc, wo,
+                    tags_json, wc, wo, s_id, g_num,
                 )
                 .await
                 {
@@ -446,7 +683,7 @@ pub fn DraftPage() -> impl IntoView {
             } else {
                 match save_draft(
                     name, opp_opt, team_opt, acts_json, cmts_json, rate, Some(side),
-                    tags_json, wc, wo,
+                    tags_json, wc, wo, s_id, g_num,
                 )
                 .await
                 {
@@ -461,14 +698,19 @@ pub fn DraftPage() -> impl IntoView {
         });
     };
 
-    // Sync slot_comment_input when highlighted_slot changes
+    // Sync slot_comment_input and matchup champion when highlighted_slot changes
     Effect::new(move |_| {
         let hl = highlighted_slot.get();
         if let Some(idx) = hl {
             let sc = slot_comments.get_untracked();
             set_slot_comment_input.set(sc.get(idx).cloned().flatten().unwrap_or_default());
+            // Update matchup champion for Intel sidebar
+            let slots = draft_slots.get_untracked();
+            let champ = slots.get(idx).and_then(|s| s.clone());
+            set_matchup_champion.set(champ);
         } else {
             set_slot_comment_input.set(String::new());
+            set_matchup_champion.set(None);
         }
     });
 
@@ -518,6 +760,8 @@ pub fn DraftPage() -> impl IntoView {
             let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
             let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
             let opp_opt = if opp.is_empty() { None } else { Some(opp) };
+            let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
+            let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
 
             use wasm_bindgen::prelude::*;
             let cb = Closure::once(move || {
@@ -525,7 +769,7 @@ pub fn DraftPage() -> impl IntoView {
                     leptos::task::spawn_local(async move {
                         let _ = update_draft(
                             draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
-                            tags_json, wc, wo,
+                            tags_json, wc, wo, s_id, g_num,
                         )
                         .await;
                         set_auto_save_status.set("saved");
@@ -545,20 +789,45 @@ pub fn DraftPage() -> impl IntoView {
         }
     });
 
+    // Role ordering for pool display
+    let role_order = |r: &str| -> u8 {
+        match r {
+            "top" => 0,
+            "jungle" | "jng" => 1,
+            "mid" | "middle" => 2,
+            "bot" | "adc" => 3,
+            "support" | "sup" => 4,
+            _ => 5,
+        }
+    };
+
     view! {
-        <div class="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
-            <div>
-                <h1 class="text-3xl font-bold text-primary">"Draft Planner"</h1>
-                <p class="text-accent font-medium mt-1">{phase_label}</p>
-                {move || loaded_draft_id.get().map(|_| {
-                    let status = auto_save_status.get();
-                    let (cls, text) = match status {
-                        "saved" => ("text-green-400 text-sm mt-0.5", "✓ Saved"),
-                        "unsaved" => ("text-amber-400 text-sm mt-0.5", "● Unsaved changes"),
-                        _ => ("text-muted text-sm mt-0.5", "Editing saved draft"),
-                    };
-                    view! { <p class=cls>{text}</p> }
-                })}
+        <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-primary">"Draft Planner"</h1>
+                    <p class="text-accent font-medium mt-1">{phase_label}</p>
+                    {move || loaded_draft_id.get().map(|_| {
+                        let status = auto_save_status.get();
+                        let (cls, text) = match status {
+                            "saved" => ("text-green-400 text-sm mt-0.5", "✓ Saved"),
+                            "unsaved" => ("text-amber-400 text-sm mt-0.5", "● Unsaved changes"),
+                            _ => ("text-muted text-sm mt-0.5", "Editing saved draft"),
+                        };
+                        view! { <p class=cls>{text}</p> }
+                    })}
+                </div>
+                <button
+                    class=move || if intel_open.get() {
+                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
+                    } else {
+                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer"
+                    }
+                    on:click=move |_| set_intel_open.update(|v| *v = !*v)
+                >
+                    <span>"Intel"</span>
+                    <span>{move || if intel_open.get() { "▼" } else { "▶" }}</span>
+                </button>
             </div>
 
             // Header form
@@ -726,6 +995,276 @@ pub fn DraftPage() -> impl IntoView {
                 </div>
             </div>
 
+            // Series Mode (Fearless Draft)
+            <div class="bg-elevated border border-divider rounded-lg">
+                <button
+                    class="w-full flex items-center justify-between px-4 py-3 text-secondary text-sm font-medium hover:text-primary transition-colors"
+                    on:click=move |_| set_series_panel_open.update(|v| *v = !*v)
+                >
+                    <span class="flex items-center gap-2">
+                        {move || if active_series.get().is_some() {
+                            view! { <span class="w-2 h-2 rounded-full bg-green-400"></span> }.into_any()
+                        } else {
+                            view! { <span class="w-2 h-2 rounded-full bg-overlay-strong"></span> }.into_any()
+                        }}
+                        "Series Mode"
+                        {move || active_series.get().map(|s| {
+                            let label = if s.is_fearless {
+                                format!(" - {} (Fearless {})", s.name, s.format.to_uppercase())
+                            } else {
+                                format!(" - {} ({})", s.name, s.format.to_uppercase())
+                            };
+                            view! { <span class="text-accent">{label}</span> }
+                        })}
+                    </span>
+                    <span class="text-muted">{move || if series_panel_open.get() { "▲" } else { "▼" }}</span>
+                </button>
+
+                {move || if series_panel_open.get() {
+                    view! {
+                        <div class="border-t border-divider px-4 py-4 flex flex-col gap-4">
+                            // Active series header with game tabs
+                            {move || if let Some(series) = active_series.get() {
+                                let max_games = match series.format.as_str() {
+                                    "bo3" => 3,
+                                    "bo5" => 5,
+                                    _ => 1,
+                                };
+                                let is_fearless = series.is_fearless;
+                                view! {
+                                    <div class="flex flex-col gap-3">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-primary font-medium">{series.name.clone()}</span>
+                                                {if is_fearless {
+                                                    view! { <span class="px-2 py-0.5 rounded text-xs font-bold bg-purple-500 text-white">"FEARLESS"</span> }.into_any()
+                                                } else {
+                                                    view! { <span></span> }.into_any()
+                                                }}
+                                                {series.opponent_name.clone().map(|opp| view! {
+                                                    <span class="text-secondary text-sm">"vs " {opp}</span>
+                                                })}
+                                            </div>
+                                            <button
+                                                class="text-xs text-muted hover:text-red-400 transition-colors"
+                                                on:click=move |_| {
+                                                    set_active_series.set(None);
+                                                    set_fearless_used.set(Vec::new());
+                                                    set_active_game_number.set(1);
+                                                }
+                                            >"Exit Series"</button>
+                                        </div>
+                                        // Game tabs
+                                        <div class="flex gap-1">
+                                            {(1..=max_games).map(|g| {
+                                                view! {
+                                                    <button
+                                                        class=move || if active_game_number.get() == g {
+                                                            "px-4 py-1.5 rounded text-sm font-medium bg-accent text-accent-contrast cursor-pointer"
+                                                        } else {
+                                                            "px-4 py-1.5 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
+                                                        }
+                                                        on:click=move |_| {
+                                                            set_active_game_number.set(g);
+                                                            // Clear current draft and load if a draft exists for this game
+                                                            set_draft_slots.set(vec![None::<String>; 20]);
+                                                            set_slot_comments.set(vec![None::<String>; 20]);
+                                                            set_loaded_draft_id.set(None);
+                                                            set_draft_name.set(String::new());
+                                                            set_comments.set(Vec::new());
+                                                            set_tags.set(Vec::new());
+                                                            set_win_conditions.set(String::new());
+                                                            set_watch_out.set(String::new());
+                                                            set_rating.set(None);
+                                                            set_active_slot.set(Some(0));
+
+                                                            // Fetch fearless used champions for this game
+                                                            let s = active_series.get_untracked();
+                                                            if let Some(ref series) = s {
+                                                                if series.is_fearless {
+                                                                    if let Some(sid) = series.id.clone() {
+                                                                        leptos::task::spawn_local(async move {
+                                                                            if let Ok(champs) = get_fearless_champions(sid, None).await {
+                                                                                set_fearless_used.set(champs);
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    >
+                                                        {format!("Game {g}")}
+                                                    </button>
+                                                }
+                                            }).collect_view()}
+                                        </div>
+                                        {move || if is_fearless && !fearless_used.get().is_empty() {
+                                            view! {
+                                                <div class="text-xs text-muted">
+                                                    <span class="font-medium text-purple-400">"Fearless bans: "</span>
+                                                    {fearless_used.get().join(", ")}
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }}
+                                    </div>
+                                }.into_any()
+                            } else {
+                                // No active series: show create form + existing series list
+                                view! {
+                                    <div class="flex flex-col gap-4">
+                                        // Create new series
+                                        <div class="flex flex-col gap-2">
+                                            <span class="text-secondary text-sm font-medium">"Start New Series"</span>
+                                            <div class="grid grid-cols-4 gap-3">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Series name..."
+                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    prop:value=move || series_name_input.get()
+                                                    on:input=move |ev| set_series_name_input.set(event_target_value(&ev))
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Opponent name..."
+                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    prop:value=move || series_opponent_input.get()
+                                                    on:input=move |ev| set_series_opponent_input.set(event_target_value(&ev))
+                                                />
+                                                <select
+                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    prop:value=move || series_format_input.get()
+                                                    on:change=move |ev| set_series_format_input.set(event_target_value(&ev))
+                                                >
+                                                    <option value="bo1">"Bo1"</option>
+                                                    <option value="bo3" selected>"Bo3"</option>
+                                                    <option value="bo5">"Bo5"</option>
+                                                </select>
+                                                <div class="flex items-center gap-3">
+                                                    <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            class="accent-purple-500"
+                                                            prop:checked=move || series_fearless_input.get()
+                                                            on:change=move |ev| {
+                                                                let checked = event_target_checked(&ev);
+                                                                set_series_fearless_input.set(checked);
+                                                            }
+                                                        />
+                                                        "Fearless"
+                                                    </label>
+                                                    <button
+                                                        class="px-3 py-1.5 rounded text-sm font-medium bg-accent text-accent-contrast hover:opacity-90 transition-opacity cursor-pointer"
+                                                        on:click=move |_| {
+                                                            let name = series_name_input.get_untracked();
+                                                            if name.trim().is_empty() {
+                                                                set_series_status.set(Some("Give the series a name.".into()));
+                                                                return;
+                                                            }
+                                                            let opp = series_opponent_input.get_untracked();
+                                                            let opp_opt = if opp.is_empty() { None } else { Some(opp) };
+                                                            let fmt = series_format_input.get_untracked();
+                                                            let fearless = series_fearless_input.get_untracked();
+                                                            leptos::task::spawn_local(async move {
+                                                                match create_series_fn(name.clone(), opp_opt.clone(), fmt.clone(), fearless).await {
+                                                                    Ok(id) => {
+                                                                        let new_series = Series {
+                                                                            id: Some(id),
+                                                                            name,
+                                                                            team_id: String::new(),
+                                                                            opponent_id: None,
+                                                                            opponent_name: opp_opt,
+                                                                            format: fmt,
+                                                                            is_fearless: fearless,
+                                                                            notes: None,
+                                                                            created_by: String::new(),
+                                                                        };
+                                                                        set_active_series.set(Some(new_series));
+                                                                        set_active_game_number.set(1);
+                                                                        set_series_name_input.set(String::new());
+                                                                        set_series_opponent_input.set(String::new());
+                                                                        set_series_status.set(Some("Series created!".into()));
+                                                                        series_resource.refetch();
+                                                                    }
+                                                                    Err(e) => set_series_status.set(Some(format!("Error: {e}"))),
+                                                                }
+                                                            });
+                                                        }
+                                                    >"Create"</button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // Existing series list
+                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading series..."</div> }>
+                                            {move || series_resource.get().map(|result| match result {
+                                                Ok(list) if list.is_empty() => view! {
+                                                    <p class="text-dimmed text-sm">"No series yet."</p>
+                                                }.into_any(),
+                                                Ok(list) => view! {
+                                                    <div class="flex flex-col gap-1">
+                                                        <span class="text-secondary text-sm font-medium">"Existing Series"</span>
+                                                        {list.into_iter().map(|s| {
+                                                            let series_clone = s.clone();
+                                                            let label = format!(
+                                                                "{} {}{}",
+                                                                s.name,
+                                                                s.format.to_uppercase(),
+                                                                if s.is_fearless { " (Fearless)" } else { "" }
+                                                            );
+                                                            let opp_label = s.opponent_name.clone().unwrap_or_default();
+                                                            view! {
+                                                                <button
+                                                                    class="flex items-center justify-between w-full px-3 py-2 rounded bg-overlay hover:bg-overlay-strong text-sm text-primary transition-colors cursor-pointer"
+                                                                    on:click=move |_| {
+                                                                        let sc = series_clone.clone();
+                                                                        let is_fearless = sc.is_fearless;
+                                                                        let sid = sc.id.clone();
+                                                                        set_active_series.set(Some(sc));
+                                                                        set_active_game_number.set(1);
+                                                                        // Load fearless bans if applicable
+                                                                        if is_fearless {
+                                                                            if let Some(sid) = sid {
+                                                                                leptos::task::spawn_local(async move {
+                                                                                    if let Ok(champs) = get_fearless_champions(sid, None).await {
+                                                                                        set_fearless_used.set(champs);
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                >
+                                                                    <span>{label}</span>
+                                                                    {if !opp_label.is_empty() {
+                                                                        view! { <span class="text-muted text-xs">"vs " {opp_label}</span> }.into_any()
+                                                                    } else {
+                                                                        view! { <span></span> }.into_any()
+                                                                    }}
+                                                                </button>
+                                                            }
+                                                        }).collect_view()}
+                                                    </div>
+                                                }.into_any(),
+                                                Err(e) => view! {
+                                                    <p class="text-red-400 text-sm">"Failed to load series: " {e.to_string()}</p>
+                                                }.into_any(),
+                                            })}
+                                        </Suspense>
+
+                                        {move || series_status.get().map(|msg| view! {
+                                            <p class="text-sm text-accent">{msg}</p>
+                                        })}
+                                    </div>
+                                }.into_any()
+                            }}
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <span></span> }.into_any()
+                }}
+            </div>
+
             // Board + Comments
             <div class="flex gap-4">
                 <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
@@ -840,6 +1379,339 @@ pub fn DraftPage() -> impl IntoView {
                         "+ Add Comment"
                     </button>
                 </div>
+
+                // Intel Sidebar
+                {move || if intel_open.get() {
+                    let current_tab = intel_tab.get();
+                    let draft_champs = draft_slots.get();
+                    let all_draft_champs: Vec<String> = draft_champs.iter().filter_map(|s| s.clone()).collect();
+                    let all_draft_champs_for_matchup = all_draft_champs.clone();
+                    view! {
+                        <div class="w-[350px] flex-shrink-0 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3 max-h-[600px] overflow-y-auto">
+                            // Tab buttons
+                            <div class="flex gap-1">
+                                {["pools", "their_picks", "matchups"].iter().map(|&tab| {
+                                    let tab_str = tab.to_string();
+                                    let tab_for_class = tab_str.clone();
+                                    let tab_for_click = tab_str.clone();
+                                    let label = match tab {
+                                        "pools" => "Our Pools",
+                                        "their_picks" => "Their Picks",
+                                        "matchups" => "Matchups",
+                                        _ => "",
+                                    };
+                                    view! {
+                                        <button
+                                            class=move || {
+                                                if intel_tab.get() == tab_for_class {
+                                                    "flex-1 px-2 py-1.5 rounded text-xs font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
+                                                } else {
+                                                    "flex-1 px-2 py-1.5 rounded text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
+                                                }
+                                            }
+                                            on:click=move |_| set_intel_tab.set(tab_for_click.clone())
+                                        >
+                                            {label}
+                                        </button>
+                                    }
+                                }).collect_view()}
+                            </div>
+
+                            // Tab content
+                            {if current_tab == "pools" {
+                                view! {
+                                    <div class="flex flex-col gap-3">
+                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading pools..."</div> }>
+                                            {move || team_pools.get().map(|result| match result {
+                                                Ok(pools) if pools.is_empty() => view! {
+                                                    <p class="text-dimmed text-sm">"No starters with champion pools yet."</p>
+                                                }.into_any(),
+                                                Ok(mut pools) => {
+                                                    pools.sort_by_key(|(_, role, _)| role_order(role));
+                                                    view! {
+                                                        <div class="flex flex-col gap-3">
+                                                            {pools.into_iter().map(|(username, role, entries)| {
+                                                                let role_label = match role.as_str() {
+                                                                    "top" => "TOP",
+                                                                    "jungle" | "jng" => "JNG",
+                                                                    "mid" | "middle" => "MID",
+                                                                    "bot" | "adc" => "BOT",
+                                                                    "support" | "sup" => "SUP",
+                                                                    other => other,
+                                                                };
+                                                                view! {
+                                                                    <div class="bg-surface rounded p-2">
+                                                                        <div class="flex items-center gap-2 mb-1.5">
+                                                                            <span class="text-xs font-bold text-accent uppercase">{role_label.to_string()}</span>
+                                                                            <span class="text-xs text-secondary">{username}</span>
+                                                                        </div>
+                                                                        {if entries.is_empty() {
+                                                                            view! { <p class="text-dimmed text-xs">"No champions"</p> }.into_any()
+                                                                        } else {
+                                                                            // Group by tier
+                                                                            let tiers_order = ["comfort", "match_ready", "scrim_ready", "practicing", "to_practice"];
+                                                                            fn tier_label_fn(t: &str) -> &'static str {
+                                                                                match t {
+                                                                                    "comfort" => "Comfort",
+                                                                                    "match_ready" => "Match Ready",
+                                                                                    "scrim_ready" => "Scrim Ready",
+                                                                                    "practicing" => "Practicing",
+                                                                                    "to_practice" => "To Practice",
+                                                                                    _ => "Other",
+                                                                                }
+                                                                            }
+                                                                            view! {
+                                                                                <div class="flex flex-col gap-1">
+                                                                                    {tiers_order.iter().filter_map(|&tier| {
+                                                                                        let tier_entries: Vec<_> = entries.iter().filter(|e| e.tier == tier).collect();
+                                                                                        if tier_entries.is_empty() {
+                                                                                            return None;
+                                                                                        }
+                                                                                        let tier_cls = match tier {
+                                                                                            "comfort" => "text-green-400",
+                                                                                            "match_ready" => "text-blue-400",
+                                                                                            "scrim_ready" => "text-yellow-400",
+                                                                                            "practicing" => "text-orange-400",
+                                                                                            "to_practice" => "text-muted",
+                                                                                            _ => "text-muted",
+                                                                                        };
+                                                                                        let label = tier_label_fn(tier);
+                                                                                        Some(view! {
+                                                                                            <div>
+                                                                                                <span class=format!("text-[10px] font-bold uppercase {tier_cls}")>{label.to_string()}</span>
+                                                                                                <div class="flex flex-wrap gap-1 mt-0.5">
+                                                                                                    {tier_entries.into_iter().map(|entry| {
+                                                                                                        let champ_name = entry.champion.clone();
+                                                                                                        let champ_for_click = champ_name.clone();
+                                                                                                        let champ_for_title = champ_name.clone();
+                                                                                                        let champ_for_display = champ_name.clone();
+                                                                                                        let comfort = entry.comfort_level.unwrap_or(0);
+                                                                                                        let comfort_dots = (0..5).map(|i| {
+                                                                                                            if i < comfort {
+                                                                                                                view! { <span class="w-1 h-1 rounded-full bg-accent inline-block"></span> }
+                                                                                                            } else {
+                                                                                                                view! { <span class="w-1 h-1 rounded-full bg-overlay-strong inline-block"></span> }
+                                                                                                            }
+                                                                                                        }).collect_view();
+                                                                                                        view! {
+                                                                                                            <button
+                                                                                                                class="bg-overlay rounded px-1.5 py-0.5 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer flex items-center gap-1"
+                                                                                                                title=format!("Click to add {} to active slot", champ_for_title)
+                                                                                                                on:click=move |_| {
+                                                                                                                    if let Some(slot) = active_slot.get_untracked() {
+                                                                                                                        fill_slot(slot, champ_for_click.clone());
+                                                                                                                    }
+                                                                                                                }
+                                                                                                            >
+                                                                                                                <span>{champ_for_display}</span>
+                                                                                                                <span class="flex gap-px">{comfort_dots}</span>
+                                                                                                            </button>
+                                                                                                        }
+                                                                                                    }).collect_view()}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        })
+                                                                                    }).collect_view()}
+                                                                                </div>
+                                                                            }.into_any()
+                                                                        }}
+                                                                    </div>
+                                                                }
+                                                            }).collect_view()}
+                                                        </div>
+                                                    }.into_any()
+                                                },
+                                                Err(e) => view! {
+                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                }.into_any(),
+                                            })}
+                                        </Suspense>
+                                    </div>
+                                }.into_any()
+                            } else if current_tab == "their_picks" {
+                                view! {
+                                    <div class="flex flex-col gap-3">
+                                        // Opponent selector
+                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading opponents..."</div> }>
+                                            {move || opponents_list.get().map(|result| match result {
+                                                Ok(opps) if opps.is_empty() => view! {
+                                                    <p class="text-dimmed text-sm">"No opponents scouted yet. Add opponents from the Opponents page."</p>
+                                                }.into_any(),
+                                                Ok(opps) => view! {
+                                                    <select
+                                                        class="w-full bg-overlay border border-outline rounded px-2 py-1.5 text-primary text-sm focus:outline-none focus:border-accent"
+                                                        prop:value=move || selected_opponent_id.get()
+                                                        on:change=move |ev| set_selected_opponent_id.set(event_target_value(&ev))
+                                                    >
+                                                        <option value="">"-- Select Opponent --"</option>
+                                                        {opps.into_iter().map(|opp| {
+                                                            let id = opp.id.clone().unwrap_or_default();
+                                                            let name = opp.name.clone();
+                                                            view! { <option value=id>{name}</option> }
+                                                        }).collect_view()}
+                                                    </select>
+                                                }.into_any(),
+                                                Err(e) => view! {
+                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                }.into_any(),
+                                            })}
+                                        </Suspense>
+                                        // Opponent players
+                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading..."</div> }>
+                                            {move || {
+                                                let draft_champs = all_draft_champs.clone();
+                                                opponent_players.get().map(move |result| match result {
+                                                    Ok(players) if players.is_empty() && !selected_opponent_id.get_untracked().is_empty() => view! {
+                                                        <p class="text-dimmed text-sm">"No players scouted for this opponent."</p>
+                                                    }.into_any(),
+                                                    Ok(players) if players.is_empty() => view! {
+                                                        <span></span>
+                                                    }.into_any(),
+                                                    Ok(players) => {
+                                                        let draft_set = draft_champs.clone();
+                                                        view! {
+                                                            <div class="flex flex-col gap-2">
+                                                                {players.into_iter().map(|player| {
+                                                                    let draft_set_inner = draft_set.clone();
+                                                                    let role_label = match player.role.as_str() {
+                                                                        "top" => "TOP",
+                                                                        "jungle" | "jng" => "JNG",
+                                                                        "mid" | "middle" => "MID",
+                                                                        "bot" | "adc" => "BOT",
+                                                                        "support" | "sup" => "SUP",
+                                                                        other => other,
+                                                                    };
+                                                                    view! {
+                                                                        <div class="bg-surface rounded p-2">
+                                                                            <div class="flex items-center gap-2 mb-1">
+                                                                                <span class="text-xs font-bold text-red-400 uppercase">{role_label.to_string()}</span>
+                                                                                <span class="text-xs text-secondary">{player.name.clone()}</span>
+                                                                            </div>
+                                                                            {if player.recent_champions.is_empty() {
+                                                                                view! { <p class="text-dimmed text-xs">"No recent champions"</p> }.into_any()
+                                                                            } else {
+                                                                                view! {
+                                                                                    <div class="flex flex-wrap gap-1">
+                                                                                        {player.recent_champions.iter().map(|champ| {
+                                                                                            let is_drafted = draft_set_inner.contains(champ);
+                                                                                            let cls = if is_drafted {
+                                                                                                "bg-overlay rounded px-1.5 py-0.5 text-xs text-dimmed line-through opacity-50"
+                                                                                            } else {
+                                                                                                "bg-overlay rounded px-1.5 py-0.5 text-xs text-primary"
+                                                                                            };
+                                                                                            view! {
+                                                                                                <span class=cls>{champ.clone()}</span>
+                                                                                            }
+                                                                                        }).collect_view()}
+                                                                                    </div>
+                                                                                }.into_any()
+                                                                            }}
+                                                                            {player.notes.as_ref().map(|notes| view! {
+                                                                                <p class="text-dimmed text-xs mt-1 italic">{notes.clone()}</p>
+                                                                            })}
+                                                                        </div>
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        }.into_any()
+                                                    },
+                                                    Err(e) => view! {
+                                                        <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                    }.into_any(),
+                                                })
+                                            }}
+                                        </Suspense>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                // Matchups tab
+                                view! {
+                                    <div class="flex flex-col gap-3">
+                                        {move || {
+                                            let champ = matchup_champion.get();
+                                            let draft_champs_inner = all_draft_champs_for_matchup.clone();
+                                            if let Some(ref c) = champ {
+                                                view! {
+                                                    <div>
+                                                        <p class="text-sm text-secondary mb-2">
+                                                            "Matchup notes for "
+                                                            <span class="text-primary font-medium">{c.clone()}</span>
+                                                        </p>
+                                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading notes..."</div> }>
+                                                            {move || matchup_notes.get().map(|result| match result {
+                                                                Ok(notes) if notes.is_empty() => view! {
+                                                                    <p class="text-dimmed text-sm">"No matchup notes found for this champion."</p>
+                                                                }.into_any(),
+                                                                Ok(notes) => view! {
+                                                                    <div class="flex flex-col gap-2">
+                                                                        {notes.into_iter().map(|(author, note)| {
+                                                                            view! {
+                                                                                <div class="bg-surface rounded p-2">
+                                                                                    <div class="flex items-center gap-2 mb-1">
+                                                                                        <span class="text-xs font-medium text-accent">{author}</span>
+                                                                                        <span class="text-xs text-muted">{note.champion.clone()}" "{note.role.clone()}</span>
+                                                                                        {note.difficulty.map(|d| {
+                                                                                            let diff_cls = match d {
+                                                                                                1..=2 => "text-green-400",
+                                                                                                3 => "text-yellow-400",
+                                                                                                4..=5 => "text-red-400",
+                                                                                                _ => "text-muted",
+                                                                                            };
+                                                                                            view! {
+                                                                                                <span class=format!("text-xs {diff_cls}")>{format!("Diff: {d}/5")}</span>
+                                                                                            }
+                                                                                        })}
+                                                                                    </div>
+                                                                                    <p class="text-xs text-primary font-medium">{note.title.clone()}</p>
+                                                                                    <p class="text-xs text-secondary mt-0.5">{note.content.clone()}</p>
+                                                                                </div>
+                                                                            }
+                                                                        }).collect_view()}
+                                                                    </div>
+                                                                }.into_any(),
+                                                                Err(e) => view! {
+                                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                                }.into_any(),
+                                                            })}
+                                                        </Suspense>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                // Show clickable list of drafted champions
+                                                view! {
+                                                    <div>
+                                                        <p class="text-dimmed text-sm mb-2">"Select a drafted champion to view matchup notes."</p>
+                                                        {if draft_champs_inner.is_empty() {
+                                                            view! { <p class="text-dimmed text-xs">"No champions drafted yet."</p> }.into_any()
+                                                        } else {
+                                                            view! {
+                                                                <div class="flex flex-wrap gap-1">
+                                                                    {draft_champs_inner.into_iter().map(|champ| {
+                                                                        let champ_for_click = champ.clone();
+                                                                        view! {
+                                                                            <button
+                                                                                class="bg-overlay rounded px-2 py-1 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer"
+                                                                                on:click=move |_| set_matchup_champion.set(Some(champ_for_click.clone()))
+                                                                            >
+                                                                                {champ.clone()}
+                                                                            </button>
+                                                                        }
+                                                                    }).collect_view()}
+                                                                </div>
+                                                            }.into_any()
+                                                        }}
+                                                    </div>
+                                                }.into_any()
+                                            }
+                                        }}
+                                    </div>
+                                }.into_any()
+                            }}
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <span></span> }.into_any()
+                }}
             </div>
 
             // Champion Picker
@@ -965,6 +1837,8 @@ pub fn DraftPage() -> impl IntoView {
                                         let d_tags = d.tags.clone();
                                         let d_win_conditions = d.win_conditions.clone().unwrap_or_default();
                                         let d_watch_out = d.watch_out.clone().unwrap_or_default();
+                                        let _d_series_id = d.series_id.clone();
+                                        let d_game_number = d.game_number;
 
                                         let icon_url = |a: &DraftAction| champ_map_sv.with_value(|m| m.get(&a.champion).cloned().unwrap_or_default());
 
@@ -1140,6 +2014,11 @@ pub fn DraftPage() -> impl IntoView {
                                                         set_slot_comments.set(sc);
                                                         set_slot_comment_input.set(String::new());
                                                         set_active_slot.set(next);
+
+                                                        // If this draft belongs to a series, set game number
+                                                        if let Some(gn) = d_game_number {
+                                                            set_active_game_number.set(gn);
+                                                        }
                                                     }
                                                 >
                                                     "Open"

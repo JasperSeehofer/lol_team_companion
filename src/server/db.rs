@@ -13,6 +13,8 @@ use crate::models::{
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
+    opponent::{Opponent, OpponentPlayer},
+    series::Series,
     team::Team,
     user::{JoinRequest, TeamMember},
 };
@@ -768,6 +770,8 @@ struct DbDraft {
     tags: Vec<String>,
     win_conditions: Option<String>,
     watch_out: Option<String>,
+    series_id: Option<String>,
+    game_number: Option<i32>,
 }
 
 impl From<DbDraft> for Draft {
@@ -786,6 +790,8 @@ impl From<DbDraft> for Draft {
             tags: d.tags,
             win_conditions: d.win_conditions,
             watch_out: d.watch_out,
+            series_id: d.series_id,
+            game_number: d.game_number,
         }
     }
 }
@@ -830,12 +836,14 @@ pub async fn save_draft(
     tags: Vec<String>,
     win_conditions: Option<String>,
     watch_out: Option<String>,
+    series_id: Option<String>,
+    game_number: Option<i32>,
 ) -> DbResult<String> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     let mut response = db
-        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out")
+        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = $series_id, game_number = $game_number")
         .bind(("name", name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -847,6 +855,8 @@ pub async fn save_draft(
         .bind(("tags", tags))
         .bind(("win_conditions", win_conditions))
         .bind(("watch_out", watch_out))
+        .bind(("series_id", series_id))
+        .bind(("game_number", game_number))
         .await?;
 
     let row: Option<IdRecord> = response.take(0)?;
@@ -919,13 +929,15 @@ pub async fn update_draft(
     tags: Vec<String>,
     win_conditions: Option<String>,
     watch_out: Option<String>,
+    series_id: Option<String>,
+    game_number: Option<i32>,
 ) -> DbResult<()> {
     let draft_key = draft_id
         .strip_prefix("draft:")
         .unwrap_or(draft_id)
         .to_string();
 
-    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out")
+    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id=$series_id, game_number=$game_number")
         .bind(("draft_key", draft_key.clone()))
         .bind(("name", name))
         .bind(("opponent", opponent))
@@ -936,6 +948,8 @@ pub async fn update_draft(
         .bind(("tags", tags))
         .bind(("win_conditions", win_conditions))
         .bind(("watch_out", watch_out))
+        .bind(("series_id", series_id))
+        .bind(("game_number", game_number))
         .await?
         .check()?;
 
@@ -1860,6 +1874,501 @@ pub async fn set_ban_priorities(
     }
     q.await?.check()?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Opponents
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbOpponent {
+    id: RecordId,
+    name: String,
+    team: RecordId,
+    notes: Option<String>,
+}
+
+impl From<DbOpponent> for Opponent {
+    fn from(o: DbOpponent) -> Self {
+        Opponent {
+            id: Some(o.id.to_sql()),
+            name: o.name,
+            team_id: o.team.to_sql(),
+            notes: o.notes,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbOpponentPlayer {
+    id: RecordId,
+    opponent: RecordId,
+    name: String,
+    role: String,
+    riot_puuid: Option<String>,
+    riot_summoner_name: Option<String>,
+    recent_champions: Vec<String>,
+    notes: Option<String>,
+}
+
+impl From<DbOpponentPlayer> for OpponentPlayer {
+    fn from(p: DbOpponentPlayer) -> Self {
+        OpponentPlayer {
+            id: Some(p.id.to_sql()),
+            opponent_id: p.opponent.to_sql(),
+            name: p.name,
+            role: p.role,
+            riot_puuid: p.riot_puuid,
+            riot_summoner_name: p.riot_summoner_name,
+            recent_champions: p.recent_champions,
+            notes: p.notes,
+        }
+    }
+}
+
+pub async fn create_opponent(
+    db: &Surreal<Db>,
+    team_id: &str,
+    name: String,
+    notes: Option<String>,
+) -> DbResult<String> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+    let mut response = db
+        .query("CREATE opponent SET name = $name, team = type::record('team', $team_key), notes = $notes")
+        .bind(("name", name))
+        .bind(("team_key", team_key))
+        .bind(("notes", notes))
+        .await?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create opponent".into())),
+    }
+}
+
+pub async fn list_opponents(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Opponent>> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+    let mut r = db
+        .query("SELECT * FROM opponent WHERE team = type::record('team', $team_key) ORDER BY name ASC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbOpponent> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(Opponent::from).collect())
+}
+
+pub async fn get_opponent(
+    db: &Surreal<Db>,
+    opponent_id: &str,
+) -> DbResult<Option<(Opponent, Vec<OpponentPlayer>)>> {
+    let opp_key = opponent_id
+        .strip_prefix("opponent:")
+        .unwrap_or(opponent_id)
+        .to_string();
+    let mut r = db
+        .query("SELECT * FROM type::record('opponent', $opp_key); SELECT * FROM opponent_player WHERE opponent = type::record('opponent', $opp_key) ORDER BY role ASC")
+        .bind(("opp_key", opp_key))
+        .await?;
+    let opp: Option<DbOpponent> = r.take(0)?;
+    let players: Vec<DbOpponentPlayer> = r.take(1).unwrap_or_default();
+    match opp {
+        Some(o) => Ok(Some((
+            Opponent::from(o),
+            players.into_iter().map(OpponentPlayer::from).collect(),
+        ))),
+        None => Ok(None),
+    }
+}
+
+pub async fn update_opponent(
+    db: &Surreal<Db>,
+    opponent_id: &str,
+    name: String,
+    notes: Option<String>,
+) -> DbResult<()> {
+    let opp_key = opponent_id
+        .strip_prefix("opponent:")
+        .unwrap_or(opponent_id)
+        .to_string();
+    db.query("UPDATE type::record('opponent', $opp_key) SET name = $name, notes = $notes")
+        .bind(("opp_key", opp_key))
+        .bind(("name", name))
+        .bind(("notes", notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_opponent(db: &Surreal<Db>, opponent_id: &str) -> DbResult<()> {
+    let opp_key = opponent_id
+        .strip_prefix("opponent:")
+        .unwrap_or(opponent_id)
+        .to_string();
+    db.query("DELETE opponent_player WHERE opponent = type::record('opponent', $opp_key); DELETE type::record('opponent', $opp_key)")
+        .bind(("opp_key", opp_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn add_opponent_player(
+    db: &Surreal<Db>,
+    opponent_id: &str,
+    name: String,
+    role: String,
+) -> DbResult<String> {
+    let opp_key = opponent_id
+        .strip_prefix("opponent:")
+        .unwrap_or(opponent_id)
+        .to_string();
+    let mut response = db
+        .query("CREATE opponent_player SET opponent = type::record('opponent', $opp_key), name = $name, role = $role")
+        .bind(("opp_key", opp_key))
+        .bind(("name", name))
+        .bind(("role", role))
+        .await?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to add opponent player".into())),
+    }
+}
+
+pub async fn save_opponent_player_info(
+    db: &Surreal<Db>,
+    player_id: &str,
+    name: String,
+    role: String,
+    riot_summoner_name: Option<String>,
+    notes: Option<String>,
+) -> DbResult<()> {
+    let player_key = player_id
+        .strip_prefix("opponent_player:")
+        .unwrap_or(player_id)
+        .to_string();
+    db.query("UPDATE type::record('opponent_player', $player_key) SET name = $name, role = $role, riot_summoner_name = $riot_summoner_name, notes = $notes")
+        .bind(("player_key", player_key))
+        .bind(("name", name))
+        .bind(("role", role))
+        .bind(("riot_summoner_name", riot_summoner_name))
+        .bind(("notes", notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_opponent_player(
+    db: &Surreal<Db>,
+    player_id: &str,
+    name: String,
+    role: String,
+    riot_puuid: Option<String>,
+    riot_summoner_name: Option<String>,
+    recent_champions: Vec<String>,
+    notes: Option<String>,
+) -> DbResult<()> {
+    let player_key = player_id
+        .strip_prefix("opponent_player:")
+        .unwrap_or(player_id)
+        .to_string();
+    db.query("UPDATE type::record('opponent_player', $player_key) SET name = $name, role = $role, riot_puuid = $riot_puuid, riot_summoner_name = $riot_summoner_name, recent_champions = $recent_champions, notes = $notes")
+        .bind(("player_key", player_key))
+        .bind(("name", name))
+        .bind(("role", role))
+        .bind(("riot_puuid", riot_puuid))
+        .bind(("riot_summoner_name", riot_summoner_name))
+        .bind(("recent_champions", recent_champions))
+        .bind(("notes", notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_opponent_player(db: &Surreal<Db>, player_id: &str) -> DbResult<()> {
+    let player_key = player_id
+        .strip_prefix("opponent_player:")
+        .unwrap_or(player_id)
+        .to_string();
+    db.query("DELETE type::record('opponent_player', $player_key)")
+        .bind(("player_key", player_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_opponent_player_champions(
+    db: &Surreal<Db>,
+    player_id: &str,
+    champions: Vec<String>,
+) -> DbResult<()> {
+    let player_key = player_id
+        .strip_prefix("opponent_player:")
+        .unwrap_or(player_id)
+        .to_string();
+    db.query("UPDATE type::record('opponent_player', $player_key) SET recent_champions = $champions")
+        .bind(("player_key", player_key))
+        .bind(("champions", champions))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Series
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbSeries {
+    id: RecordId,
+    name: String,
+    team: RecordId,
+    opponent_id: Option<String>,
+    opponent_name: Option<String>,
+    format: String,
+    is_fearless: bool,
+    notes: Option<String>,
+    created_by: RecordId,
+}
+
+impl From<DbSeries> for Series {
+    fn from(s: DbSeries) -> Self {
+        Series {
+            id: Some(s.id.to_sql()),
+            name: s.name,
+            team_id: s.team.to_sql(),
+            opponent_id: s.opponent_id,
+            opponent_name: s.opponent_name,
+            format: s.format,
+            is_fearless: s.is_fearless,
+            notes: s.notes,
+            created_by: s.created_by.to_sql(),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_series(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    name: String,
+    opponent_id: Option<String>,
+    opponent_name: Option<String>,
+    format: String,
+    is_fearless: bool,
+    notes: Option<String>,
+) -> DbResult<String> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+
+    let mut response = db
+        .query("CREATE series SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent_id = $opponent_id, opponent_name = $opponent_name, format = $format, is_fearless = $is_fearless, notes = $notes")
+        .bind(("name", name))
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .bind(("opponent_id", opponent_id))
+        .bind(("opponent_name", opponent_name))
+        .bind(("format", format))
+        .bind(("is_fearless", is_fearless))
+        .bind(("notes", notes))
+        .await?;
+
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create series".into())),
+    }
+}
+
+pub async fn list_series(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Series>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut result = db
+        .query("SELECT * FROM series WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbSeries> = result.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(Series::from).collect())
+}
+
+pub async fn get_series(db: &Surreal<Db>, series_id: &str) -> DbResult<Option<Series>> {
+    let series_key = series_id
+        .strip_prefix("series:")
+        .unwrap_or(series_id)
+        .to_string();
+    let mut result = db
+        .query("SELECT * FROM type::record('series', $series_key)")
+        .bind(("series_key", series_key))
+        .await?;
+    let row: Option<DbSeries> = result.take(0)?;
+    Ok(row.map(Series::from))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn update_series(
+    db: &Surreal<Db>,
+    series_id: &str,
+    name: String,
+    opponent_id: Option<String>,
+    opponent_name: Option<String>,
+    format: String,
+    is_fearless: bool,
+    notes: Option<String>,
+) -> DbResult<()> {
+    let series_key = series_id
+        .strip_prefix("series:")
+        .unwrap_or(series_id)
+        .to_string();
+    db.query("UPDATE type::record('series', $series_key) SET name=$name, opponent_id=$opponent_id, opponent_name=$opponent_name, format=$format, is_fearless=$is_fearless, notes=$notes")
+        .bind(("series_key", series_key))
+        .bind(("name", name))
+        .bind(("opponent_id", opponent_id))
+        .bind(("opponent_name", opponent_name))
+        .bind(("format", format))
+        .bind(("is_fearless", is_fearless))
+        .bind(("notes", notes))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_series(db: &Surreal<Db>, series_id: &str) -> DbResult<()> {
+    let series_key = series_id
+        .strip_prefix("series:")
+        .unwrap_or(series_id)
+        .to_string();
+    let sid = series_id.to_string();
+    // Unlink drafts first
+    db.query("UPDATE draft SET series_id = NONE, game_number = NONE WHERE series_id = $sid")
+        .bind(("sid", sid))
+        .await?
+        .check()?;
+    db.query("DELETE type::record('series', $series_key)")
+        .bind(("series_key", series_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn list_series_drafts(db: &Surreal<Db>, series_id: &str) -> DbResult<Vec<Draft>> {
+    let sid = series_id.to_string();
+    let mut result = db
+        .query("SELECT * FROM draft WHERE series_id = $sid ORDER BY game_number ASC")
+        .bind(("sid", sid))
+        .await?;
+    let db_drafts: Vec<DbDraft> = result.take(0).unwrap_or_default();
+
+    let mut drafts: Vec<Draft> = Vec::new();
+    for dd in db_drafts {
+        let draft_id = dd.id.to_sql();
+        let draft_key = draft_id
+            .strip_prefix("draft:")
+            .unwrap_or(&draft_id)
+            .to_string();
+        let mut draft = Draft::from(dd);
+
+        let mut actions_result = db
+            .query("SELECT * FROM draft_action WHERE draft = type::record('draft', $draft_key) ORDER BY `order` ASC")
+            .bind(("draft_key", draft_key))
+            .await?;
+        let db_actions: Vec<DbDraftAction> = actions_result.take(0).unwrap_or_default();
+        draft.actions = db_actions.into_iter().map(DraftAction::from).collect();
+        drafts.push(draft);
+    }
+    Ok(drafts)
+}
+
+/// Get all champion names used in draft_actions for drafts in the given series.
+/// Optionally exclude a specific draft (useful when editing the current draft).
+pub async fn get_fearless_used_champions(
+    db: &Surreal<Db>,
+    series_id: &str,
+    exclude_draft_id: Option<&str>,
+) -> DbResult<Vec<String>> {
+    let sid = series_id.to_string();
+
+    let query = match exclude_draft_id {
+        Some(eid) => {
+            let eid_str = eid.to_string();
+            let mut result = db
+                .query("SELECT champion FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE series_id = $sid AND id != type::record('draft', $eid))")
+                .bind(("sid", sid))
+                .bind(("eid", eid_str.strip_prefix("draft:").unwrap_or(&eid_str).to_string()))
+                .await?;
+            let rows: Vec<ChampionRow> = result.take(0).unwrap_or_default();
+            rows
+        }
+        None => {
+            let mut result = db
+                .query("SELECT champion FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE series_id = $sid)")
+                .bind(("sid", sid))
+                .await?;
+            let rows: Vec<ChampionRow> = result.take(0).unwrap_or_default();
+            rows
+        }
+    };
+
+    let mut champions: Vec<String> = query.into_iter().map(|r| r.champion).collect();
+    champions.sort();
+    champions.dedup();
+    Ok(champions)
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct ChampionRow {
+    champion: String,
+}
+
+/// Get matchup notes from all team members that mention a specific champion.
+/// Returns Vec<(username, ChampionNote)>.
+pub async fn get_team_matchup_notes(
+    db: &Surreal<Db>,
+    team_id: &str,
+    champion: &str,
+) -> DbResult<Vec<(String, ChampionNote)>> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+
+    // Get all team member user IDs and usernames
+    let mut r = db
+        .query("SELECT user.id as user_id, user.username as username FROM team_member WHERE team = type::record('team', $team_key)")
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MemberInfo {
+        user_id: RecordId,
+        username: String,
+    }
+
+    let members: Vec<MemberInfo> = r.take(0).unwrap_or_default();
+
+    let mut result = Vec::new();
+    for member in &members {
+        let user_sql = member.user_id.to_sql();
+        let user_key = user_sql
+            .strip_prefix("user:")
+            .unwrap_or(&user_sql)
+            .to_string();
+        let champion_owned = champion.to_string();
+        let mut nr = db
+            .query("SELECT *, <string>created_at AS created_at FROM champion_note WHERE user = type::record('user', $user_key) AND note_type = 'matchup' AND (title CONTAINS $champion OR content CONTAINS $champion)")
+            .bind(("user_key", user_key))
+            .bind(("champion", champion_owned))
+            .await?;
+        let notes: Vec<DbChampionNote> = nr.take(0).unwrap_or_default();
+        for note in notes {
+            result.push((member.username.clone(), ChampionNote::from(note)));
+        }
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
