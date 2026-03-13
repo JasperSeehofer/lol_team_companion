@@ -38,6 +38,24 @@ pub struct PostGameLearning {
     pub created_by: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ChecklistTemplate {
+    pub id: Option<String>,
+    pub team_id: String,
+    pub name: String,
+    pub items: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ChecklistInstance {
+    pub id: Option<String>,
+    pub team_id: String,
+    pub game_plan_id: Option<String>,
+    pub template_id: Option<String>,
+    pub items: Vec<String>,
+    pub checked: Vec<bool>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

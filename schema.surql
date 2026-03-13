@@ -215,5 +215,21 @@ DEFINE FIELD IF NOT EXISTS content ON team_note TYPE string;
 DEFINE FIELD IF NOT EXISTS pinned ON team_note TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS created_at ON team_note TYPE datetime DEFAULT time::now();
 
+-- Checklist templates (reusable per team)
+DEFINE TABLE IF NOT EXISTS checklist_template SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON checklist_template TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS name ON checklist_template TYPE string;
+DEFINE FIELD IF NOT EXISTS items ON checklist_template TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS created_at ON checklist_template TYPE datetime DEFAULT time::now();
+
+-- Checklist instances (per-game)
+DEFINE TABLE IF NOT EXISTS checklist_instance SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON checklist_instance TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS game_plan_id ON checklist_instance TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS template_id ON checklist_instance TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS items ON checklist_instance TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS checked ON checklist_instance TYPE array<bool> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS created_at ON checklist_instance TYPE datetime DEFAULT time::now();
+
 -- Sessions (for tower-sessions-surrealdb-store)
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;

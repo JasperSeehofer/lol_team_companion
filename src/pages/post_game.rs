@@ -125,6 +125,25 @@ pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
 }
 
 #[server]
+pub async fn get_linked_plan(plan_id: String) -> Result<Option<GamePlan>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::get_game_plan(&surreal, &plan_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
 pub async fn create_review(review_json: String) -> Result<String, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
@@ -579,6 +598,16 @@ pub fn PostGamePage() -> impl IntoView {
                         </div>
                     </div>
 
+                    // Linked game plan summary
+                    {move || {
+                        let gp_id = game_plan_id.get();
+                        if gp_id.is_empty() {
+                            None
+                        } else {
+                            Some(view! { <LinkedPlanCard plan_id=gp_id /> })
+                        }
+                    }}
+
                     // Structured feedback
                     <div class="grid grid-cols-3 gap-4">
                         // What went well
@@ -638,5 +667,114 @@ pub fn PostGamePage() -> impl IntoView {
                 </div>
             </div>
         </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Linked game plan summary card
+// ---------------------------------------------------------------------------
+
+#[component]
+fn LinkedPlanCard(plan_id: String) -> impl IntoView {
+    let pid = plan_id.clone();
+    let linked_plan = Resource::new(move || pid.clone(), |id| get_linked_plan(id));
+
+    view! {
+        <Suspense fallback=|| view! { <div class="text-dimmed text-xs py-2">"Loading plan..."</div> }>
+            {move || linked_plan.get().map(|result| match result {
+                Ok(Some(plan)) => {
+                    let name = if plan.name.is_empty() { "Untitled Plan".to_string() } else { plan.name.clone() };
+                    let our_champs = plan.our_champions.clone();
+                    let enemy_champs = plan.enemy_champions.clone();
+                    let win_conds = plan.win_conditions.clone();
+                    let teamfight = plan.teamfight_strategy.clone();
+                    let top = plan.top_strategy.clone();
+                    let jg = plan.jungle_strategy.clone();
+                    let mid = plan.mid_strategy.clone();
+                    let bot = plan.bot_strategy.clone();
+                    let sup = plan.support_strategy.clone();
+
+                    view! {
+                        <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex flex-col gap-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-blue-400 text-xs font-semibold uppercase tracking-wider">"Game Plan Summary"</span>
+                                <span class="text-primary text-sm font-medium">{name}</span>
+                            </div>
+
+                            // Champions
+                            {(!our_champs.is_empty() || !enemy_champs.is_empty()).then(|| {
+                                let ours = our_champs.join(", ");
+                                let theirs = enemy_champs.join(", ");
+                                view! {
+                                    <div class="grid grid-cols-[1fr_auto_1fr] gap-2 text-xs">
+                                        <div>
+                                            <span class="text-blue-400 font-medium">"Our Team: "</span>
+                                            <span class="text-secondary">{ours}</span>
+                                        </div>
+                                        <span class="text-dimmed">"vs"</span>
+                                        <div>
+                                            <span class="text-red-400 font-medium">"Enemy: "</span>
+                                            <span class="text-secondary">{theirs}</span>
+                                        </div>
+                                    </div>
+                                }
+                            })}
+
+                            // Win conditions
+                            {(!win_conds.is_empty()).then(|| {
+                                view! {
+                                    <div class="text-xs">
+                                        <span class="text-muted font-medium">"Win Conditions: "</span>
+                                        <span class="text-secondary">{win_conds.join(" | ")}</span>
+                                    </div>
+                                }
+                            })}
+
+                            // Teamfight
+                            {(!teamfight.is_empty()).then(|| {
+                                view! {
+                                    <div class="text-xs">
+                                        <span class="text-muted font-medium">"Teamfight: "</span>
+                                        <span class="text-secondary">{teamfight}</span>
+                                    </div>
+                                }
+                            })}
+
+                            // Role strategies (compact)
+                            {
+                                let roles = vec![
+                                    ("Top", top),
+                                    ("Jg", jg),
+                                    ("Mid", mid),
+                                    ("Bot", bot),
+                                    ("Sup", sup),
+                                ];
+                                let has_any = roles.iter().any(|(_, s)| s.is_some());
+                                has_any.then(|| {
+                                    view! {
+                                        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                                            {roles.into_iter().filter_map(|(role, strat)| {
+                                                strat.map(|s| view! {
+                                                    <div>
+                                                        <span class="text-accent font-medium">{role}": "</span>
+                                                        <span class="text-secondary">{s}</span>
+                                                    </div>
+                                                })
+                                            }).collect_view()}
+                                        </div>
+                                    }
+                                })
+                            }
+                        </div>
+                    }.into_any()
+                },
+                Ok(None) => view! {
+                    <div class="text-dimmed text-xs py-1">"Linked plan not found."</div>
+                }.into_any(),
+                Err(e) => view! {
+                    <div class="text-red-400 text-xs py-1">{format!("Error loading plan: {e}")}</div>
+                }.into_any(),
+            })}
+        </Suspense>
     }
 }

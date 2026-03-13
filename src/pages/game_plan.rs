@@ -3,7 +3,7 @@ use crate::components::draft_board::slot_meta;
 use crate::components::ui::{ErrorBanner, StatusMessage};
 use crate::models::champion::Champion;
 use crate::models::draft::Draft;
-use crate::models::game_plan::GamePlan;
+use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
 use leptos::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -137,6 +137,198 @@ pub async fn delete_plan(plan_id: String) -> Result<(), ServerFnError> {
 pub async fn get_champions_for_game_plan() -> Result<Vec<Champion>, ServerFnError> {
     use crate::server::data_dragon;
     data_dragon::fetch_champions()
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn get_checklist_templates() -> Result<Vec<ChecklistTemplate>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::list_checklist_templates(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn save_checklist_template(
+    name: String,
+    items_json: String,
+) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    let items: Vec<String> = serde_json::from_str(&items_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid items JSON: {e}")))?;
+
+    db::create_checklist_template(&surreal, &team_id, name, items)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn delete_checklist_template_fn(id: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::delete_checklist_template(&surreal, &id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn get_plan_checklist(plan_id: String) -> Result<Option<ChecklistInstance>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::get_checklist_for_plan(&surreal, &plan_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn create_plan_checklist(
+    plan_id: String,
+    template_id: Option<String>,
+    items_json: String,
+) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    let items: Vec<String> = serde_json::from_str(&items_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid items JSON: {e}")))?;
+
+    db::create_checklist_instance(&surreal, &team_id, Some(plan_id), template_id, items)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn update_checklist(
+    instance_id: String,
+    checked_json: String,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let checked: Vec<bool> = serde_json::from_str(&checked_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid checked JSON: {e}")))?;
+
+    db::update_checklist_checked(&surreal, &instance_id, checked)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn start_post_game_review(
+    plan_id: String,
+    draft_id: Option<String>,
+) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use crate::models::game_plan::PostGameLearning;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    let review = PostGameLearning {
+        id: None,
+        team_id,
+        match_riot_id: None,
+        game_plan_id: Some(plan_id),
+        draft_id,
+        what_went_well: Vec::new(),
+        improvements: Vec::new(),
+        action_items: Vec::new(),
+        open_notes: None,
+        created_by: user.id,
+    };
+
+    db::save_post_game_learning(&surreal, review)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
@@ -839,6 +1031,47 @@ pub fn GamePlanPage() -> impl IntoView {
                         />
                     </div>
 
+                    // Pre-Game Checklist section
+                    <ChecklistSection editing_id=editing_id set_status_msg=set_status_msg />
+
+                    // Start Post-Game Review button
+                    {move || {
+                        let eid = editing_id.get();
+                        let did = draft_id.get();
+                        eid.map(|plan_id| {
+                            let plan_id_clone = plan_id.clone();
+                            let draft_for_review = if did.is_empty() { None } else { Some(did.clone()) };
+                            view! {
+                                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center justify-between">
+                                    <div>
+                                        <h3 class="text-primary font-semibold text-sm">"Game Complete?"</h3>
+                                        <p class="text-muted text-xs mt-0.5">"Start a post-game review with this plan pre-linked"</p>
+                                    </div>
+                                    <button
+                                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-5 py-2 text-sm transition-colors"
+                                        on:click=move |_| {
+                                            let pid = plan_id_clone.clone();
+                                            let did = draft_for_review.clone();
+                                            leptos::task::spawn_local(async move {
+                                                match start_post_game_review(pid, did).await {
+                                                    Ok(_review_id) => {
+                                                        #[cfg(feature = "hydrate")]
+                                                        if let Some(window) = web_sys::window() {
+                                                            let _ = window.location().set_href("/post-game");
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        set_status_msg.set(Some(format!("Error starting review: {e}")));
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    >"Start Post-Game Review"</button>
+                                </div>
+                            }
+                        })
+                    }}
+
                     // Save buttons + auto-save status
                     <div class="flex gap-3 items-center">
                         <button
@@ -866,6 +1099,301 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
                 </div>
             </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Checklist section component
+// ---------------------------------------------------------------------------
+
+#[component]
+fn ChecklistSection(
+    editing_id: ReadSignal<Option<String>>,
+    set_status_msg: WriteSignal<Option<String>>,
+) -> impl IntoView {
+    let (checklist_open, set_checklist_open) = signal(false);
+    let (checklist_items, set_checklist_items) = signal(Vec::<String>::new());
+    let (checklist_checked, set_checklist_checked) = signal(Vec::<bool>::new());
+    let (checklist_instance_id, set_checklist_instance_id) = signal(Option::<String>::None);
+    let (new_item_text, set_new_item_text) = signal(String::new());
+
+    let templates = Resource::new(|| (), |_| get_checklist_templates());
+
+    // Load checklist when plan changes
+    Effect::new(move || {
+        let plan_id = editing_id.get();
+        if let Some(pid) = plan_id {
+            let pid = pid.clone();
+            leptos::task::spawn_local(async move {
+                match get_plan_checklist(pid).await {
+                    Ok(Some(inst)) => {
+                        set_checklist_instance_id.set(inst.id.clone());
+                        set_checklist_items.set(inst.items.clone());
+                        set_checklist_checked.set(inst.checked.clone());
+                    }
+                    Ok(None) => {
+                        set_checklist_instance_id.set(None);
+                        set_checklist_items.set(Vec::new());
+                        set_checklist_checked.set(Vec::new());
+                    }
+                    Err(_) => {
+                        set_checklist_instance_id.set(None);
+                        set_checklist_items.set(Vec::new());
+                        set_checklist_checked.set(Vec::new());
+                    }
+                }
+            });
+        } else {
+            set_checklist_instance_id.set(None);
+            set_checklist_items.set(Vec::new());
+            set_checklist_checked.set(Vec::new());
+        }
+    });
+
+    let do_add_item = move |_| {
+        let text = new_item_text.get_untracked();
+        if text.trim().is_empty() {
+            return;
+        }
+        set_checklist_items.update(|items| items.push(text.trim().to_string()));
+        set_checklist_checked.update(|c| c.push(false));
+        set_new_item_text.set(String::new());
+    };
+
+    let do_use_template = Callback::new(move |tmpl: ChecklistTemplate| {
+        set_checklist_items.set(tmpl.items.clone());
+        set_checklist_checked.set(vec![false; tmpl.items.len()]);
+        set_checklist_instance_id.set(None); // Will create new on save
+        set_status_msg.set(Some(format!("Loaded template: {}", tmpl.name)));
+    });
+
+    let do_save_checklist = move |_| {
+        let plan_id = editing_id.get_untracked();
+        let items = checklist_items.get_untracked();
+        let checked = checklist_checked.get_untracked();
+        let instance_id = checklist_instance_id.get_untracked();
+
+        if items.is_empty() {
+            set_status_msg.set(Some("No checklist items to save.".into()));
+            return;
+        }
+
+        let Some(pid) = plan_id else {
+            set_status_msg.set(Some("Save the plan first before adding a checklist.".into()));
+            return;
+        };
+
+        leptos::task::spawn_local(async move {
+            if let Some(iid) = instance_id {
+                // Update existing
+                let checked_json = serde_json::to_string(&checked).unwrap_or_default();
+                match update_checklist(iid, checked_json).await {
+                    Ok(_) => set_status_msg.set(Some("Checklist updated!".into())),
+                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                }
+            } else {
+                // Create new
+                let items_json = serde_json::to_string(&items).unwrap_or_default();
+                match create_plan_checklist(pid, None, items_json).await {
+                    Ok(id) => {
+                        set_checklist_instance_id.set(Some(id));
+                        set_status_msg.set(Some("Checklist created!".into()));
+                    }
+                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                }
+            }
+        });
+    };
+
+    let do_save_as_template = move |_| {
+        let items = checklist_items.get_untracked();
+        if items.is_empty() {
+            set_status_msg.set(Some("No items to save as template.".into()));
+            return;
+        }
+        let items_json = serde_json::to_string(&items).unwrap_or_default();
+        leptos::task::spawn_local(async move {
+            match save_checklist_template("Pre-Game Checklist".to_string(), items_json).await {
+                Ok(_) => {
+                    set_status_msg.set(Some("Saved as template!".into()));
+                    templates.refetch();
+                }
+                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            }
+        });
+    };
+
+    view! {
+        <div class="bg-elevated/50 border border-divider/50 rounded-xl">
+            <button
+                class="w-full text-left p-4 flex items-center justify-between"
+                on:click=move |_| set_checklist_open.update(|v| *v = !*v)
+            >
+                <div class="flex items-center gap-2">
+                    <h3 class="text-primary font-semibold text-sm">"Pre-Game Checklist"</h3>
+                    {move || {
+                        let items = checklist_items.get();
+                        let checked = checklist_checked.get();
+                        if items.is_empty() {
+                            view! { <span class="text-dimmed text-xs">"No items"</span> }.into_any()
+                        } else {
+                            let done = checked.iter().filter(|c| **c).count();
+                            let total = items.len();
+                            view! {
+                                <span class="text-muted text-xs">{format!("{done}/{total} complete")}</span>
+                            }.into_any()
+                        }
+                    }}
+                </div>
+                <span class="text-dimmed text-sm">
+                    {move || if checklist_open.get() { "\u{25BC}" } else { "\u{25B6}" }}
+                </span>
+            </button>
+
+            {move || checklist_open.get().then(|| {
+                let items = checklist_items.get();
+                let checked = checklist_checked.get();
+                let total = items.len();
+                let done = checked.iter().filter(|c| **c).count();
+
+                view! {
+                    <div class="px-4 pb-4 flex flex-col gap-3">
+                        // Progress bar
+                        {(total > 0).then(|| {
+                            let pct = if total > 0 { (done * 100) / total } else { 0 };
+                            view! {
+                                <div class="w-full bg-overlay rounded-full h-2">
+                                    <div
+                                        class="bg-accent rounded-full h-2 transition-all"
+                                        style=format!("width: {}%", pct)
+                                    />
+                                </div>
+                            }
+                        })}
+
+                        // Checklist items
+                        <div class="flex flex-col gap-1">
+                            {items.iter().enumerate().map(|(i, item)| {
+                                let item_text = item.clone();
+                                let is_checked = checked.get(i).copied().unwrap_or(false);
+                                view! {
+                                    <label class="flex items-center gap-2 py-1 px-2 rounded hover:bg-overlay/30 cursor-pointer transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            class="accent-accent"
+                                            prop:checked=is_checked
+                                            on:change=move |ev| {
+                                                let val = event_target_checked(&ev);
+                                                set_checklist_checked.update(|c| {
+                                                    if i < c.len() { c[i] = val; }
+                                                });
+                                                // Auto-save check state
+                                                let instance_id = checklist_instance_id.get_untracked();
+                                                if let Some(iid) = instance_id {
+                                                    let checked_now = checklist_checked.get_untracked();
+                                                    let checked_json = serde_json::to_string(&checked_now).unwrap_or_default();
+                                                    leptos::task::spawn_local(async move {
+                                                        let _ = update_checklist(iid, checked_json).await;
+                                                    });
+                                                }
+                                            }
+                                        />
+                                        <span class=move || {
+                                            let c = checklist_checked.get();
+                                            if c.get(i).copied().unwrap_or(false) {
+                                                "text-muted text-sm line-through"
+                                            } else {
+                                                "text-primary text-sm"
+                                            }
+                                        }>{item_text}</span>
+                                        <button
+                                            class="ml-auto text-red-400/50 hover:text-red-400 text-xs transition-colors"
+                                            on:click=move |_| {
+                                                set_checklist_items.update(|items| { if i < items.len() { items.remove(i); } });
+                                                set_checklist_checked.update(|c| { if i < c.len() { c.remove(i); } });
+                                            }
+                                        >"x"</button>
+                                    </label>
+                                }
+                            }).collect_view()}
+                        </div>
+
+                        // Add new item
+                        <div class="flex gap-2">
+                            <input
+                                type="text"
+                                class=input_class()
+                                placeholder="Add checklist item..."
+                                prop:value=move || new_item_text.get()
+                                on:input=move |ev| set_new_item_text.set(event_target_value(&ev))
+                                on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                                    if ev.key() == "Enter" {
+                                        ev.prevent_default();
+                                        let text = new_item_text.get_untracked();
+                                        if !text.trim().is_empty() {
+                                            set_checklist_items.update(|items| items.push(text.trim().to_string()));
+                                            set_checklist_checked.update(|c| c.push(false));
+                                            set_new_item_text.set(String::new());
+                                        }
+                                    }
+                                }
+                            />
+                            <button
+                                class="bg-overlay hover:bg-overlay-strong text-secondary text-sm font-medium px-3 py-2 rounded-lg transition-colors flex-shrink-0"
+                                on:click=do_add_item
+                            >"Add"</button>
+                        </div>
+
+                        // Template selector
+                        <Suspense fallback=|| ()>
+                            {move || templates.get().map(|result| match result {
+                                Ok(tmpls) if !tmpls.is_empty() => {
+                                    view! {
+                                        <div class="flex flex-wrap gap-2 items-center">
+                                            <span class="text-muted text-xs">"Templates:"</span>
+                                            {tmpls.into_iter().map(|t| {
+                                                let t_for_use = t.clone();
+                                                let t_id = t.id.clone().unwrap_or_default();
+                                                let t_name = t.name.clone();
+                                                view! {
+                                                    <button
+                                                        class="bg-overlay hover:bg-overlay-strong text-secondary text-xs px-2 py-1 rounded transition-colors"
+                                                        on:click=move |_| do_use_template.run(t_for_use.clone())
+                                                    >{t_name}</button>
+                                                    <button
+                                                        class="text-red-400/50 hover:text-red-400 text-xs transition-colors"
+                                                        on:click=move |_| {
+                                                            let id = t_id.clone();
+                                                            leptos::task::spawn_local(async move {
+                                                                let _ = delete_checklist_template_fn(id).await;
+                                                                templates.refetch();
+                                                            });
+                                                        }
+                                                    >"x"</button>
+                                                }
+                                            }).collect_view()}
+                                        </div>
+                                    }.into_any()
+                                },
+                                _ => view! { <span></span> }.into_any(),
+                            })}
+                        </Suspense>
+
+                        // Action buttons
+                        <div class="flex gap-2">
+                            <button
+                                class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                                on:click=do_save_checklist
+                            >"Save Checklist"</button>
+                            <button
+                                class="bg-overlay hover:bg-overlay-strong text-secondary text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                                on:click=do_save_as_template
+                            >"Save as Template"</button>
+                        </div>
+                    </div>
+                }
+            })}
         </div>
     }
 }

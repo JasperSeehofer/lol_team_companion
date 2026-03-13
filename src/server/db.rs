@@ -12,7 +12,7 @@ use crate::models::{
     action_item::ActionItem,
     champion::{ChampionNote, ChampionPoolEntry, ChampionStatSummary},
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
-    game_plan::{GamePlan, PostGameLearning},
+    game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     series::Series,
@@ -1863,6 +1863,177 @@ pub async fn delete_post_game_learning(db: &Surreal<Db>, id: &str) -> DbResult<(
         .await?
         .check()?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Checklist templates & instances
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbChecklistTemplate {
+    id: RecordId,
+    team: RecordId,
+    name: String,
+    items: Vec<String>,
+}
+
+impl From<DbChecklistTemplate> for ChecklistTemplate {
+    fn from(t: DbChecklistTemplate) -> Self {
+        ChecklistTemplate {
+            id: Some(t.id.to_sql()),
+            team_id: t.team.to_sql(),
+            name: t.name,
+            items: t.items,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbChecklistInstance {
+    id: RecordId,
+    team: RecordId,
+    game_plan_id: Option<String>,
+    template_id: Option<String>,
+    items: Vec<String>,
+    checked: Vec<bool>,
+}
+
+impl From<DbChecklistInstance> for ChecklistInstance {
+    fn from(i: DbChecklistInstance) -> Self {
+        ChecklistInstance {
+            id: Some(i.id.to_sql()),
+            team_id: i.team.to_sql(),
+            game_plan_id: i.game_plan_id,
+            template_id: i.template_id,
+            items: i.items,
+            checked: i.checked,
+        }
+    }
+}
+
+pub async fn create_checklist_template(
+    db: &Surreal<Db>,
+    team_id: &str,
+    name: String,
+    items: Vec<String>,
+) -> DbResult<String> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut response = db
+        .query("CREATE checklist_template SET team = type::record('team', $team_key), name = $name, items = $items")
+        .bind(("team_key", team_key))
+        .bind(("name", name))
+        .bind(("items", items))
+        .await?
+        .check()?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create checklist template".into())),
+    }
+}
+
+pub async fn list_checklist_templates(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<ChecklistTemplate>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query("SELECT * FROM checklist_template WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+    let rows: Vec<DbChecklistTemplate> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(ChecklistTemplate::from).collect())
+}
+
+pub async fn delete_checklist_template(db: &Surreal<Db>, template_id: &str) -> DbResult<()> {
+    let key = template_id
+        .strip_prefix("checklist_template:")
+        .unwrap_or(template_id)
+        .to_string();
+    db.query("DELETE type::record('checklist_template', $key)")
+        .bind(("key", key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn create_checklist_instance(
+    db: &Surreal<Db>,
+    team_id: &str,
+    game_plan_id: Option<String>,
+    template_id: Option<String>,
+    items: Vec<String>,
+) -> DbResult<String> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let checked: Vec<bool> = vec![false; items.len()];
+    let mut response = db
+        .query("CREATE checklist_instance SET team = type::record('team', $team_key), game_plan_id = $game_plan_id, template_id = $template_id, items = $items, checked = $checked")
+        .bind(("team_key", team_key))
+        .bind(("game_plan_id", game_plan_id))
+        .bind(("template_id", template_id))
+        .bind(("items", items))
+        .bind(("checked", checked))
+        .await?
+        .check()?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create checklist instance".into())),
+    }
+}
+
+pub async fn get_checklist_for_plan(
+    db: &Surreal<Db>,
+    game_plan_id: &str,
+) -> DbResult<Option<ChecklistInstance>> {
+    let mut r = db
+        .query("SELECT * FROM checklist_instance WHERE game_plan_id = $game_plan_id ORDER BY created_at DESC LIMIT 1")
+        .bind(("game_plan_id", game_plan_id.to_string()))
+        .await?;
+    let row: Option<DbChecklistInstance> = r.take(0)?;
+    Ok(row.map(ChecklistInstance::from))
+}
+
+pub async fn update_checklist_checked(
+    db: &Surreal<Db>,
+    instance_id: &str,
+    checked: Vec<bool>,
+) -> DbResult<()> {
+    let key = instance_id
+        .strip_prefix("checklist_instance:")
+        .unwrap_or(instance_id)
+        .to_string();
+    db.query("UPDATE type::record('checklist_instance', $key) SET checked = $checked")
+        .bind(("key", key))
+        .bind(("checked", checked))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_checklist_instance(db: &Surreal<Db>, instance_id: &str) -> DbResult<()> {
+    let key = instance_id
+        .strip_prefix("checklist_instance:")
+        .unwrap_or(instance_id)
+        .to_string();
+    db.query("DELETE type::record('checklist_instance', $key)")
+        .bind(("key", key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn get_game_plan(db: &Surreal<Db>, plan_id: &str) -> DbResult<Option<GamePlan>> {
+    let plan_key = plan_id
+        .strip_prefix("game_plan:")
+        .unwrap_or(plan_id)
+        .to_string();
+    let mut r = db
+        .query("SELECT * FROM type::record('game_plan', $plan_key)")
+        .bind(("plan_key", plan_key))
+        .await?;
+    let row: Option<DbGamePlan> = r.take(0)?;
+    Ok(row.map(GamePlan::from))
 }
 
 pub async fn delete_draft(db: &Surreal<Db>, draft_id: &str) -> DbResult<()> {
