@@ -22,6 +22,10 @@ pub struct Draft {
     pub win_conditions: Option<String>,
     /// "Watch out for" notes
     pub watch_out: Option<String>,
+    /// Series this draft belongs to (if any)
+    pub series_id: Option<String>,
+    /// Game number within the series
+    pub game_number: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -98,6 +102,8 @@ mod tests {
             tags: vec!["teamfight".into()],
             win_conditions: None,
             watch_out: None,
+            series_id: None,
+            game_number: None,
         };
         let json = serde_json::to_string(&d).unwrap();
         let back: Draft = serde_json::from_str(&json).unwrap();

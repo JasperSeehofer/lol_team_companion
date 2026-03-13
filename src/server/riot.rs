@@ -98,3 +98,40 @@ pub async fn fetch_match_history(
 
     Ok(results)
 }
+
+pub async fn fetch_player_champions(puuid: &str, count: usize) -> Result<Vec<String>, RiotError> {
+    let api = api();
+    let match_ids = api
+        .match_v5()
+        .get_match_ids_by_puuid(
+            riven::consts::RegionalRoute::EUROPE,
+            puuid,
+            Some(count as i32),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
+
+    let mut champions = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for mid in match_ids {
+        let Some(m) = api
+            .match_v5()
+            .get_match(riven::consts::RegionalRoute::EUROPE, &mid)
+            .await?
+        else {
+            continue;
+        };
+        if let Some(p) = m.info.participants.iter().find(|p| p.puuid == puuid) {
+            if seen.insert(p.champion_name.clone()) {
+                champions.push(p.champion_name.clone());
+            }
+        }
+    }
+
+    Ok(champions)
+}

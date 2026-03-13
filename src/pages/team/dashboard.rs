@@ -353,6 +353,151 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
     Ok(recent)
 }
 
+// ---------------------------------------------------------------------------
+// Team Notebook server functions
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn get_all_team_notes(
+) -> Result<Vec<crate::models::team_note::TeamNote>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::list_team_notes(&db, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn add_team_note(content: String) -> Result<String, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("No team"))?;
+
+    db::create_team_note(&db, &team_id, &user.id, &user.username, content)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn toggle_note_pin(note_id: String, pinned: bool) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::toggle_pin_team_note(&db, &note_id, pinned)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn edit_team_note(note_id: String, content: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::update_team_note(&db, &note_id, content)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn remove_team_note(note_id: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::delete_team_note(&db, &note_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[server]
+pub async fn get_open_action_items_summary(
+) -> Result<(usize, Vec<crate::models::action_item::ActionItem>), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok((0, Vec::new())),
+    };
+
+    let items = db::list_open_action_items(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let total = items.len();
+    let top3: Vec<_> = items.into_iter().take(3).collect();
+    Ok((total, top3))
+}
+
 fn role_icon_url(role: &str) -> &'static str {
     match role {
         "top" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
@@ -922,6 +1067,53 @@ pub fn TeamDashboard() -> impl IntoView {
                                     </Suspense>
                                 </div>
 
+                                // Team Notebook
+                                <TeamNotebook current_user_id=current_user_id.clone() is_leader=is_leader />
+
+                                // Action Items widget
+                                <div>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h3 class="text-lg font-semibold text-primary">"Open Action Items"</h3>
+                                        <A href="/action-items" attr:class="text-accent text-sm hover:underline">"View all \u{2192}"</A>
+                                    </div>
+                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                        {move || {
+                                            let action_items_res = Resource::new(|| (), |_| get_open_action_items_summary());
+                                            move || action_items_res.get().map(|result| match result {
+                                                Ok((total, top_items)) => {
+                                                    if total == 0 {
+                                                        view! {
+                                                            <p class="text-dimmed text-sm">"No open action items. "</p>
+                                                        }.into_any()
+                                                    } else {
+                                                        view! {
+                                                            <div class="space-y-2">
+                                                                <p class="text-secondary text-sm mb-2">{total}" open item(s)"</p>
+                                                                {top_items.into_iter().map(|item| {
+                                                                    let status_dot = match item.status.as_str() {
+                                                                        "in_progress" => "w-2 h-2 rounded-full bg-yellow-500 shrink-0",
+                                                                        _ => "w-2 h-2 rounded-full bg-green-500 shrink-0",
+                                                                    };
+                                                                    view! {
+                                                                        <div class="flex items-center gap-2 bg-elevated border border-divider rounded px-3 py-2">
+                                                                            <span class=status_dot></span>
+                                                                            <span class="text-primary text-sm truncate">{item.text}</span>
+                                                                            {item.assigned_to.map(|a| view! {
+                                                                                <span class="text-xs bg-surface text-muted rounded px-1.5 py-0.5 shrink-0">{a}</span>
+                                                                            })}
+                                                                        </div>
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        }.into_any()
+                                                    }
+                                                }
+                                                Err(_) => view! { <p class="text-dimmed text-sm">"Could not load action items."</p> }.into_any(),
+                                            })
+                                        }}
+                                    </Suspense>
+                                </div>
+
                                 // Leave team (non-leaders only)
                                 {if !is_leader {
                                     view! {
@@ -982,6 +1174,252 @@ pub fn TeamDashboard() -> impl IntoView {
                         <ErrorBanner message=format!("Failed to load team data: {e}") />
                     }.into_any(),
                 })}
+            </Suspense>
+        </div>
+    }
+}
+
+#[component]
+fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
+    let notes_resource = Resource::new(|| (), |_| get_all_team_notes());
+    let (expanded, set_expanded) = signal(false);
+    let (new_note, set_new_note) = signal(String::new());
+    let (note_msg, set_note_msg) = signal(Option::<String>::None);
+    let (editing_id, set_editing_id) = signal(Option::<String>::None);
+    let (edit_content, set_edit_content) = signal(String::new());
+
+    view! {
+        <div>
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-semibold text-primary">"Team Notebook"</h3>
+                <button
+                    class="text-muted hover:text-accent text-sm transition-colors cursor-pointer"
+                    on:click=move |_| set_expanded.update(|v| *v = !*v)
+                >
+                    {move || if expanded.get() { "Collapse" } else { "Show all" }}
+                </button>
+            </div>
+
+            {move || note_msg.get().map(|msg| view! {
+                <div class="mb-2"><StatusMessage message=msg /></div>
+            })}
+
+            // Add note form
+            <div class="flex gap-2 mb-4">
+                <textarea
+                    prop:value=move || new_note.get()
+                    on:input=move |ev| set_new_note.set(event_target_value(&ev))
+                    placeholder="Write a note for the team..."
+                    rows="2"
+                    class="flex-1 bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent resize-none"
+                />
+                <button
+                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer self-end"
+                    on:click=move |_| {
+                        let content = new_note.get_untracked();
+                        if content.trim().is_empty() {
+                            return;
+                        }
+                        leptos::task::spawn_local(async move {
+                            match add_team_note(content).await {
+                                Ok(_) => {
+                                    set_new_note.set(String::new());
+                                    set_note_msg.set(None);
+                                    notes_resource.refetch();
+                                }
+                                Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                            }
+                        });
+                    }
+                >"Add"</button>
+            </div>
+
+            <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading notes..."</p> }>
+                {move || {
+                    let uid = current_user_id.clone();
+                    let leader = is_leader;
+                    notes_resource.get().map(move |res| match res {
+                        Ok(notes) if notes.is_empty() => {
+                            view! { <p class="text-dimmed text-sm">"No notes yet. Be the first to write one!"</p> }.into_any()
+                        }
+                        Ok(notes) => {
+                            let show_expanded = expanded.get();
+                            let display_notes: Vec<_> = if show_expanded {
+                                notes
+                            } else {
+                                // Collapsed: show only pinned notes
+                                notes.into_iter().filter(|n| n.pinned).collect()
+                            };
+
+                            if display_notes.is_empty() && !show_expanded {
+                                view! {
+                                    <p class="text-dimmed text-sm">"No pinned notes. Click \"Show all\" to see all notes."</p>
+                                }.into_any()
+                            } else {
+                                let uid2 = uid.clone();
+                                view! {
+                                    <div class="flex flex-col gap-2">
+                                        {display_notes.into_iter().map(|note| {
+                                            let note_id = note.id.clone().unwrap_or_default();
+                                            let note_id_pin = note_id.clone();
+                                            let note_id_del = note_id.clone();
+                                            let note_id_edit = note_id.clone();
+                                            let note_id_save = note_id.clone();
+                                            let is_author = note.author_id == uid2;
+                                            let can_delete = is_author || leader;
+                                            let pinned = note.pinned;
+                                            let initial = note.author_name.chars().next().unwrap_or('?').to_uppercase().to_string();
+                                            let content_for_edit = note.content.clone();
+
+                                            view! {
+                                                <div class=if pinned {
+                                                    "bg-accent/10 border border-accent/30 rounded-lg p-4"
+                                                } else {
+                                                    "bg-surface border border-divider rounded-lg p-4"
+                                                }>
+                                                    <div class="flex items-start gap-3">
+                                                        // Author avatar
+                                                        <span class="bg-accent/20 text-accent rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                            {initial}
+                                                        </span>
+                                                        <div class="flex-1 min-w-0">
+                                                            <div class="flex items-center gap-2 mb-1">
+                                                                <span class="text-primary text-sm font-medium">{note.author_name.clone()}</span>
+                                                                {if pinned {
+                                                                    view! {
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="currentColor" viewBox="0 0 24 24">
+                                                                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                                                        </svg>
+                                                                    }.into_any()
+                                                                } else {
+                                                                    view! { <span></span> }.into_any()
+                                                                }}
+                                                                <span class="text-dimmed text-xs ml-auto">
+                                                                    {note.created_at.clone().unwrap_or_default()}
+                                                                </span>
+                                                            </div>
+
+                                                            // Content: show edit form or text
+                                                            {
+                                                                let note_id_for_display = note_id_edit.clone();
+                                                                let note_id_for_save = note_id_save.clone();
+                                                                let content_text = content_for_edit.clone();
+                                                                move || {
+                                                                    let nid = note_id_for_display.clone();
+                                                                    let nid_save = note_id_for_save.clone();
+                                                                    let ct = content_text.clone();
+                                                                    if editing_id.get() == Some(nid) {
+                                                                        view! {
+                                                                            <div class="flex flex-col gap-2">
+                                                                                <textarea
+                                                                                    prop:value=move || edit_content.get()
+                                                                                    on:input=move |ev| set_edit_content.set(event_target_value(&ev))
+                                                                                    rows="3"
+                                                                                    class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent resize-none"
+                                                                                />
+                                                                                <div class="flex gap-2">
+                                                                                    <button
+                                                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-bold rounded px-3 py-1 transition-colors cursor-pointer"
+                                                                                        on:click=move |_| {
+                                                                                            let id = nid_save.clone();
+                                                                                            let content = edit_content.get_untracked();
+                                                                                            leptos::task::spawn_local(async move {
+                                                                                                match edit_team_note(id, content).await {
+                                                                                                    Ok(_) => {
+                                                                                                        set_editing_id.set(None);
+                                                                                                        notes_resource.refetch();
+                                                                                                    }
+                                                                                                    Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                                                                                }
+                                                                                            });
+                                                                                        }
+                                                                                    >"Save"</button>
+                                                                                    <button
+                                                                                        class="text-secondary hover:text-primary text-xs rounded px-3 py-1 transition-colors cursor-pointer"
+                                                                                        on:click=move |_| set_editing_id.set(None)
+                                                                                    >"Cancel"</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        }.into_any()
+                                                                    } else {
+                                                                        view! {
+                                                                            <p class="text-secondary text-sm whitespace-pre-wrap">{ct}</p>
+                                                                        }.into_any()
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // Action buttons
+                                                            <div class="flex items-center gap-2 mt-2">
+                                                                // Pin/Unpin
+                                                                <button
+                                                                    class="text-muted hover:text-accent text-xs transition-colors cursor-pointer"
+                                                                    title=if pinned { "Unpin" } else { "Pin" }
+                                                                    on:click=move |_| {
+                                                                        let id = note_id_pin.clone();
+                                                                        let new_pinned = !pinned;
+                                                                        leptos::task::spawn_local(async move {
+                                                                            match toggle_note_pin(id, new_pinned).await {
+                                                                                Ok(_) => notes_resource.refetch(),
+                                                                                Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                >
+                                                                    {if pinned { "Unpin" } else { "Pin" }}
+                                                                </button>
+
+                                                                // Edit (author only)
+                                                                {if is_author {
+                                                                    let content_for_btn = note.content.clone();
+                                                                    let nid = note_id.clone();
+                                                                    view! {
+                                                                        <button
+                                                                            class="text-muted hover:text-accent text-xs transition-colors cursor-pointer"
+                                                                            on:click=move |_| {
+                                                                                set_edit_content.set(content_for_btn.clone());
+                                                                                set_editing_id.set(Some(nid.clone()));
+                                                                            }
+                                                                        >"Edit"</button>
+                                                                    }.into_any()
+                                                                } else {
+                                                                    view! { <span></span> }.into_any()
+                                                                }}
+
+                                                                // Delete (author or leader)
+                                                                {if can_delete {
+                                                                    view! {
+                                                                        <button
+                                                                            class="text-muted hover:text-red-400 text-xs transition-colors cursor-pointer"
+                                                                            on:click=move |_| {
+                                                                                let id = note_id_del.clone();
+                                                                                leptos::task::spawn_local(async move {
+                                                                                    match remove_team_note(id).await {
+                                                                                        Ok(_) => notes_resource.refetch(),
+                                                                                        Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        >"Delete"</button>
+                                                                    }.into_any()
+                                                                } else {
+                                                                    view! { <span></span> }.into_any()
+                                                                }}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                }.into_any()
+                            }
+                        }
+                        Err(e) => view! {
+                            <p class="text-red-400 text-sm">{format!("Could not load notes: {e}")}</p>
+                        }.into_any(),
+                    })
+                }}
             </Suspense>
         </div>
     }

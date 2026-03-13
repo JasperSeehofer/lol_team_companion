@@ -48,6 +48,15 @@ pub const NOTE_TYPES: &[&str] = &[
     "positioning",
 ];
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ChampionStatSummary {
+    pub champion: String,
+    pub games: i32,
+    pub wins: i32,
+    pub avg_kda: f64,
+    pub avg_cs_per_min: f64,
+}
+
 pub fn note_type_label(note_type: &str) -> &'static str {
     match note_type {
         "matchup" => "Matchup",
@@ -116,6 +125,20 @@ mod tests {
         let json = serde_json::to_string(&note).unwrap();
         let back: ChampionNote = serde_json::from_str(&json).unwrap();
         assert_eq!(note, back);
+    }
+
+    #[test]
+    fn champion_stat_summary_round_trips_json() {
+        let s = ChampionStatSummary {
+            champion: "Jinx".into(),
+            games: 12,
+            wins: 8,
+            avg_kda: 3.2,
+            avg_cs_per_min: 8.1,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: ChampionStatSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(s, back);
     }
 
     #[test]

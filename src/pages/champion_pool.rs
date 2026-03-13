@@ -1,6 +1,8 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::ui::StatusMessage;
-use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionPoolEntry};
+use crate::models::champion::{
+    note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
+};
 use leptos::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -291,6 +293,25 @@ const NOTE_TYPE_LIST: &[&str] = &[
     "positioning",
 ];
 
+#[server]
+pub async fn get_my_champion_stats() -> Result<Vec<ChampionStatSummary>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::get_champion_stats_for_user(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -310,6 +331,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
 
     let pool = Resource::new(|| (), |_| get_pool());
     let champions_resource = Resource::new(|| (), |_| get_pool_champions());
+    let stats_resource = Resource::new(|| (), |_| get_my_champion_stats());
 
     let (active_role, set_active_role) = signal("Top");
     let (status_msg, set_status_msg) = signal(Option::<String>::None);
@@ -572,6 +594,20 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                             <span class=format!("text-[9px] px-1 rounded border font-bold {cls}")>{label}</span>
                                                                                         }
                                                                                     })}
+                                                                                    // Match stats badge
+                                                                                    {move || {
+                                                                                        let champ_name = champ.clone();
+                                                                                        stats_resource.get().and_then(|r| r.ok()).and_then(|stats| {
+                                                                                            stats.into_iter().find(|s| s.champion == champ_name)
+                                                                                        }).map(|s| {
+                                                                                            let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
+                                                                                            view! {
+                                                                                                <span class="text-[9px] px-1 rounded bg-overlay text-muted whitespace-nowrap" title="Games / Win% / KDA from match history">
+                                                                                                    {format!("{}G {}%W {:.1}", s.games, wr, s.avg_kda)}
+                                                                                                </span>
+                                                                                            }
+                                                                                        })
+                                                                                    }}
                                                                                 </div>
                                                                             </div>
                                                                             <button

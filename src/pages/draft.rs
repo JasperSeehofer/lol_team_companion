@@ -1,7 +1,7 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::ui::ErrorBanner;
-use crate::models::champion::{Champion, ChampionNote};
+use crate::models::champion::{Champion, ChampionNote, ChampionStatSummary};
 use crate::models::draft::{BanPriority, Draft, DraftAction};
 use crate::models::opponent::OpponentPlayer;
 use crate::models::series::Series;
@@ -361,6 +361,42 @@ pub async fn get_team_pools(
     Ok(result)
 }
 
+/// Get per-champion match stats for all team starters.
+/// Returns Vec<(username, Vec<ChampionStatSummary>)>.
+#[server]
+pub async fn get_team_champion_stats(
+) -> Result<Vec<(String, Vec<ChampionStatSummary>)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let (_, members) = match db::get_user_team_with_members(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(t) => t,
+        None => return Ok(Vec::new()),
+    };
+
+    let mut result = Vec::new();
+    for member in members.iter().filter(|m| m.roster_type == "starter") {
+        let stats = db::get_champion_stats_for_user(&db, &member.user_id)
+            .await
+            .unwrap_or_default();
+        result.push((member.username.clone(), stats));
+    }
+
+    Ok(result)
+}
+
 /// Get opponent players for a given opponent ID.
 #[server]
 pub async fn get_opponent_intel(
@@ -519,6 +555,7 @@ pub fn DraftPage() -> impl IntoView {
     let (matchup_champion, set_matchup_champion) = signal(Option::<String>::None);
 
     let team_pools = Resource::new(|| (), |_| get_team_pools());
+    let team_stats = Resource::new(|| (), |_| get_team_champion_stats());
     let opponents_list = Resource::new(|| (), |_| crate::pages::opponents::get_opponents());
     let opponent_players = Resource::new(
         move || selected_opponent_id.get(),
@@ -1430,7 +1467,13 @@ pub fn DraftPage() -> impl IntoView {
                                                     pools.sort_by_key(|(_, role, _)| role_order(role));
                                                     view! {
                                                         <div class="flex flex-col gap-3">
-                                                            {pools.into_iter().map(|(username, role, entries)| {
+                                                            // Collect team stats into a lookup map: username -> Vec<ChampionStatSummary>
+                                                            {let all_stats: std::collections::HashMap<String, Vec<ChampionStatSummary>> = team_stats.get()
+                                                                .and_then(|r| r.ok())
+                                                                .map(|v| v.into_iter().collect())
+                                                                .unwrap_or_default();
+                                                            pools.into_iter().map(|(username, role, entries)| {
+                                                                let user_stats = all_stats.get(&username).cloned().unwrap_or_default();
                                                                 let role_label = match role.as_str() {
                                                                     "top" => "TOP",
                                                                     "jungle" | "jng" => "JNG",
@@ -1486,6 +1529,14 @@ pub fn DraftPage() -> impl IntoView {
                                                                                                         let champ_for_title = champ_name.clone();
                                                                                                         let champ_for_display = champ_name.clone();
                                                                                                         let comfort = entry.comfort_level.unwrap_or(0);
+                                                                                                        // Look up match stats for this champion
+                                                                                                        let stat = user_stats.iter().find(|s| s.champion == champ_name).cloned();
+                                                                                                        let title_text = if let Some(ref s) = stat {
+                                                                                                            let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
+                                                                                                            format!("{} - {}G {}%W {:.1} KDA", champ_for_title, s.games, wr, s.avg_kda)
+                                                                                                        } else {
+                                                                                                            format!("Click to add {} to active slot", champ_for_title)
+                                                                                                        };
                                                                                                         let comfort_dots = (0..5).map(|i| {
                                                                                                             if i < comfort {
                                                                                                                 view! { <span class="w-1 h-1 rounded-full bg-accent inline-block"></span> }
@@ -1493,10 +1544,14 @@ pub fn DraftPage() -> impl IntoView {
                                                                                                                 view! { <span class="w-1 h-1 rounded-full bg-overlay-strong inline-block"></span> }
                                                                                                             }
                                                                                                         }).collect_view();
+                                                                                                        let stat_badge = stat.map(|s| {
+                                                                                                            let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
+                                                                                                            format!("{}G/{}%", s.games, wr)
+                                                                                                        });
                                                                                                         view! {
                                                                                                             <button
                                                                                                                 class="bg-overlay rounded px-1.5 py-0.5 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer flex items-center gap-1"
-                                                                                                                title=format!("Click to add {} to active slot", champ_for_title)
+                                                                                                                title=title_text
                                                                                                                 on:click=move |_| {
                                                                                                                     if let Some(slot) = active_slot.get_untracked() {
                                                                                                                         fill_slot(slot, champ_for_click.clone());
@@ -1505,6 +1560,9 @@ pub fn DraftPage() -> impl IntoView {
                                                                                                             >
                                                                                                                 <span>{champ_for_display}</span>
                                                                                                                 <span class="flex gap-px">{comfort_dots}</span>
+                                                                                                                {stat_badge.map(|badge| view! {
+                                                                                                                    <span class="text-[9px] text-muted ml-0.5">{badge}</span>
+                                                                                                                })}
                                                                                                             </button>
                                                                                                         }
                                                                                                     }).collect_view()}

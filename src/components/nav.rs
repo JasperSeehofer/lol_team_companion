@@ -127,6 +127,7 @@ pub fn Nav() -> impl IntoView {
         let link_cls5 = link_cls.clone();
         let link_cls6 = link_cls.clone();
         let link_cls7 = link_cls.clone();
+        let link_cls8 = link_cls.clone();
         view! {
             <A href="/" attr:class=link_cls
                 on:click=move |_| close_link.run(())>
@@ -157,6 +158,10 @@ pub fn Nav() -> impl IntoView {
                     <A href="/post-game" attr:class=link_cls7.clone()
                         on:click=move |_| close_link.run(())>
                         "Post Game"
+                    </A>
+                    <A href="/opponents" attr:class=link_cls8.clone()
+                        on:click=move |_| close_link.run(())>
+                        "Opponents"
                     </A>
                 }.into_any()
             } else {

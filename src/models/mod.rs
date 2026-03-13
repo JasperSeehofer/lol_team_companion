@@ -1,6 +1,10 @@
+pub mod action_item;
 pub mod champion;
 pub mod draft;
 pub mod game_plan;
 pub mod match_data;
+pub mod opponent;
+pub mod series;
 pub mod team;
+pub mod team_note;
 pub mod user;

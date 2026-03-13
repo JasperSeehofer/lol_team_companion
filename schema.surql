@@ -64,6 +64,8 @@ DEFINE FIELD IF NOT EXISTS our_side ON draft TYPE string DEFAULT 'blue';
 DEFINE FIELD IF NOT EXISTS tags ON draft TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS win_conditions ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS watch_out ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS series_id ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_number ON draft TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
 -- Picks/bans in a draft
@@ -164,6 +166,54 @@ DEFINE FIELD IF NOT EXISTS champion ON ban_priority TYPE string;
 DEFINE FIELD IF NOT EXISTS rank ON ban_priority TYPE int;
 DEFINE FIELD IF NOT EXISTS reason ON ban_priority TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON ban_priority TYPE datetime DEFAULT time::now();
+
+-- Opponents
+DEFINE TABLE IF NOT EXISTS opponent SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON opponent TYPE string;
+DEFINE FIELD IF NOT EXISTS team ON opponent TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS notes ON opponent TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON opponent TYPE datetime DEFAULT time::now();
+
+-- Opponent players (5 per opponent)
+DEFINE TABLE IF NOT EXISTS opponent_player SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS opponent ON opponent_player TYPE record<opponent>;
+DEFINE FIELD IF NOT EXISTS name ON opponent_player TYPE string;
+DEFINE FIELD IF NOT EXISTS role ON opponent_player TYPE string;
+DEFINE FIELD IF NOT EXISTS riot_puuid ON opponent_player TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS riot_summoner_name ON opponent_player TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS recent_champions ON opponent_player TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS notes ON opponent_player TYPE option<string>;
+
+-- Series (best-of sets)
+DEFINE TABLE IF NOT EXISTS series SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON series TYPE string;
+DEFINE FIELD IF NOT EXISTS team ON series TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS opponent_id ON series TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS opponent_name ON series TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS format ON series TYPE string DEFAULT 'bo1';
+DEFINE FIELD IF NOT EXISTS is_fearless ON series TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS notes ON series TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_by ON series TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON series TYPE datetime DEFAULT time::now();
+
+-- Action items (from post-game reviews)
+DEFINE TABLE IF NOT EXISTS action_item SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON action_item TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS text ON action_item TYPE string;
+DEFINE FIELD IF NOT EXISTS status ON action_item TYPE string DEFAULT 'open';
+DEFINE FIELD IF NOT EXISTS assigned_to ON action_item TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON action_item TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS resolved_at ON action_item TYPE option<datetime>;
+
+-- Team notes (shared notebook)
+DEFINE TABLE IF NOT EXISTS team_note SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON team_note TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS author ON team_note TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS author_name ON team_note TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS content ON team_note TYPE string;
+DEFINE FIELD IF NOT EXISTS pinned ON team_note TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS created_at ON team_note TYPE datetime DEFAULT time::now();
 
 -- Sessions (for tower-sessions-surrealdb-store)
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;

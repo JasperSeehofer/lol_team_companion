@@ -9,13 +9,15 @@ use surrealdb::{
 use thiserror::Error;
 
 use crate::models::{
-    champion::{ChampionNote, ChampionPoolEntry},
+    action_item::ActionItem,
+    champion::{ChampionNote, ChampionPoolEntry, ChampionStatSummary},
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{GamePlan, PostGameLearning},
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     series::Series,
     team::Team,
+    team_note::TeamNote,
     user::{JoinRequest, TeamMember},
 };
 
@@ -427,6 +429,73 @@ pub async fn delete_champion_note(
         .await?
         .check()?;
     Ok(())
+}
+
+pub async fn get_champion_stats_for_user(
+    db: &Surreal<Db>,
+    user_id: &str,
+) -> DbResult<Vec<ChampionStatSummary>> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PlayerMatchRow {
+        champion: String,
+        kills: i64,
+        deaths: i64,
+        assists: i64,
+        cs: i64,
+        win: bool,
+    }
+
+    let mut r = db
+        .query("SELECT champion, kills, deaths, assists, cs, win FROM player_match WHERE user = type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+
+    let rows: Vec<PlayerMatchRow> = r.take(0).unwrap_or_default();
+
+    let mut by_champ: HashMap<String, Vec<(f64, f64, f64, f64, bool)>> = HashMap::new();
+    for row in &rows {
+        by_champ
+            .entry(row.champion.clone())
+            .or_default()
+            .push((
+                row.kills as f64,
+                row.deaths as f64,
+                row.assists as f64,
+                row.cs as f64,
+                row.win,
+            ));
+    }
+
+    let mut results: Vec<ChampionStatSummary> = by_champ
+        .into_iter()
+        .map(|(champion, matches)| {
+            let games = matches.len() as i32;
+            let wins = matches.iter().filter(|m| m.4).count() as i32;
+            let total_kills: f64 = matches.iter().map(|m| m.0).sum();
+            let total_deaths: f64 = matches.iter().map(|m| m.1).sum();
+            let total_assists: f64 = matches.iter().map(|m| m.2).sum();
+            let avg_cs: f64 = matches.iter().map(|m| m.3).sum::<f64>() / games as f64;
+
+            let avg_kda = if total_deaths > 0.0 {
+                (total_kills + total_assists) / total_deaths
+            } else {
+                total_kills + total_assists
+            };
+
+            ChampionStatSummary {
+                champion,
+                games,
+                wins,
+                avg_kda: (avg_kda * 10.0).round() / 10.0,
+                avg_cs_per_min: (avg_cs * 10.0).round() / 10.0,
+            }
+        })
+        .collect();
+
+    results.sort_by(|a, b| b.games.cmp(&a.games));
+    Ok(results)
 }
 
 // ---------------------------------------------------------------------------
@@ -2369,6 +2438,296 @@ pub async fn get_team_matchup_notes(
     }
 
     Ok(result)
+}
+
+// ---------------------------------------------------------------------------
+// Action Items
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbActionItem {
+    id: RecordId,
+    team: RecordId,
+    source_review: Option<String>,
+    text: String,
+    status: String,
+    assigned_to: Option<String>,
+    created_at: String,
+    resolved_at: Option<String>,
+}
+
+impl From<DbActionItem> for ActionItem {
+    fn from(a: DbActionItem) -> Self {
+        ActionItem {
+            id: Some(a.id.to_sql()),
+            team_id: a.team.to_sql(),
+            source_review: a.source_review,
+            text: a.text,
+            status: a.status,
+            assigned_to: a.assigned_to,
+            created_at: Some(a.created_at),
+            resolved_at: a.resolved_at,
+        }
+    }
+}
+
+pub async fn create_action_item(
+    db: &Surreal<Db>,
+    team_id: &str,
+    text: String,
+    source_review: Option<String>,
+    assigned_to: Option<String>,
+) -> DbResult<String> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut response = db
+        .query(
+            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = $source_review, assigned_to = $assigned_to",
+        )
+        .bind(("team_key", team_key))
+        .bind(("text", text))
+        .bind(("source_review", source_review))
+        .bind(("assigned_to", assigned_to))
+        .await?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create action item".into())),
+    }
+}
+
+pub async fn list_action_items(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<ActionItem>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query(
+            "SELECT *, <string>created_at AS created_at, <string>resolved_at AS resolved_at FROM action_item WHERE team = type::record('team', $team_key) ORDER BY status ASC, created_at DESC",
+        )
+        .bind(("team_key", team_key))
+        .await?;
+    let items: Vec<DbActionItem> = r.take(0).unwrap_or_default();
+    Ok(items.into_iter().map(ActionItem::from).collect())
+}
+
+pub async fn list_open_action_items(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<ActionItem>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let mut r = db
+        .query(
+            "SELECT *, <string>created_at AS created_at, <string>resolved_at AS resolved_at FROM action_item WHERE team = type::record('team', $team_key) AND (status = 'open' OR status = 'in_progress') ORDER BY status ASC, created_at DESC",
+        )
+        .bind(("team_key", team_key))
+        .await?;
+    let items: Vec<DbActionItem> = r.take(0).unwrap_or_default();
+    Ok(items.into_iter().map(ActionItem::from).collect())
+}
+
+pub async fn update_action_item_status(
+    db: &Surreal<Db>,
+    item_id: &str,
+    status: String,
+) -> DbResult<()> {
+    let item_key = item_id
+        .strip_prefix("action_item:")
+        .unwrap_or(item_id)
+        .to_string();
+    if status == "done" {
+        db.query(
+            "UPDATE type::record('action_item', $item_key) SET status = $status, resolved_at = time::now()",
+        )
+        .bind(("item_key", item_key))
+        .bind(("status", status))
+        .await?
+        .check()?;
+    } else {
+        db.query(
+            "UPDATE type::record('action_item', $item_key) SET status = $status, resolved_at = NONE",
+        )
+        .bind(("item_key", item_key))
+        .bind(("status", status))
+        .await?
+        .check()?;
+    }
+    Ok(())
+}
+
+pub async fn update_action_item(
+    db: &Surreal<Db>,
+    item_id: &str,
+    text: String,
+    assigned_to: Option<String>,
+    status: String,
+) -> DbResult<()> {
+    let item_key = item_id
+        .strip_prefix("action_item:")
+        .unwrap_or(item_id)
+        .to_string();
+    let resolved = if status == "done" {
+        "resolved_at = time::now()"
+    } else {
+        "resolved_at = NONE"
+    };
+    let query = format!(
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, status = $status, {resolved}"
+    );
+    db.query(&query)
+        .bind(("item_key", item_key))
+        .bind(("text", text))
+        .bind(("assigned_to", assigned_to))
+        .bind(("status", status))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_action_item(db: &Surreal<Db>, item_id: &str) -> DbResult<()> {
+    let item_key = item_id
+        .strip_prefix("action_item:")
+        .unwrap_or(item_id)
+        .to_string();
+    db.query("DELETE type::record('action_item', $item_key)")
+        .bind(("item_key", item_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Team Notes (shared notebook)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbTeamNote {
+    id: RecordId,
+    team: RecordId,
+    author: RecordId,
+    author_name: String,
+    content: String,
+    pinned: bool,
+    created_at: String,
+}
+
+impl From<DbTeamNote> for TeamNote {
+    fn from(n: DbTeamNote) -> Self {
+        TeamNote {
+            id: Some(n.id.to_sql()),
+            team_id: n.team.to_sql(),
+            author_id: n.author.to_sql(),
+            author_name: n.author_name,
+            content: n.content,
+            pinned: n.pinned,
+            created_at: Some(n.created_at),
+        }
+    }
+}
+
+pub async fn create_team_note(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    username: &str,
+    content: String,
+) -> DbResult<String> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+
+    let mut response = db
+        .query("CREATE team_note SET team = type::record('team', $team_key), author = type::record('user', $user_key), author_name = $author_name, content = $content")
+        .bind(("team_key", team_key))
+        .bind(("user_key", user_key))
+        .bind(("author_name", username.to_string()))
+        .bind(("content", content))
+        .await?;
+
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create team note".into())),
+    }
+}
+
+pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+
+    let mut response = db
+        .query("SELECT *, <string>created_at AS created_at FROM team_note WHERE team = type::record('team', $team_key) ORDER BY pinned DESC, created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+
+    let rows: Vec<DbTeamNote> = response.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(TeamNote::from).collect())
+}
+
+pub async fn list_pinned_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+
+    let mut response = db
+        .query("SELECT *, <string>created_at AS created_at FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true ORDER BY created_at DESC")
+        .bind(("team_key", team_key))
+        .await?;
+
+    let rows: Vec<DbTeamNote> = response.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(TeamNote::from).collect())
+}
+
+pub async fn update_team_note(db: &Surreal<Db>, note_id: &str, content: String) -> DbResult<()> {
+    let note_key = note_id
+        .strip_prefix("team_note:")
+        .unwrap_or(note_id)
+        .to_string();
+
+    db.query("UPDATE type::record('team_note', $note_key) SET content = $content")
+        .bind(("note_key", note_key))
+        .bind(("content", content))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn toggle_pin_team_note(
+    db: &Surreal<Db>,
+    note_id: &str,
+    pinned: bool,
+) -> DbResult<()> {
+    let note_key = note_id
+        .strip_prefix("team_note:")
+        .unwrap_or(note_id)
+        .to_string();
+
+    db.query("UPDATE type::record('team_note', $note_key) SET pinned = $pinned")
+        .bind(("note_key", note_key))
+        .bind(("pinned", pinned))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_team_note(db: &Surreal<Db>, note_id: &str) -> DbResult<()> {
+    let note_key = note_id
+        .strip_prefix("team_note:")
+        .unwrap_or(note_id)
+        .to_string();
+
+    db.query("DELETE type::record('team_note', $note_key)")
+        .bind(("note_key", note_key))
+        .await?
+        .check()?;
+    Ok(())
 }
 
 #[cfg(test)]

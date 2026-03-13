@@ -8,11 +8,13 @@ use leptos_router::{
 use crate::components::nav::Nav;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
+    action_items::ActionItemsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
     draft::DraftPage,
     game_plan::GamePlanPage,
     home::HomePage,
+    opponents::OpponentsPage,
     post_game::PostGamePage,
     profile::ProfilePage,
     stats::StatsPage,
@@ -65,6 +67,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/team-builder") view=TeamBuilderPage />
                     <Route path=path!("/game-plan") view=GamePlanPage />
                     <Route path=path!("/post-game") view=PostGamePage />
+                    <Route path=path!("/opponents") view=OpponentsPage />
+                    <Route path=path!("/action-items") view=ActionItemsPage />
                 </Routes>
             </main>
         </Router>
