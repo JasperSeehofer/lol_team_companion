@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — "Closed Loop" Milestone
+
+- **Opponent Profiles & Scouting Hub**: New `/opponents` page with opponent CRUD, 5 player slots per opponent, "Fetch Champions" button to pull recent picks from Riot API, `opponent` + `opponent_player` DB tables
+- **Draft Intelligence**: Collapsible Intel sidebar on draft page with 3 tabs — Our Pools (team starters' champion pools by tier), Their Picks (opponent players' recent champions, grayed out if drafted), Matchups (team members' matchup notes for selected champion)
+- **Fearless Draft & Series Management**: Series mode on draft page (Bo1/Bo3/Bo5), fearless toggle that grays out champions picked in prior games, game number tabs, `series` DB table, `series_id`/`game_number` fields on drafts
+- **Per-Champion Stats**: Match history aggregated per champion (games, wins, KDA) shown as badges on champion pool cards and in draft Intel panel
+- **Action Item Tracking**: New `/action-items` page with status filters (open/in_progress/done), assignee dropdown, quick stats header; dashboard widget showing open item count + top 3 items; `action_item` DB table
+- **Game Day Flow**: Pre-game checklist section on game plan page with reusable templates, progress bar, auto-save; "Start Post-Game Review" button that creates a review pre-linked to the plan/draft; linked plan summary card on post-game page; `checklist_template` + `checklist_instance` DB tables
+- **Team Builder**: Full rewrite of placeholder page — 5 role slots filtered to each starter's champion pool, auto-computed composition tags, opponent intel section, "Save as Draft" button
+- **Draft Tendency Heatmap**: Table on draft page showing champion pick/ban frequency across all 20 draft positions with predictable pattern warnings (70%+ same slot)
+- **Win Condition Tracker**: Strategy tag selector on game plan page with historical win rate display per tag
+- **Draft Outcome Correlation**: Analytics panel on draft page showing blue/red side win rates, composition tag win rates, first pick champion win rates
+- **Team Notebook**: Shared notes on team dashboard with pin/unpin, edit/delete (author-only), author avatars, expand/collapse view; `team_note` DB table
+- `win_condition_tag` field on `game_plan` table for strategy tagging
+
 ### Added
 
 - Context7 MCP server for live library documentation lookup (Leptos, SurrealDB, Axum, etc.)

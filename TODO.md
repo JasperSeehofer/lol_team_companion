@@ -43,7 +43,7 @@
 - [ ] **Drag-and-drop roster management**: Players in bench/coach/starter slots draggable between slots. Show role selector on drop into starter slot.
 
 #### Team Builder
-- [ ] **Placeholder page**: `/team-builder` shows placeholder text — needs actual composition builder implementation or should be hidden from nav until ready.
+- [x] **Placeholder page**: `/team-builder` fully implemented — composition builder with pool-filtered role slots, auto-tags, opponent intel, save as draft.
 
 ---
 
@@ -59,14 +59,14 @@ Replace single textarea with structured fields per champion (informed by researc
 - [x] **Teamfight role & positioning notes**
 
 #### Draft Tools
-- [ ] **Fearless draft mode**: Track previously picked/banned champions across a series (BO3/BO5), gray them out in subsequent games
-- [ ] **Series-level draft grouping**: Group multiple drafts into a "series" with a single shareable view
-- [ ] **Matchup context inline**: Show basic counter/synergy info when a champion is picked
+- [x] **Fearless draft mode**: Series mode with fearless toggle — champions from prior games grayed out in picker
+- [x] **Series-level draft grouping**: Series table with Bo1/Bo3/Bo5 format, game number tabs, linked drafts
+- [x] **Matchup context inline**: Intel sidebar Matchups tab surfaces team members' notes when champion selected
 - [x] **Ban priority list**: Collapsible panel with ranked champion list, add/remove entries with reason, save/cancel edit mode
 - [ ] **Saved counter-picks**: Per champion, "our go-to answers" as a quick-reference overlay during draft phase
 
 #### Stats
-- [ ] **Per-champion stats breakdown**: Top 5 played champions per player with win rate, avg KDA, avg CS/min
+- [x] **Per-champion stats breakdown**: Stats badges on pool cards + Intel panel (games, win%, KDA)
 - [ ] **Win/loss streak indicator**: Visual W/L streak on the match list
 - [ ] **Aggregate graphs**: Line chart of team win rate over time; bar chart of most played champions together
 
@@ -75,8 +75,8 @@ Replace single textarea with structured fields per champion (informed by researc
 - [ ] **Template from champion pool**: Pre-fill role strategy fields from selected champion's notes
 
 #### Scouting & Opponent Prep
-- [ ] **Opponent team profile**: Fill in enemy roster (5 summoner names), auto-fetch their recent champion picks from Riot API. Link to game plan.
-- [ ] **Champion matchup notes integration**: Surface champion pool matchup notes during draft when facing specific opponents
+- [x] **Opponent team profile**: `/opponents` page with 5 player slots, Riot API champion fetch, linked from draft/game plan
+- [x] **Champion matchup notes integration**: Intel sidebar Matchups tab on draft page surfaces notes during draft
 - [ ] **Patch tracking**: Record which patch each game was played on, show patch label on match cards, filter by patch
 
 ---
@@ -85,7 +85,7 @@ Replace single textarea with structured fields per champion (informed by researc
 
 #### Champion Pool
 - [ ] **Initial pool from Riot API**: Fetch champion mastery/recent ranked history on first link, suggest initial pool with confirmation dialog
-- [ ] **Per-champion stats inline**: Show win rate, KDA, games played on each champion card
+- [x] **Per-champion stats inline**: Stats badges on champion pool cards (games, win%, KDA)
 - [ ] **Role filter tab "All"**: Tab showing entire pool across all roles
 - [ ] **Tier description tooltips**: Small (?) next to each tier name explaining its meaning
 
@@ -100,7 +100,7 @@ Replace single textarea with structured fields per champion (informed by researc
 
 #### Practice & Scheduling
 - [ ] **Scrim log**: Log scrimmage results (opponent, score, date, format) linked to drafts and post-game reviews
-- [ ] **Pre-game checklist**: Customisable checklist before matches ("Reviewed ban pattern", "Agreed on win condition")
+- [x] **Pre-game checklist**: Checklist section on game plan page with reusable templates, progress bar, auto-save
 - [ ] **Practice priority queue**: Mark 1-3 champions per role as "focus this week", shown on dashboard
 
 #### Draft Tools
@@ -109,7 +109,7 @@ Replace single textarea with structured fields per champion (informed by researc
 
 #### Communication
 - [ ] **VoD link on post-game**: Attach YouTube/Twitch timestamp links with per-timestamp notes
-- [ ] **Team announcements**: Pinboard on dashboard for leader to post short text announcements
+- [x] **Team announcements**: Team Notebook on dashboard with pinned notes, add/edit/delete, author avatars
 
 ---
 
@@ -119,7 +119,7 @@ Replace single textarea with structured fields per champion (informed by researc
 - [ ] **Export draft as image**: Screenshot draft board as PNG for Discord sharing
 - [ ] **Export tree as PDF/image**: For sharing scouting reports
 - [ ] **Match timeline mini-graph**: Gold/XP lead chart per match (Riot timeline endpoint)
-- [ ] **Post-game link from game plan**: Prompt to create linked post-game review after completing a game plan
+- [x] **Post-game link from game plan**: "Start Post-Game Review" button on game plan creates pre-linked review
 
 ---
 

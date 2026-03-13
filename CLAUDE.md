@@ -116,6 +116,8 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 | `/champion-pool`   | ChampionPoolPage | Yes           |
 | `/game-plan`       | GamePlanPage     | Yes           |
 | `/post-game`       | PostGamePage     | Yes           |
+| `/opponents`       | OpponentsPage    | Yes           |
+| `/action-items`    | ActionItemsPage  | Yes           |
 
 ## Critical Patterns and Gotchas
 
