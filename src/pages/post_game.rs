@@ -273,6 +273,14 @@ pub fn PostGamePage() -> impl IntoView {
         }
     });
 
+    // URL query params
+    use leptos_router::hooks::use_query_map;
+    let query = use_query_map();
+    let url_review_id = move || query.read().get("review_id");
+    let url_plan_id = move || query.read().get("plan_id");
+    let url_draft_id = move || query.read().get("draft_id");
+    let (url_review_loaded, set_url_review_loaded) = signal(false);
+
     let reviews = Resource::new(|| (), |_| list_reviews());
     let plans = Resource::new(|| (), |_| list_plans_for_postgame());
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
@@ -309,6 +317,37 @@ pub fn PostGamePage() -> impl IntoView {
         set_action_items.set(r.action_items.join("\n"));
         set_open_notes.set(r.open_notes.clone().unwrap_or_default());
     };
+
+    // URL param: auto-load review when ?review_id=X is present
+    Effect::new(move |_| {
+        if url_review_loaded.get_untracked() {
+            return;
+        }
+        let Some(target_id) = url_review_id() else { return };
+        if let Some(Ok(list)) = reviews.get() {
+            if let Some(r) = list.iter().find(|r| r.id.as_deref() == Some(&target_id)) {
+                load_review(r);
+                set_url_review_loaded.set(true);
+            }
+        }
+    });
+
+    // URL param: seed plan_id and draft_id signals when present (for new review flows)
+    Effect::new(move |_| {
+        if url_review_loaded.get_untracked() {
+            return;
+        }
+        if let Some(pid) = url_plan_id() {
+            if game_plan_id.get_untracked().is_empty() {
+                set_game_plan_id.set(pid);
+            }
+        }
+        if let Some(did) = url_draft_id() {
+            if draft_id.get_untracked().is_empty() {
+                set_draft_id.set(did);
+            }
+        }
+    });
 
     let build_review = move || -> PostGameLearning {
         PostGameLearning {
@@ -522,6 +561,45 @@ pub fn PostGamePage() -> impl IntoView {
 
                 // Right: editor
                 <div class="flex-1 flex flex-col gap-5">
+                    // Back-reference badges (when a review is loaded)
+                    {move || {
+                        let gp_id = game_plan_id.get();
+                        let dr_id = draft_id.get();
+                        let has_refs = !gp_id.is_empty() || !dr_id.is_empty();
+                        if has_refs {
+                            view! {
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    {if !gp_id.is_empty() {
+                                        view! {
+                                            <a href="/game-plan"
+                                               class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors">
+                                                <span class="text-accent">"Game Plan"</span>
+                                            </a>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span></span> }.into_any()
+                                    }}
+                                    {move || {
+                                        let did = draft_id.get();
+                                        if did.is_empty() {
+                                            view! { <span></span> }.into_any()
+                                        } else {
+                                            view! {
+                                                <a
+                                                    href=format!("/draft?draft_id={did}")
+                                                    class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
+                                                >
+                                                    <span class="text-accent">"Draft"</span>
+                                                </a>
+                                            }.into_any()
+                                        }
+                                    }}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }
+                    }}
                     // Linking: match, game plan, draft
                     <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
                         <h3 class="text-primary font-semibold text-sm mb-3">"Link to..."</h3>
