@@ -2087,6 +2087,7 @@ pub fn DraftPage() -> impl IntoView {
                                             <button
                                                 class="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
                                                 on:click=move |_| {
+                                                    #[allow(unused_variables)]
                                                     let did3 = dr2.clone();
                                                     #[cfg(feature = "hydrate")]
                                                     if let Some(window) = web_sys::window() {
@@ -2397,12 +2398,13 @@ pub fn DraftPage() -> impl IntoView {
                                                                 <span class="text-muted">"A game plan already exists."</span>
                                                                 <div class="flex gap-1.5">
                                                                     <a href="/game-plan"
-                                                                       attr:class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded px-2 py-0.5 transition-colors">
+                                                                       class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded px-2 py-0.5 transition-colors">
                                                                         "View Game Plan"
                                                                     </a>
                                                                     <button
                                                                         class="bg-overlay hover:bg-overlay-strong text-secondary border border-outline/50 font-semibold rounded px-2 py-0.5 transition-colors"
                                                                         on:click=move |_| {
+                                                                            #[allow(unused_variables)]
                                                                             let did = cta_draft_id2.clone();
                                                                             #[cfg(feature = "hydrate")]
                                                                             if let Some(window) = web_sys::window() {
