@@ -41,7 +41,7 @@ Plans:
 **Goal:** Systematically test all app features with Playwright e2e tests to identify and document existing bugs
 **Requirements**: None (inserted testing phase)
 **Depends on:** Phase 1
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 01.1-01-PLAN.md — Fixtures extension + draft and tree-drafter audit (known bugs)

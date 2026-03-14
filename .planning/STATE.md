@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 01.1-playwright-bug-audit/01.1-01-PLAN.md
-last_updated: "2026-03-14T13:38:18.356Z"
+stopped_at: Completed 01.1-playwright-bug-audit/01.1-02-PLAN.md
+last_updated: "2026-03-14T13:51:28.970Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-pipeline-ctas P01 | 9 | 2 tasks | 4 files |
 | Phase 01-pipeline-ctas P03 | 30 | 2 tasks | 2 files |
 | Phase 01.1-playwright-bug-audit P01 | 17 | 3 tasks | 3 files |
+| Phase 01.1-playwright-bug-audit P02 | 10 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 01.1-playwright-bug-audit]: User-reported 'saved draft not in list' and 'tree switch unresponsive' bugs do not reproduce — tests converted to passing coverage with audit notes
 - [Phase 01.1-playwright-bug-audit]: New bug discovered: tree branch not visible in graph after add+save (nodes resource refetch issue)
 - [Phase 01.1-playwright-bug-audit]: teamPage fixture pattern: authenticatePage + createTeam as base for all team-scoped audit tests
+- [Phase 01.1-playwright-bug-audit]: Avoid redundant page.goto('/team/dashboard') in teamPage tests — fixture already lands there, second goto() times out due to pending WASM redirect Effects
+- [Phase 01.1-playwright-bug-audit]: AUDIT-FINDING pattern used for: no checklist UI on game-plan, no remove button on champion-pool, no role slots on dashboard — UI gaps logged as findings, not test failures
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T13:38:06.151Z
-Stopped at: Completed 01.1-playwright-bug-audit/01.1-01-PLAN.md
+Last session: 2026-03-14T13:51:28.962Z
+Stopped at: Completed 01.1-playwright-bug-audit/01.1-02-PLAN.md
 Resume file: None
