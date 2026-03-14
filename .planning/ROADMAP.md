@@ -58,7 +58,12 @@ Plans:
   3. Champion name normalization function is applied at all ingestion points so cross-feature joins on champion names return correct results
   4. All new queries return `Ok(empty)` rather than `Err` when the team has no data
   5. Integration tests cover each new query function
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Normalization utility, model structs, autocomplete canonical ID fix
+- [ ] 02-02-PLAN.md — Dashboard summary query, champion performance queries, pool gap analysis, migration
+- [ ] 02-03-PLAN.md — Page-level autocomplete enforcement, startup migration wiring
 
 **Note:** Phase 2 has no direct v1 requirement assigned because it is a pure infrastructure phase whose outputs are consumed by Phases 3, 4, and 5. Skipping it is not possible — the upstream v1 requirements (INTL-01, PIPE-03, PIPE-04, INTL-02, PIPE-02) all depend on these queries.
 
@@ -105,7 +110,7 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Pipeline CTAs | 3/3 | Complete   | 2026-03-14 |
 | 1.1 Playwright Bug Audit | 3/3 | Complete   | 2026-03-14 |
-| 2. Aggregation Layer | 0/TBD | Not started | - |
+| 2. Aggregation Layer | 0/3 | Planning complete | - |
 | 3. Smart Dashboard | 0/TBD | Not started | - |
 | 4. Inline Intel | 0/TBD | Not started | - |
 | 5. Post-Game Loop + Polish | 0/TBD | Not started | - |
