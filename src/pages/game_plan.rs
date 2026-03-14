@@ -141,6 +141,55 @@ pub async fn get_champions_for_game_plan() -> Result<Vec<Champion>, ServerFnErro
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+/// Fetch a draft with its actions by ID, for prefilling a new game plan.
+/// Returns None if the draft does not exist.
+#[server]
+pub async fn get_draft_for_prefill(
+    draft_id: String,
+) -> Result<Option<crate::models::draft::Draft>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::get_draft_for_prefill(&surreal, &draft_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+/// Check whether any game plan already references the given draft ID.
+/// Returns Some(plan_id) if at least one plan exists, or None if none do.
+/// Used for duplicate detection in the "Prep for This Draft" CTA.
+#[server]
+pub async fn check_draft_has_game_plan(
+    draft_id: String,
+) -> Result<Option<String>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let plans = db::get_game_plans_for_draft(&surreal, &draft_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(plans.into_iter().next().and_then(|p| p.id))
+}
+
 #[server]
 pub async fn get_checklist_templates() -> Result<Vec<ChecklistTemplate>, ServerFnError> {
     use crate::server::auth::AuthSession;
