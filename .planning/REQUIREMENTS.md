@@ -60,21 +60,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PIPE-01 | — | Pending |
-| PIPE-02 | — | Pending |
-| PIPE-03 | — | Pending |
-| PIPE-04 | — | Pending |
-| INTL-01 | — | Pending |
-| INTL-02 | — | Pending |
-| UX-01 | — | Pending |
-| UX-02 | — | Pending |
-| UX-03 | — | Pending |
+| PIPE-01 | Phase 1 | Pending |
+| PIPE-02 | Phase 5 | Pending |
+| PIPE-03 | Phase 4 | Pending |
+| PIPE-04 | Phase 4 | Pending |
+| INTL-01 | Phase 3 | Pending |
+| INTL-02 | Phase 4 | Pending |
+| UX-01 | Phase 5 | Pending |
+| UX-02 | Phase 5 | Pending |
+| UX-03 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 9 total
-- Mapped to phases: 0
-- Unmapped: 9 ⚠️
+- Mapped to phases: 9
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-14*
-*Last updated: 2026-03-14 after initial definition*
+*Last updated: 2026-03-14 after roadmap creation*
