@@ -1755,6 +1755,47 @@ pub async fn delete_game_plan(db: &Surreal<Db>, plan_id: &str) -> DbResult<()> {
     Ok(())
 }
 
+/// Fetch a single draft with its actions for prefilling a game plan.
+/// Returns `None` if no draft with the given ID exists.
+pub async fn get_draft_for_prefill(
+    db: &Surreal<Db>,
+    draft_id: &str,
+) -> DbResult<Option<Draft>> {
+    let draft_key = draft_id
+        .strip_prefix("draft:")
+        .unwrap_or(draft_id)
+        .to_string();
+    let mut result = db
+        .query("SELECT * FROM type::record('draft', $draft_key); SELECT * FROM draft_action WHERE draft = type::record('draft', $draft_key) ORDER BY `order` ASC")
+        .bind(("draft_key", draft_key))
+        .await?;
+    let db_drafts: Vec<DbDraft> = result.take(0).unwrap_or_default();
+    let db_actions: Vec<DbDraftAction> = result.take(1).unwrap_or_default();
+
+    match db_drafts.into_iter().next() {
+        None => Ok(None),
+        Some(db_draft) => {
+            let mut draft = Draft::from(db_draft);
+            draft.actions = db_actions.into_iter().map(DraftAction::from).collect();
+            Ok(Some(draft))
+        }
+    }
+}
+
+/// Find all game plans that reference the given draft ID.
+/// The `game_plan.draft` field stores the full record ID string (e.g. `"draft:abc123"`).
+pub async fn get_game_plans_for_draft(
+    db: &Surreal<Db>,
+    draft_id: &str,
+) -> DbResult<Vec<GamePlan>> {
+    let mut r = db
+        .query("SELECT * FROM game_plan WHERE draft = $draft_id ORDER BY created_at DESC")
+        .bind(("draft_id", draft_id.to_string()))
+        .await?;
+    let rows: Vec<DbGamePlan> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(GamePlan::from).collect())
+}
+
 pub async fn save_post_game_learning(
     db: &Surreal<Db>,
     learning: PostGameLearning,
