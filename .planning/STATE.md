@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: "Checkpoint: 01-02 Task 2 human-verify (game plan prefill flow browser verification)"
-last_updated: "2026-03-14T21:52:54.988Z"
+stopped_at: Completed 01-pipeline-ctas-02-PLAN.md
+last_updated: "2026-03-14T22:42:44.979Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 6
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01.1-playwright-bug-audit P02 | 10 | 2 tasks | 5 files |
 | Phase 01.1-playwright-bug-audit P03 | 15 | 2 tasks | 3 files |
 | Phase 01-pipeline-ctas P02 | 15 | 1 tasks | 2 files |
+| Phase 01-pipeline-ctas P02 | 45 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting current work:
 - [Phase 01.1-playwright-bug-audit]: All tests pass without test.fail() — both user-reported bugs do not reproduce; BUG-001 tree branch visibility is new discovery
 - [Phase 01-pipeline-ctas]: prefill_applied guard prevents re-seeding when auto-save or other Effects re-trigger the prefill Effect
 - [Phase 01-pipeline-ctas]: Back-reference badge deep-links to /draft?draft_id={id} so Plan 01-03 URL param handler auto-selects the correct draft
+- [Phase 01-pipeline-ctas]: prefill_applied guard prevents re-seeding when auto-save or other Effects re-trigger the prefill Effect
+- [Phase 01-pipeline-ctas]: Back-reference badge deep-links to /draft?draft_id={id} so Plan 01-03 URL param handler auto-selects the correct draft
+- [Phase 01-pipeline-ctas]: Champion lock applies only to our team picks; enemy champions remain freely editable
 
 ### Pending Todos
 
@@ -95,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T21:52:54.977Z
-Stopped at: Checkpoint: 01-02 Task 2 human-verify (game plan prefill flow browser verification)
+Last session: 2026-03-14T22:42:44.975Z
+Stopped at: Completed 01-pipeline-ctas-02-PLAN.md
 Resume file: None
