@@ -29,7 +29,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User can click "Write post-game review" from a game plan page and arrive at the post-game page pre-linked to that plan
   3. Game plan created from a draft retains a visible reference to the source draft
   4. Navigating to `/game-plan?draft_id=X` directly (e.g. bookmarked) correctly pre-fills from that draft
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — DB queries for draft prefill and game plan lookup
+- [ ] 01-02-PLAN.md — Game plan page prefill, champion lock, badges, link dropdown
+- [ ] 01-03-PLAN.md — Draft page CTAs, post-game badges, pipeline wiring
 
 ### Phase 2: Aggregation Layer
 **Goal**: Cross-table intelligence queries exist and are validated, ready to power UI panels
@@ -86,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Pipeline CTAs | 0/TBD | Not started | - |
+| 1. Pipeline CTAs | 0/3 | Planning complete | - |
 | 2. Aggregation Layer | 0/TBD | Not started | - |
 | 3. Smart Dashboard | 0/TBD | Not started | - |
 | 4. Inline Intel | 0/TBD | Not started | - |
