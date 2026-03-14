@@ -500,6 +500,24 @@ pub fn GamePlanPage() -> impl IntoView {
         }
     });
 
+    // URL query param: ?draft_id=X for prefill
+    use leptos_router::hooks::use_query_map;
+    let query = use_query_map();
+
+    // Prefill Resource keyed on draft_id query param
+    let prefill_data = Resource::new(
+        move || query.read().get("draft_id"),
+        |draft_id_opt| async move {
+            match draft_id_opt {
+                Some(id) if !id.is_empty() => get_draft_for_prefill(id).await,
+                _ => Ok(None),
+            }
+        },
+    );
+
+    let prefill_applied = RwSignal::new(false);
+    let (champs_locked, set_champs_locked) = signal(false);
+
     let plans = Resource::new(|| (), |_| list_plans());
     let drafts = Resource::new(|| (), |_| list_team_drafts());
     let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
@@ -521,6 +539,56 @@ pub fn GamePlanPage() -> impl IntoView {
     let (notes, set_notes) = signal(String::new());
     let (win_condition_tag, set_win_condition_tag) = signal(String::new());
     let strategy_win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
+
+    // Prefill Effect: seed editor from draft when ?draft_id=X is set
+    let our_sigs_for_prefill = our_champ_signals.clone();
+    let enemy_sigs_for_prefill = enemy_champ_signals.clone();
+    Effect::new(move |_| {
+        if prefill_applied.get() {
+            return;
+        }
+        if let Some(Ok(Some(draft))) = prefill_data.get() {
+            let our_side = draft.our_side.clone();
+            let enemy_side = if our_side == "blue" { "red" } else { "blue" };
+            let mut our_picks: Vec<String> = draft
+                .actions
+                .iter()
+                .filter(|a| a.side == our_side && a.phase.contains("pick"))
+                .map(|a| a.champion.clone())
+                .collect();
+            let mut enemy_picks: Vec<String> = draft
+                .actions
+                .iter()
+                .filter(|a| a.side == enemy_side && a.phase.contains("pick"))
+                .map(|a| a.champion.clone())
+                .collect();
+            our_picks.resize(5, String::new());
+            enemy_picks.resize(5, String::new());
+            for (i, s) in our_sigs_for_prefill.iter().enumerate() {
+                s.set(our_picks[i].clone());
+            }
+            for (i, s) in enemy_sigs_for_prefill.iter().enumerate() {
+                s.set(enemy_picks[i].clone());
+            }
+            // Seed other fields from draft
+            if let Some(wc) = &draft.win_conditions {
+                if !wc.is_empty() {
+                    set_win_conditions.set(wc.clone());
+                }
+            }
+            if let Some(n) = &draft.notes {
+                if !n.is_empty() {
+                    set_notes.set(n.clone());
+                }
+            }
+            // Set draft FK so the plan saves with the link
+            if let Some(did) = &draft.id {
+                set_draft_id.set(did.clone());
+            }
+            prefill_applied.set(true);
+            set_champs_locked.set(true);
+        }
+    });
 
     // Clear editor (Callback is Copy, safe in multiple closures)
     let our_champ_signals_clone = our_champ_signals.clone();
@@ -917,6 +985,34 @@ pub fn GamePlanPage() -> impl IntoView {
                 <div class="flex-1 flex flex-col gap-5">
                     // Plan name + draft link
                     <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
+                        // Back-reference badge: shown when a draft is linked
+                        {move || {
+                            let did = draft_id.get();
+                            if did.is_empty() {
+                                view! { <span></span> }.into_any()
+                            } else {
+                                view! {
+                                    <div class="flex items-center gap-2">
+                                        <a
+                                            href=format!("/draft?draft_id={did}")
+                                            class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
+                                        >
+                                            <span class="text-accent">"Source Draft"</span>
+                                            <span class="text-dimmed">"- click to open"</span>
+                                        </a>
+                                        {move || if champs_locked.get() {
+                                            view! {
+                                                <span class="text-xs text-muted bg-surface border border-outline/30 rounded px-2 py-0.5">
+                                                    "Champions pre-filled from draft"
+                                                </span>
+                                            }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }}
+                                    </div>
+                                }.into_any()
+                            }
+                        }}
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-muted text-xs font-medium mb-1">"Plan Name"</label>
@@ -1002,18 +1098,45 @@ pub fn GamePlanPage() -> impl IntoView {
                                         <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
                                             // Our team
                                             <div class="flex flex-col gap-2">
-                                                <span class="text-blue-400 text-xs font-semibold uppercase">"Your Team"</span>
+                                                <div class="flex items-center justify-between">
+                                                    <span class="text-blue-400 text-xs font-semibold uppercase">"Your Team"</span>
+                                                    {move || if champs_locked.get() {
+                                                        view! {
+                                                            <button
+                                                                class="text-muted hover:text-accent text-xs transition-colors"
+                                                                on:click=move |_| set_champs_locked.set(false)
+                                                            >"Edit"</button>
+                                                        }.into_any()
+                                                    } else {
+                                                        view! { <span></span> }.into_any()
+                                                    }}
+                                                </div>
                                                 {our_sigs.iter().enumerate().map(|(i, sig)| {
                                                     let role = ROLES[i];
-                                                    let champs = champ_list.clone();
+                                                    let champs_locked_branch = champ_list.clone();
+                                                    let sig_for_lock = *sig;
                                                     view! {
                                                         <div class="flex items-center gap-2">
                                                             <span class="text-dimmed text-xs w-14">{role}</span>
-                                                            <ChampionAutocomplete
-                                                                champions=champs
-                                                                value=*sig
-                                                                placeholder=role
-                                                            />
+                                                            {move || {
+                                                                let champs_for_input = champs_locked_branch.clone();
+                                                                if champs_locked.get() {
+                                                                    let val = sig_for_lock.get();
+                                                                    view! {
+                                                                        <div class="flex-1 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm">
+                                                                            {if val.is_empty() { "-".to_string() } else { val }}
+                                                                        </div>
+                                                                    }.into_any()
+                                                                } else {
+                                                                    view! {
+                                                                        <ChampionAutocomplete
+                                                                            champions=champs_for_input
+                                                                            value=sig_for_lock
+                                                                            placeholder=role
+                                                                        />
+                                                                    }.into_any()
+                                                                }
+                                                            }}
                                                         </div>
                                                     }
                                                 }).collect_view()}
@@ -1219,10 +1342,13 @@ pub fn GamePlanPage() -> impl IntoView {
                                             let did = draft_for_review.clone();
                                             leptos::task::spawn_local(async move {
                                                 match start_post_game_review(pid, did).await {
-                                                    Ok(_review_id) => {
+                                                    #[allow(unused_variables)]
+                                                    Ok(review_id) => {
                                                         #[cfg(feature = "hydrate")]
                                                         if let Some(window) = web_sys::window() {
-                                                            let _ = window.location().set_href("/post-game");
+                                                            let _ = window.location().set_href(
+                                                                &format!("/post-game?review_id={review_id}")
+                                                            );
                                                         }
                                                     }
                                                     Err(e) => {

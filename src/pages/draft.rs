@@ -6,6 +6,7 @@ use crate::models::draft::{BanPriority, Draft, DraftAction};
 use crate::models::opponent::OpponentPlayer;
 use crate::models::series::Series;
 use crate::models::team::Team;
+use crate::pages::game_plan::check_draft_has_game_plan;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -543,6 +544,44 @@ pub async fn get_draft_analytics() -> Result<DraftAnalytics, ServerFnError> {
     })
 }
 
+/// Batch-fetch the number of game plans referencing each draft for the user's team.
+/// Returns a list of (draft_id, count) pairs for drafts that have at least one game plan.
+#[server]
+pub async fn get_draft_game_plan_counts() -> Result<Vec<(String, usize)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    let plans = db::list_game_plans(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for plan in &plans {
+        if let Some(ref draft_id) = plan.draft_id {
+            *counts.entry(draft_id.clone()).or_default() += 1;
+        }
+    }
+
+    Ok(counts.into_iter().collect())
+}
+
 fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .into_iter()
@@ -682,6 +721,20 @@ pub fn DraftPage() -> impl IntoView {
     let tendency_data = Resource::new(|| (), |_| get_draft_tendency_data());
     let analytics_data = Resource::new(|| (), |_| get_draft_analytics());
 
+    // Pipeline CTAs: game plan count badges per draft
+    let game_plan_counts = Resource::new(|| (), |_| get_draft_game_plan_counts());
+
+    // Pipeline CTAs: duplicate prompt (draft_id, existing_plan_id) when "Prep for This Draft"
+    // detects an existing game plan
+    let (duplicate_prompt, set_duplicate_prompt) = signal(Option::<(String, String)>::None);
+    let (cta_loading, set_cta_loading) = signal(false);
+    let (cta_status, set_cta_status) = signal(Option::<String>::None);
+
+    // URL param auto-load: ?draft_id=X deep-links to a specific draft
+    use leptos_router::hooks::use_query_map;
+    let query = use_query_map();
+    let (url_draft_loaded, set_url_draft_loaded) = signal(false);
+
     // Auto-select first team when resource loads
     Effect::new(move |_| {
         if let Some(Ok(teams)) = teams_resource.get() {
@@ -689,6 +742,62 @@ pub fn DraftPage() -> impl IntoView {
                 if let Some(first) = teams.first() {
                     set_selected_team_id.set(first.id.clone().unwrap_or_default());
                 }
+            }
+        }
+    });
+
+    // URL param auto-load: when ?draft_id=X is present, load that draft once the draft list resolves
+    Effect::new(move |_| {
+        let param_id = query.read().get("draft_id");
+        let Some(target_id) = param_id else { return };
+        if url_draft_loaded.get_untracked() {
+            return;
+        }
+        if let Some(Ok(list)) = drafts.get() {
+            if let Some(d) = list.iter().find(|d| d.id.as_deref() == Some(&target_id)) {
+                let d_id = d.id.clone();
+                let d_name = d.name.clone();
+                let d_opp = d.opponent.clone().unwrap_or_default();
+                let d_comments = d.comments.clone();
+                let d_actions = d.actions.clone();
+                let d_team_id = d.team_id.clone();
+                let d_rating = d.rating.clone();
+                let d_our_side = d.our_side.clone();
+                let d_tags = d.tags.clone();
+                let d_win_conditions = d.win_conditions.clone().unwrap_or_default();
+                let d_watch_out = d.watch_out.clone().unwrap_or_default();
+                let d_game_number = d.game_number;
+
+                set_loaded_draft_id.set(d_id);
+                set_draft_name.set(d_name);
+                set_opponent.set(d_opp);
+                set_selected_team_id.set(d_team_id);
+                set_rating.set(d_rating);
+                set_our_side.set(d_our_side);
+                set_comments.set(d_comments);
+                set_tags.set(d_tags);
+                set_win_conditions.set(d_win_conditions);
+                set_watch_out.set(d_watch_out);
+                set_save_result.set(None);
+                set_highlighted_slot.set(None);
+                let mut slots = vec![None::<String>; 20];
+                let mut sc = vec![None::<String>; 20];
+                for action in &d_actions {
+                    let o = action.order as usize;
+                    if o < 20 {
+                        slots[o] = Some(action.champion.clone());
+                        sc[o] = action.comment.clone();
+                    }
+                }
+                let next = (0..20).find(|&i| slots[i].is_none());
+                set_draft_slots.set(slots);
+                set_slot_comments.set(sc);
+                set_slot_comment_input.set(String::new());
+                set_active_slot.set(next);
+                if let Some(gn) = d_game_number {
+                    set_active_game_number.set(gn);
+                }
+                set_url_draft_loaded.set(true);
             }
         }
     });
@@ -1927,6 +2036,78 @@ pub fn DraftPage() -> impl IntoView {
                 {move || save_result.get().map(|msg| view! {
                     <div class="text-green-300 text-sm">{msg}</div>
                 })}
+                // Pipeline CTAs for loaded draft
+                {move || {
+                    let did = loaded_draft_id.get();
+                    if let Some(current_draft_id) = did {
+                        let draft_id_for_prep = current_draft_id.clone();
+                        let draft_id_for_review = current_draft_id.clone();
+                        let draft_id_for_review2 = current_draft_id.clone();
+                        view! {
+                            <div class="flex items-center gap-2 flex-wrap">
+                                // Prep for This Draft CTA
+                                <button
+                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors disabled:opacity-50"
+                                    disabled=move || cta_loading.get()
+                                    on:click=move |_| {
+                                        let did2 = draft_id_for_prep.clone();
+                                        set_cta_loading.set(true);
+                                        set_cta_status.set(None);
+                                        leptos::task::spawn_local(async move {
+                                            match check_draft_has_game_plan(did2.clone()).await {
+                                                Ok(None) => {
+                                                    set_cta_loading.set(false);
+                                                    #[cfg(feature = "hydrate")]
+                                                    if let Some(window) = web_sys::window() {
+                                                        let _ = window.location().set_href(&format!("/game-plan?draft_id={did2}"));
+                                                    }
+                                                }
+                                                Ok(Some(plan_id)) => {
+                                                    set_cta_loading.set(false);
+                                                    set_duplicate_prompt.set(Some((did2, plan_id)));
+                                                }
+                                                Err(e) => {
+                                                    set_cta_loading.set(false);
+                                                    set_cta_status.set(Some(format!("Error: {e}")));
+                                                }
+                                            }
+                                        });
+                                    }
+                                >"Prep for This Draft"</button>
+                                // Review This Game CTA (only when draft has linked game plans)
+                                {move || {
+                                    let bid = draft_id_for_review.clone();
+                                    let has_plan = game_plan_counts.get()
+                                        .and_then(|r| r.ok())
+                                        .and_then(|pairs| pairs.into_iter().find(|(id, _)| id == &bid).map(|(_, c)| c))
+                                        .unwrap_or(0) > 0;
+                                    if has_plan {
+                                        let dr2 = draft_id_for_review2.clone();
+                                        view! {
+                                            <button
+                                                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                                                on:click=move |_| {
+                                                    let did3 = dr2.clone();
+                                                    #[cfg(feature = "hydrate")]
+                                                    if let Some(window) = web_sys::window() {
+                                                        let _ = window.location().set_href(&format!("/post-game?draft_id={did3}"));
+                                                    }
+                                                }
+                                            >"Review This Game"</button>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span></span> }.into_any()
+                                    }
+                                }}
+                                {move || cta_status.get().map(|msg| view! {
+                                    <span class="text-red-400 text-sm">{msg}</span>
+                                })}
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }
+                }}
             </div>
 
             // Saved Drafts
@@ -1986,6 +2167,8 @@ pub fn DraftPage() -> impl IntoView {
                                 <div class="flex flex-col gap-2">
                                     {filtered.into_iter().map(|d| {
                                         let d_id = d.id.clone();
+                                        let d_id_for_cta = d.id.clone().unwrap_or_default();
+                                        let d_id_for_badge = d.id.clone().unwrap_or_default();
                                         let d_name = d.name.clone();
                                         let d_opp = d.opponent.clone().unwrap_or_default();
                                         let d_comments = d.comments.clone();
@@ -2055,6 +2238,25 @@ pub fn DraftPage() -> impl IntoView {
                                                         {display_tags.into_iter().map(|tag| {
                                                             view! { <span class="rounded px-1.5 py-0.5 text-xs font-medium bg-overlay-strong text-secondary">{tag}</span> }
                                                         }).collect_view()}
+                                                        // Game plan count badge
+                                                        {move || {
+                                                            let bid = d_id_for_badge.clone();
+                                                            let count = game_plan_counts.get()
+                                                                .and_then(|r| r.ok())
+                                                                .and_then(|pairs| pairs.into_iter().find(|(id, _)| id == &bid).map(|(_, c)| c))
+                                                                .unwrap_or(0);
+                                                            if count > 0 {
+                                                                let label = if count == 1 { "1 game plan".to_string() } else { format!("{count} game plans") };
+                                                                view! {
+                                                                    <a href="/game-plan"
+                                                                       class="bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-0.5 hover:text-primary hover:border-accent/50 transition-colors">
+                                                                        {label}
+                                                                    </a>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! { <span></span> }.into_any()
+                                                            }
+                                                        }}
                                                     </div>
                                                     // Icon summary: [blue bans] | [picks] | [red bans]
                                                     <div class="flex items-center gap-0.5 flex-wrap">
@@ -2182,6 +2384,75 @@ pub fn DraftPage() -> impl IntoView {
                                                 >
                                                     "Open"
                                                 </button>
+                                                // "Prep for This Draft" CTA or duplicate prompt
+                                                {move || {
+                                                    let cta_draft_id = d_id_for_cta.clone();
+                                                    let prompt = duplicate_prompt.get();
+                                                    if prompt.as_ref().map(|(id, _)| id == &cta_draft_id).unwrap_or(false) {
+                                                        // Show duplicate prompt for this draft
+                                                        let (_, existing_plan_id) = prompt.unwrap();
+                                                        let cta_draft_id2 = cta_draft_id.clone();
+                                                        view! {
+                                                            <div class="flex-shrink-0 flex flex-col gap-1 bg-surface border border-outline/50 rounded-lg px-3 py-2 text-xs">
+                                                                <span class="text-muted">"A game plan already exists."</span>
+                                                                <div class="flex gap-1.5">
+                                                                    <a href="/game-plan"
+                                                                       attr:class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded px-2 py-0.5 transition-colors">
+                                                                        "View Game Plan"
+                                                                    </a>
+                                                                    <button
+                                                                        class="bg-overlay hover:bg-overlay-strong text-secondary border border-outline/50 font-semibold rounded px-2 py-0.5 transition-colors"
+                                                                        on:click=move |_| {
+                                                                            let did = cta_draft_id2.clone();
+                                                                            #[cfg(feature = "hydrate")]
+                                                                            if let Some(window) = web_sys::window() {
+                                                                                let _ = window.location().set_href(&format!("/game-plan?draft_id={did}"));
+                                                                            }
+                                                                            let _ = existing_plan_id.clone(); // consumed
+                                                                        }
+                                                                    >"Create New"</button>
+                                                                    <button
+                                                                        class="text-muted hover:text-primary text-xs px-1 transition-colors"
+                                                                        on:click=move |_| set_duplicate_prompt.set(None)
+                                                                    >"Cancel"</button>
+                                                                </div>
+                                                            </div>
+                                                        }.into_any()
+                                                    } else {
+                                                        let is_loading = cta_loading.get();
+                                                        let cta_draft_id3 = cta_draft_id.clone();
+                                                        view! {
+                                                            <button
+                                                                class="flex-shrink-0 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
+                                                                disabled=is_loading
+                                                                on:click=move |_| {
+                                                                    let did = cta_draft_id3.clone();
+                                                                    set_cta_loading.set(true);
+                                                                    set_cta_status.set(None);
+                                                                    leptos::task::spawn_local(async move {
+                                                                        match check_draft_has_game_plan(did.clone()).await {
+                                                                            Ok(None) => {
+                                                                                set_cta_loading.set(false);
+                                                                                #[cfg(feature = "hydrate")]
+                                                                                if let Some(window) = web_sys::window() {
+                                                                                    let _ = window.location().set_href(&format!("/game-plan?draft_id={did}"));
+                                                                                }
+                                                                            }
+                                                                            Ok(Some(plan_id)) => {
+                                                                                set_cta_loading.set(false);
+                                                                                set_duplicate_prompt.set(Some((did, plan_id)));
+                                                                            }
+                                                                            Err(e) => {
+                                                                                set_cta_loading.set(false);
+                                                                                set_cta_status.set(Some(format!("Error: {e}")));
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }
+                                                            >"Prep for This Draft"</button>
+                                                        }.into_any()
+                                                    }
+                                                }}
                                             </div>
                                         }
                                     }).collect_view()}
