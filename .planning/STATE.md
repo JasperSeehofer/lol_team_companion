@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 01-pipeline-ctas/01-01-PLAN.md
-last_updated: "2026-03-14T01:58:11.217Z"
+stopped_at: "Completed 01-pipeline-ctas/01-03-PLAN.md (awaiting checkpoint:human-verify)"
+last_updated: "2026-03-14T02:07:01.221Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01-pipeline-ctas P01 | 9 | 2 tasks | 4 files |
+| Phase 01-pipeline-ctas P03 | 30 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Recent decisions affecting current work:
 - Milestone: Desktop-first — competitive teams primarily prep on desktop
 - [Phase 01-pipeline-ctas]: game_plan.draft is option<string> (not record reference) — query uses full string match WHERE draft = $draft_id
 - [Phase 01-pipeline-ctas]: check_draft_has_game_plan returns Option<String> plan ID rather than bool for direct linking
+- [Phase 01-pipeline-ctas]: Review This Game from draft uses ?draft_id= navigation, not start_post_game_review, to avoid empty plan_id in review record
+- [Phase 01-pipeline-ctas]: Game plan counts batch-fetched via get_draft_game_plan_counts, grouped client-side by draft_id
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T01:58:11.211Z
-Stopped at: Completed 01-pipeline-ctas/01-01-PLAN.md
+Last session: 2026-03-14T02:07:01.217Z
+Stopped at: Completed 01-pipeline-ctas/01-03-PLAN.md (awaiting checkpoint:human-verify)
 Resume file: None
