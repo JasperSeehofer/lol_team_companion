@@ -12,7 +12,7 @@ This milestone transforms the app from a collection of siloed features into one 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Pipeline CTAs** - Wire draft → game plan navigation with FK pre-fill
+- [x] **Phase 1: Pipeline CTAs** - Wire draft → game plan navigation with FK pre-fill (completed 2026-03-14)
 - [ ] **Phase 2: Aggregation Layer** - Add cross-table intelligence queries to db.rs
 - [ ] **Phase 3: Smart Dashboard** - Surface prep priorities on team dashboard
 - [ ] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User can click "Write post-game review" from a game plan page and arrive at the post-game page pre-linked to that plan
   3. Game plan created from a draft retains a visible reference to the source draft
   4. Navigating to `/game-plan?draft_id=X` directly (e.g. bookmarked) correctly pre-fills from that draft
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 01-01-PLAN.md — DB queries for draft prefill and game plan lookup
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Pipeline CTAs | 2/3 | In Progress|  |
+| 1. Pipeline CTAs | 3/3 | Complete   | 2026-03-14 |
 | 1.1 Playwright Bug Audit | 3/3 | Complete   | 2026-03-14 |
 | 2. Aggregation Layer | 0/TBD | Not started | - |
 | 3. Smart Dashboard | 0/TBD | Not started | - |
