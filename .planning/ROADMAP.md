@@ -36,6 +36,18 @@ Plans:
 - [ ] 01-02-PLAN.md — Game plan page prefill, champion lock, badges, link dropdown
 - [ ] 01-03-PLAN.md — Draft page CTAs, post-game badges, pipeline wiring
 
+### Phase 01.1: Playwright bug audit — identify and document existing bugs across all features (INSERTED)
+
+**Goal:** Systematically test all app features with Playwright e2e tests to identify and document existing bugs
+**Requirements**: None (inserted testing phase)
+**Depends on:** Phase 1
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01.1-01-PLAN.md — Fixtures extension + draft and tree-drafter audit (known bugs)
+- [ ] 01.1-02-PLAN.md — Game plan, post-game, champion pool, team, and misc pages audit
+- [ ] 01.1-03-PLAN.md — Full suite run, BUG-REPORT.md compilation, user review
+
 ### Phase 2: Aggregation Layer
 **Goal**: Cross-table intelligence queries exist and are validated, ready to power UI panels
 **Depends on**: Phase 1
@@ -87,11 +99,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Pipeline CTAs | 2/3 | In Progress|  |
+| 1.1 Playwright Bug Audit | 0/3 | Not started | - |
 | 2. Aggregation Layer | 0/TBD | Not started | - |
 | 3. Smart Dashboard | 0/TBD | Not started | - |
 | 4. Inline Intel | 0/TBD | Not started | - |
