@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: "Completed 01-pipeline-ctas/01-03-PLAN.md (awaiting checkpoint:human-verify)"
-last_updated: "2026-03-14T02:07:01.221Z"
+stopped_at: Completed 01.1-playwright-bug-audit/01.1-01-PLAN.md
+last_updated: "2026-03-14T13:38:18.356Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 0
-  total_plans: 3
-  completed_plans: 2
+  total_plans: 6
+  completed_plans: 3
   percent: 0
 ---
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01-pipeline-ctas P01 | 9 | 2 tasks | 4 files |
 | Phase 01-pipeline-ctas P03 | 30 | 2 tasks | 2 files |
+| Phase 01.1-playwright-bug-audit P01 | 17 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -67,10 +68,17 @@ Recent decisions affecting current work:
 - [Phase 01-pipeline-ctas]: check_draft_has_game_plan returns Option<String> plan ID rather than bool for direct linking
 - [Phase 01-pipeline-ctas]: Review This Game from draft uses ?draft_id= navigation, not start_post_game_review, to avoid empty plan_id in review record
 - [Phase 01-pipeline-ctas]: Game plan counts batch-fetched via get_draft_game_plan_counts, grouped client-side by draft_id
+- [Phase 01.1-playwright-bug-audit]: User-reported 'saved draft not in list' and 'tree switch unresponsive' bugs do not reproduce — tests converted to passing coverage with audit notes
+- [Phase 01.1-playwright-bug-audit]: New bug discovered: tree branch not visible in graph after add+save (nodes resource refetch issue)
+- [Phase 01.1-playwright-bug-audit]: teamPage fixture pattern: authenticatePage + createTeam as base for all team-scoped audit tests
 
 ### Pending Todos
 
 None yet.
+
+### Roadmap Evolution
+
+- Phase 01.1 inserted after Phase 1: Playwright bug audit — identify and document existing bugs across all features (URGENT)
 
 ### Blockers/Concerns
 
@@ -79,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T02:07:01.217Z
-Stopped at: Completed 01-pipeline-ctas/01-03-PLAN.md (awaiting checkpoint:human-verify)
+Last session: 2026-03-14T13:38:06.151Z
+Stopped at: Completed 01.1-playwright-bug-audit/01.1-01-PLAN.md
 Resume file: None
