@@ -27,20 +27,24 @@ pub fn ChampionAutocomplete(
         })
     };
 
-    let select_champion = move |name: String| {
-        value.set(name.clone());
-        set_filter_text.set(name.clone());
+    let select_champion = move |champ: Champion| {
+        value.set(champ.id.clone());           // store canonical Data Dragon ID
+        set_filter_text.set(champ.name.clone()); // display human-readable name
         set_open.set(false);
         if let Some(cb) = on_select {
-            cb.run(name);
+            cb.run(champ.id);   // callback receives canonical ID
         }
     };
 
-    // Sync filter_text when value changes externally
+    // Sync filter_text when value changes externally.
+    // If value is a canonical ID, look up and display the human name instead.
     Effect::new(move |_| {
         let v = value.get();
         if v != filter_text.get_untracked() {
-            set_filter_text.set(v);
+            let display = champions.with_value(|champs| {
+                champs.iter().find(|c| c.id == v).map(|c| c.name.clone())
+            });
+            set_filter_text.set(display.unwrap_or(v));
         }
     });
 
@@ -96,14 +100,14 @@ pub fn ChampionAutocomplete(
                     <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
                         {items.into_iter().map(|c| {
                             let name = c.name.clone();
-                            let name_for_click = name.clone();
                             let img = c.image_full.clone();
+                            let c_for_click = c.clone();
                             view! {
                                 <button
                                     class="w-full flex items-center gap-2 px-3 py-2 hover:bg-overlay transition-colors text-left cursor-pointer"
                                     on:mousedown=move |ev| {
                                         ev.prevent_default();
-                                        select_champion(name_for_click.clone());
+                                        select_champion(c_for_click.clone());
                                     }
                                 >
                                     <img src=img alt=name.clone() class="w-6 h-6 rounded object-cover" />
