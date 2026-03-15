@@ -100,6 +100,94 @@ test("team: dashboard shows roster slots", async ({ teamPage }) => {
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
+test("team: dashboard shows action items panel", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+
+  // teamPage fixture already lands on /team/dashboard after team creation.
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(500);
+
+  if (!page.url().includes("/team/dashboard")) {
+    await page.goto("/team/dashboard");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+  }
+
+  // Panel heading must be visible — hard assertion
+  const actionItemsHeading = page.locator("h3").filter({ hasText: /Open Action Items/i });
+  await expect(actionItemsHeading).toBeVisible({ timeout: 5000 });
+
+  // Check for empty state text or "View all" link to /action-items
+  const emptyState = page.locator('text=/No open action items/i').first();
+  const viewAllLink = page.locator('a[href*="/action-items"]').first();
+  const hasEmptyState = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
+  const hasViewAllLink = await viewAllLink.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!hasEmptyState && !hasViewAllLink) {
+    console.log("AUDIT-FINDING: Action items panel has no empty state text and no /action-items link");
+  }
+
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});
+
+test("team: dashboard shows post-game reviews panel", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(500);
+
+  if (!page.url().includes("/team/dashboard")) {
+    await page.goto("/team/dashboard");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+  }
+
+  // Panel heading must be visible — hard assertion
+  const reviewsHeading = page.locator("h3").filter({ hasText: /Recent Reviews/i });
+  await expect(reviewsHeading).toBeVisible({ timeout: 5000 });
+
+  // Check for empty state text or CTA link
+  const emptyState = page.locator('text=/No post-game reviews yet/i').first();
+  const ctaLink = page.locator('text=/Start your first review/i').first();
+  const hasEmptyState = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
+  const hasCtaLink = await ctaLink.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!hasEmptyState && !hasCtaLink) {
+    console.log("AUDIT-FINDING: Post-game reviews panel has no empty state text and no CTA link");
+  }
+
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});
+
+test("team: dashboard shows pool gap warnings panel", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(500);
+
+  if (!page.url().includes("/team/dashboard")) {
+    await page.goto("/team/dashboard");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+  }
+
+  // Panel heading must be visible — hard assertion
+  const poolGapHeading = page.locator("h3").filter({ hasText: /Pool Gap Warnings/i });
+  await expect(poolGapHeading).toBeVisible({ timeout: 5000 });
+
+  // Check for empty state text or CTA link
+  const emptyState = page.locator('text=/No pool gaps detected/i').first();
+  const ctaLink = page.locator('text=/Manage champion pools/i').first();
+  const hasEmptyState = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
+  const hasCtaLink = await ctaLink.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!hasEmptyState && !hasCtaLink) {
+    console.log("AUDIT-FINDING: Pool gap warnings panel has no empty state text and no CTA link");
+  }
+
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});
+
 test("team: join with invalid code shows error", async ({ authedPage }) => {
   const page = authedPage;
   const errors = captureErrors(page);
