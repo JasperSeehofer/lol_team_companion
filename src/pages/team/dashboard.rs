@@ -1172,6 +1172,97 @@ pub fn TeamDashboard() -> impl IntoView {
                                     </Suspense>
                                 </div>
 
+                                // Post-Game Summaries Panel
+                                <div>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h3 class="text-lg font-semibold text-primary">"Recent Reviews"</h3>
+                                        <A href="/post-game" attr:class="text-accent text-sm hover:underline">"View all reviews"</A>
+                                    </div>
+                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                        {move || post_game_panel.get().map(|result| match result {
+                                            Ok(previews) if previews.is_empty() => view! {
+                                                <p class="text-dimmed text-sm">
+                                                    "No post-game reviews yet. "
+                                                    <A href="/post-game" attr:class="text-accent hover:underline">"Start your first review"</A>
+                                                </p>
+                                            }.into_any(),
+                                            Ok(previews) => view! {
+                                                <div class="space-y-2">
+                                                    {previews.into_iter().map(|preview| {
+                                                        let extra = if preview.improvements.len() > 2 {
+                                                            Some(preview.improvements.len() - 2)
+                                                        } else {
+                                                            None
+                                                        };
+                                                        let top_improvements: Vec<String> = preview.improvements.into_iter().take(2).collect();
+                                                        view! {
+                                                            <div class="bg-elevated border border-divider rounded-lg p-3">
+                                                                {preview.created_at.map(|d| view! {
+                                                                    <p class="text-xs text-muted mb-1">{d}</p>
+                                                                })}
+                                                                {top_improvements.into_iter().map(|imp| view! {
+                                                                    <p class="text-sm text-secondary truncate">{imp}</p>
+                                                                }).collect_view()}
+                                                                {extra.map(|n| view! {
+                                                                    <p class="text-xs text-muted mt-1">{"+"}{n}{" more"}</p>
+                                                                })}
+                                                            </div>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any(),
+                                            Err(_) => view! {
+                                                <p class="text-dimmed text-sm">"Could not load post-game reviews."</p>
+                                            }.into_any(),
+                                        })}
+                                    </Suspense>
+                                </div>
+
+                                // Pool Gap Warnings Panel
+                                <div>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h3 class="text-lg font-semibold text-primary">"Pool Gap Warnings"</h3>
+                                        <A href="/champion-pool" attr:class="text-accent text-sm hover:underline">"Manage pools"</A>
+                                    </div>
+                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                        {move || pool_gap_panel.get().map(|result| match result {
+                                            Ok(warnings) if warnings.is_empty() => view! {
+                                                <p class="text-dimmed text-sm">
+                                                    "No pool gaps detected. "
+                                                    <A href="/champion-pool" attr:class="text-accent hover:underline">"Manage champion pools"</A>
+                                                </p>
+                                            }.into_any(),
+                                            Ok(warnings) => view! {
+                                                <div class="space-y-2">
+                                                    {warnings.into_iter().map(|warning| {
+                                                        let label = if warning.opponent_escalated {
+                                                            format!("{} ({}) — opponent threat", warning.username, warning.role)
+                                                        } else {
+                                                            format!("{} ({})", warning.username, warning.role)
+                                                        };
+                                                        let missing = warning.missing_classes.join(", ");
+                                                        view! {
+                                                            <div class="flex items-start gap-2 bg-elevated border border-divider rounded px-3 py-2">
+                                                                <span class="text-yellow-500 shrink-0 font-bold">"!"</span>
+                                                                <div>
+                                                                    <p class="text-primary text-sm">{label}</p>
+                                                                    <p class="text-xs text-muted">{"Missing: "}{missing}</p>
+                                                                    {warning.dominant_class.map(|dc| view! {
+                                                                        <span class="text-xs bg-surface text-muted rounded px-1.5 py-0.5">{"Dominant: "}{dc}</span>
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any(),
+                                            Err(_) => view! {
+                                                <p class="text-dimmed text-sm">"Could not load pool gap warnings."</p>
+                                            }.into_any(),
+                                        })}
+                                    </Suspense>
+                                </div>
+
                                 // Leave team (non-leaders only)
                                 {if !is_leader {
                                     view! {
