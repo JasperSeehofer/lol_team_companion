@@ -498,6 +498,64 @@ pub async fn get_open_action_items_summary(
     Ok((total, top3))
 }
 
+#[server]
+pub async fn get_post_game_panel() -> Result<Vec<crate::models::game_plan::PostGamePreview>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    let summary = db::get_dashboard_summary(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(summary.recent_post_games)
+}
+
+#[server]
+pub async fn get_pool_gap_panel() -> Result<Vec<crate::models::game_plan::PoolGapWarning>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    let summary = db::get_dashboard_summary(&surreal, &team_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(summary.pool_gap_warnings)
+}
+
 fn role_icon_url(role: &str) -> &'static str {
     match role {
         "top" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
@@ -525,6 +583,9 @@ pub fn TeamDashboard() -> impl IntoView {
     let dashboard = Resource::new(|| (), |_| get_team_dashboard());
     let requests = Resource::new(|| (), |_| get_pending_requests());
     let recent_matches = Resource::new(|| (), |_| get_recent_team_matches());
+    let action_items_res = Resource::new(|| (), |_| get_open_action_items_summary());
+    let post_game_panel = Resource::new(|| (), |_| get_post_game_panel());
+    let pool_gap_panel = Resource::new(|| (), |_| get_pool_gap_panel());
 
     view! {
         <div class="max-w-4xl mx-auto py-8 px-6">
@@ -1077,40 +1138,37 @@ pub fn TeamDashboard() -> impl IntoView {
                                         <A href="/action-items" attr:class="text-accent text-sm hover:underline">"View all \u{2192}"</A>
                                     </div>
                                     <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
-                                        {move || {
-                                            let action_items_res = Resource::new(|| (), |_| get_open_action_items_summary());
-                                            move || action_items_res.get().map(|result| match result {
-                                                Ok((total, top_items)) => {
-                                                    if total == 0 {
-                                                        view! {
-                                                            <p class="text-dimmed text-sm">"No open action items. "</p>
-                                                        }.into_any()
-                                                    } else {
-                                                        view! {
-                                                            <div class="space-y-2">
-                                                                <p class="text-secondary text-sm mb-2">{total}" open item(s)"</p>
-                                                                {top_items.into_iter().map(|item| {
-                                                                    let status_dot = match item.status.as_str() {
-                                                                        "in_progress" => "w-2 h-2 rounded-full bg-yellow-500 shrink-0",
-                                                                        _ => "w-2 h-2 rounded-full bg-green-500 shrink-0",
-                                                                    };
-                                                                    view! {
-                                                                        <div class="flex items-center gap-2 bg-elevated border border-divider rounded px-3 py-2">
-                                                                            <span class=status_dot></span>
-                                                                            <span class="text-primary text-sm truncate">{item.text}</span>
-                                                                            {item.assigned_to.map(|a| view! {
-                                                                                <span class="text-xs bg-surface text-muted rounded px-1.5 py-0.5 shrink-0">{a}</span>
-                                                                            })}
-                                                                        </div>
-                                                                    }
-                                                                }).collect_view()}
-                                                            </div>
-                                                        }.into_any()
-                                                    }
+                                        {move || action_items_res.get().map(|result| match result {
+                                            Ok((total, top_items)) => {
+                                                if total == 0 {
+                                                    view! {
+                                                        <p class="text-dimmed text-sm">"No open action items. "</p>
+                                                    }.into_any()
+                                                } else {
+                                                    view! {
+                                                        <div class="space-y-2">
+                                                            <p class="text-secondary text-sm mb-2">{total}" open item(s)"</p>
+                                                            {top_items.into_iter().map(|item| {
+                                                                let status_dot = match item.status.as_str() {
+                                                                    "in_progress" => "w-2 h-2 rounded-full bg-yellow-500 shrink-0",
+                                                                    _ => "w-2 h-2 rounded-full bg-green-500 shrink-0",
+                                                                };
+                                                                view! {
+                                                                    <div class="flex items-center gap-2 bg-elevated border border-divider rounded px-3 py-2">
+                                                                        <span class=status_dot></span>
+                                                                        <span class="text-primary text-sm truncate">{item.text}</span>
+                                                                        {item.assigned_to.map(|a| view! {
+                                                                            <span class="text-xs bg-surface text-muted rounded px-1.5 py-0.5 shrink-0">{a}</span>
+                                                                        })}
+                                                                    </div>
+                                                                }
+                                                            }).collect_view()}
+                                                        </div>
+                                                    }.into_any()
                                                 }
-                                                Err(_) => view! { <p class="text-dimmed text-sm">"Could not load action items."</p> }.into_any(),
-                                            })
-                                        }}
+                                            }
+                                            Err(_) => view! { <p class="text-dimmed text-sm">"Could not load action items."</p> }.into_any(),
+                                        })}
                                     </Suspense>
                                 </div>
 
