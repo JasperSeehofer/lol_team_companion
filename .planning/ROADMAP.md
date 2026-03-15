@@ -77,7 +77,11 @@ Plans:
   3. Dashboard shows champion pool gap warnings when a player has no coverage for a lane appearing in recent drafts
   4. Each dashboard panel loads independently (one slow query does not block others from rendering)
   5. New teams with no data see empty states with contextual guidance CTAs, not blank panels
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Server functions for post-game and pool-gap panels, fix action items resource bug, add all three panel UIs
+- [ ] 03-02-PLAN.md — E2e tests for dashboard panels, visual verification checkpoint
 
 ### Phase 4: Inline Intel
 **Goal**: Draft planner and game plan pages surface contextual intelligence without disrupting existing workflows
@@ -111,6 +115,6 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 | 1. Pipeline CTAs | 3/3 | Complete   | 2026-03-14 |
 | 1.1 Playwright Bug Audit | 3/3 | Complete   | 2026-03-14 |
 | 2. Aggregation Layer | 0/3 | Planning complete | - |
-| 3. Smart Dashboard | 0/TBD | Not started | - |
+| 3. Smart Dashboard | 0/2 | Planning complete | - |
 | 4. Inline Intel | 0/TBD | Not started | - |
 | 5. Post-Game Loop + Polish | 0/TBD | Not started | - |
