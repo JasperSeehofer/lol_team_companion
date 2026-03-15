@@ -13,10 +13,10 @@ This milestone transforms the app from a collection of siloed features into one 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Pipeline CTAs** - Wire draft → game plan navigation with FK pre-fill (completed 2026-03-14)
-- [ ] **Phase 2: Aggregation Layer** - Add cross-table intelligence queries to db.rs
+- [x] **Phase 2: Aggregation Layer** - Add cross-table intelligence queries to db.rs (completed 2026-03-15)
 - [x] **Phase 3: Smart Dashboard** - Surface prep priorities on team dashboard (completed 2026-03-15)
-- [ ] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages
-- [ ] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide
+- [ ] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages (GAP CLOSURE)
+- [ ] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide (GAP CLOSURE)
 
 ## Phase Details
 
@@ -114,7 +114,7 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Pipeline CTAs | 3/3 | Complete   | 2026-03-14 |
 | 1.1 Playwright Bug Audit | 3/3 | Complete   | 2026-03-14 |
-| 2. Aggregation Layer | 0/3 | Planning complete | - |
+| 2. Aggregation Layer | 3/3 | Complete   | 2026-03-15 |
 | 3. Smart Dashboard | 2/2 | Complete   | 2026-03-15 |
-| 4. Inline Intel | 0/TBD | Not started | - |
-| 5. Post-Game Loop + Polish | 0/TBD | Not started | - |
+| 4. Inline Intel | 0/TBD | Gap closure | - |
+| 5. Post-Game Loop + Polish | 0/TBD | Gap closure | - |
