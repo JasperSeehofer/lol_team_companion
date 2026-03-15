@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-aggregation-layer-03-PLAN.md
-last_updated: "2026-03-15T07:42:53.956Z"
+stopped_at: Completed 03-smart-dashboard-01-PLAN.md
+last_updated: "2026-03-15T08:15:00.000Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 6
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-14)
 
 ## Current Position
 
-Phase: 1 of 5 (Pipeline CTAs)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-14 — Roadmap created
+Phase: 3 of 5 (Smart Dashboard)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-15 — Completed 03-01 smart dashboard panels
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-aggregation-layer P01 | 9 | 2 tasks | 3 files |
 | Phase 02-aggregation-layer P02 | 16 | 2 tasks | 1 files |
 | Phase 02-aggregation-layer P03 | 25 | 2 tasks | 4 files |
+| Phase 03-smart-dashboard P01 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,8 @@ Recent decisions affecting current work:
 - [Phase 02-aggregation-layer]: aggregate_champion_performance is a public pure function extracted for unit testability, called by both per-player and team-wide performance queries
 - [Phase 02-aggregation-layer]: champion_map keyed by c.id throughout tree_drafter (NodeEditor, LiveNavigator, graph) — slots store canonical IDs post Plan 01 so map keys must match
 - [Phase 02-aggregation-layer]: champion_picker drag data and is_used check use champion.id (not name) — used_champions list contains IDs from draft_slots
+- [Phase 03-smart-dashboard]: Action items Resource moved to component top-level (was inside Suspense closure — prevented independent loading)
+- [Phase 03-smart-dashboard]: Three separate Resources at component scope ensure three separate Suspense boundaries that load independently (panel pattern: server fn + Resource + Suspense + empty state CTA)
 
 ### Pending Todos
 
