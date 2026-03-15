@@ -58,6 +58,55 @@ pub struct ChecklistInstance {
     pub checked: Vec<bool>,
 }
 
+/// Aggregation summary for the dashboard widget.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+pub struct DashboardSummary {
+    pub open_action_item_count: usize,
+    pub recent_action_items: Vec<ActionItemPreview>,
+    pub recent_post_games: Vec<PostGamePreview>,
+    pub pool_gap_warnings: Vec<PoolGapWarning>,
+    pub drafts_without_game_plan: usize,
+    pub game_plans_without_post_game: usize,
+}
+
+/// Lightweight preview of a single action item for the dashboard.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ActionItemPreview {
+    pub id: String,
+    pub text: String,
+}
+
+/// Lightweight preview of a post-game learning record for the dashboard.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PostGamePreview {
+    pub id: String,
+    pub improvements: Vec<String>,
+    pub created_at: Option<String>,
+}
+
+/// Warning that a player's champion pool lacks coverage for a given role/class.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PoolGapWarning {
+    pub user_id: String,
+    pub username: String,
+    pub role: String,
+    pub dominant_class: Option<String>,
+    pub missing_classes: Vec<String>,
+    pub opponent_escalated: bool,
+}
+
+/// Cross-feature performance summary for a single champion.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+pub struct ChampionPerformanceSummary {
+    pub champion: String,
+    pub games_in_draft: usize,
+    pub games_in_match: usize,
+    pub wins_in_match: usize,
+    pub games_in_plan: usize,
+    pub post_game_wins: usize,
+    pub post_game_losses: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,6 +161,79 @@ mod tests {
         let json = serde_json::to_string(&plan).unwrap();
         let back: GamePlan = serde_json::from_str(&json).unwrap();
         assert_eq!(plan, back);
+    }
+
+    #[test]
+    fn dashboard_summary_default_round_trips() {
+        let summary = DashboardSummary::default();
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: DashboardSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(summary, back);
+        assert_eq!(back.open_action_item_count, 0);
+        assert_eq!(back.drafts_without_game_plan, 0);
+    }
+
+    #[test]
+    fn dashboard_summary_populated_round_trips() {
+        let summary = DashboardSummary {
+            open_action_item_count: 3,
+            recent_action_items: vec![
+                ActionItemPreview { id: "ai:1".into(), text: "Review baron fight".into() },
+            ],
+            recent_post_games: vec![
+                PostGamePreview {
+                    id: "pg:1".into(),
+                    improvements: vec!["Better vision control".into()],
+                    created_at: Some("2026-03-14T20:00:00Z".into()),
+                },
+            ],
+            pool_gap_warnings: vec![
+                PoolGapWarning {
+                    user_id: "user:u1".into(),
+                    username: "Player1".into(),
+                    role: "top".into(),
+                    dominant_class: Some("Fighter".into()),
+                    missing_classes: vec!["Tank".into()],
+                    opponent_escalated: true,
+                },
+            ],
+            drafts_without_game_plan: 2,
+            game_plans_without_post_game: 1,
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: DashboardSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(summary, back);
+    }
+
+    #[test]
+    fn champion_performance_summary_round_trips() {
+        let summary = ChampionPerformanceSummary {
+            champion: "Jinx".into(),
+            games_in_draft: 10,
+            games_in_match: 8,
+            wins_in_match: 5,
+            games_in_plan: 7,
+            post_game_wins: 4,
+            post_game_losses: 3,
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: ChampionPerformanceSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(summary, back);
+    }
+
+    #[test]
+    fn pool_gap_warning_round_trips() {
+        let w = PoolGapWarning {
+            user_id: "user:u1".into(),
+            username: "Player1".into(),
+            role: "jungle".into(),
+            dominant_class: None,
+            missing_classes: vec!["Assassin".into(), "Tank".into()],
+            opponent_escalated: false,
+        };
+        let json = serde_json::to_string(&w).unwrap();
+        let back: PoolGapWarning = serde_json::from_str(&json).unwrap();
+        assert_eq!(w, back);
     }
 
     #[test]
