@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-aggregation-layer-01-PLAN.md
-last_updated: "2026-03-15T06:47:39.722Z"
+stopped_at: Completed 02-aggregation-layer-02-PLAN.md
+last_updated: "2026-03-15T07:06:49.999Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-pipeline-ctas P02 | 15 | 1 tasks | 2 files |
 | Phase 01-pipeline-ctas P02 | 45 | 2 tasks | 2 files |
 | Phase 02-aggregation-layer P01 | 9 | 2 tasks | 3 files |
+| Phase 02-aggregation-layer P02 | 16 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Recent decisions affecting current work:
 - [Phase 02-aggregation-layer]: normalize_champion_name uses 3-pass lookup: exact ID first, then case-insensitive display name, then stripped fuzzy
 - [Phase 02-aggregation-layer]: ChampionAutocomplete select_champion changed from String to Champion parameter to carry both id and name
 - [Phase 02-aggregation-layer]: Aggregation model structs (DashboardSummary etc.) added to game_plan.rs for co-location with related pipeline types
+- [Phase 02-aggregation-layer]: migrate_champion_names is best-effort at startup: Data Dragon failure logs warning and returns Ok() to avoid blocking server start
+- [Phase 02-aggregation-layer]: aggregate_champion_performance is a public pure function extracted for unit testability, called by both per-player and team-wide performance queries
 
 ### Pending Todos
 
@@ -103,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T06:47:39.713Z
-Stopped at: Completed 02-aggregation-layer-01-PLAN.md
+Last session: 2026-03-15T07:06:49.983Z
+Stopped at: Completed 02-aggregation-layer-02-PLAN.md
 Resume file: None
