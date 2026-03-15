@@ -10,9 +10,12 @@ use thiserror::Error;
 
 use crate::models::{
     action_item::ActionItem,
-    champion::{ChampionNote, ChampionPoolEntry, ChampionStatSummary},
+    champion::{Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary},
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
-    game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan, PostGameLearning},
+    game_plan::{
+        ActionItemPreview, ChampionPerformanceSummary, ChecklistInstance, ChecklistTemplate,
+        DashboardSummary, GamePlan, PoolGapWarning, PostGameLearning, PostGamePreview,
+    },
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     series::Series,
@@ -110,6 +113,10 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     let db = Surreal::new::<SurrealKv>(path).await?;
     db.use_ns("lol_companion").use_db("app").await?;
     apply_schema(&db).await?;
+    // Best-effort champion name normalization (skipped if Data Dragon is unreachable)
+    if let Err(e) = migrate_champion_names(&db).await {
+        tracing::warn!("Champion name migration failed: {e}");
+    }
     Ok(Arc::new(db))
 }
 
@@ -926,7 +933,8 @@ pub async fn save_draft(
         .bind(("watch_out", watch_out))
         .bind(("series_id", series_id))
         .bind(("game_number", game_number))
-        .await?;
+        .await?
+        .check()?;
 
     let row: Option<IdRecord> = response.take(0)?;
     let draft_id = match row {
@@ -3241,6 +3249,791 @@ pub async fn get_draft_outcome_stats(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Champion Name Migration
+// ---------------------------------------------------------------------------
+
+/// Normalize champion names across all tables at startup.
+/// This is a best-effort migration: if Data Dragon is unreachable, we log a warning and continue.
+/// Tables normalized: champion_pool, draft_action, game_plan (our_champions/enemy_champions arrays),
+/// opponent_player (recent_champions array), ban_priority, tree_node_action.
+pub async fn migrate_champion_names(db: &Surreal<Db>) -> DbResult<()> {
+    use crate::server::data_dragon;
+    use tracing::{info, warn};
+
+    let champions = match data_dragon::fetch_champions().await {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("Champion name migration skipped — could not fetch Data Dragon: {e}");
+            return Ok(());
+        }
+    };
+
+    // Build lookup maps for normalization
+    let canonical_ids: std::collections::HashSet<&str> =
+        champions.iter().map(|c| c.id.as_str()).collect();
+
+    // Helper: normalize a champion string — returns Some(canonical_id) if different from input
+    let normalize = |input: &str| -> Option<String> {
+        if canonical_ids.contains(input) {
+            return None; // Already canonical, no update needed
+        }
+        data_dragon::normalize_champion_name(input, &champions)
+    };
+
+    // Normalize single-value champion fields
+    let single_tables: &[(&str, &str)] = &[
+        ("champion_pool", "champion"),
+        ("draft_action", "champion"),
+        ("ban_priority", "champion"),
+        ("tree_node_action", "champion"),
+    ];
+
+    for (table, field) in single_tables {
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct ChampField {
+            id: RecordId,
+            champion: String,
+        }
+
+        let query = format!("SELECT id, {field} as champion FROM {table}");
+        let mut r = db.query(&query).await?;
+        let rows: Vec<ChampField> = r.take(0).unwrap_or_default();
+
+        for row in rows {
+            if let Some(canonical) = normalize(&row.champion) {
+                let record_key = row.id.to_sql();
+                let table_prefix = format!("{table}:");
+                let key = record_key
+                    .strip_prefix(&table_prefix)
+                    .unwrap_or(&record_key)
+                    .to_string();
+                let update_query =
+                    format!("UPDATE type::record('{table}', $key) SET {field} = $new_champ");
+                db.query(&update_query)
+                    .bind(("key", key))
+                    .bind(("new_champ", canonical.clone()))
+                    .await?
+                    .check()?;
+                info!(
+                    "Normalized champion: '{}' -> '{}' in {table}",
+                    row.champion, canonical
+                );
+            }
+        }
+    }
+
+    // Normalize array fields: game_plan.our_champions, game_plan.enemy_champions, opponent_player.recent_champions
+    let array_tables: &[(&str, &str)] = &[
+        ("game_plan", "our_champions"),
+        ("game_plan", "enemy_champions"),
+        ("opponent_player", "recent_champions"),
+    ];
+
+    for (table, field) in array_tables {
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct ArrayField {
+            id: RecordId,
+            champions: Vec<String>,
+        }
+
+        let query = format!("SELECT id, {field} as champions FROM {table}");
+        let mut r = db.query(&query).await?;
+        let rows: Vec<ArrayField> = r.take(0).unwrap_or_default();
+
+        for row in rows {
+            let mut changed = false;
+            let normalized: Vec<String> = row
+                .champions
+                .iter()
+                .map(|c| {
+                    if let Some(canon) = normalize(c) {
+                        changed = true;
+                        info!("Normalized champion: '{c}' -> '{canon}' in {table}.{field}");
+                        canon
+                    } else {
+                        c.clone()
+                    }
+                })
+                .collect();
+
+            if changed {
+                let record_key = row.id.to_sql();
+                let table_prefix = format!("{table}:");
+                let key = record_key
+                    .strip_prefix(&table_prefix)
+                    .unwrap_or(&record_key)
+                    .to_string();
+                let update_query =
+                    format!("UPDATE type::record('{table}', $key) SET {field} = $new_champs");
+                db.query(&update_query)
+                    .bind(("key", key))
+                    .bind(("new_champs", normalized))
+                    .await?
+                    .check()?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard Summary
+// ---------------------------------------------------------------------------
+
+/// Compute pool gap warnings for a set of champion pool entries.
+///
+/// Groups entries by (user_id, role), then checks:
+/// - If any single class represents >= 70% of the class distribution, warn about dominance.
+/// - If a class is entirely missing AND it appears in opponent_champions' class tags, set opponent_escalated.
+///
+/// `members` maps user_id -> username for populating warning structs.
+pub fn compute_pool_gaps(
+    pool_entries: &[ChampionPoolEntry],
+    members: &[(String, String)], // (user_id, username)
+    champions: &[Champion],
+    opponent_champions: &[String],
+) -> Vec<PoolGapWarning> {
+    const ALL_CLASSES: &[&str] = &[
+        "Fighter", "Mage", "Assassin", "Tank", "Marksman", "Support",
+    ];
+
+    // Build champion class lookup: champion_id -> Vec<class>
+    let class_map: HashMap<&str, &[String]> =
+        champions.iter().map(|c| (c.id.as_str(), c.tags.as_slice())).collect();
+
+    // Build username lookup
+    let username_map: HashMap<&str, &str> = members
+        .iter()
+        .map(|(uid, uname)| (uid.as_str(), uname.as_str()))
+        .collect();
+
+    // Collect all class tags that appear in opponent champions
+    let opponent_classes: std::collections::HashSet<String> = opponent_champions
+        .iter()
+        .flat_map(|champ| {
+            class_map
+                .get(champ.as_str())
+                .map(|tags| tags.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        })
+        .collect();
+
+    // Group pool entries by (user_id, role)
+    let mut by_user_role: HashMap<(String, String), Vec<&ChampionPoolEntry>> = HashMap::new();
+    for entry in pool_entries {
+        by_user_role
+            .entry((entry.user_id.clone(), entry.role.clone()))
+            .or_default()
+            .push(entry);
+    }
+
+    let mut warnings = Vec::new();
+
+    for ((user_id, role), entries) in &by_user_role {
+        // Count class occurrences
+        let mut class_counts: HashMap<&str, usize> = HashMap::new();
+        for entry in entries {
+            if let Some(tags) = class_map.get(entry.champion.as_str()) {
+                for tag in *tags {
+                    *class_counts.entry(tag.as_str()).or_default() += 1;
+                }
+            }
+        }
+
+        let total: usize = class_counts.values().sum();
+
+        let mut dominant_class: Option<String> = None;
+        let mut missing_classes = Vec::new();
+        let mut opponent_escalated = false;
+
+        for &class in ALL_CLASSES {
+            let count = class_counts.get(class).copied().unwrap_or(0);
+
+            // Check for dominance: >= 70% of total class tags
+            if total > 0 && (count as f64 / total as f64) >= 0.70 {
+                dominant_class = Some(class.to_string());
+            }
+
+            // Check for missing class with opponent escalation
+            if count == 0 && opponent_classes.contains(class) {
+                missing_classes.push(class.to_string());
+                opponent_escalated = true;
+            }
+        }
+
+        if dominant_class.is_some() || !missing_classes.is_empty() {
+            let username = username_map
+                .get(user_id.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+
+            warnings.push(PoolGapWarning {
+                user_id: user_id.clone(),
+                username,
+                role: role.clone(),
+                dominant_class,
+                missing_classes,
+                opponent_escalated,
+            });
+        }
+    }
+
+    warnings.sort_by(|a, b| a.user_id.cmp(&b.user_id).then(a.role.cmp(&b.role)));
+    warnings
+}
+
+/// Fetch all summary data for the team dashboard in a single batched query.
+///
+/// Returns `Ok(DashboardSummary::default())` if the team has no data or user has no team.
+pub async fn get_dashboard_summary(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<DashboardSummary> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // 5-statement batched query (per RESEARCH.md Example 2)
+    let mut result = db
+        .query(
+            "SELECT id, text, <string>created_at AS created_at FROM action_item \
+             WHERE team = type::record('team', $team_key) AND status IN ['open','in_progress'] \
+             ORDER BY created_at DESC LIMIT 3; \
+             SELECT count() as n FROM action_item \
+             WHERE team = type::record('team', $team_key) AND status IN ['open','in_progress'] \
+             GROUP ALL; \
+             SELECT id, improvements, <string>created_at AS created_at FROM post_game_learning \
+             WHERE team = type::record('team', $team_key) \
+             ORDER BY created_at DESC LIMIT 5; \
+             SELECT count() as n FROM draft WHERE team = type::record('team', $team_key) \
+             AND draft NOT IN (SELECT VALUE draft FROM game_plan WHERE draft != NONE) \
+             GROUP ALL; \
+             SELECT count() as n FROM game_plan WHERE team = type::record('team', $team_key) \
+             AND id NOT IN (SELECT VALUE game_plan_id FROM post_game_learning WHERE game_plan_id != NONE) \
+             GROUP ALL",
+        )
+        .bind(("team_key", team_key.clone()))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbActionItemPreview {
+        id: RecordId,
+        text: String,
+        #[allow(dead_code)]
+        created_at: String,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPostGamePreview {
+        id: RecordId,
+        improvements: Vec<String>,
+        created_at: Option<String>,
+    }
+
+    let db_action_items: Vec<DbActionItemPreview> = result.take(0).unwrap_or_default();
+    let action_count_rows: Vec<CountResult> = result.take(1).unwrap_or_default();
+    let db_post_games: Vec<DbPostGamePreview> = result.take(2).unwrap_or_default();
+    let drafts_no_plan_rows: Vec<CountResult> = result.take(3).unwrap_or_default();
+    let plans_no_postgame_rows: Vec<CountResult> = result.take(4).unwrap_or_default();
+
+    let open_action_item_count = action_count_rows.first().map(|r| r.n as usize).unwrap_or(0);
+    let drafts_without_game_plan = drafts_no_plan_rows
+        .first()
+        .map(|r| r.n as usize)
+        .unwrap_or(0);
+    let game_plans_without_post_game = plans_no_postgame_rows
+        .first()
+        .map(|r| r.n as usize)
+        .unwrap_or(0);
+
+    let recent_action_items: Vec<ActionItemPreview> = db_action_items
+        .into_iter()
+        .map(|a| ActionItemPreview {
+            id: a.id.to_sql(),
+            text: a.text,
+        })
+        .collect();
+
+    let recent_post_games: Vec<PostGamePreview> = db_post_games
+        .into_iter()
+        .map(|p| PostGamePreview {
+            id: p.id.to_sql(),
+            improvements: p.improvements,
+            created_at: p.created_at,
+        })
+        .collect();
+
+    // Fetch champion pool entries for all team members (for gap analysis)
+    let pool_gap_warnings = match compute_pool_gaps_for_team(db, &team_key).await {
+        Ok(warnings) => warnings,
+        Err(_) => Vec::new(), // Non-fatal: gap analysis failure should not break dashboard
+    };
+
+    Ok(DashboardSummary {
+        open_action_item_count,
+        recent_action_items,
+        recent_post_games,
+        pool_gap_warnings,
+        drafts_without_game_plan,
+        game_plans_without_post_game,
+    })
+}
+
+/// Internal helper: fetch pool gap warnings for a team.
+/// Loads team members, their champion pools, and opponent data, then calls compute_pool_gaps.
+async fn compute_pool_gaps_for_team(
+    db: &Surreal<Db>,
+    team_key: &str,
+) -> DbResult<Vec<PoolGapWarning>> {
+    use crate::server::data_dragon;
+
+    // Fetch Data Dragon champions for class tags (best-effort)
+    let champions = match data_dragon::fetch_champions().await {
+        Ok(c) => c,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    // Get team members
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MemberInfo {
+        user_id: RecordId,
+        username: String,
+    }
+
+    let mut r = db
+        .query("SELECT user.id as user_id, user.username as username FROM team_member WHERE team = type::record('team', $team_key)")
+        .bind(("team_key", team_key.to_string()))
+        .await?;
+    let members_db: Vec<MemberInfo> = r.take(0).unwrap_or_default();
+
+    if members_db.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let members: Vec<(String, String)> = members_db
+        .iter()
+        .map(|m| (m.user_id.to_sql(), m.username.clone()))
+        .collect();
+
+    // Get all pool entries for team members
+    let user_ids: Vec<String> = members_db.iter().map(|m| m.user_id.to_sql()).collect();
+    let user_id_list = user_ids.join(", ");
+    let pool_query = format!(
+        "SELECT user, champion, role, tier FROM champion_pool WHERE user IN [{user_id_list}]"
+    );
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PoolRow {
+        user: RecordId,
+        champion: String,
+        role: String,
+        tier: String,
+    }
+
+    let mut pr = db.query(&pool_query).await?;
+    let pool_rows: Vec<PoolRow> = pr.take(0).unwrap_or_default();
+
+    let pool_entries: Vec<ChampionPoolEntry> = pool_rows
+        .into_iter()
+        .map(|row| ChampionPoolEntry {
+            id: None,
+            user_id: row.user.to_sql(),
+            champion: row.champion,
+            role: row.role,
+            tier: row.tier,
+            notes: None,
+            comfort_level: None,
+            meta_tag: None,
+        })
+        .collect();
+
+    // Get opponent champion lists for escalation detection
+    let mut opp_r = db
+        .query("SELECT recent_champions FROM opponent_player WHERE opponent IN (SELECT VALUE id FROM opponent WHERE team = type::record('team', $team_key))")
+        .bind(("team_key", team_key.to_string()))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct RecentChamps {
+        recent_champions: Vec<String>,
+    }
+
+    let opp_rows: Vec<RecentChamps> = opp_r.take(0).unwrap_or_default();
+    let opponent_champions: Vec<String> = opp_rows
+        .into_iter()
+        .flat_map(|r| r.recent_champions)
+        .collect();
+
+    Ok(compute_pool_gaps(
+        &pool_entries,
+        &members,
+        &champions,
+        &opponent_champions,
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Champion Performance Summary
+// ---------------------------------------------------------------------------
+
+/// Aggregate per-champion performance from draft, match, game plan, and post-game data.
+/// This is a pure Rust helper that can be tested without a DB connection.
+pub fn aggregate_champion_performance(
+    draft_champions: &[String],
+    match_stats: &[(String, bool)], // (champion, win)
+    plan_champions: &[String],
+    post_game_champ_outcomes: &[(String, bool)], // (champion, win)
+) -> Vec<ChampionPerformanceSummary> {
+    let mut map: HashMap<String, ChampionPerformanceSummary> = HashMap::new();
+
+    for champ in draft_champions {
+        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
+            champion: champ.clone(),
+            ..Default::default()
+        });
+        entry.games_in_draft += 1;
+    }
+
+    for (champ, win) in match_stats {
+        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
+            champion: champ.clone(),
+            ..Default::default()
+        });
+        entry.games_in_match += 1;
+        if *win {
+            entry.wins_in_match += 1;
+        }
+    }
+
+    for champ in plan_champions {
+        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
+            champion: champ.clone(),
+            ..Default::default()
+        });
+        entry.games_in_plan += 1;
+    }
+
+    for (champ, win) in post_game_champ_outcomes {
+        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
+            champion: champ.clone(),
+            ..Default::default()
+        });
+        if *win {
+            entry.post_game_wins += 1;
+        } else {
+            entry.post_game_losses += 1;
+        }
+    }
+
+    let mut result: Vec<ChampionPerformanceSummary> = map.into_values().collect();
+    result.sort_by(|a, b| b.games_in_match.cmp(&a.games_in_match));
+    result
+}
+
+/// Get per-player champion performance summary.
+///
+/// Applies "30 days OR 20 games, whichever is more" window logic.
+/// Returns `Ok(Vec::new())` when user has no team or no data.
+pub async fn get_champion_performance_summary(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    window_days: Option<i64>,
+    min_games: Option<usize>,
+) -> DbResult<Vec<ChampionPerformanceSummary>> {
+    use chrono::{DateTime, Duration, Utc};
+
+    if team_id.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let days = window_days.unwrap_or(30);
+    let min = min_games.unwrap_or(20);
+
+    // Calculate the 30-day cutoff
+    let day_cutoff: DateTime<Utc> = Utc::now() - Duration::days(days);
+    let day_cutoff_str = day_cutoff.to_rfc3339();
+
+    // Count matches within the day-based window
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    let mut count_r = db
+        .query(
+            "SELECT count() as n FROM player_match_stats \
+             WHERE user = type::record('user', $user_key) \
+             AND created_at >= $cutoff GROUP ALL",
+        )
+        .bind(("user_key", user_key.clone()))
+        .bind(("cutoff", day_cutoff_str.clone()))
+        .await?;
+
+    let count_rows: Vec<CountResult> = count_r.take(0).unwrap_or_default();
+    let match_count = count_rows.first().map(|r| r.n as usize).unwrap_or(0);
+
+    // Determine effective cutoff
+    let effective_cutoff = if match_count < min {
+        // Try to extend window to at least min_games
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct DateRow {
+            created_at: String,
+        }
+
+        let start_idx = if min > 1 { min - 1 } else { 0 };
+        let mut oldest_r = db
+            .query(
+                "SELECT <string>created_at AS created_at FROM player_match_stats \
+                 WHERE user = type::record('user', $user_key) \
+                 ORDER BY created_at DESC LIMIT 1 START $start_idx",
+            )
+            .bind(("user_key", user_key.clone()))
+            .bind(("start_idx", start_idx as i64))
+            .await?;
+
+        let oldest_rows: Vec<DateRow> = oldest_r.take(0).unwrap_or_default();
+        oldest_rows
+            .into_iter()
+            .next()
+            .map(|r| r.created_at)
+            .unwrap_or(day_cutoff_str)
+    } else {
+        day_cutoff_str
+    };
+
+    // Batched query: draft picks, match stats, game plan champions, post-game outcomes
+    let mut result = db
+        .query(
+            "SELECT champion FROM draft_action \
+             WHERE draft IN (SELECT VALUE id FROM draft WHERE team = type::record('team', $team_key)) \
+             AND phase CONTAINS 'pick' \
+             AND created_at >= $cutoff; \
+             SELECT champion, win FROM player_match_stats \
+             WHERE user = type::record('user', $user_key) \
+             AND created_at >= $cutoff; \
+             SELECT our_champions FROM game_plan \
+             WHERE team = type::record('team', $team_key) \
+             AND created_at >= $cutoff; \
+             SELECT id, improvements FROM post_game_learning \
+             WHERE team = type::record('team', $team_key) \
+             AND created_at >= $cutoff",
+        )
+        .bind(("team_key", team_key.clone()))
+        .bind(("user_key", user_key.clone()))
+        .bind(("cutoff", effective_cutoff.clone()))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DraftChampRow {
+        champion: String,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MatchStatRow {
+        champion: String,
+        win: bool,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PlanChampRow {
+        our_champions: Vec<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PostGameRow {
+        #[allow(dead_code)]
+        id: RecordId,
+        improvements: Vec<String>,
+    }
+
+    let draft_rows: Vec<DraftChampRow> = result.take(0).unwrap_or_default();
+    let match_rows: Vec<MatchStatRow> = result.take(1).unwrap_or_default();
+    let plan_rows: Vec<PlanChampRow> = result.take(2).unwrap_or_default();
+    let post_game_rows: Vec<PostGameRow> = result.take(3).unwrap_or_default();
+
+    if draft_rows.is_empty()
+        && match_rows.is_empty()
+        && plan_rows.is_empty()
+        && post_game_rows.is_empty()
+    {
+        return Ok(Vec::new());
+    }
+
+    let draft_champions: Vec<String> = draft_rows.into_iter().map(|r| r.champion).collect();
+    let match_stats: Vec<(String, bool)> =
+        match_rows.into_iter().map(|r| (r.champion, r.win)).collect();
+    let plan_champions: Vec<String> = plan_rows
+        .into_iter()
+        .flat_map(|r| r.our_champions)
+        .collect();
+
+    // Post-game outcomes: we don't have per-champion win/loss in post_game_learning,
+    // so we use improvements list length as a proxy for loss (improvements = things to fix)
+    // The post_game_learning table doesn't store win/loss directly, so we leave this empty for now
+    let post_game_outcomes: Vec<(String, bool)> = Vec::new();
+
+    let _ = post_game_rows; // Used for count reference but outcomes N/A without win field
+
+    Ok(aggregate_champion_performance(
+        &draft_champions,
+        &match_stats,
+        &plan_champions,
+        &post_game_outcomes,
+    ))
+}
+
+/// Get team-wide champion performance summary.
+///
+/// Same "30 days OR 20 games" logic applied across all team members.
+/// Returns `Ok(Vec::new())` when team has no data.
+pub async fn get_team_champion_performance(
+    db: &Surreal<Db>,
+    team_id: &str,
+    window_days: Option<i64>,
+    min_games: Option<usize>,
+) -> DbResult<Vec<ChampionPerformanceSummary>> {
+    use chrono::{DateTime, Duration, Utc};
+
+    if team_id.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let days = window_days.unwrap_or(30);
+    let min = min_games.unwrap_or(20);
+
+    // Get all team member user IDs
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MemberRef {
+        user_id: RecordId,
+    }
+
+    let mut member_r = db
+        .query(
+            "SELECT user.id as user_id FROM team_member WHERE team = type::record('team', $team_key)",
+        )
+        .bind(("team_key", team_key.clone()))
+        .await?;
+
+    let member_refs: Vec<MemberRef> = member_r.take(0).unwrap_or_default();
+    if member_refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let user_ids: Vec<String> = member_refs.iter().map(|m| m.user_id.to_sql()).collect();
+
+    // Determine time window
+    let day_cutoff: DateTime<Utc> = Utc::now() - Duration::days(days);
+    let day_cutoff_str = day_cutoff.to_rfc3339();
+
+    let user_id_list = user_ids.join(", ");
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    let count_query = format!(
+        "SELECT count() as n FROM player_match_stats WHERE user IN [{user_id_list}] AND created_at >= $cutoff GROUP ALL"
+    );
+    let mut count_r = db
+        .query(&count_query)
+        .bind(("cutoff", day_cutoff_str.clone()))
+        .await?;
+
+    let count_rows: Vec<CountResult> = count_r.take(0).unwrap_or_default();
+    let match_count = count_rows.first().map(|r| r.n as usize).unwrap_or(0);
+
+    let effective_cutoff = if match_count < min {
+        let start_idx = if min > 1 { min - 1 } else { 0 };
+        let oldest_query = format!(
+            "SELECT <string>created_at AS created_at FROM player_match_stats WHERE user IN [{user_id_list}] ORDER BY created_at DESC LIMIT 1 START {start_idx}"
+        );
+
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct DateRow {
+            created_at: String,
+        }
+
+        let mut oldest_r = db.query(&oldest_query).await?;
+        let oldest_rows: Vec<DateRow> = oldest_r.take(0).unwrap_or_default();
+        oldest_rows
+            .into_iter()
+            .next()
+            .map(|r| r.created_at)
+            .unwrap_or(day_cutoff_str)
+    } else {
+        day_cutoff_str
+    };
+
+    // Batched query for team-wide data
+    let match_query = format!(
+        "SELECT champion, win FROM player_match_stats WHERE user IN [{user_id_list}] AND created_at >= $cutoff"
+    );
+
+    let mut result = db
+        .query(&format!(
+            "{match_query}; \
+             SELECT champion FROM draft_action \
+             WHERE draft IN (SELECT VALUE id FROM draft WHERE team = type::record('team', $team_key)) \
+             AND phase CONTAINS 'pick' \
+             AND created_at >= $cutoff; \
+             SELECT our_champions FROM game_plan \
+             WHERE team = type::record('team', $team_key) \
+             AND created_at >= $cutoff"
+        ))
+        .bind(("team_key", team_key.clone()))
+        .bind(("cutoff", effective_cutoff.clone()))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MatchStatRow {
+        champion: String,
+        win: bool,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DraftChampRow {
+        champion: String,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PlanChampRow {
+        our_champions: Vec<String>,
+    }
+
+    let match_rows: Vec<MatchStatRow> = result.take(0).unwrap_or_default();
+    let draft_rows: Vec<DraftChampRow> = result.take(1).unwrap_or_default();
+    let plan_rows: Vec<PlanChampRow> = result.take(2).unwrap_or_default();
+
+    if match_rows.is_empty() && draft_rows.is_empty() && plan_rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let match_stats: Vec<(String, bool)> =
+        match_rows.into_iter().map(|r| (r.champion, r.win)).collect();
+    let draft_champions: Vec<String> = draft_rows.into_iter().map(|r| r.champion).collect();
+    let plan_champions: Vec<String> = plan_rows
+        .into_iter()
+        .flat_map(|r| r.our_champions)
+        .collect();
+
+    Ok(aggregate_champion_performance(
+        &draft_champions,
+        &match_stats,
+        &plan_champions,
+        &[],
+    ))
+}
+
 /// Data structure for draft outcome analytics
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct DraftOutcomeData {
@@ -3254,6 +4047,231 @@ pub struct DraftOutcomeData {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::models::champion::{Champion, ChampionPoolEntry};
+    use crate::models::game_plan::{ActionItemPreview, DashboardSummary, PostGamePreview, PoolGapWarning};
+
+    fn make_champion(id: &str, name: &str, tags: Vec<&str>) -> Champion {
+        Champion {
+            id: id.into(),
+            name: name.into(),
+            title: "Test".into(),
+            tags: tags.into_iter().map(|s| s.into()).collect(),
+            image_full: format!("{id}.png"),
+        }
+    }
+
+    fn make_pool_entry(user_id: &str, champion: &str, role: &str) -> ChampionPoolEntry {
+        ChampionPoolEntry {
+            id: None,
+            user_id: user_id.into(),
+            champion: champion.into(),
+            role: role.into(),
+            tier: "comfort".into(),
+            notes: None,
+            comfort_level: None,
+            meta_tag: None,
+        }
+    }
+
+    #[test]
+    fn test_compute_pool_gaps_dominant_class() {
+        // All 4 picks are single-class Fighters — should warn about dominant class (4/4 = 100% >= 70%)
+        let champions = vec![
+            make_champion("Darius", "Darius", vec!["Fighter"]),
+            make_champion("Garen", "Garen", vec!["Fighter"]),
+            make_champion("Tryndamere", "Tryndamere", vec!["Fighter"]),
+            make_champion("Renekton", "Renekton", vec!["Fighter"]),
+            make_champion("Jinx", "Jinx", vec!["Marksman"]),
+        ];
+        let members = vec![("user:u1".to_string(), "Player1".to_string())];
+        // 4 Fighters in top pool = 100% Fighter class coverage => dominant
+        let top_pool = vec![
+            make_pool_entry("user:u1", "Darius", "top"),
+            make_pool_entry("user:u1", "Garen", "top"),
+            make_pool_entry("user:u1", "Tryndamere", "top"),
+            make_pool_entry("user:u1", "Renekton", "top"),
+        ];
+        let warnings = compute_pool_gaps(&top_pool, &members, &champions, &[]);
+        assert!(!warnings.is_empty(), "Should warn about Fighter dominance (4/4 entries are Fighter = 100%)");
+        let has_dominant = warnings.iter().any(|w| w.dominant_class.as_deref() == Some("Fighter"));
+        assert!(has_dominant, "Should have a Fighter dominant class warning");
+
+        // 3 Fighters + 1 Marksman = 75% Fighter => still dominant
+        let mixed_pool = vec![
+            make_pool_entry("user:u1", "Darius", "top"),
+            make_pool_entry("user:u1", "Garen", "top"),
+            make_pool_entry("user:u1", "Tryndamere", "top"),
+            make_pool_entry("user:u1", "Jinx", "top"),
+        ];
+        let warnings2 = compute_pool_gaps(&mixed_pool, &members, &champions, &[]);
+        let has_dominant2 = warnings2.iter().any(|w| w.dominant_class.as_deref() == Some("Fighter"));
+        assert!(has_dominant2, "3/4 Fighter (75%) should be dominant");
+    }
+
+    #[test]
+    fn test_compute_pool_gaps_missing_class_opponent() {
+        // Player has no Tanks in their pool, but opponents play Tank champions
+        let champions = vec![
+            make_champion("Jinx", "Jinx", vec!["Marksman"]),
+            make_champion("Caitlyn", "Caitlyn", vec!["Marksman"]),
+            make_champion("MalzaharChamp", "Malzahar", vec!["Mage"]),
+            make_champion("TankChamp", "Malphite", vec!["Tank", "Fighter"]),
+        ];
+        let pool = vec![
+            make_pool_entry("user:u1", "Jinx", "bot"),
+            make_pool_entry("user:u1", "Caitlyn", "bot"),
+            make_pool_entry("user:u1", "MalzaharChamp", "bot"),
+        ];
+        let members = vec![("user:u1".to_string(), "Player1".to_string())];
+        // Opponents play Tank champions
+        let opponent_champions = vec!["TankChamp".to_string()];
+        let warnings = compute_pool_gaps(&pool, &members, &champions, &opponent_champions);
+        let has_tank_warning = warnings.iter().any(|w| {
+            w.missing_classes.contains(&"Tank".to_string()) && w.opponent_escalated
+        });
+        assert!(has_tank_warning, "Should warn about missing Tank coverage with opponent escalation");
+    }
+
+    #[test]
+    fn test_compute_pool_gaps_balanced() {
+        // Balanced pool: Fighter, Mage, Assassin, Tank, Marksman, Support
+        let champions = vec![
+            make_champion("Darius", "Darius", vec!["Fighter"]),
+            make_champion("Syndra", "Syndra", vec!["Mage"]),
+            make_champion("Zed", "Zed", vec!["Assassin"]),
+            make_champion("Malphite", "Malphite", vec!["Tank"]),
+            make_champion("Jinx", "Jinx", vec!["Marksman"]),
+            make_champion("Thresh", "Thresh", vec!["Support"]),
+        ];
+        let pool = vec![
+            make_pool_entry("user:u1", "Darius", "top"),
+            make_pool_entry("user:u1", "Syndra", "top"),
+            make_pool_entry("user:u1", "Zed", "top"),
+            make_pool_entry("user:u1", "Malphite", "top"),
+            make_pool_entry("user:u1", "Jinx", "top"),
+            make_pool_entry("user:u1", "Thresh", "top"),
+        ];
+        let members = vec![("user:u1".to_string(), "Player1".to_string())];
+        let warnings = compute_pool_gaps(&pool, &members, &champions, &[]);
+        // No class dominates (each is 1/6 = 16.7%), no missing classes with opponent escalation
+        assert!(warnings.is_empty() || warnings.iter().all(|w| !w.opponent_escalated && w.dominant_class.is_none()),
+            "Balanced pool should have no dominant class or opponent-escalated warnings");
+    }
+
+    #[test]
+    fn test_dashboard_summary_assembly() {
+        // Test that DashboardSummary can be constructed and all fields populate correctly
+        let action_items = vec![
+            ActionItemPreview { id: "action_item:1".into(), text: "Review baron fight".into() },
+            ActionItemPreview { id: "action_item:2".into(), text: "Improve vision".into() },
+        ];
+        let post_games = vec![
+            PostGamePreview {
+                id: "pgl:1".into(),
+                improvements: vec!["Better rotations".into()],
+                created_at: Some("2026-03-14T20:00:00Z".into()),
+            },
+        ];
+        let pool_warnings = vec![
+            PoolGapWarning {
+                user_id: "user:u1".into(),
+                username: "Player1".into(),
+                role: "top".into(),
+                dominant_class: Some("Fighter".into()),
+                missing_classes: vec![],
+                opponent_escalated: false,
+            },
+        ];
+        let summary = DashboardSummary {
+            open_action_item_count: 5,
+            recent_action_items: action_items.clone(),
+            recent_post_games: post_games.clone(),
+            pool_gap_warnings: pool_warnings.clone(),
+            drafts_without_game_plan: 3,
+            game_plans_without_post_game: 2,
+        };
+        assert_eq!(summary.open_action_item_count, 5);
+        assert_eq!(summary.recent_action_items.len(), 2);
+        assert_eq!(summary.recent_post_games.len(), 1);
+        assert_eq!(summary.pool_gap_warnings.len(), 1);
+        assert_eq!(summary.drafts_without_game_plan, 3);
+        assert_eq!(summary.game_plans_without_post_game, 2);
+    }
+
+    #[test]
+    fn test_dashboard_summary_empty_is_default() {
+        // DashboardSummary::default() should have all zero/empty fields
+        let summary = DashboardSummary::default();
+        assert_eq!(summary.open_action_item_count, 0);
+        assert!(summary.recent_action_items.is_empty());
+        assert!(summary.recent_post_games.is_empty());
+        assert!(summary.pool_gap_warnings.is_empty());
+        assert_eq!(summary.drafts_without_game_plan, 0);
+        assert_eq!(summary.game_plans_without_post_game, 0);
+    }
+
+    #[test]
+    fn test_aggregate_champion_performance() {
+        let draft_champions = vec!["Jinx".to_string(), "Jinx".to_string(), "Caitlyn".to_string()];
+        let match_stats = vec![
+            ("Jinx".to_string(), true),
+            ("Jinx".to_string(), false),
+            ("Caitlyn".to_string(), true),
+        ];
+        let plan_champions = vec!["Jinx".to_string()];
+        let post_game_outcomes = vec![
+            ("Jinx".to_string(), true),
+            ("Caitlyn".to_string(), false),
+        ];
+
+        let result = aggregate_champion_performance(
+            &draft_champions,
+            &match_stats,
+            &plan_champions,
+            &post_game_outcomes,
+        );
+
+        assert!(!result.is_empty(), "Should return some results");
+
+        let jinx = result.iter().find(|s| s.champion == "Jinx").expect("Should have Jinx");
+        assert_eq!(jinx.games_in_draft, 2);
+        assert_eq!(jinx.games_in_match, 2);
+        assert_eq!(jinx.wins_in_match, 1);
+        assert_eq!(jinx.games_in_plan, 1);
+        assert_eq!(jinx.post_game_wins, 1);
+        assert_eq!(jinx.post_game_losses, 0);
+
+        let caitlyn = result.iter().find(|s| s.champion == "Caitlyn").expect("Should have Caitlyn");
+        assert_eq!(caitlyn.games_in_draft, 1);
+        assert_eq!(caitlyn.games_in_match, 1);
+        assert_eq!(caitlyn.wins_in_match, 1);
+        assert_eq!(caitlyn.games_in_plan, 0);
+        assert_eq!(caitlyn.post_game_wins, 0);
+        assert_eq!(caitlyn.post_game_losses, 1);
+    }
+
+    #[test]
+    fn test_aggregate_champion_performance_empty() {
+        let result = aggregate_champion_performance(&[], &[], &[], &[]);
+        assert!(result.is_empty(), "Empty inputs should return empty result");
+    }
+
+    #[test]
+    fn test_champion_performance_sorted_by_match_games() {
+        // Result should be sorted by games_in_match descending
+        let match_stats = vec![
+            ("Jinx".to_string(), true),
+            ("Caitlyn".to_string(), true),
+            ("Caitlyn".to_string(), false),
+            ("Caitlyn".to_string(), true),
+        ];
+        let result = aggregate_champion_performance(&[], &match_stats, &[], &[]);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].champion, "Caitlyn", "Caitlyn has 3 games, should be first");
+        assert_eq!(result[1].champion, "Jinx", "Jinx has 1 game, should be second");
+    }
+
     #[test]
     fn strip_user_prefix_with_prefix() {
         let input = "user:abc123";
