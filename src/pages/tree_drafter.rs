@@ -588,7 +588,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
     let on_champion_select = Callback::new(move |champ: Champion| {
         if let Some(slot) = active_slot.get_untracked() {
-            fill_slot(slot, champ.name);
+            fill_slot(slot, champ.id);
         }
     });
 
@@ -922,7 +922,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                         let champ_map = champions_resource.get()
                                                             .and_then(|r| r.ok())
                                                             .map(|champs| {
-                                                                champs.into_iter().map(|c| (c.name.clone(), c)).collect::<HashMap<String, Champion>>()
+                                                                champs.into_iter().map(|c| (c.id.clone(), c)).collect::<HashMap<String, Champion>>()
                                                             })
                                                             .unwrap_or_default();
                                                         let champion_map_stored = StoredValue::new(champ_map);
@@ -1281,7 +1281,7 @@ fn NodeEditor(
                         Ok(champs) => {
                             let champion_map: HashMap<String, Champion> = champs
                                 .into_iter()
-                                .map(|c| (c.name.clone(), c))
+                                .map(|c| (c.id.clone(), c))
                                 .collect();
                             view! {
                                 <DraftBoard
@@ -1485,7 +1485,7 @@ fn LiveNavigator(
                                                 Ok(champs) => {
                                                     let champion_map: HashMap<String, Champion> = champs
                                                         .into_iter()
-                                                        .map(|c| (c.name.clone(), c))
+                                                        .map(|c| (c.id.clone(), c))
                                                         .collect();
                                                     let (ro_slots, _) = signal(slots.clone());
                                                     let (ro_active, _) = signal(None::<usize>);

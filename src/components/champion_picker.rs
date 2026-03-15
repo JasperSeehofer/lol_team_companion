@@ -111,7 +111,7 @@ pub fn ChampionPicker(
                     children={
                         let used_champions = used_champions.clone();
                         move |champion: Champion| {
-                            let is_used = used_champions.contains(&champion.name);
+                            let is_used = used_champions.contains(&champion.id);
                             let champ_for_click = champion.clone();
                             let champ_for_drag = champion.clone();
                             let icon_url = champion.image_full.clone();
@@ -127,7 +127,7 @@ pub fn ChampionPicker(
                                     on:dragstart=move |ev: web_sys::DragEvent| {
                                         if !is_used {
                                             if let Some(dt) = ev.data_transfer() {
-                                                let _ = dt.set_data("text/plain", &champ_for_drag.name);
+                                                let _ = dt.set_data("text/plain", &champ_for_drag.id);
                                             }
                                         }
                                     }

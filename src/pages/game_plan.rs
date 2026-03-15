@@ -1122,9 +1122,17 @@ pub fn GamePlanPage() -> impl IntoView {
                                                                 let champs_for_input = champs_locked_branch.clone();
                                                                 if champs_locked.get() {
                                                                     let val = sig_for_lock.get();
+                                                                    let display = if val.is_empty() {
+                                                                        "-".to_string()
+                                                                    } else {
+                                                                        champs_for_input.iter()
+                                                                            .find(|c| c.id == val)
+                                                                            .map(|c| c.name.clone())
+                                                                            .unwrap_or(val)
+                                                                    };
                                                                     view! {
                                                                         <div class="flex-1 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm">
-                                                                            {if val.is_empty() { "-".to_string() } else { val }}
+                                                                            {display}
                                                                         </div>
                                                                     }.into_any()
                                                                 } else {
@@ -1285,8 +1293,19 @@ pub fn GamePlanPage() -> impl IntoView {
                                                 let o = our_sig.get();
                                                 let t = enemy_sig.get();
                                                 if !o.is_empty() && !t.is_empty() {
+                                                    let champ_list = champions.get()
+                                                        .and_then(|r| r.ok())
+                                                        .unwrap_or_default();
+                                                    let o_name = champ_list.iter()
+                                                        .find(|c| c.id == o)
+                                                        .map(|c| c.name.clone())
+                                                        .unwrap_or(o);
+                                                    let t_name = champ_list.iter()
+                                                        .find(|c| c.id == t)
+                                                        .map(|c| c.name.clone())
+                                                        .unwrap_or(t);
                                                     view! {
-                                                        <div class="text-dimmed text-xs mt-0.5">{format!("{o} vs {t}")}</div>
+                                                        <div class="text-dimmed text-xs mt-0.5">{format!("{o_name} vs {t_name}")}</div>
                                                     }.into_any()
                                                 } else {
                                                     view! { <div></div> }.into_any()

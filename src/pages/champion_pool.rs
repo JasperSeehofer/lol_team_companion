@@ -543,11 +543,11 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                     let comfort = entry.comfort_level;
                                                                     let meta = entry.meta_tag.clone();
 
-                                                                    let img_url = champions_resource.get()
+                                                                    let (img_url, display_name) = champions_resource.get()
                                                                         .and_then(|r| r.ok())
-                                                                        .and_then(|champs| champs.into_iter().find(|c| c.name == champ))
-                                                                        .map(|c| c.image_full)
-                                                                        .unwrap_or_default();
+                                                                        .and_then(|champs| champs.into_iter().find(|c| c.id == champ))
+                                                                        .map(|c| (c.image_full, c.name))
+                                                                        .unwrap_or_else(|| (String::new(), champ.clone()));
 
                                                                     view! {
                                                                         <div
@@ -568,13 +568,13 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                         >
                                                                             {if !img_url.is_empty() {
                                                                                 view! {
-                                                                                    <img src=img_url alt=champ.clone() class="w-7 h-7 rounded object-cover" />
+                                                                                    <img src=img_url alt=display_name.clone() class="w-7 h-7 rounded object-cover" />
                                                                                 }.into_any()
                                                                             } else {
                                                                                 view! { <span></span> }.into_any()
                                                                             }}
                                                                             <div class="flex flex-col min-w-0">
-                                                                                <span class="text-primary text-sm truncate">{champ.clone()}</span>
+                                                                                <span class="text-primary text-sm truncate">{display_name.clone()}</span>
                                                                                 <div class="flex items-center gap-1">
                                                                                     // Comfort stars (compact)
                                                                                     {comfort.map(|lvl| {
@@ -662,11 +662,11 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                 let current_comfort = current_entry.as_ref().and_then(|e| e.comfort_level);
                                 let current_meta = current_entry.as_ref().and_then(|e| e.meta_tag.clone());
 
-                                let img_url = champions_resource.get()
+                                let (img_url, champ_display_name) = champions_resource.get()
                                     .and_then(|r| r.ok())
-                                    .and_then(|champs| champs.into_iter().find(|c| c.name == *champ))
-                                    .map(|c| c.image_full)
-                                    .unwrap_or_default();
+                                    .and_then(|champs| champs.into_iter().find(|c| c.id == *champ))
+                                    .map(|c| (c.image_full, c.name))
+                                    .unwrap_or_else(|| (String::new(), champ.clone()));
 
                                 set_notes_input.set(current_notes_text.clone());
 
@@ -685,12 +685,12 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                         // Header
                                         <div class="flex items-center gap-3 p-4 border-b border-divider/30">
                                             {if !img_url.is_empty() {
-                                                view! { <img src=img_url alt=champ.clone() class="w-12 h-12 rounded-lg object-cover" /> }.into_any()
+                                                view! { <img src=img_url alt=champ_display_name.clone() class="w-12 h-12 rounded-lg object-cover" /> }.into_any()
                                             } else {
                                                 view! { <span></span> }.into_any()
                                             }}
                                             <div class="min-w-0 flex-1">
-                                                <h3 class="text-primary font-semibold truncate">{champ.clone()}</h3>
+                                                <h3 class="text-primary font-semibold truncate">{champ_display_name.clone()}</h3>
                                                 <div class="flex items-center gap-2">
                                                     <p class="text-muted text-xs capitalize">{role.clone()}</p>
                                                     {current_meta.as_ref().map(|t| {
