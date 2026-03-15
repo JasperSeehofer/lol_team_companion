@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-aggregation-layer-02-PLAN.md
-last_updated: "2026-03-15T07:06:49.999Z"
+stopped_at: Completed 02-aggregation-layer-03-PLAN.md
+last_updated: "2026-03-15T07:17:11.932Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-pipeline-ctas P02 | 45 | 2 tasks | 2 files |
 | Phase 02-aggregation-layer P01 | 9 | 2 tasks | 3 files |
 | Phase 02-aggregation-layer P02 | 16 | 2 tasks | 1 files |
+| Phase 02-aggregation-layer P03 | 25 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting current work:
 - [Phase 02-aggregation-layer]: Aggregation model structs (DashboardSummary etc.) added to game_plan.rs for co-location with related pipeline types
 - [Phase 02-aggregation-layer]: migrate_champion_names is best-effort at startup: Data Dragon failure logs warning and returns Ok() to avoid blocking server start
 - [Phase 02-aggregation-layer]: aggregate_champion_performance is a public pure function extracted for unit testability, called by both per-player and team-wide performance queries
+- [Phase 02-aggregation-layer]: champion_map keyed by c.id throughout tree_drafter (NodeEditor, LiveNavigator, graph) — slots store canonical IDs post Plan 01 so map keys must match
+- [Phase 02-aggregation-layer]: champion_picker drag data and is_used check use champion.id (not name) — used_champions list contains IDs from draft_slots
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T07:06:49.983Z
-Stopped at: Completed 02-aggregation-layer-02-PLAN.md
+Last session: 2026-03-15T07:17:11.923Z
+Stopped at: Completed 02-aggregation-layer-03-PLAN.md
 Resume file: None
