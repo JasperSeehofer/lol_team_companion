@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-14T23:25:06.162Z"
+stopped_at: Completed 02-aggregation-layer-01-PLAN.md
+last_updated: "2026-03-15T06:47:39.722Z"
 last_activity: 2026-03-14 — Roadmap created
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
   percent: 0
 ---
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01.1-playwright-bug-audit P03 | 15 | 2 tasks | 3 files |
 | Phase 01-pipeline-ctas P02 | 15 | 1 tasks | 2 files |
 | Phase 01-pipeline-ctas P02 | 45 | 2 tasks | 2 files |
+| Phase 02-aggregation-layer P01 | 9 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,9 @@ Recent decisions affecting current work:
 - [Phase 01-pipeline-ctas]: prefill_applied guard prevents re-seeding when auto-save or other Effects re-trigger the prefill Effect
 - [Phase 01-pipeline-ctas]: Back-reference badge deep-links to /draft?draft_id={id} so Plan 01-03 URL param handler auto-selects the correct draft
 - [Phase 01-pipeline-ctas]: Champion lock applies only to our team picks; enemy champions remain freely editable
+- [Phase 02-aggregation-layer]: normalize_champion_name uses 3-pass lookup: exact ID first, then case-insensitive display name, then stripped fuzzy
+- [Phase 02-aggregation-layer]: ChampionAutocomplete select_champion changed from String to Champion parameter to carry both id and name
+- [Phase 02-aggregation-layer]: Aggregation model structs (DashboardSummary etc.) added to game_plan.rs for co-location with related pipeline types
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T23:25:06.158Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-aggregation-layer/02-CONTEXT.md
+Last session: 2026-03-15T06:47:39.713Z
+Stopped at: Completed 02-aggregation-layer-01-PLAN.md
+Resume file: None
