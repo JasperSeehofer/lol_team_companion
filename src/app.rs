@@ -6,6 +6,7 @@ use leptos_router::{
 };
 
 use crate::components::nav::Nav;
+use crate::components::ui::ToastProvider;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
     action_items::ActionItemsPage,
@@ -51,26 +52,28 @@ pub fn App() -> impl IntoView {
         <Title text="LoL Team Companion" />
 
         <Router>
-            <Nav />
-            <main>
-                <Routes fallback=|| view! { <ErrorTemplate outside_errors=Errors::default() /> }>
-                    <Route path=path!("/") view=HomePage />
-                    <Route path=path!("/profile") view=ProfilePage />
-                    <Route path=path!("/auth/login") view=LoginPage />
-                    <Route path=path!("/auth/register") view=RegisterPage />
-                    <Route path=path!("/team/dashboard") view=TeamDashboard />
-                    <Route path=path!("/team/roster") view=RosterPage />
-                    <Route path=path!("/draft") view=DraftPage />
-                    <Route path=path!("/tree-drafter") view=TreeDrafterPage />
-                    <Route path=path!("/stats") view=StatsPage />
-                    <Route path=path!("/champion-pool") view=ChampionPoolPage />
-                    <Route path=path!("/team-builder") view=TeamBuilderPage />
-                    <Route path=path!("/game-plan") view=GamePlanPage />
-                    <Route path=path!("/post-game") view=PostGamePage />
-                    <Route path=path!("/opponents") view=OpponentsPage />
-                    <Route path=path!("/action-items") view=ActionItemsPage />
-                </Routes>
-            </main>
+            <ToastProvider>
+                <Nav />
+                <main>
+                    <Routes fallback=|| view! { <ErrorTemplate outside_errors=Errors::default() /> }>
+                        <Route path=path!("/") view=HomePage />
+                        <Route path=path!("/profile") view=ProfilePage />
+                        <Route path=path!("/auth/login") view=LoginPage />
+                        <Route path=path!("/auth/register") view=RegisterPage />
+                        <Route path=path!("/team/dashboard") view=TeamDashboard />
+                        <Route path=path!("/team/roster") view=RosterPage />
+                        <Route path=path!("/draft") view=DraftPage />
+                        <Route path=path!("/tree-drafter") view=TreeDrafterPage />
+                        <Route path=path!("/stats") view=StatsPage />
+                        <Route path=path!("/champion-pool") view=ChampionPoolPage />
+                        <Route path=path!("/team-builder") view=TeamBuilderPage />
+                        <Route path=path!("/game-plan") view=GamePlanPage />
+                        <Route path=path!("/post-game") view=PostGamePage />
+                        <Route path=path!("/opponents") view=OpponentsPage />
+                        <Route path=path!("/action-items") view=ActionItemsPage />
+                    </Routes>
+                </main>
+            </ToastProvider>
         </Router>
     }
 }
