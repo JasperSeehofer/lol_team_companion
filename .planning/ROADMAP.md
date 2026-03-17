@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Pipeline CTAs** - Wire draft → game plan navigation with FK pre-fill (completed 2026-03-14)
 - [x] **Phase 2: Aggregation Layer** - Add cross-table intelligence queries to db.rs (completed 2026-03-15)
 - [x] **Phase 3: Smart Dashboard** - Surface prep priorities on team dashboard (completed 2026-03-15)
-- [ ] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages (GAP CLOSURE)
+- [x] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages (GAP CLOSURE) (completed 2026-03-17)
 - [ ] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide (GAP CLOSURE)
 
 ## Phase Details
@@ -92,7 +92,7 @@ Plans:
   2. Draft planner shows an opponent tendency sidebar listing historical picks and bans from scouting data for the current opponent
   3. Win condition tracker page shows each declared win condition alongside a pass/fail record across recent post-game reviews
   4. Intel panels in the draft planner do not trigger reactive refetches on every champion pick — only on explicit user actions
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 04-01-PLAN.md — Pool warning badges on draft pick slots (DraftBoard prop + client-side Memo computation)
@@ -121,5 +121,5 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 | 1.1 Playwright Bug Audit | 3/3 | Complete   | 2026-03-14 |
 | 2. Aggregation Layer | 3/3 | Complete   | 2026-03-15 |
 | 3. Smart Dashboard | 2/2 | Complete   | 2026-03-15 |
-| 4. Inline Intel | 2/3 | In Progress|  |
+| 4. Inline Intel | 3/3 | Complete   | 2026-03-17 |
 | 5. Post-Game Loop + Polish | 0/TBD | Gap closure | - |
