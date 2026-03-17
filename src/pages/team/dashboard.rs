@@ -1364,7 +1364,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                 >"Add"</button>
             </div>
 
-            <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading notes..."</p> }>
+            <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                 {move || {
                     let uid = current_user_id.clone();
                     let leader = is_leader;

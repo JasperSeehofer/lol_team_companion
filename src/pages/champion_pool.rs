@@ -501,7 +501,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     </div>
 
                     // Tier columns
-                    <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading pool..."</div> }>
+                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-20" /><SkeletonCard height="h-20" /></div> }>
                         {move || {
                             let role = active_role.get();
                             pool.get().map(move |result| {

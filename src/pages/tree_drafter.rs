@@ -905,7 +905,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                             </div>
                                         </div>
 
-                                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading nodes..."</div> }>
+                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonCard height="h-8" /><SkeletonCard height="h-8" /><SkeletonCard height="h-8" /></div> }>
                                             {move || nodes_resource.get().map(|result| match result {
                                                 Ok(roots) if roots.is_empty() => view! {
                                                     <p class="text-dimmed text-sm">"No nodes yet."</p>

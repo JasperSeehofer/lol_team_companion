@@ -793,7 +793,7 @@ fn LinkedPlanCard(plan_id: String) -> impl IntoView {
     let linked_plan = Resource::new(move || pid.clone(), |id| get_linked_plan(id));
 
     view! {
-        <Suspense fallback=|| view! { <div class="text-dimmed text-xs py-2">"Loading plan..."</div> }>
+        <Suspense fallback=|| view! { <SkeletonCard height="h-16" /> }>
             {move || linked_plan.get().map(|result| match result {
                 Ok(Some(plan)) => {
                     let name = if plan.name.is_empty() { "Untitled Plan".to_string() } else { plan.name.clone() };

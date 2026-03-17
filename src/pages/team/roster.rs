@@ -1,4 +1,4 @@
-use crate::components::ui::{EmptyState, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use leptos::prelude::*;
 
@@ -181,7 +181,7 @@ pub fn RosterPage() -> impl IntoView {
                 <h2 class="text-2xl font-bold text-primary mb-1">"Join an Existing Team"</h2>
                 <p class="text-muted text-sm mb-4">"Find a team below and click Join to become a member."</p>
 
-                <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading teams..."</div> }>
+                <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                     {move || teams_resource.get().map(|result| match result {
                         Ok(teams) if teams.is_empty() => view! {
                             <p class="text-dimmed text-sm">"No teams yet. Be the first to create one!"</p>

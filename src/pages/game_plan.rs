@@ -1,6 +1,6 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
 use crate::models::draft::Draft;
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
@@ -1132,7 +1132,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                 on:click=do_generate_template
                             >"Generate Template"</button>
                         </div>
-                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm py-4">"Loading champions..."</div> }>
+                        <Suspense fallback=|| view! { <SkeletonGrid cols=3 rows=1 card_height="h-8" /> }>
                             {move || {
                                 let our_sigs = our_champs_for_matchup.clone();
                                 let enemy_sigs = enemy_champs_for_matchup.clone();
