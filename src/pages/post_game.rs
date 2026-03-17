@@ -144,7 +144,7 @@ pub async fn get_linked_plan(plan_id: String) -> Result<Option<GamePlan>, Server
 }
 
 #[server]
-pub async fn create_review(review_json: String) -> Result<String, ServerFnError> {
+pub async fn create_review(review_json: String) -> Result<(String, usize), ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -164,16 +164,26 @@ pub async fn create_review(review_json: String) -> Result<String, ServerFnError>
 
     let mut review: PostGameLearning = serde_json::from_str(&review_json)
         .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
-    review.team_id = team_id;
+    review.team_id = team_id.clone();
     review.created_by = user.id;
 
-    db::save_post_game_learning(&surreal, review)
+    let improvements = review.improvements.clone();
+    let review_id = db::save_post_game_learning(&surreal, review)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let items_created = db::batch_create_action_items_from_review(
+        &surreal,
+        &team_id,
+        &review_id,
+        &improvements,
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok((review_id, items_created))
 }
 
 #[server]
-pub async fn update_review(review_json: String) -> Result<(), ServerFnError> {
+pub async fn update_review(review_json: String) -> Result<usize, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -189,9 +199,21 @@ pub async fn update_review(review_json: String) -> Result<(), ServerFnError> {
     let review: PostGameLearning = serde_json::from_str(&review_json)
         .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
 
+    let review_id = review.id.clone().unwrap_or_default();
+    let team_id = review.team_id.clone();
+    let improvements = review.improvements.clone();
     db::update_post_game_learning(&surreal, review)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let items_created = db::batch_create_action_items_from_review(
+        &surreal,
+        &team_id,
+        &review_id,
+        &improvements,
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(items_created)
 }
 
 #[server]
@@ -287,6 +309,7 @@ pub fn PostGamePage() -> impl IntoView {
     let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
 
     let (status_msg, set_status_msg) = signal(Option::<String>::None);
+    let action_item_count: RwSignal<Option<usize>> = RwSignal::new(None);
     let (editing_id, set_editing_id) = signal(Option::<String>::None);
     let (match_riot_id, set_match_riot_id) = signal(String::new());
     let (game_plan_id, set_game_plan_id) = signal(String::new());
@@ -413,24 +436,27 @@ pub fn PostGamePage() -> impl IntoView {
         let is_update = editing_id.get_untracked().is_some();
 
         leptos::task::spawn_local(async move {
-            let result = if is_update {
-                update_review(json).await.map(|_| String::new())
-            } else {
-                create_review(json).await
-            };
-            match result {
-                Ok(id) => {
-                    if !is_update && !id.is_empty() {
-                        set_editing_id.set(Some(id));
+            if is_update {
+                match update_review(json).await {
+                    Ok(n_items) => {
+                        action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
+                        set_status_msg.set(Some("Review updated!".into()));
+                        reviews.refetch();
                     }
-                    set_status_msg.set(Some(if is_update {
-                        "Review updated!".into()
-                    } else {
-                        "Review created!".into()
-                    }));
-                    reviews.refetch();
+                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+            } else {
+                match create_review(json).await {
+                    Ok((id, n_items)) => {
+                        if !id.is_empty() {
+                            set_editing_id.set(Some(id));
+                        }
+                        action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
+                        set_status_msg.set(Some("Review created!".into()));
+                        reviews.refetch();
+                    }
+                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                }
             }
         });
     };
@@ -457,6 +483,19 @@ pub fn PostGamePage() -> impl IntoView {
 
             {move || status_msg.get().map(|msg| {
                 view! { <StatusMessage message=msg /> }
+            })}
+
+            {move || action_item_count.get().map(|n| {
+                let label = if n == 1 {
+                    "1 action item created".to_string()
+                } else {
+                    format!("{n} action items created")
+                };
+                view! {
+                    <div class="bg-accent/10 border border-accent/30 text-secondary text-sm rounded-xl px-4 py-3">
+                        {label}" — "<a href="/action-items" class="text-accent underline">"View"</a>
+                    </div>
+                }
             })}
 
             <div class="flex gap-6 min-h-[36rem]">
