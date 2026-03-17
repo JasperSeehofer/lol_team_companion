@@ -1,4 +1,4 @@
-use crate::components::ui::{EmptyState, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::champion::{Champion, ChampionPoolEntry, ChampionStatSummary};
 use crate::models::opponent::{Opponent, OpponentPlayer};
 use leptos::prelude::*;
@@ -477,7 +477,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                 <p class="text-muted">"Explore team compositions from your champion pools"</p>
             </div>
 
-            <Suspense fallback=move || view! { <p class="text-muted">"Loading roster..."</p> }>
+            <Suspense fallback=move || view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                 {move || {
                     let roster_data = roster.get().unwrap_or(Ok(Vec::new())).unwrap_or_default();
                     let stats_data = team_stats.get().unwrap_or(Ok(Vec::new())).unwrap_or_default();
