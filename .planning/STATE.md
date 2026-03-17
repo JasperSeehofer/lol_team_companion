@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-17T17:03:06.827Z"
+last_updated: "2026-03-17T17:07:03.828Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 ## Position
@@ -34,3 +34,4 @@ All 19 plans across 6 phases complete. Milestone v1.0 achieved.
 - [Phase 05-05]: opponents.rs uses has_team resource (calls get_team_dashboard) to distinguish no-team vs no-opponents for correct NoTeamState vs EmptyState selection
 - [Phase 05-05]: champion_pool empty state at role-level per active tab; dashboard StatusMessage signals removed entirely and replaced with toast
 - [Phase 05-post-game-loop-polish]: SkeletonGrid cols=4 for champion picker grids; stacked SkeletonCard for list-type data in Suspense fallbacks
+- [Phase 05]: Used same has_team Resource pattern from opponents.rs for stats.rs and champion_pool.rs NoTeamState
