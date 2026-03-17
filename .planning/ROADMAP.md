@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Aggregation Layer** - Add cross-table intelligence queries to db.rs (completed 2026-03-15)
 - [x] **Phase 3: Smart Dashboard** - Surface prep priorities on team dashboard (completed 2026-03-15)
 - [x] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages (GAP CLOSURE) (completed 2026-03-17)
-- [ ] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide (GAP CLOSURE)
+- [x] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide (GAP CLOSURE) (completed 2026-03-17)
 
 ## Phase Details
 
@@ -108,7 +108,7 @@ Plans:
   2. Every page with no data shows a meaningful empty state with a contextual CTA (not a blank area or generic message)
   3. Every data-fetching page shows skeleton screens while loading (not blank space or a spinner)
   4. Every save, delete, and update action shows a visible success or error message within the same page context
-**Plans:** 2/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md — UI primitives: Toast system, skeleton components, EmptyState/NoTeamState in ui.rs + app.rs wiring
@@ -129,4 +129,4 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 | 2. Aggregation Layer | 3/3 | Complete   | 2026-03-15 |
 | 3. Smart Dashboard | 2/2 | Complete   | 2026-03-15 |
 | 4. Inline Intel | 3/3 | Complete   | 2026-03-17 |
-| 5. Post-Game Loop + Polish | 2/5 | In Progress|  |
+| 5. Post-Game Loop + Polish | 5/5 | Complete   | 2026-03-17 |

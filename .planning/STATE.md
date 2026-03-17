@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-17T15:47:39.863Z"
+last_updated: "2026-03-17T15:52:29Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 ## Position
 
-Phase 04 (Inline Intel) is next — gap closure phase. Needs planning before execution.
+All 19 plans across 6 phases complete. Milestone v1.0 achieved.
 
 ## Decisions
 
@@ -31,3 +31,5 @@ Phase 04 (Inline Intel) is next — gap closure phase. Needs planning before exe
 - [Phase 05]: batch_create_action_items_from_review uses list_open_action_items for dedup to reuse existing query; create_review returns (String, usize) tuple for review_id + items_created count
 - [Phase 05-post-game-loop-polish]: ChecklistSection and LiveNavigator sub-components receive ToastContext by value (Copy) instead of WriteSignal — cleaner API, no wrapper needed
 - [Phase 05-post-game-loop-polish]: Sub-components (OpponentDetail, PlayerCard) use_context::<ToastContext>() directly rather than receiving error_msg prop
+- [Phase 05-05]: opponents.rs uses has_team resource (calls get_team_dashboard) to distinguish no-team vs no-opponents for correct NoTeamState vs EmptyState selection
+- [Phase 05-05]: champion_pool empty state at role-level per active tab; dashboard StatusMessage signals removed entirely and replaced with toast
