@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-17T15:30:01.257Z"
+last_updated: "2026-03-17T15:31:43.952Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 19
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 ## Position
@@ -28,3 +28,4 @@ Phase 04 (Inline Intel) is next — gap closure phase. Needs planning before exe
 - [Phase 04-inline-intel]: get_opponent_intel_full added alongside existing get_opponent_intel for backward compatibility
 - [Phase 05-post-game-loop-polish]: Used AtomicU64 in StoredValue for toast ID gen (Cell<u64> not Sync)
 - [Phase 05-post-game-loop-polish]: Added Navigator+Clipboard to web-sys features for clipboard copy in error toasts
+- [Phase 05]: batch_create_action_items_from_review uses list_open_action_items for dedup to reuse existing query; create_review returns (String, usize) tuple for review_id + items_created count
