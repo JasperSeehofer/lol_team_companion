@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Aggregation Layer** - Add cross-table intelligence queries to db.rs (completed 2026-03-15)
 - [x] **Phase 3: Smart Dashboard** - Surface prep priorities on team dashboard (completed 2026-03-15)
 - [x] **Phase 4: Inline Intel** - Opponent sidebar, pool warnings, and win condition tracker on feature pages (GAP CLOSURE) (completed 2026-03-17)
-- [ ] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide (GAP CLOSURE)
+- [x] **Phase 5: Post-Game Loop + Polish** - Auto-generate action items from reviews; consistent empty states, skeletons, and mutation feedback app-wide (GAP CLOSURE) (completed 2026-03-18)
 
 ## Phase Details
 
@@ -108,7 +108,7 @@ Plans:
   2. Every page with no data shows a meaningful empty state with a contextual CTA (not a blank area or generic message)
   3. Every data-fetching page shows skeleton screens while loading (not blank space or a spinner)
   4. Every save, delete, and update action shows a visible success or error message within the same page context
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans executed
 
 Plans:
 - [x] 05-01-PLAN.md — UI primitives: Toast system, skeleton components, EmptyState/NoTeamState in ui.rs + app.rs wiring
@@ -116,8 +116,8 @@ Plans:
 - [x] 05-03-PLAN.md — Toast + skeleton migration for game_plan, tree_drafter, draft pages
 - [x] 05-04-PLAN.md — Toast + skeleton migration for champion_pool, opponents, post_game, action_items pages
 - [x] 05-05-PLAN.md — Empty states + toast + skeleton for profile, stats, team_builder, dashboard, roster pages
-- [ ] 05-06-PLAN.md — Gap closure: Replace 14 remaining Loading... Suspense fallbacks with skeleton components
-- [ ] 05-07-PLAN.md — Gap closure: Add NoTeamState to stats.rs and champion_pool.rs
+- [x] 05-06-PLAN.md — Gap closure: Replace 14 remaining Loading... Suspense fallbacks with skeleton components
+- [x] 05-07-PLAN.md — Gap closure: Add NoTeamState to stats.rs and champion_pool.rs
 
 ## Progress
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 | 2. Aggregation Layer | 3/3 | Complete   | 2026-03-15 |
 | 3. Smart Dashboard | 2/2 | Complete   | 2026-03-15 |
 | 4. Inline Intel | 3/3 | Complete   | 2026-03-17 |
-| 5. Post-Game Loop + Polish | 6/7 | In Progress|  |
+| 5. Post-Game Loop + Polish | 7/7 | Complete   | 2026-03-18 |
