@@ -459,6 +459,35 @@ pub async fn get_strategy_win_rates() -> Result<Vec<(String, i32, i32)>, ServerF
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+#[server]
+pub async fn get_strategy_win_rates_vs_opponent(
+    opponent_name: String,
+) -> Result<Vec<(String, i32, i32)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Ok(Vec::new()),
+    };
+
+    db::get_win_condition_stats_vs_opponent(&surreal, &team_id, &opponent_name)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

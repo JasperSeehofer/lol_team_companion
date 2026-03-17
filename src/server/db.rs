@@ -3097,6 +3097,151 @@ pub async fn get_win_condition_stats(
     Ok(stats)
 }
 
+/// Pure helper: filters win condition stats to only games linked to a specific opponent.
+/// Input: per-game-plan data as (win_condition_tag, opponent_name, is_win) triples.
+/// Returns: aggregated (tag, total_games, wins) for plans matching `opponent_name`.
+pub fn filter_win_condition_stats(
+    plan_tags: &[(String, Option<String>, bool)],
+    opponent_name: &str,
+) -> Vec<(String, i32, i32)> {
+    let mut tag_stats: HashMap<String, (i32, i32)> = HashMap::new();
+    for (tag, opp, won) in plan_tags {
+        if opp.as_deref() == Some(opponent_name) {
+            let entry = tag_stats.entry(tag.clone()).or_insert((0, 0));
+            entry.0 += 1;
+            if *won {
+                entry.1 += 1;
+            }
+        }
+    }
+    let mut stats: Vec<(String, i32, i32)> = tag_stats
+        .into_iter()
+        .map(|(tag, (total, wins))| (tag, total, wins))
+        .collect();
+    stats.sort_by(|a, b| b.1.cmp(&a.1));
+    stats
+}
+
+/// Returns win condition stats filtered to games against a specific opponent.
+/// Joins game_plan -> draft -> opponent_name for filtering.
+pub async fn get_win_condition_stats_vs_opponent(
+    db: &Surreal<Db>,
+    team_id: &str,
+    opponent_name: &str,
+) -> DbResult<Vec<(String, i32, i32)>> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // Fetch game plans with win_condition_tag, drafts (for opponent_name), and post_game_learning
+    let mut result = db
+        .query("SELECT id, win_condition_tag, draft_id FROM game_plan WHERE team = type::record('team', $team_key) AND win_condition_tag != NONE; SELECT id, opponent_name FROM draft WHERE team = type::record('team', $team_key); SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key); SELECT match_id, id FROM match WHERE team_id = type::record('team', $team_key); SELECT * FROM player_match")
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct PlanTagWithDraft {
+        id: RecordId,
+        win_condition_tag: Option<String>,
+        draft_id: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbDraftOpponent {
+        id: RecordId,
+        opponent_name: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPostGameVs {
+        id: RecordId,
+        game_plan_id: Option<String>,
+        match_riot_id: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbMatchRefVs {
+        match_id: String,
+        id: RecordId,
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPlayerMatchVs {
+        #[serde(rename = "match")]
+        match_ref: RecordId,
+        win: bool,
+    }
+
+    let plans: Vec<PlanTagWithDraft> = result.take(0).unwrap_or_default();
+    let drafts: Vec<DbDraftOpponent> = result.take(1).unwrap_or_default();
+    let post_games: Vec<DbPostGameVs> = result.take(2).unwrap_or_default();
+    let matches: Vec<DbMatchRefVs> = result.take(3).unwrap_or_default();
+    let player_matches: Vec<DbPlayerMatchVs> = result.take(4).unwrap_or_default();
+
+    // Build draft id -> opponent_name lookup
+    let draft_opponent: HashMap<String, String> = drafts
+        .iter()
+        .filter_map(|d| {
+            d.opponent_name
+                .as_ref()
+                .map(|opp| (d.id.to_sql(), opp.clone()))
+        })
+        .collect();
+
+    // Build match outcome lookup
+    let match_id_to_record: HashMap<String, String> = matches
+        .iter()
+        .map(|m| (m.match_id.clone(), m.id.to_sql()))
+        .collect();
+
+    let mut match_record_wins: HashMap<String, bool> = HashMap::new();
+    for pm in &player_matches {
+        let match_sql = pm.match_ref.to_sql();
+        if pm.win {
+            match_record_wins.insert(match_sql, true);
+        } else {
+            match_record_wins.entry(match_sql).or_insert(false);
+        }
+    }
+
+    // Build per-game-plan flat data: (tag, opponent_name, is_win)
+    let plan_tags_lookup: HashMap<String, (String, Option<String>)> = plans
+        .iter()
+        .filter_map(|p| {
+            p.win_condition_tag.as_ref().map(|tag| {
+                let plan_sql = p.id.to_sql();
+                let opp = p.draft_id.as_ref().and_then(|did| {
+                    // draft_id may be stored as full record ID or bare key
+                    draft_opponent
+                        .get(did)
+                        .or_else(|| {
+                            // try matching by stripping prefix
+                            let full = format!("draft:{did}");
+                            draft_opponent.get(&full)
+                        })
+                        .cloned()
+                });
+                (plan_sql, (tag.clone(), opp))
+            })
+        })
+        .collect();
+
+    // Build flat per-result tuples for filter_win_condition_stats
+    let mut flat: Vec<(String, Option<String>, bool)> = Vec::new();
+    for pg in &post_games {
+        if let Some(ref gp_id) = pg.game_plan_id {
+            if let Some((tag, opp)) = plan_tags_lookup.get(gp_id) {
+                if let Some(ref riot_id) = pg.match_riot_id {
+                    if let Some(record_id) = match_id_to_record.get(riot_id) {
+                        let won = match_record_wins.get(record_id).copied().unwrap_or(false);
+                        flat.push((tag.clone(), opp.clone(), won));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(filter_win_condition_stats(&flat, opponent_name))
+}
+
 /// Draft outcome statistics: side win rates, tag win rates, first pick win rates.
 pub async fn get_draft_outcome_stats(
     db: &Surreal<Db>,
@@ -4298,5 +4443,33 @@ mod tests {
         let input = "rawkey";
         let result = input.strip_prefix("draft:").unwrap_or(input).to_string();
         assert_eq!(result, "rawkey");
+    }
+
+    #[test]
+    fn test_filter_win_condition_stats_empty_input() {
+        let result = filter_win_condition_stats(&[], "TeamA");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_filter_win_condition_stats_no_matching_opponent() {
+        let data = vec![
+            ("Aggression".to_string(), Some("TeamB".to_string()), true),
+            ("Scale".to_string(), Some("TeamB".to_string()), false),
+        ];
+        let result = filter_win_condition_stats(&data, "TeamA");
+        assert!(result.is_empty(), "No plans against TeamA should mean empty results");
+    }
+
+    #[test]
+    fn test_filter_win_condition_stats_matching_opponent() {
+        let data = vec![
+            ("Aggression".to_string(), Some("TeamA".to_string()), true),
+            ("Aggression".to_string(), Some("TeamA".to_string()), false),
+            ("Scale".to_string(), Some("TeamB".to_string()), true),
+        ];
+        let result = filter_win_condition_stats(&data, "TeamA");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], ("Aggression".to_string(), 2, 1)); // 2 games, 1 win
     }
 }
