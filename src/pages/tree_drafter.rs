@@ -1,7 +1,7 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::tree_graph::TreeGraph;
-use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
 use leptos::prelude::*;
@@ -257,11 +257,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
     // Mode: "edit" or "live"
     let (mode, set_mode) = signal("edit".to_string());
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     // Tree management
     let (new_tree_name, set_new_tree_name) = signal(String::new());
     let (new_tree_opponent, set_new_tree_opponent) = signal(String::new());
     let (selected_tree_id, set_selected_tree_id) = signal(Option::<String>::None);
-    let (status_msg, set_status_msg) = signal(Option::<String>::None);
 
     // Node editing
     let (selected_node_id, set_selected_node_id) = signal(Option::<String>::None);
@@ -304,7 +304,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let do_create_tree = Callback::new(move |_: ()| {
         let name = new_tree_name.get_untracked();
         if name.trim().is_empty() {
-            set_status_msg.set(Some("Enter a tree name.".into()));
+            toast.show.run((ToastKind::Error, "Enter a tree name.".into()));
             return;
         }
         let opp = new_tree_opponent.get_untracked();
@@ -315,11 +315,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     set_selected_tree_id.set(Some(id));
                     set_new_tree_name.set(String::new());
                     set_new_tree_opponent.set(String::new());
-                    set_status_msg.set(Some("Tree created!".into()));
+                    toast.show.run((ToastKind::Success, "Tree saved".into()));
                     trees.refetch();
                     nodes_resource.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     });
@@ -335,10 +335,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 Ok(_) => {
                     set_selected_tree_id.set(None);
                     set_selected_node_id.set(None);
-                    set_status_msg.set(Some("Tree deleted.".into()));
+                    toast.show.run((ToastKind::Success, "Tree deleted".into()));
                     trees.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -432,10 +432,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match save_node(nid, label, notes, improvised, actions_json).await {
                 Ok(_) => {
-                    set_status_msg.set(Some("Node saved!".into()));
+                    toast.show.run((ToastKind::Success, "Node saved".into()));
                     nodes_resource.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -518,7 +518,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
         let parent = adding_branch_to.get_untracked();
         let label = new_branch_label.get_untracked();
         if label.trim().is_empty() {
-            set_status_msg.set(Some("Enter a branch label.".into()));
+            toast.show.run((ToastKind::Error, "Enter a branch label.".into()));
             return;
         }
         let tree_id_for_select = tree_id.clone();
@@ -527,7 +527,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 Ok(new_node_id) => {
                     set_new_branch_label.set(String::new());
                     set_adding_branch_to.set(None);
-                    set_status_msg.set(Some("Branch added!".into()));
+                    toast.show.run((ToastKind::Success, "Node saved".into()));
                     nodes_resource.refetch();
                     // Select the newly created node
                     let new_node = DraftTreeNode {
@@ -543,7 +543,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     };
                     select_node(&new_node);
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -554,10 +554,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
             match remove_node(node_id).await {
                 Ok(_) => {
                     set_selected_node_id.set(None);
-                    set_status_msg.set(Some("Node deleted.".into()));
+                    toast.show.run((ToastKind::Success, "Node saved".into()));
                     nodes_resource.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -629,7 +629,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     .await
                     {
                         Ok(_) => {
-                            set_status_msg.set(Some("Branch created from position!".into()));
+                            toast.show.run((ToastKind::Success, "Node saved".into()));
                             nodes_resource.refetch();
                             // Select the newly created node with its actions
                             let actions = build_actions_from_slots(&branch_slots_for_select);
@@ -646,10 +646,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             };
                             select_node(&new_node);
                         }
-                        Err(e) => set_status_msg.set(Some(format!("Error saving branch: {e}"))),
+                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                     }
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error creating branch: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     });
@@ -709,7 +709,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         }
                         on:click=move |_| {
                             if selected_tree_id.get_untracked().is_none() {
-                                set_status_msg.set(Some("Select a tree first to enter Live Game mode.".into()));
+                                toast.show.run((ToastKind::Error, "Select a tree first to enter Live Game mode.".into()));
                                 return;
                             }
                             set_mode.set("live".to_string());
@@ -718,11 +718,6 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     >"Live Game"</button>
                 </div>
             </div>
-
-            // Status message
-            {move || status_msg.get().map(|msg| {
-                view! { <StatusMessage message=msg /> }
-            })}
 
             // Main layout: sidebar + content
             <div class="flex gap-6 min-h-[36rem]">
@@ -760,7 +755,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     // Tree list
                     <div class="flex flex-col gap-1.5 flex-1 overflow-y-auto">
                         <h3 class="text-muted text-xs font-semibold uppercase tracking-wider px-1">"Your Trees"</h3>
-                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm px-1">"Loading..."</div> }>
+                        <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                             {move || trees.get().map(|result| match result {
                                 Ok(list) if list.is_empty() => view! {
                                     <div class="text-center py-6">
@@ -859,7 +854,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                     nav_path=nav_path
                                     set_nav_path=set_nav_path
                                     champions_resource=champions_resource
-                                    status_msg=set_status_msg
+                                    toast=toast
                                     selected_tree_id=selected_tree_id
                                 />
                             }.into_any()
@@ -1273,7 +1268,7 @@ fn NodeEditor(
 
             // Draft board
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
-                <Suspense fallback=|| view! { <div class="text-dimmed text-sm text-center py-8">"Loading champions..."</div> }>
+                <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <div class="text-red-400 text-sm">"Failed to load champions: " {e.to_string()}</div>
@@ -1321,7 +1316,7 @@ fn NodeEditor(
 
             // Champion picker
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
-                <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
+                <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load champions: {e}") />
@@ -1373,7 +1368,7 @@ fn LiveNavigator(
     nav_path: ReadSignal<Vec<String>>,
     set_nav_path: WriteSignal<Vec<String>>,
     champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
-    status_msg: WriteSignal<Option<String>>,
+    toast: ToastContext,
     selected_tree_id: ReadSignal<Option<String>>,
 ) -> impl IntoView {
     // Find the current node based on nav_path
@@ -1441,7 +1436,7 @@ fn LiveNavigator(
             </div>
 
             // Current node display
-            <Suspense fallback=|| view! { <div class="text-dimmed text-center py-8">"Loading..."</div> }>
+            <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
                 {move || {
                     let node = current_node();
                     match node {
@@ -1479,7 +1474,7 @@ fn LiveNavigator(
 
                                     // Draft board (read-only display)
                                     <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
-                                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
+                                        <Suspense fallback=|| view! { <SkeletonLine width="w-32" height="h-8" /> }>
                                             {move || champions_resource.get().map(|result| match result {
                                                 Err(_) => view! { <div class="text-dimmed">"Champions unavailable"</div> }.into_any(),
                                                 Ok(champs) => {
@@ -1523,15 +1518,14 @@ fn LiveNavigator(
                                                         let nid = nid.clone();
                                                         let tree_id = tree_id.clone();
                                                         if let Some(tree_id) = tree_id {
-                                                            let status_msg = status_msg;
                                                             leptos::task::spawn_local(async move {
                                                                 match add_branch(tree_id, Some(nid), "Improvised".to_string()).await {
                                                                     Ok(new_id) => {
                                                                         let _ = save_node(new_id, "Improvised".to_string(), None, true, "[]".to_string()).await;
-                                                                        status_msg.set(Some("Improvised branch created!".into()));
+                                                                        toast.show.run((ToastKind::Success, "Node saved".into()));
                                                                         nodes_resource.refetch();
                                                                     }
-                                                                    Err(e) => status_msg.set(Some(format!("Error: {e}"))),
+                                                                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                 }
                                                             });
                                                         }

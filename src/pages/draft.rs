@@ -1,6 +1,6 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::ui::ErrorBanner;
+use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, ToastContext, ToastKind};
 use crate::models::champion::{Champion, ChampionNote, ChampionStatSummary};
 use crate::models::draft::{BanPriority, Draft, DraftAction};
 use crate::models::opponent::OpponentPlayerIntel;
@@ -848,6 +848,7 @@ pub fn DraftPage() -> impl IntoView {
         }
     });
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let (draft_name, set_draft_name) = signal(String::new());
     let (opponent, set_opponent) = signal(String::new());
     let (selected_team_id, set_selected_team_id) = signal(String::new());
@@ -858,7 +859,6 @@ pub fn DraftPage() -> impl IntoView {
     let (highlighted_slot, set_highlighted_slot) = signal(Option::<usize>::None);
     let (comments, set_comments) = signal(Vec::<String>::new());
     let (comment_input, set_comment_input) = signal(String::new());
-    let (save_result, set_save_result) = signal(Option::<String>::None);
     let (loaded_draft_id, set_loaded_draft_id) = signal(Option::<String>::None);
     // Per-slot rationale comments (Phase 1)
     let (slot_comments, set_slot_comments) = signal(vec![None::<String>; 20]);
@@ -986,7 +986,6 @@ pub fn DraftPage() -> impl IntoView {
                 set_tags.set(d_tags);
                 set_win_conditions.set(d_win_conditions);
                 set_watch_out.set(d_watch_out);
-                set_save_result.set(None);
                 set_highlighted_slot.set(None);
                 let mut slots = vec![None::<String>; 20];
                 let mut sc = vec![None::<String>; 20];
@@ -1100,7 +1099,7 @@ pub fn DraftPage() -> impl IntoView {
     let do_save = move |_| {
         let name = draft_name.get_untracked();
         if name.trim().is_empty() {
-            set_save_result.set(Some("Give this draft a name before saving.".into()));
+            toast.show.run((ToastKind::Error, "Give this draft a name before saving.".into()));
             return;
         }
         let opp = opponent.get_untracked();
@@ -1130,10 +1129,10 @@ pub fn DraftPage() -> impl IntoView {
                 .await
                 {
                     Ok(_) => {
-                        set_save_result.set(Some("Updated!".into()));
+                        toast.show.run((ToastKind::Success, "Draft saved".into()));
                         drafts.refetch();
                     }
-                    Err(e) => set_save_result.set(Some(format!("Error: {e}"))),
+                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             } else {
                 match save_draft(
@@ -1143,11 +1142,11 @@ pub fn DraftPage() -> impl IntoView {
                 .await
                 {
                     Ok(id) => {
-                        set_save_result.set(Some("Saved!".into()));
+                        toast.show.run((ToastKind::Success, "Draft saved".into()));
                         set_loaded_draft_id.set(Some(id));
                         drafts.refetch();
                     }
-                    Err(e) => set_save_result.set(Some(format!("Error: {e}"))),
+                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             }
         });
@@ -2096,7 +2095,7 @@ pub fn DraftPage() -> impl IntoView {
                                             })}
                                         </Suspense>
                                         // Opponent players — enhanced intel: frequencies, OTP badge, mastery
-                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading..."</div> }>
+                                        <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
                                             {move || {
                                                 let draft_champs = all_draft_champs.clone();
                                                 opponent_players.get().map(move |result| match result {
@@ -2328,7 +2327,6 @@ pub fn DraftPage() -> impl IntoView {
                         set_active_slot.set(Some(0));
                         set_highlighted_slot.set(None);
                         set_comments.set(Vec::new());
-                        set_save_result.set(None);
                         set_loaded_draft_id.set(None);
                         set_draft_name.set(String::new());
                         set_opponent.set(String::new());
@@ -2343,9 +2341,6 @@ pub fn DraftPage() -> impl IntoView {
                 >
                     {move || if loaded_draft_id.get().is_some() { "New Draft" } else { "Clear" }}
                 </button>
-                {move || save_result.get().map(|msg| view! {
-                    <div class="text-green-300 text-sm">{msg}</div>
-                })}
                 // Pipeline CTAs for loaded draft
                 {move || {
                     let did = loaded_draft_id.get();
@@ -2450,7 +2445,7 @@ pub fn DraftPage() -> impl IntoView {
                         }
                     }).collect_view()}
                 </div>
-                <Suspense fallback=|| view! { <div class="text-muted">"Loading..."</div> }>
+                <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
                     {move || {
                         let champ_url_map: HashMap<String, String> = champions_resource.get()
                             .and_then(|r| r.ok())
@@ -2670,7 +2665,6 @@ pub fn DraftPage() -> impl IntoView {
                                                         set_tags.set(d_tags.clone());
                                                         set_win_conditions.set(d_win_conditions.clone());
                                                         set_watch_out.set(d_watch_out.clone());
-                                                        set_save_result.set(None);
                                                         set_highlighted_slot.set(None);
                                                         let mut slots = vec![None::<String>; 20];
                                                         let mut sc = vec![None::<String>; 20];
@@ -3146,7 +3140,7 @@ pub fn DraftPage() -> impl IntoView {
                                 // View mode
                                 view! {
                                     <div class="flex flex-col gap-2">
-                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading..."</div> }>
+                                        <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                             {move || ban_priorities.get().map(|result| match result {
                                                 Ok(list) if list.is_empty() => view! {
                                                     <p class="text-dimmed text-sm">"No ban priorities set."</p>

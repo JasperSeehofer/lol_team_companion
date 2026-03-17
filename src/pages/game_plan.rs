@@ -1,6 +1,6 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
-use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
 use crate::models::draft::Draft;
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
@@ -547,10 +547,10 @@ pub fn GamePlanPage() -> impl IntoView {
     let prefill_applied = RwSignal::new(false);
     let (champs_locked, set_champs_locked) = signal(false);
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let plans = Resource::new(|| (), |_| list_plans());
     let drafts = Resource::new(|| (), |_| list_team_drafts());
     let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
-    let (status_msg, set_status_msg) = signal(Option::<String>::None);
 
     // Editor state
     let (editing_id, set_editing_id) = signal(Option::<String>::None);
@@ -905,14 +905,10 @@ pub fn GamePlanPage() -> impl IntoView {
                     if !is_update && !id.is_empty() {
                         set_editing_id.set(Some(id));
                     }
-                    set_status_msg.set(Some(if is_update {
-                        "Plan updated!".into()
-                    } else {
-                        "Plan created!".into()
-                    }));
+                    toast.show.run((ToastKind::Success, "Game plan saved".into()));
                     plans.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -922,10 +918,10 @@ pub fn GamePlanPage() -> impl IntoView {
             match delete_plan(plan_id).await {
                 Ok(_) => {
                     clear_editor.run(());
-                    set_status_msg.set(Some("Plan deleted.".into()));
+                    toast.show.run((ToastKind::Success, "Game plan deleted".into()));
                     plans.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     });
@@ -946,9 +942,7 @@ pub fn GamePlanPage() -> impl IntoView {
         set_obj_priority.set(obj.join("\n"));
         set_teamfight.set(tf);
         set_early_game.set(eg);
-        set_status_msg.set(Some(
-            "Template generated! Customize to your strategy.".into(),
-        ));
+        toast.show.run((ToastKind::Success, "Template generated! Customize to your strategy.".into()));
     };
 
     // Pre-clone for multiple move closures in view!
@@ -965,10 +959,6 @@ pub fn GamePlanPage() -> impl IntoView {
                 <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups"</p>
             </div>
 
-            {move || status_msg.get().map(|msg| {
-                view! { <StatusMessage message=msg /> }
-            })}
-
             <div class="flex gap-6 min-h-[36rem]">
                 // Left: plan list
                 <div class="w-72 flex-shrink-0 flex flex-col gap-3">
@@ -977,7 +967,7 @@ pub fn GamePlanPage() -> impl IntoView {
                         on:click=move |_| clear_editor.run(())
                     >"+ New Plan"</button>
 
-                    <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
+                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                         {move || plans.get().map(|result| match result {
                             Ok(list) if list.is_empty() => view! {
                                 <div class="text-center py-6">
@@ -1079,7 +1069,7 @@ pub fn GamePlanPage() -> impl IntoView {
                             </div>
                             <div>
                                 <label class="block text-muted text-xs font-medium mb-1">"Linked Draft (optional)"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
+                                <Suspense fallback=|| view! { <SkeletonLine width="w-full" height="h-9" /> }>
                                     {move || {
                                         let our_sigs = our_champs_for_draft.clone();
                                         let enemy_sigs = enemy_champs_for_draft.clone();
@@ -1363,7 +1353,7 @@ pub fn GamePlanPage() -> impl IntoView {
                             let show_vs = tracker_vs_opponent.get();
                             view! {
                                 <div class="p-4">
-                                    <Suspense fallback=|| view! { <div class="text-dimmed text-xs py-2">"Loading..."</div> }>
+                                    <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                                         {move || {
                                             let rates_result = if show_vs {
                                                 opponent_win_rates.get()
@@ -1539,7 +1529,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Pre-Game Checklist section
-                    <ChecklistSection editing_id=editing_id set_status_msg=set_status_msg />
+                    <ChecklistSection editing_id=editing_id toast=toast />
 
                     // Start Post-Game Review button
                     {move || {
@@ -1571,7 +1561,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        set_status_msg.set(Some(format!("Error starting review: {e}")));
+                                                        toast.show.run((ToastKind::Error, format!("{e}")));
                                                     }
                                                 }
                                             });
@@ -1620,7 +1610,7 @@ pub fn GamePlanPage() -> impl IntoView {
 #[component]
 fn ChecklistSection(
     editing_id: ReadSignal<Option<String>>,
-    set_status_msg: WriteSignal<Option<String>>,
+    toast: ToastContext,
 ) -> impl IntoView {
     let (checklist_open, set_checklist_open) = signal(false);
     let (checklist_items, set_checklist_items) = signal(Vec::<String>::new());
@@ -1675,7 +1665,7 @@ fn ChecklistSection(
         set_checklist_items.set(tmpl.items.clone());
         set_checklist_checked.set(vec![false; tmpl.items.len()]);
         set_checklist_instance_id.set(None); // Will create new on save
-        set_status_msg.set(Some(format!("Loaded template: {}", tmpl.name)));
+        toast.show.run((ToastKind::Success, format!("Loaded template: {}", tmpl.name)));
     });
 
     let do_save_checklist = move |_| {
@@ -1685,12 +1675,12 @@ fn ChecklistSection(
         let instance_id = checklist_instance_id.get_untracked();
 
         if items.is_empty() {
-            set_status_msg.set(Some("No checklist items to save.".into()));
+            toast.show.run((ToastKind::Error, "No checklist items to save.".into()));
             return;
         }
 
         let Some(pid) = plan_id else {
-            set_status_msg.set(Some("Save the plan first before adding a checklist.".into()));
+            toast.show.run((ToastKind::Error, "Save the plan first before adding a checklist.".into()));
             return;
         };
 
@@ -1699,8 +1689,8 @@ fn ChecklistSection(
                 // Update existing
                 let checked_json = serde_json::to_string(&checked).unwrap_or_default();
                 match update_checklist(iid, checked_json).await {
-                    Ok(_) => set_status_msg.set(Some("Checklist updated!".into())),
-                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                    Ok(_) => toast.show.run((ToastKind::Success, "Checklist updated!".into())),
+                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             } else {
                 // Create new
@@ -1708,9 +1698,9 @@ fn ChecklistSection(
                 match create_plan_checklist(pid, None, items_json).await {
                     Ok(id) => {
                         set_checklist_instance_id.set(Some(id));
-                        set_status_msg.set(Some("Checklist created!".into()));
+                        toast.show.run((ToastKind::Success, "Checklist created!".into()));
                     }
-                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             }
         });
@@ -1719,17 +1709,17 @@ fn ChecklistSection(
     let do_save_as_template = move |_| {
         let items = checklist_items.get_untracked();
         if items.is_empty() {
-            set_status_msg.set(Some("No items to save as template.".into()));
+            toast.show.run((ToastKind::Error, "No items to save as template.".into()));
             return;
         }
         let items_json = serde_json::to_string(&items).unwrap_or_default();
         leptos::task::spawn_local(async move {
             match save_checklist_template("Pre-Game Checklist".to_string(), items_json).await {
                 Ok(_) => {
-                    set_status_msg.set(Some("Saved as template!".into()));
+                    toast.show.run((ToastKind::Success, "Saved as template!".into()));
                     templates.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
