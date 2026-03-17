@@ -627,6 +627,146 @@ fn tier_badge_class(tier: &str) -> &'static str {
 
 const TIERS: &[&str] = &["S+", "S", "A", "B", "C", "D"];
 
+/// Compute pool warning annotations for each of the 20 draft slots.
+///
+/// Returns a `Vec<Option<(player_name, class_gap_detail)>>` of length 20.
+/// `Some((player, detail))` means the slot's champion is not in that player's pool AND
+/// exposes a class gap (i.e. coaching-quality insight, not just a binary yes/no).
+/// `None` means no warning for that slot.
+///
+/// # Arguments
+/// * `slots` - 20-slot draft array, values are champion display names
+/// * `pools` - Team pools: `(username, role, pool_entries)` per player
+/// * `champions` - Champion lookup keyed by **display name** (`Champion.name`)
+/// * `our_side` - "blue" or "red"
+/// * `role_overrides` - Manual slot→role assignment overrides (keyed by slot index)
+pub fn compute_slot_warnings(
+    slots: &[Option<String>],
+    pools: &[(String, String, Vec<crate::models::champion::ChampionPoolEntry>)],
+    champions: &HashMap<String, crate::models::champion::Champion>,
+    our_side: &str,
+    role_overrides: &HashMap<usize, String>,
+) -> Vec<Option<(String, String)>> {
+    use crate::models::champion::Champion;
+
+    // Build a reverse lookup: canonical Data Dragon ID -> Champion
+    // This is needed because pool entries store canonical IDs, but champions map uses display names.
+    let id_to_champion: HashMap<&str, &Champion> = champions
+        .values()
+        .map(|c| (c.id.as_str(), c))
+        .collect();
+
+    // Our-side pick slot indices and their conventional role mapping
+    // Draft order: pick1=top, pick2=jungle, pick3=mid, pick4=bot, pick5=support
+    let (our_pick_slots, _opp_pick_slots): (&[usize], &[usize]) = if our_side == "blue" {
+        (&[6, 9, 10, 17, 18], &[7, 8, 11, 16, 19])
+    } else {
+        (&[7, 8, 11, 16, 19], &[6, 9, 10, 17, 18])
+    };
+
+    // Map pick slot index -> conventional role
+    let slot_to_default_role: HashMap<usize, &str> = our_pick_slots
+        .iter()
+        .zip(["top", "jungle", "mid", "bot", "support"].iter())
+        .map(|(&slot, &role)| (slot, role))
+        .collect();
+
+    let mut result: Vec<Option<(String, String)>> = vec![None; 20];
+
+    for &slot_idx in our_pick_slots {
+        let champ_name = match slots.get(slot_idx).and_then(|s| s.as_ref()) {
+            Some(name) => name,
+            None => continue, // empty slot, no warning
+        };
+
+        // Determine role for this slot
+        let role: &str = if let Some(override_role) = role_overrides.get(&slot_idx) {
+            override_role.as_str()
+        } else {
+            match slot_to_default_role.get(&slot_idx) {
+                Some(r) => r,
+                None => continue,
+            }
+        };
+
+        // Find the player whose role matches
+        let player = pools.iter().find(|(_, player_role, _)| {
+            normalize_role(player_role) == normalize_role(role)
+        });
+        let (username, _, pool_entries) = match player {
+            Some(p) => p,
+            None => continue, // no player for this role
+        };
+
+        // Check if champion is in the player's pool
+        // Pool entries may use canonical IDs or display names - check both
+        let in_pool = pool_entries.iter().any(|entry| {
+            entry.champion == *champ_name
+                || id_to_champion
+                    .get(entry.champion.as_str())
+                    .map(|c| c.name == *champ_name)
+                    .unwrap_or(false)
+        });
+
+        if in_pool {
+            // Champion is in pool - no warning
+            continue;
+        }
+
+        // Champion not in pool - check for class gap
+        // Get the picked champion's class tags
+        let picked_champ = champions.get(champ_name);
+        let picked_tags = match picked_champ {
+            Some(c) => &c.tags,
+            None => continue, // unknown champion, skip
+        };
+
+        if picked_tags.is_empty() {
+            continue; // no class info, can't determine gap
+        }
+
+        // Collect the classes already covered by the player's pool entries
+        let covered_classes: std::collections::HashSet<&str> = pool_entries
+            .iter()
+            .flat_map(|entry| {
+                // Look up by display name first, then by canonical ID
+                let champ = champions
+                    .get(entry.champion.as_str())
+                    .or_else(|| id_to_champion.get(entry.champion.as_str()).copied());
+                champ
+                    .map(|c| c.tags.iter().map(|t| t.as_str()).collect::<Vec<_>>())
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        // Find first class tag of the picked champion that is NOT covered
+        let missing_class = picked_tags
+            .iter()
+            .find(|tag| !covered_classes.contains(tag.as_str()));
+
+        if let Some(class) = missing_class {
+            result[slot_idx] = Some((
+                username.clone(),
+                format!("No {} coverage", class),
+            ));
+        }
+        // If all classes are covered (no gap), no warning despite champion not being in pool
+    }
+
+    result
+}
+
+/// Normalize role strings for matching (handles aliases like "jng" -> "jungle")
+fn normalize_role(role: &str) -> &str {
+    match role {
+        "jng" | "jungle" => "jungle",
+        "middle" | "mid" => "mid",
+        "bot" | "adc" => "bot",
+        "sup" | "support" => "support",
+        other => other,
+    }
+}
+
 #[component]
 pub fn DraftPage() -> impl IntoView {
     // Auth redirect
@@ -1034,6 +1174,23 @@ pub fn DraftPage() -> impl IntoView {
             }
             cb.forget();
         }
+    });
+
+    // Pool warning computation (Phase 4 - Inline Intel)
+    let (role_overrides, set_role_overrides) = signal(HashMap::<usize, String>::new());
+
+    let warning_slots_memo = Memo::new(move |_| {
+        let slots = draft_slots.get();       // tracked
+        let side = our_side.get();           // tracked
+        let overrides = role_overrides.get(); // tracked
+        let pools = team_pools.get()
+            .and_then(|r| r.ok())
+            .unwrap_or_default();
+        let champs = champions_resource.get()
+            .and_then(|r| r.ok())
+            .map(|v| v.into_iter().map(|c| (c.name.clone(), c)).collect::<HashMap<_, _>>())
+            .unwrap_or_default();
+        compute_slot_warnings(&slots, &pools, &champs, &side, &overrides)
     });
 
     // Role ordering for pool display
@@ -1535,11 +1692,57 @@ pub fn DraftPage() -> impl IntoView {
                                         highlighted_slot=highlighted_slot
                                         on_slot_clear=on_slot_clear
                                         slot_comments=slot_comments
+                                        warning_slots=Signal::from(warning_slots_memo)
                                     />
                                 }.into_any()
                             }
                         })}
                     </Suspense>
+
+                    // Role override dropdowns for our-side pick slots
+                    {move || {
+                        let side = our_side.get();
+                        let our_picks: &[usize] = if side == "blue" {
+                            &[6, 9, 10, 17, 18]
+                        } else {
+                            &[7, 8, 11, 16, 19]
+                        };
+                        let default_roles = ["Top", "Jungle", "Mid", "Bot", "Support"];
+                        view! {
+                            <div class="mt-2 flex flex-wrap gap-2 items-center">
+                                <span class="text-muted text-xs">"Role assignments:"</span>
+                                {our_picks.iter().zip(default_roles.iter()).map(|(&slot_idx, &default_role)| {
+                                    let override_val = role_overrides.get()
+                                        .get(&slot_idx)
+                                        .map(|r| r.to_string())
+                                        .unwrap_or_else(|| default_role.to_lowercase());
+                                    let (_, _, slot_label) = slot_meta(slot_idx);
+                                    view! {
+                                        <div class="flex items-center gap-1">
+                                            <span class="text-dimmed text-xs">{slot_label}</span>
+                                            <select
+                                                class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer"
+                                                prop:value=override_val
+                                                on:change=move |ev| {
+                                                    let val = event_target_value(&ev);
+                                                    set_role_overrides.update(|m| {
+                                                        m.insert(slot_idx, val);
+                                                    });
+                                                }
+                                            >
+                                                <option value="top">"Top"</option>
+                                                <option value="jungle">"Jungle"</option>
+                                                <option value="mid">"Mid"</option>
+                                                <option value="bot">"Bot"</option>
+                                                <option value="support">"Support"</option>
+                                            </select>
+                                        </div>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        }
+                    }}
+
                     // Per-slot comment editor (visible when a pick slot is highlighted)
                     {move || {
                         let hl = highlighted_slot.get();
@@ -2883,5 +3086,117 @@ pub fn DraftPage() -> impl IntoView {
                 })}
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::champion::{Champion, ChampionPoolEntry};
+    use std::collections::HashMap;
+
+    fn make_champion(id: &str, tags: Vec<&str>) -> Champion {
+        Champion {
+            id: id.to_string(),
+            name: id.to_string(),
+            title: String::new(),
+            tags: tags.into_iter().map(String::from).collect(),
+            image_full: String::new(),
+        }
+    }
+
+    fn make_pool_entry(user_id: &str, champion: &str, role: &str) -> ChampionPoolEntry {
+        ChampionPoolEntry {
+            id: None,
+            user_id: user_id.to_string(),
+            champion: champion.to_string(),
+            role: role.to_string(),
+            tier: "S".to_string(),
+            notes: None,
+            comfort_level: None,
+            meta_tag: None,
+        }
+    }
+
+    #[test]
+    fn champion_in_pool_no_warning() {
+        // Player has Darius in pool -> picking Darius = no warning
+        let mut champs = HashMap::new();
+        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let mut slots: Vec<Option<String>> = vec![None; 20];
+        slots[6] = Some("Darius".to_string()); // Blue pick 1 = top
+        let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
+        assert!(result[6].is_none(), "Champion in pool should not trigger warning");
+    }
+
+    #[test]
+    fn champion_not_in_pool_with_class_gap_warns() {
+        // Player has only Fighters, picks a Mage (not in pool + class gap)
+        let mut champs = HashMap::new();
+        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
+        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let mut slots: Vec<Option<String>> = vec![None; 20];
+        slots[6] = Some("Syndra".to_string()); // Blue pick 1 = top
+        let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
+        assert!(result[6].is_some(), "Not-in-pool champion with class gap should warn");
+        let (name, detail) = result[6].as_ref().unwrap();
+        assert_eq!(name, "TopPlayer");
+        assert!(detail.contains("Mage"), "Should mention the missing class");
+    }
+
+    #[test]
+    fn champion_not_in_pool_without_class_gap_no_warning() {
+        // Player has Darius (Fighter) in pool, picks Garen (also Fighter, not in pool)
+        // No class gap because Fighter is already covered
+        let mut champs = HashMap::new();
+        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        champs.insert("Garen".to_string(), make_champion("Garen", vec!["Fighter"]));
+        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let mut slots: Vec<Option<String>> = vec![None; 20];
+        slots[6] = Some("Garen".to_string());
+        let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
+        assert!(result[6].is_none(), "No class gap = no warning even if champion not in pool");
+    }
+
+    #[test]
+    fn wrong_side_slot_no_warning() {
+        // Blue side: red pick slots should never have warnings
+        let mut champs = HashMap::new();
+        champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
+        let pools = vec![("TopPlayer".to_string(), "top".to_string(), vec![])];
+        let mut slots: Vec<Option<String>> = vec![None; 20];
+        slots[7] = Some("Syndra".to_string()); // Red pick 1 (not our side when blue)
+        let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
+        assert!(result[7].is_none(), "Opponent-side slots should not have warnings");
+    }
+
+    #[test]
+    fn side_switch_changes_checked_slots() {
+        let mut champs = HashMap::new();
+        champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
+        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let mut slots: Vec<Option<String>> = vec![None; 20];
+        slots[6] = Some("Syndra".to_string()); // Blue pick 1
+        slots[7] = Some("Syndra".to_string()); // Red pick 1
+        let blue_result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
+        let red_result = compute_slot_warnings(&slots, &pools, &champs, "red", &HashMap::new());
+        // Blue side: slot 6 is ours (may warn), slot 7 is theirs (no warn)
+        // Red side: slot 7 is ours (may warn), slot 6 is theirs (no warn)
+        assert!(blue_result[7].is_none(), "Slot 7 is opponent on blue side");
+        assert!(red_result[6].is_none(), "Slot 6 is opponent on red side");
+    }
+
+    #[test]
+    fn empty_inputs_no_panic() {
+        let result = compute_slot_warnings(&vec![None; 20], &[], &HashMap::new(), "blue", &HashMap::new());
+        assert_eq!(result.len(), 20);
+        assert!(result.iter().all(|w| w.is_none()));
     }
 }
