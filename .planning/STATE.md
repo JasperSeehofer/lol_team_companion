@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-03-17T17:11:24.920Z"
+milestone_name: Cross-Feature Intelligence
+status: completed
+last_updated: "2026-03-18"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -13,25 +13,23 @@ progress:
 
 ## Position
 
-All 19 plans across 6 phases complete. Milestone v1.0 achieved.
+Milestone v1.0 shipped. All 6 phases (21 plans) complete.
+
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-03-18)
+
+**Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
+**Current focus:** Planning next milestone
 
 ## Decisions
 
-- Phases 04 and 05 are gap closure phases created after milestone audit found 7/9 requirements unsatisfied
-- Original roadmap defined these phases but they were never created or executed
+- Phases 04 and 05 are gap closure phases created after milestone audit found requirements unsatisfied
 - Phase 02 integration tests gap deferred as tech debt (non-blocking)
 - BUG-001 (tree drafter branch visibility) deferred as tech debt
-- [Phase 04-inline-intel]: Used in-memory filter for opponent win condition stats to keep code unit-testable (Approach B over SurrealQL join)
-- [Phase 04-inline-intel]: Pool warnings combine not-in-pool with class gap analysis (coaching-quality insight, not binary yes/no)
-- [Phase 04-inline-intel]: DraftBoard warning_slots prop uses dual champion lookup (display name + canonical Data Dragon ID) to bridge draft slots vs pool entry identifier mismatch
-- [Phase 04-inline-intel]: Used riven Champion::identifier() for Data Dragon name mapping — no HashMap needed, riven enum has static lookup
-- [Phase 04-inline-intel]: get_opponent_intel_full added alongside existing get_opponent_intel for backward compatibility
-- [Phase 05-post-game-loop-polish]: Used AtomicU64 in StoredValue for toast ID gen (Cell<u64> not Sync)
-- [Phase 05-post-game-loop-polish]: Added Navigator+Clipboard to web-sys features for clipboard copy in error toasts
-- [Phase 05]: batch_create_action_items_from_review uses list_open_action_items for dedup to reuse existing query; create_review returns (String, usize) tuple for review_id + items_created count
-- [Phase 05-post-game-loop-polish]: ChecklistSection and LiveNavigator sub-components receive ToastContext by value (Copy) instead of WriteSignal — cleaner API, no wrapper needed
-- [Phase 05-post-game-loop-polish]: Sub-components (OpponentDetail, PlayerCard) use_context::<ToastContext>() directly rather than receiving error_msg prop
-- [Phase 05-05]: opponents.rs uses has_team resource (calls get_team_dashboard) to distinguish no-team vs no-opponents for correct NoTeamState vs EmptyState selection
-- [Phase 05-05]: champion_pool empty state at role-level per active tab; dashboard StatusMessage signals removed entirely and replaced with toast
-- [Phase 05-post-game-loop-polish]: SkeletonGrid cols=4 for champion picker grids; stacked SkeletonCard for list-type data in Suspense fallbacks
-- [Phase 05]: Used same has_team Resource pattern from opponents.rs for stats.rs and champion_pool.rs NoTeamState
+- Dashboard incomplete workflow counts deferred to v2
+- post_game_champ_outcomes empty Vec accepted (schema limitation)
+
+## Accumulated Context
+
+All context from v1.0 archived to `.planning/milestones/`. See MILESTONES.md for summary.

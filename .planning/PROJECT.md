@@ -1,8 +1,8 @@
-# LoL Team Companion — Cross-Feature Intelligence
+# LoL Team Companion
 
 ## What This Is
 
-A League of Legends team management web app for coordinating drafts, tracking stats, and planning games. Built with Rust/Leptos/SurrealDB, it serves teams who want a single place to prepare for competitive play. Currently feature-complete but siloed — each feature (drafts, stats, game plans, post-game reviews) operates independently without sharing data or context.
+A League of Legends team management web app for coordinating drafts, tracking stats, and planning games. Built with Rust/Leptos/SurrealDB. Features are connected — drafts flow into game plans, post-game reviews auto-generate action items, and the dashboard surfaces prep priorities, pool gaps, and recent patterns at a glance.
 
 ## Core Value
 
@@ -12,62 +12,79 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 
 ### Validated
 
-- ✓ User authentication (register, login, logout, sessions) — existing
-- ✓ Team management (create, join, roster, join requests) — existing
-- ✓ Draft planning (linear drafts with blue/red side) — existing
-- ✓ Tree-based draft planning (graph view, node editing) — existing
-- ✓ Champion pool management (tier-based) — existing
-- ✓ Match history and stats (via Riot API) — existing
-- ✓ Game plan creation (pre-game strategy) — existing
-- ✓ Post-game review with pattern analysis — existing
-- ✓ Opponent scouting profiles — existing
-- ✓ Cross-feature action items — existing
-- ✓ Team notebook (shared notes) — existing
-- ✓ Theme system (dark/light + accent colors) — existing
+- ✓ User authentication (register, login, logout, sessions) — pre-v1.0
+- ✓ Team management (create, join, roster, join requests) — pre-v1.0
+- ✓ Draft planning (linear drafts with blue/red side) — pre-v1.0
+- ✓ Tree-based draft planning (graph view, node editing) — pre-v1.0
+- ✓ Champion pool management (tier-based) — pre-v1.0
+- ✓ Match history and stats (via Riot API) — pre-v1.0
+- ✓ Game plan creation (pre-game strategy) — pre-v1.0
+- ✓ Post-game review with pattern analysis — pre-v1.0
+- ✓ Opponent scouting profiles — pre-v1.0
+- ✓ Cross-feature action items — pre-v1.0
+- ✓ Team notebook (shared notes) — pre-v1.0
+- ✓ Theme system (dark/light + accent colors) — pre-v1.0
+- ✓ Game plan from draft with picks/bans/side prefill (PIPE-01) — v1.0
+- ✓ Post-game auto-generates action items from patterns (PIPE-02) — v1.0
+- ✓ Draft warns on champion pool gaps (PIPE-03) — v1.0
+- ✓ Opponent tendency sidebar on draft page (PIPE-04) — v1.0
+- ✓ Smart dashboard with prep priorities (INTL-01) — v1.0
+- ✓ Win condition tracker with historical stats (INTL-02) — v1.0
+- ✓ Meaningful empty states with CTAs on all pages (UX-01) — v1.0
+- ✓ Skeleton loading screens on all data pages (UX-02) — v1.0
+- ✓ Consistent mutation feedback via toast system (UX-03) — v1.0
 
 ### Active
 
-- [ ] Smart dashboard that surfaces what matters (upcoming prep, patterns, action items)
-- [ ] Stats-informed draft suggestions (win rates, champion performance → draft recommendations)
-- [ ] Draft → Game plan pipeline (planned draft flows into pre-game strategy)
-- [ ] Post-game → Next game loop (lessons and action items surface in future game prep)
-- [ ] Game day guided flow (opponent review → draft plan → game plan → post-game review)
-- [ ] Auto-suggestions (ban recommendations from stats, champion pool gap warnings)
-- [ ] Meaningful empty states that guide users on what to do next
-- [ ] Loading states and skeleton screens for data-fetching pages
-- [ ] Clear success/error feedback for all mutations (save, delete, update)
+- [ ] Ban recommendations based on team champion win rate data (INTL-03)
+- [ ] Stats-informed draft pick scoring using match history (INTL-04)
+- [ ] Post-game lesson recall when facing previously-seen opponent (INTL-05)
+- [ ] Draft outcome correlation ("your team wins 70% with engage comps") (INTL-06)
+- [ ] Game day guided wizard flow (FLOW-01)
 
 ### Out of Scope
 
-- Mobile-specific responsive redesign — not this milestone, desktop-first
-- Public launch infrastructure (CI/CD, monitoring, error tracking) — separate effort
-- Onboarding wizard for new teams — polish milestone, not intelligence
-- Real-time collaboration (WebSocket live updates) — complexity not justified yet
-- OAuth / social login — email/password works, not a priority
+- Real-time collaborative editing — WebSocket complexity without proportional value for async team prep
+- AI/LLM-generated draft picks — no comparable data corpus; surfaces own-data win rates instead
+- Video analysis / VOD review — completely different product surface
+- Mobile responsive redesign — desktop-first; mobile comes after intelligence features
+- Public leaderboards / social — shifts product from private team tool to public platform
+- Riot API live in-game overlay — requires desktop client
+- Auto opponent stats via Riot API — rate limits make per-game scouting expensive
+- Offline mode — real-time data is core value
 
 ## Context
 
-This is a brownfield project with ~10,500 lines of page code across 13 route components, plus 3,200 lines of DB queries. The app is functional but each feature is an island — drafts, stats, game plans, and post-game reviews don't share data or context. The codebase has solid patterns (typed DB structs, server functions, reactive signals) that can be extended for cross-feature data flow.
+Shipped v1.0 with 22,986 lines of Rust across 13 route components + server/DB layer.
+Tech stack: Rust nightly / Leptos 0.8 / Axum 0.8 / SurrealDB 3.x / Tailwind CSS v4.
+Features are now connected end-to-end: draft → game plan → post-game → action items.
+Dashboard surfaces prep priorities with independently-loading panels.
+All pages have consistent UX (skeletons, empty states, toast feedback).
 
-The target user is a competitive League team (5 players + coach) who wants to improve through structured preparation. The app should feel like a coaching assistant that connects the dots between past performance and future strategy.
+Known tech debt from v1.0:
+- Missing integration tests for DB aggregation functions
+- `post_game_champ_outcomes` returns empty (schema lacks win/loss field)
+- Dashboard incomplete workflow counts not surfaced (deferred)
 
-The app will eventually be public (any team can sign up), so the intelligence features need to work generically — not hardcoded to one team's workflow.
+## Key Decisions
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| Intelligence before polish | Disconnected data was the bigger gap; polish followed naturally | ✓ Good — v1.0 shipped both |
+| No real-time sync | WebSocket adds complexity without proportional value for async team prep | ✓ Good — not needed |
+| Desktop-first | Competitive teams primarily prep on desktop | ✓ Good — appropriate for v1.0 |
+| Champion name normalization in Rust | SurrealDB lacks good string normalization; 3-pass lookup (exact ID, case-insensitive, fuzzy) | ✓ Good — enabled cross-feature joins |
+| In-memory filter for opponent stats | Unit-testable over SurrealQL join approach | ✓ Good — clean separation |
+| Toast system via context provider | AtomicU64 for ID gen (Cell not Sync); Callback::new for Copy closures | ✓ Good — works across all pages |
+| Gap closure phases (4, 5) | Milestone audit found requirements unsatisfied → created targeted phases | ✓ Good — systematic coverage |
 
 ## Constraints
 
 - **Tech stack**: Rust nightly / Leptos 0.8 / Axum 0.8 / SurrealDB 3.x — no changes
 - **Single crate**: Must maintain dual SSR/WASM compile target architecture
 - **Riot API**: Rate limited per key — cross-feature queries must minimize API calls
-- **DB monolith**: `db.rs` is 3,243 lines — new queries add to this, but splitting is out of scope
+- **DB monolith**: `db.rs` is ~4,000 lines — splitting is a future refactor
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Intelligence before polish | User feels disconnected data is the bigger gap; polish follows naturally | — Pending |
-| No real-time sync | WebSocket adds complexity without proportional value for async team prep | — Pending |
-| Desktop-first | Competitive teams primarily prep on desktop; mobile can come later | — Pending |
-
 ---
-*Last updated: 2026-03-14 after initialization*
+*Last updated: 2026-03-18 after v1.0 milestone*
