@@ -3131,9 +3131,9 @@ pub async fn get_win_condition_stats_vs_opponent(
 ) -> DbResult<Vec<(String, i32, i32)>> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
-    // Fetch game plans with win_condition_tag, drafts (for opponent_name), and post_game_learning
+    // Fetch game plans with win_condition_tag, drafts (for opponent), and post_game_learning
     let mut result = db
-        .query("SELECT id, win_condition_tag, draft_id FROM game_plan WHERE team = type::record('team', $team_key) AND win_condition_tag != NONE; SELECT id, opponent_name FROM draft WHERE team = type::record('team', $team_key); SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key); SELECT match_id, id FROM match WHERE team_id = type::record('team', $team_key); SELECT * FROM player_match")
+        .query("SELECT id, win_condition_tag, draft FROM game_plan WHERE team = type::record('team', $team_key) AND win_condition_tag != NONE; SELECT id, opponent FROM draft WHERE team = type::record('team', $team_key); SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key); SELECT match_id, id FROM match WHERE team_id = type::record('team', $team_key); SELECT * FROM player_match")
         .bind(("team_key", team_key))
         .await?;
 
@@ -3141,13 +3141,13 @@ pub async fn get_win_condition_stats_vs_opponent(
     struct PlanTagWithDraft {
         id: RecordId,
         win_condition_tag: Option<String>,
-        draft_id: Option<String>,
+        draft: Option<String>,
     }
 
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbDraftOpponent {
         id: RecordId,
-        opponent_name: Option<String>,
+        opponent: Option<String>,
     }
 
     #[derive(Debug, Deserialize, SurrealValue)]
@@ -3176,11 +3176,11 @@ pub async fn get_win_condition_stats_vs_opponent(
     let matches: Vec<DbMatchRefVs> = result.take(3).unwrap_or_default();
     let player_matches: Vec<DbPlayerMatchVs> = result.take(4).unwrap_or_default();
 
-    // Build draft id -> opponent_name lookup
+    // Build draft id -> opponent lookup
     let draft_opponent: HashMap<String, String> = drafts
         .iter()
         .filter_map(|d| {
-            d.opponent_name
+            d.opponent
                 .as_ref()
                 .map(|opp| (d.id.to_sql(), opp.clone()))
         })
@@ -3202,23 +3202,13 @@ pub async fn get_win_condition_stats_vs_opponent(
         }
     }
 
-    // Build per-game-plan flat data: (tag, opponent_name, is_win)
+    // Build per-game-plan flat data: (tag, opponent, is_win)
     let plan_tags_lookup: HashMap<String, (String, Option<String>)> = plans
         .iter()
         .filter_map(|p| {
             p.win_condition_tag.as_ref().map(|tag| {
                 let plan_sql = p.id.to_sql();
-                let opp = p.draft_id.as_ref().and_then(|did| {
-                    // draft_id may be stored as full record ID or bare key
-                    draft_opponent
-                        .get(did)
-                        .or_else(|| {
-                            // try matching by stripping prefix
-                            let full = format!("draft:{did}");
-                            draft_opponent.get(&full)
-                        })
-                        .cloned()
-                });
+                let opp = p.draft.as_ref().and_then(|did| draft_opponent.get(did).cloned());
                 (plan_sql, (tag.clone(), opp))
             })
         })

@@ -569,6 +569,32 @@ pub fn GamePlanPage() -> impl IntoView {
     let (win_condition_tag, set_win_condition_tag) = signal(String::new());
     let strategy_win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
 
+    // Win condition tracker state
+    let (tracker_open, set_tracker_open) = signal(true);
+    let (tracker_vs_opponent, set_tracker_vs_opponent) = signal(false);
+    // opponent_win_rates loads when vs-opponent tab is active and an opponent is linked to the draft
+    let opponent_win_rates = Resource::new(
+        move || {
+            let show = tracker_vs_opponent.get();
+            let opp = drafts
+                .get()
+                .and_then(|r| r.ok())
+                .unwrap_or_default()
+                .into_iter()
+                .find(|d| d.id.as_deref() == Some(&draft_id.get()))
+                .and_then(|d| d.opponent.clone())
+                .unwrap_or_default();
+            (show, opp)
+        },
+        move |(show, opp)| async move {
+            if !show || opp.is_empty() {
+                Ok(Vec::<(String, i32, i32)>::new())
+            } else {
+                get_strategy_win_rates_vs_opponent(opp).await
+            }
+        },
+    );
+
     // Prefill Effect: seed editor from draft when ?draft_id=X is set
     let our_sigs_for_prefill = our_champ_signals.clone();
     let enemy_sigs_for_prefill = enemy_champ_signals.clone();
@@ -1266,6 +1292,151 @@ pub fn GamePlanPage() -> impl IntoView {
                                 })
                             }}
                         </Suspense>
+                    </div>
+
+                    // Win Condition Tracker panel
+                    <div class="bg-surface border border-divider rounded-lg">
+                        // Panel header with collapse toggle and tab switcher
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-divider/50">
+                            <button
+                                class="flex items-center gap-2 text-primary font-medium text-sm hover:text-accent transition-colors"
+                                on:click=move |_| set_tracker_open.update(|v| *v = !*v)
+                            >
+                                {move || if tracker_open.get() { "\u{25bc}" } else { "\u{25b6}" }}
+                                " Win Condition History"
+                            </button>
+                            {move || if tracker_open.get() {
+                                // Determine if an opponent is linked for enabling vs tab
+                                let linked_opponent = drafts
+                                    .get()
+                                    .and_then(|r| r.ok())
+                                    .unwrap_or_default()
+                                    .into_iter()
+                                    .find(|d| d.id.as_deref() == Some(&draft_id.get()))
+                                    .and_then(|d| d.opponent.clone())
+                                    .unwrap_or_default();
+                                let has_opponent = !linked_opponent.is_empty();
+                                let vs_label = if has_opponent {
+                                    format!("vs {linked_opponent}")
+                                } else {
+                                    "vs Opponent".to_string()
+                                };
+                                view! {
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            class=move || {
+                                                if !tracker_vs_opponent.get() {
+                                                    "px-2.5 py-1 rounded text-xs font-medium bg-accent text-accent-contrast transition-colors"
+                                                } else {
+                                                    "px-2.5 py-1 rounded text-xs font-medium bg-overlay hover:bg-overlay-strong text-secondary transition-colors"
+                                                }
+                                            }
+                                            on:click=move |_| set_tracker_vs_opponent.set(false)
+                                        >"All-Time"</button>
+                                        <button
+                                            class=move || {
+                                                let active = tracker_vs_opponent.get();
+                                                if !has_opponent {
+                                                    "px-2.5 py-1 rounded text-xs font-medium bg-overlay text-dimmed cursor-not-allowed opacity-50"
+                                                } else if active {
+                                                    "px-2.5 py-1 rounded text-xs font-medium bg-accent text-accent-contrast transition-colors"
+                                                } else {
+                                                    "px-2.5 py-1 rounded text-xs font-medium bg-overlay hover:bg-overlay-strong text-secondary transition-colors"
+                                                }
+                                            }
+                                            disabled=!has_opponent
+                                            on:click=move |_| {
+                                                if has_opponent {
+                                                    set_tracker_vs_opponent.set(true);
+                                                }
+                                            }
+                                        >{vs_label}</button>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                view! { <span></span> }.into_any()
+                            }}
+                        </div>
+                        // Panel body
+                        {move || if tracker_open.get() {
+                            let current_tag = win_condition_tag.get();
+                            let show_vs = tracker_vs_opponent.get();
+                            view! {
+                                <div class="p-4">
+                                    <Suspense fallback=|| view! { <div class="text-dimmed text-xs py-2">"Loading..."</div> }>
+                                        {move || {
+                                            let rates_result = if show_vs {
+                                                opponent_win_rates.get()
+                                            } else {
+                                                strategy_win_rates.get()
+                                            };
+                                            let current_tag_inner = current_tag.clone();
+                                            rates_result.map(|result| match result {
+                                                Ok(rates) if rates.is_empty() => view! {
+                                                    <div class="text-center py-4">
+                                                        <p class="text-muted text-sm">"No win condition data yet."</p>
+                                                        <p class="text-dimmed text-xs mt-1">
+                                                            "Complete post-game reviews with tagged win conditions to see trends here."
+                                                        </p>
+                                                    </div>
+                                                }.into_any(),
+                                                Ok(rates) => {
+                                                    let max_games = rates.iter().map(|(_, t, _)| *t).max().unwrap_or(1).max(1);
+                                                    view! {
+                                                        <div class="flex flex-col divide-y divide-divider/30">
+                                                            {rates.into_iter().map(|(tag, total, wins)| {
+                                                                let win_pct = if total > 0 { (wins * 100) / total } else { 0 };
+                                                                let bar_pct = if max_games > 0 { (total * 100) / max_games } else { 0 };
+                                                                let is_current = tag == current_tag_inner;
+                                                                let bar_color = if win_pct > 60 {
+                                                                    "bg-emerald-600"
+                                                                } else if win_pct >= 40 {
+                                                                    "bg-amber-500"
+                                                                } else {
+                                                                    "bg-red-600"
+                                                                };
+                                                                let row_class = if is_current {
+                                                                    "py-2 px-2 rounded bg-accent/10 border-l-2 border-accent flex items-center gap-3"
+                                                                } else {
+                                                                    "py-2 flex items-center gap-3"
+                                                                };
+                                                                view! {
+                                                                    <div class=row_class>
+                                                                        <span class="text-primary text-xs font-medium w-36 shrink-0 truncate">{tag}</span>
+                                                                        <div class="flex-1 bg-overlay/50 rounded-full h-2 overflow-hidden">
+                                                                            <div
+                                                                                class=format!("{bar_color} h-2 rounded-full transition-all")
+                                                                                style=format!("width: {bar_pct}%")
+                                                                            ></div>
+                                                                        </div>
+                                                                        <span class="text-muted text-xs w-12 text-right shrink-0">
+                                                                            {format!("{wins}/{total}")}
+                                                                        </span>
+                                                                        <span class="text-secondary text-xs w-10 text-right shrink-0">
+                                                                            {format!("{win_pct}%")}
+                                                                        </span>
+                                                                    </div>
+                                                                }
+                                                            }).collect_view()}
+                                                        </div>
+                                                    }.into_any()
+                                                },
+                                                Err(_) => view! {
+                                                    <div class="text-center py-4">
+                                                        <p class="text-muted text-sm">"No win condition data yet."</p>
+                                                        <p class="text-dimmed text-xs mt-1">
+                                                            "Complete post-game reviews with tagged win conditions to see trends here."
+                                                        </p>
+                                                    </div>
+                                                }.into_any(),
+                                            })
+                                        }}
+                                    </Suspense>
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! { <div></div> }.into_any()
+                        }}
                     </div>
 
                     // Macro strategy
