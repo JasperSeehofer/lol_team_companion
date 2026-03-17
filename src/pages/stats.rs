@@ -1,5 +1,5 @@
 use crate::components::stat_card::StatCard;
-use crate::components::ui::ErrorBanner;
+use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard};
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -406,19 +406,26 @@ pub fn StatsPage() -> impl IntoView {
             </div>
 
             // Stats content
-            <Suspense fallback=|| view! { <div class="text-dimmed text-center py-8">"Loading stats..."</div> }>
+            <Suspense fallback=|| view! {
+                <div class="flex flex-col gap-2">
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                </div>
+            }>
                 {move || stats.get().map(|result| match result {
                     Err(e) => view! {
                         <ErrorBanner message=format!("Failed to load stats: {e}") />
                     }.into_any(),
                     Ok(rows) if rows.is_empty() => view! {
-                        <div class="text-center py-12">
-                            <p class="text-muted text-lg mb-2">"No match data yet"</p>
-                            <p class="text-dimmed text-sm mb-6">"Create or join a team, then click Sync Matches to pull recent games."</p>
-                            <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors">
-                                "Go to Team"
-                            </a>
-                        </div>
+                        <EmptyState
+                            icon="📊"
+                            message="No match stats yet — link your Riot account and play some games to see stats here"
+                            cta_label="Link Riot Account"
+                            cta_href="/profile"
+                        />
                     }.into_any(),
                     Ok(rows) => {
                         let all_matches = group_matches(&rows);

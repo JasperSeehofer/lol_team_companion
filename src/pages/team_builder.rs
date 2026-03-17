@@ -1,3 +1,4 @@
+use crate::components::ui::{EmptyState, ToastContext, ToastKind};
 use crate::models::champion::{Champion, ChampionPoolEntry, ChampionStatSummary};
 use crate::models::opponent::{Opponent, OpponentPlayer};
 use leptos::prelude::*;
@@ -460,12 +461,10 @@ pub fn TeamBuilderPage() -> impl IntoView {
         },
     );
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+
     // Opponent section collapsed state
     let opponent_expanded: RwSignal<bool> = RwSignal::new(false);
-
-    // Save result
-    let save_result: RwSignal<Option<String>> = RwSignal::new(None);
-    let save_error: RwSignal<Option<String>> = RwSignal::new(None);
 
     // Comp name for saving
     let comp_name: RwSignal<String> = RwSignal::new(String::new());
@@ -488,10 +487,10 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                     if roster_data.is_empty() {
                         return view! {
-                            <div class="bg-elevated rounded-lg border border-divider p-8 text-center">
-                                <p class="text-muted text-lg mb-2">"No team roster found"</p>
-                                <p class="text-dimmed text-sm">"Create or join a team, then assign starters with roles to start building compositions."</p>
-                            </div>
+                            <EmptyState
+                                icon="⚗️"
+                                message="No team compositions saved yet — use the builder below to try role combinations"
+                            />
                         }.into_any();
                     }
 
@@ -852,7 +851,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                     on:click=move |_| {
                                         let name = comp_name.get_untracked();
                                         if name.trim().is_empty() {
-                                            save_error.set(Some("Please enter a name for the composition".to_string()));
+                                            toast.show.run((ToastKind::Error, "Please enter a name for the composition".into()));
                                             return;
                                         }
 
@@ -866,7 +865,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                             .collect();
 
                                         if filled.is_empty() {
-                                            save_error.set(Some("Select at least one champion".to_string()));
+                                            toast.show.run((ToastKind::Error, "Select at least one champion".into()));
                                             return;
                                         }
 
@@ -878,16 +877,13 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                             opps_for_save.iter().find(|o| o.id.as_deref() == Some(&id)).map(|o| o.name.clone())
                                         });
 
-                                        save_error.set(None);
-                                        save_result.set(None);
-
                                         leptos::task::spawn_local(async move {
                                             match save_comp_as_draft(name, champs_json, opp_name, Some("blue".to_string()), tags_json).await {
                                                 Ok(_id) => {
-                                                    save_result.set(Some("Composition saved as draft! View it on the Draft page.".to_string()));
+                                                    toast.show.run((ToastKind::Success, "Composition saved".into()));
                                                 }
                                                 Err(e) => {
-                                                    save_error.set(Some(format!("Failed to save: {e}")));
+                                                    toast.show.run((ToastKind::Error, format!("{e}")));
                                                 }
                                             }
                                         });
@@ -897,20 +893,6 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                 </button>
                             </div>
 
-                            // Save feedback
-                            {move || {
-                                if let Some(msg) = save_result.get() {
-                                    view! {
-                                        <p class="mt-3 text-sm text-green-400">{msg}</p>
-                                    }.into_any()
-                                } else if let Some(err) = save_error.get() {
-                                    view! {
-                                        <p class="mt-3 text-sm text-red-400">{err}</p>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }
-                            }}
                         </div>
                     }.into_any()
                 }}

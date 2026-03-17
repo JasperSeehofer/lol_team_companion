@@ -1,3 +1,4 @@
+use crate::components::ui::{EmptyState, SkeletonCard, SkeletonGrid, ToastContext, ToastKind};
 use crate::models::champion::ChampionPoolEntry;
 use crate::models::user::PublicUser;
 use leptos::prelude::*;
@@ -79,12 +80,33 @@ const POOL_ROLES: &[&str] = &["Top", "Jungle", "Mid", "ADC", "Support"];
 
 #[component]
 pub fn ProfilePage() -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let user = Resource::new(|| (), |_| get_current_user());
     let update_profile_action = ServerAction::<UpdateProfile>::new();
     let link_riot = ServerAction::<crate::pages::team::roster::LinkRiotAccount>::new();
     let logout_action = ServerAction::<Logout>::new();
 
     let pool_resource = Resource::new(|| (), |_| get_champion_pool());
+
+    // Toast feedback for update_profile
+    Effect::new(move || {
+        if let Some(result) = update_profile_action.value().get() {
+            match result {
+                Ok(()) => toast.show.run((ToastKind::Success, "Profile updated".into())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+            }
+        }
+    });
+
+    // Toast feedback for link_riot
+    Effect::new(move || {
+        if let Some(result) = link_riot.value().get() {
+            match result {
+                Ok(()) => toast.show.run((ToastKind::Success, "Riot account linked".into())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+            }
+        }
+    });
 
     // Hard-navigate on logout so session state is fully cleared
     Effect::new(move || {
@@ -109,7 +131,7 @@ pub fn ProfilePage() -> impl IntoView {
     view! {
         <div class="max-w-2xl mx-auto py-8 px-6">
             <h1 class="text-3xl font-bold text-primary mb-8">"Profile"</h1>
-            <Suspense fallback=move || view! { <p class="text-muted">"Loading..."</p> }>
+            <Suspense fallback=move || view! { <SkeletonCard height="h-20" /> }>
                 {move || Suspend::new(async move {
                     match user.await {
                         Ok(Some(u)) => {
@@ -123,18 +145,6 @@ pub fn ProfilePage() -> impl IntoView {
                                     <section class="bg-surface border border-divider rounded-lg p-6">
                                         <h2 class="text-xl font-semibold text-primary mb-4">"Account"</h2>
 
-                                        {move || update_profile_action.value().get().map(|r| match r {
-                                            Ok(()) => view! {
-                                                <div class="bg-green-900 border border-green-700 text-green-200 rounded px-4 py-3 text-sm mb-4">
-                                                    "Profile updated!"
-                                                </div>
-                                            }.into_any(),
-                                            Err(e) => view! {
-                                                <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm mb-4">
-                                                    {e.to_string()}
-                                                </div>
-                                            }.into_any(),
-                                        })}
 
                                         <div>
                                             <label class="block text-secondary text-sm mb-1">"Username"</label>
@@ -201,24 +211,14 @@ pub fn ProfilePage() -> impl IntoView {
                                                 </p>
                                             }.into_any(),
                                             None => view! {
-                                                <p class="text-muted text-sm mb-4">
-                                                    "No Riot account linked."
-                                                </p>
+                                                <EmptyState
+                                                    icon="🔗"
+                                                    message="Link your Riot account to track match stats and see champion performance across the app"
+                                                    cta_label="Link Account"
+                                                    cta_href="#link-account"
+                                                />
                                             }.into_any(),
                                         }}
-
-                                        {move || link_riot.value().get().map(|r| match r {
-                                            Ok(()) => view! {
-                                                <div class="bg-green-900 border border-green-700 text-green-200 rounded px-4 py-3 text-sm mb-4">
-                                                    "Riot account linked!"
-                                                </div>
-                                            }.into_any(),
-                                            Err(e) => view! {
-                                                <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm mb-4">
-                                                    {e.to_string()}
-                                                </div>
-                                            }.into_any(),
-                                        })}
 
                                         <ActionForm action=link_riot>
                                             <div class="flex flex-col gap-4">
@@ -255,7 +255,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                 "Manage Pool"
                                             </a>
                                         </div>
-                                        <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
+                                        <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=2 card_height="h-16" /> }>
                                             {move || pool_resource.get().map(|result| match result {
                                                 Ok(pool) => {
                                                     if pool.is_empty() {
