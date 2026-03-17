@@ -1,4 +1,4 @@
-use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
 use leptos::prelude::*;
@@ -569,6 +569,7 @@ fn role_icon_url(role: &str) -> &'static str {
 
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -590,17 +591,15 @@ pub fn TeamDashboard() -> impl IntoView {
     view! {
         <div class="max-w-4xl mx-auto py-8 px-6">
             <h1 class="text-3xl font-bold text-primary mb-6">"Team Dashboard"</h1>
-            <Suspense fallback=|| view! { <div class="text-muted">"Loading..."</div> }>
+            <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                 {move || dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
                         let is_leader = team.created_by == current_user_id;
                         let created_by = team.created_by.clone();
                         let (edit_name, set_edit_name) = signal(team.name.clone());
                         let (edit_region, set_edit_region) = signal(team.region.clone());
-                        let (edit_msg, set_edit_msg) = signal(Option::<String>::None);
                         let (show_edit_modal, set_show_edit_modal) = signal(false);
                         let (leave_confirm, set_leave_confirm) = signal(false);
-                        let (leave_msg, set_leave_msg) = signal(Option::<String>::None);
 
                         // Check if current user has riot account linked
                         let current_user_riot_linked = members.iter()
@@ -689,9 +688,6 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 on:click=move |ev| ev.stop_propagation()
                                             >
                                                 <h3 class="text-primary text-lg font-semibold mb-4">"Edit Team"</h3>
-                                                {move || edit_msg.get().map(|m| {
-                                                    view! { <div class="mb-3"><StatusMessage message=m /></div> }
-                                                })}
                                                 <div class="flex flex-col gap-4">
                                                     <div>
                                                         <label class="block text-muted text-xs mb-1">"Team Name"</label>
@@ -719,7 +715,6 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             class="text-secondary hover:text-primary text-sm px-4 py-2 rounded transition-colors cursor-pointer hover:bg-overlay"
                                                             on:click=move |_| {
                                                                 set_show_edit_modal.set(false);
-                                                                set_edit_msg.set(None);
                                                             }
                                                         >
                                                             "Cancel"
@@ -732,7 +727,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 leptos::task::spawn_local(async move {
                                                                     match update_team_info(name, region).await {
                                                                         Ok(_) => {
-                                                                            set_edit_msg.set(Some("Saved!".into()));
+                                                                            toast.show.run((ToastKind::Success, "Team info updated".into()));
                                                                             dashboard.refetch();
                                                                             // Close modal after a brief delay to show success
                                                                             #[cfg(feature = "hydrate")]
@@ -740,7 +735,6 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                 use wasm_bindgen::prelude::*;
                                                                                 let cb = Closure::once(move || {
                                                                                     set_show_edit_modal.set(false);
-                                                                                    set_edit_msg.set(None);
                                                                                 });
                                                                                 if let Some(win) = web_sys::window() {
                                                                                     let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
@@ -750,7 +744,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                 cb.forget();
                                                                             }
                                                                         }
-                                                                        Err(e) => set_edit_msg.set(Some(format!("Error: {e}"))),
+                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                     }
                                                                 });
                                                             }
@@ -1079,7 +1073,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                         <h3 class="text-lg font-semibold text-primary">"Recent Games"</h3>
                                         <A href="/stats" attr:class="text-accent text-sm hover:underline">"View all stats \u{2192}"</A>
                                     </div>
-                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || recent_matches.get().map(|res| match res {
                                             Ok(matches) if matches.is_empty() => {
                                                 view! { <p class="text-dimmed text-sm">"No matches synced yet. Go to Stats to sync match history."</p> }.into_any()
@@ -1137,7 +1131,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                         <h3 class="text-lg font-semibold text-primary">"Open Action Items"</h3>
                                         <A href="/action-items" attr:class="text-accent text-sm hover:underline">"View all \u{2192}"</A>
                                     </div>
-                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || action_items_res.get().map(|result| match result {
                                             Ok((total, top_items)) => {
                                                 if total == 0 {
@@ -1178,7 +1172,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                         <h3 class="text-lg font-semibold text-primary">"Recent Reviews"</h3>
                                         <A href="/post-game" attr:class="text-accent text-sm hover:underline">"View all reviews"</A>
                                     </div>
-                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || post_game_panel.get().map(|result| match result {
                                             Ok(previews) if previews.is_empty() => view! {
                                                 <p class="text-dimmed text-sm">
@@ -1224,7 +1218,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                         <h3 class="text-lg font-semibold text-primary">"Pool Gap Warnings"</h3>
                                         <A href="/champion-pool" attr:class="text-accent text-sm hover:underline">"Manage pools"</A>
                                     </div>
-                                    <Suspense fallback=|| view! { <p class="text-dimmed text-sm">"Loading..."</p> }>
+                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || pool_gap_panel.get().map(|result| match result {
                                             Ok(warnings) if warnings.is_empty() => view! {
                                                 <p class="text-dimmed text-sm">
@@ -1267,9 +1261,6 @@ pub fn TeamDashboard() -> impl IntoView {
                                 {if !is_leader {
                                     view! {
                                         <div class="border-t border-divider pt-4">
-                                            {move || leave_msg.get().map(|msg| view! {
-                                                <div class="mb-3"><StatusMessage message=msg /></div>
-                                            })}
                                             {move || if leave_confirm.get() {
                                                 view! {
                                                     <div class="flex items-center gap-3">
@@ -1280,10 +1271,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 leptos::task::spawn_local(async move {
                                                                     match leave_team().await {
                                                                         Ok(_) => {
-                                                                            set_leave_msg.set(Some("You have left the team.".into()));
+                                                                            toast.show.run((ToastKind::Success, "You have left the team".into()));
                                                                             dashboard.refetch();
                                                                         }
-                                                                        Err(e) => set_leave_msg.set(Some(format!("Error: {e}"))),
+                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                     }
                                                                 });
                                                                 set_leave_confirm.set(false);
@@ -1312,12 +1303,7 @@ pub fn TeamDashboard() -> impl IntoView {
                         }.into_any()
                     },
                     Ok(None) => view! {
-                        <div class="text-center py-16">
-                            <p class="text-muted mb-4">"You are not part of a team yet."</p>
-                            <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2">
-                                "Create or Join a Team"
-                            </a>
-                        </div>
+                        <NoTeamState />
                     }.into_any(),
                     Err(e) => view! {
                         <ErrorBanner message=format!("Failed to load team data: {e}") />
@@ -1330,10 +1316,10 @@ pub fn TeamDashboard() -> impl IntoView {
 
 #[component]
 fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let notes_resource = Resource::new(|| (), |_| get_all_team_notes());
     let (expanded, set_expanded) = signal(false);
     let (new_note, set_new_note) = signal(String::new());
-    let (note_msg, set_note_msg) = signal(Option::<String>::None);
     let (editing_id, set_editing_id) = signal(Option::<String>::None);
     let (edit_content, set_edit_content) = signal(String::new());
 
@@ -1348,10 +1334,6 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                     {move || if expanded.get() { "Collapse" } else { "Show all" }}
                 </button>
             </div>
-
-            {move || note_msg.get().map(|msg| view! {
-                <div class="mb-2"><StatusMessage message=msg /></div>
-            })}
 
             // Add note form
             <div class="flex gap-2 mb-4">
@@ -1373,10 +1355,9 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                             match add_team_note(content).await {
                                 Ok(_) => {
                                     set_new_note.set(String::new());
-                                    set_note_msg.set(None);
                                     notes_resource.refetch();
                                 }
-                                Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                             }
                         });
                     }
@@ -1478,7 +1459,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                                                         set_editing_id.set(None);
                                                                                                         notes_resource.refetch();
                                                                                                     }
-                                                                                                    Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                                                                                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                                 }
                                                                                             });
                                                                                         }
@@ -1510,7 +1491,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                         leptos::task::spawn_local(async move {
                                                                             match toggle_note_pin(id, new_pinned).await {
                                                                                 Ok(_) => notes_resource.refetch(),
-                                                                                Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                                                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                             }
                                                                         });
                                                                     }
@@ -1545,7 +1526,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                                 leptos::task::spawn_local(async move {
                                                                                     match remove_team_note(id).await {
                                                                                         Ok(_) => notes_resource.refetch(),
-                                                                                        Err(e) => set_note_msg.set(Some(format!("Error: {e}"))),
+                                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                     }
                                                                                 });
                                                                             }

@@ -1,4 +1,4 @@
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind};
 use crate::models::action_item::ActionItem;
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -407,9 +407,10 @@ pub fn ActionItemsPage() -> impl IntoView {
 
                         if filtered.is_empty() {
                             view! {
-                                <div class="text-center py-12">
-                                    <p class="text-muted">"No action items found."</p>
-                                </div>
+                                <EmptyState
+                                    icon="✅"
+                                    message="No action items yet — they'll appear here automatically after post-game reviews, or add one manually"
+                                />
                             }.into_any()
                         } else {
                             view! {

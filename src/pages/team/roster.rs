@@ -1,3 +1,4 @@
+use crate::components::ui::{EmptyState, ToastContext, ToastKind};
 use crate::models::team::Team;
 use leptos::prelude::*;
 
@@ -92,6 +93,7 @@ pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
 
 #[component]
 pub fn RosterPage() -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -103,14 +105,35 @@ pub fn RosterPage() -> impl IntoView {
         }
     });
 
+    // Toast for create_team errors (success redirects to dashboard)
+    Effect::new(move || {
+        if let Some(Err(e)) = ServerAction::<CreateTeam>::new().value().get() {
+            toast.show.run((ToastKind::Error, format!("{e}")));
+        }
+    });
+
     let create_team_action = ServerAction::<CreateTeam>::new();
     let link_riot = ServerAction::<LinkRiotAccount>::new();
     let teams_resource = Resource::new(|| (), |_| list_teams());
-    let (join_error, set_join_error) = signal(Option::<String>::None);
-    let (join_success, set_join_success) = signal(Option::<String>::None);
+
+    // Toast for link_riot
+    Effect::new(move || {
+        if let Some(result) = link_riot.value().get() {
+            match result {
+                Ok(()) => toast.show.run((ToastKind::Success, "Riot account linked".into())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+            }
+        }
+    });
 
     view! {
         <div class="max-w-2xl mx-auto py-8 px-6 flex flex-col gap-8">
+            // No-team context message
+            <EmptyState
+                icon="👥"
+                message="You're not part of a team yet — create a new team or join an existing one"
+            />
+
             // Create Team
             <section>
                 <h2 class="text-2xl font-bold text-primary mb-4">"Create a New Team"</h2>
@@ -158,17 +181,6 @@ pub fn RosterPage() -> impl IntoView {
                 <h2 class="text-2xl font-bold text-primary mb-1">"Join an Existing Team"</h2>
                 <p class="text-muted text-sm mb-4">"Find a team below and click Join to become a member."</p>
 
-                {move || join_error.get().map(|e| view! {
-                    <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm mb-4">
-                        {e}
-                    </div>
-                })}
-                {move || join_success.get().map(|m| view! {
-                    <div class="bg-green-900 border border-green-700 text-green-200 rounded px-4 py-3 text-sm mb-4">
-                        {m}
-                    </div>
-                })}
-
                 <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading teams..."</div> }>
                     {move || teams_resource.get().map(|result| match result {
                         Ok(teams) if teams.is_empty() => view! {
@@ -192,11 +204,9 @@ pub fn RosterPage() -> impl IntoView {
                                                     let id = team_id.clone();
                                                     let tname = team_name.clone();
                                                     leptos::task::spawn_local(async move {
-                                                        set_join_error.set(None);
-                                                        set_join_success.set(None);
                                                         match request_to_join(id).await {
-                                                            Ok(_) => set_join_success.set(Some(format!("Join request sent to {}!", tname))),
-                                                            Err(e) => set_join_error.set(Some(e.to_string())),
+                                                            Ok(_) => toast.show.run((ToastKind::Success, format!("Join request sent to {}!", tname))),
+                                                            Err(e) => toast.show.run((ToastKind::Error, e.to_string())),
                                                         }
                                                     });
                                                 }
@@ -220,16 +230,6 @@ pub fn RosterPage() -> impl IntoView {
                 <h2 class="text-2xl font-bold text-primary mb-4">"Link Riot Account"</h2>
                 <ActionForm action=link_riot>
                     <div class="flex flex-col gap-4">
-                        {move || link_riot.value().get().and_then(|r| r.err()).map(|e| view! {
-                            <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm">
-                                {e.to_string()}
-                            </div>
-                        })}
-                        {move || link_riot.value().get().and_then(|r| r.ok()).map(|_| view! {
-                            <div class="bg-green-900 border border-green-700 text-green-200 rounded px-4 py-3 text-sm">
-                                "Riot account linked successfully!"
-                            </div>
-                        })}
                         <div>
                             <label class="block text-secondary text-sm mb-1">
                                 "Riot ID (e.g. PlayerName#EUW)"

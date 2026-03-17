@@ -1,5 +1,5 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
-use crate::components::ui::{SkeletonCard, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
@@ -509,6 +509,17 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                 let role_entries: Vec<ChampionPoolEntry> = entries.into_iter()
                                     .filter(|e| e.role == role)
                                     .collect();
+
+                                if role_entries.is_empty() {
+                                    return view! {
+                                        <EmptyState
+                                            icon="🎯"
+                                            message="Your champion pool is empty — add champions to track your picks and matchups"
+                                            cta_label="Add a Champion"
+                                            cta_href="#add-champion"
+                                        />
+                                    }.into_any();
+                                }
 
                                 view! {
                                     <div class="flex flex-col gap-3">

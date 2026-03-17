@@ -1,4 +1,4 @@
-use crate::components::ui::{SkeletonCard, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::opponent::{Opponent, OpponentPlayer};
 use leptos::prelude::*;
 
@@ -240,6 +240,12 @@ pub fn OpponentsPage() -> impl IntoView {
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
 
+    // Team check for NoTeamState
+    let has_team = Resource::new(
+        || (),
+        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+    );
+
     let opponents = Resource::new(|| (), |_| get_opponents());
     let selected_id: RwSignal<Option<String>> = RwSignal::new(None);
     let new_name: RwSignal<String> = RwSignal::new(String::new());
@@ -325,9 +331,19 @@ pub fn OpponentsPage() -> impl IntoView {
                                 match opponents.await {
                                     Ok(list) => {
                                         if list.is_empty() {
-                                            view! {
-                                                <div class="p-4 text-muted text-sm">"No opponents yet. Create one to get started."</div>
-                                            }.into_any()
+                                            let user_has_team = has_team.get().unwrap_or(false);
+                                            if user_has_team {
+                                                view! {
+                                                    <EmptyState
+                                                        icon="🎭"
+                                                        message="No opponents scouted yet — add an opponent team to start tracking their picks and bans"
+                                                        cta_label="Add Opponent"
+                                                        cta_href="#add-opponent"
+                                                    />
+                                                }.into_any()
+                                            } else {
+                                                view! { <NoTeamState /> }.into_any()
+                                            }
                                         } else {
                                             let items = list.into_iter().map(|opp| {
                                                 let opp_id = opp.id.clone().unwrap_or_default();
