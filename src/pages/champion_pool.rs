@@ -1,5 +1,5 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
-use crate::components::ui::StatusMessage;
+use crate::components::ui::{SkeletonCard, ToastContext, ToastKind};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
@@ -333,8 +333,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let champions_resource = Resource::new(|| (), |_| get_pool_champions());
     let stats_resource = Resource::new(|| (), |_| get_my_champion_stats());
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+
     let (active_role, set_active_role) = signal("Top");
-    let (status_msg, set_status_msg) = signal(Option::<String>::None);
     // Selected champion: (champion_name, role)
     let (selected_entry, set_selected_entry) = signal(Option::<(String, String)>::None);
     // Detail panel tab: "overview", "matchups", "notes", "journal"
@@ -365,8 +366,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 Ok(_) => {
                     add_input_signal.set(String::new());
                     pool.refetch();
+                    toast.show.run((ToastKind::Success, "Champion added to pool".into()));
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -411,9 +413,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
             match save_note(json).await {
                 Ok(_) => {
                     notes_resource.refetch();
-                    set_status_msg.set(Some("Note saved!".into()));
+                    toast.show.run((ToastKind::Success, "Note saved".into()));
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
         clear_note_form();
@@ -424,9 +426,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
             match delete_note(note_id).await {
                 Ok(_) => {
                     notes_resource.refetch();
-                    set_status_msg.set(Some("Note deleted.".into()));
+                    toast.show.run((ToastKind::Success, "Note deleted".into()));
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     });
@@ -449,8 +451,6 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 <h1 class="text-3xl font-bold text-primary">"Champion Pool"</h1>
                 <p class="text-muted text-sm mt-1">"Organize your champion pool by role and readiness tier"</p>
             </div>
-
-            {move || status_msg.get().map(|msg| view! { <StatusMessage message=msg /> })}
 
             // Role tabs — scrollable on mobile
             <div class="flex gap-1 overflow-x-auto pb-1">
@@ -620,7 +620,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                     leptos::task::spawn_local(async move {
                                                                                         match remove_from_pool(c, r).await {
                                                                                             Ok(_) => pool.refetch(),
-                                                                                            Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                                            Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                         }
                                                                                     });
                                                                                 }
@@ -773,7 +773,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         leptos::task::spawn_local(async move {
                                                                                             match set_champion_tier(c, r, t).await {
                                                                                                 Ok(_) => pool.refetch(),
-                                                                                                Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                             }
                                                                                         });
                                                                                     }
@@ -805,7 +805,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         leptos::task::spawn_local(async move {
                                                                                             match set_champion_comfort(c, r, new_level).await {
                                                                                                 Ok(_) => pool.refetch(),
-                                                                                                Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                             }
                                                                                         });
                                                                                     }
@@ -848,7 +848,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         leptos::task::spawn_local(async move {
                                                                                             match set_champion_meta_tag(c, r, new_tag).await {
                                                                                                 Ok(_) => pool.refetch(),
-                                                                                                Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                             }
                                                                                         });
                                                                                     }
@@ -879,10 +879,10 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                             leptos::task::spawn_local(async move {
                                                                                 match set_champion_notes(c, r, n).await {
                                                                                     Ok(_) => {
-                                                                                        set_status_msg.set(Some("Notes saved!".into()));
+                                                                                        toast.show.run((ToastKind::Success, "Notes saved".into()));
                                                                                         pool.refetch();
                                                                                     }
-                                                                                    Err(e) => set_status_msg.set(Some(e.to_string())),
+                                                                                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                                                                 }
                                                                             });
                                                                         }
@@ -907,7 +907,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                     >"+ Add Matchup"</button>
                                                                 </div>
 
-                                                                <Suspense fallback=|| view! { <div class="text-dimmed text-xs">"Loading..."</div> }>
+                                                                <Suspense fallback=|| view! { <SkeletonCard height="h-20" /> }>
                                                                     {move || notes_resource.get().map(|notes| {
                                                                         let matchups: Vec<&ChampionNote> = notes.iter()
                                                                             .filter(|n| n.note_type == "matchup")
@@ -1047,7 +1047,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                     >"+ Add Entry"</button>
                                                                 </div>
 
-                                                                <Suspense fallback=|| view! { <div class="text-dimmed text-xs">"Loading..."</div> }>
+                                                                <Suspense fallback=|| view! { <SkeletonCard height="h-20" /> }>
                                                                     {move || notes_resource.get().map(|notes| {
                                                                         let lessons: Vec<&ChampionNote> = notes.iter()
                                                                             .filter(|n| n.note_type == "lesson")

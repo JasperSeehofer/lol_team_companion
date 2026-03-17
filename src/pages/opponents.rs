@@ -1,3 +1,4 @@
+use crate::components::ui::{SkeletonCard, ToastContext, ToastKind};
 use crate::models::opponent::{Opponent, OpponentPlayer};
 use leptos::prelude::*;
 
@@ -237,10 +238,10 @@ pub fn OpponentsPage() -> impl IntoView {
         }
     });
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+
     let opponents = Resource::new(|| (), |_| get_opponents());
     let selected_id: RwSignal<Option<String>> = RwSignal::new(None);
-    let error_msg: RwSignal<Option<String>> = RwSignal::new(None);
-    let status_msg: RwSignal<Option<String>> = RwSignal::new(None);
     let new_name: RwSignal<String> = RwSignal::new(String::new());
 
     // Detail resource: refetch when selected_id changes
@@ -265,8 +266,9 @@ pub fn OpponentsPage() -> impl IntoView {
                 Ok(id) => {
                     selected_id.set(Some(id));
                     opponents.refetch();
+                    toast.show.run((ToastKind::Success, "Opponent added".into()));
                 }
-                Err(e) => error_msg.set(Some(e.to_string())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -277,33 +279,15 @@ pub fn OpponentsPage() -> impl IntoView {
                 Ok(()) => {
                     selected_id.set(None);
                     opponents.refetch();
-                    status_msg.set(Some("Opponent deleted".into()));
+                    toast.show.run((ToastKind::Success, "Opponent deleted".into()));
                 }
-                Err(e) => error_msg.set(Some(e.to_string())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     });
 
     view! {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-            {move || error_msg.get().map(|msg| view! {
-                <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4 flex items-start gap-3">
-                    <p class="text-red-400 text-sm">{msg}</p>
-                    <button
-                        on:click=move |_| error_msg.set(None)
-                        class="text-red-400 hover:text-red-300 ml-auto cursor-pointer"
-                    >"x"</button>
-                </div>
-            })}
-            {move || status_msg.get().map(|msg| view! {
-                <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl px-4 py-3 text-sm mb-4 flex items-center justify-between">
-                    <span>{msg}</span>
-                    <button
-                        on:click=move |_| status_msg.set(None)
-                        class="text-emerald-400 hover:text-emerald-300 ml-2 cursor-pointer"
-                    >"x"</button>
-                </div>
-            })}
 
             <div class="flex items-center justify-between mb-6">
                 <h1 class="text-2xl font-bold text-primary">"Opponents"</h1>
@@ -336,7 +320,7 @@ pub fn OpponentsPage() -> impl IntoView {
                         <div class="px-4 py-3 border-b border-divider">
                             <h2 class="text-sm font-semibold text-secondary">"All Opponents"</h2>
                         </div>
-                        <Suspense fallback=move || view! { <div class="p-4 text-muted text-sm">"Loading..."</div> }>
+                        <Suspense fallback=move || view! { <div class="p-4 flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                             {move || Suspend::new(async move {
                                 match opponents.await {
                                     Ok(list) => {
@@ -380,7 +364,7 @@ pub fn OpponentsPage() -> impl IntoView {
 
                 // Right column: detail panel
                 <div class="lg:col-span-2">
-                    <Suspense fallback=move || view! { <div class="text-muted text-sm">"Loading..."</div> }>
+                    <Suspense fallback=move || view! { <SkeletonCard height="h-64" /> }>
                         {move || Suspend::new(async move {
                             match detail.await {
                                 Ok(Some((opp, players))) => {
@@ -391,11 +375,10 @@ pub fn OpponentsPage() -> impl IntoView {
                                             on_save_done=move || {
                                                 opponents.refetch();
                                                 detail.refetch();
-                                                status_msg.set(Some("Saved".into()));
+                                                toast.show.run((ToastKind::Success, "Opponent updated".into()));
                                             }
                                             on_delete=on_delete
                                             on_player_change=move || detail.refetch()
-                                            error_msg=error_msg
                                         />
                                     }.into_any()
                                 }
@@ -425,8 +408,8 @@ fn OpponentDetail(
     on_save_done: impl Fn() + Copy + Send + Sync + 'static,
     on_delete: Callback<String>,
     on_player_change: impl Fn() + Copy + Send + Sync + 'static,
-    error_msg: RwSignal<Option<String>>,
 ) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let opp_id = opponent.id.clone().unwrap_or_default();
     let opp_id_save = opp_id.clone();
     let opp_id_delete = opp_id.clone();
@@ -445,7 +428,7 @@ fn OpponentDetail(
         leptos::task::spawn_local(async move {
             match save_opponent(id, n, nt).await {
                 Ok(()) => on_save_done(),
-                Err(e) => error_msg.set(Some(e.to_string())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -460,8 +443,11 @@ fn OpponentDetail(
         add_player_name.set(String::new());
         leptos::task::spawn_local(async move {
             match add_player(oid, p_name, p_role).await {
-                Ok(_) => on_player_change(),
-                Err(e) => error_msg.set(Some(e.to_string())),
+                Ok(_) => {
+                    on_player_change();
+                    toast.show.run((ToastKind::Success, "Player added".into()));
+                }
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -587,7 +573,6 @@ fn OpponentDetail(
                             <PlayerCard
                                 player=player
                                 on_change=on_player_change
-                                error_msg=error_msg
                             />
                         }
                     }).collect_view()}
@@ -601,8 +586,8 @@ fn OpponentDetail(
 fn PlayerCard(
     player: OpponentPlayer,
     on_change: impl Fn() + Copy + Send + Sync + 'static,
-    error_msg: RwSignal<Option<String>>,
 ) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let player_id = player.id.clone().unwrap_or_default();
     let player_id_save = player_id.clone();
     let player_id_remove = player_id.clone();
@@ -633,8 +618,11 @@ fn PlayerCard(
         let nt = p_notes.get_untracked();
         leptos::task::spawn_local(async move {
             match save_player(id, n, r, s, nt).await {
-                Ok(()) => on_change(),
-                Err(e) => error_msg.set(Some(e.to_string())),
+                Ok(()) => {
+                    on_change();
+                    toast.show.run((ToastKind::Success, "Player saved".into()));
+                }
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -644,7 +632,7 @@ fn PlayerCard(
         leptos::task::spawn_local(async move {
             match remove_player(id).await {
                 Ok(()) => on_change(),
-                Err(e) => error_msg.set(Some(e.to_string())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -653,7 +641,7 @@ fn PlayerCard(
         let id = player_id_fetch.clone();
         let summoner = p_summoner.get_untracked();
         if summoner.trim().is_empty() {
-            error_msg.set(Some("Enter a summoner name (Name#Tag) first".into()));
+            toast.show.run((ToastKind::Error, "Enter a summoner name (Name#Tag) first".into()));
             return;
         }
         fetching.set(true);
@@ -666,7 +654,7 @@ fn PlayerCard(
                 }
                 Err(e) => {
                     fetching.set(false);
-                    error_msg.set(Some(e.to_string()));
+                    toast.show.run((ToastKind::Error, format!("{e}")));
                 }
             }
         });
