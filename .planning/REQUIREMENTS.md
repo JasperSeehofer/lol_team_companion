@@ -11,7 +11,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **PIPE-01**: User can create a game plan from a completed draft, with picks/bans/side prefilled
 - [ ] **PIPE-02**: Post-game review auto-generates action items from identified patterns
-- [ ] **PIPE-03**: Draft planner warns when a drafted champion is not in the assigned player's pool
+- [x] **PIPE-03**: Draft planner warns when a drafted champion is not in the assigned player's pool
 - [ ] **PIPE-04**: Draft planner shows opponent tendency sidebar (historical picks/bans from scouting data)
 
 ### Intelligence
@@ -62,7 +62,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | PIPE-01 | Phase 1 | Complete |
 | PIPE-02 | Phase 5 | Pending |
-| PIPE-03 | Phase 4 | Pending |
+| PIPE-03 | Phase 4 | Complete |
 | PIPE-04 | Phase 4 | Pending |
 | INTL-01 | Phase 3 | Complete |
 | INTL-02 | Phase 4 | Complete |
