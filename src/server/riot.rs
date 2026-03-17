@@ -99,6 +99,37 @@ pub async fn fetch_match_history(
     Ok(results)
 }
 
+/// Fetch champion mastery data for a player by PUUID.
+///
+/// Returns a list of (champion_name, mastery_level, mastery_points) tuples,
+/// ordered by mastery points descending (highest mastery first).
+///
+/// Uses the EUW1 platform route to match the existing regional routing pattern.
+/// Returns an empty Vec on API error — callers should degrade gracefully.
+pub async fn fetch_champion_masteries(
+    puuid: &str,
+) -> Result<Vec<(String, i32, i32)>, RiotError> {
+    let api = api();
+    let masteries = api
+        .champion_mastery_v4()
+        .get_all_champion_masteries_by_puuid(riven::consts::PlatformRoute::EUW1, puuid)
+        .await?;
+    let result = masteries
+        .into_iter()
+        .filter_map(|m| {
+            // Use the identifier (Data Dragon canonical name) for consistency.
+            // Fall back to the display name if identifier is unavailable.
+            let name = m
+                .champion_id
+                .identifier()
+                .or_else(|| m.champion_id.name())
+                .map(|s| s.to_string())?;
+            Some((name, m.champion_level, m.champion_points))
+        })
+        .collect();
+    Ok(result)
+}
+
 pub async fn fetch_player_champions(puuid: &str, count: usize) -> Result<Vec<String>, RiotError> {
     let api = api();
     let match_ids = api
