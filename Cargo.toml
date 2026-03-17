@@ -39,7 +39,7 @@ wasm-bindgen = { version = "0.2", optional = true }
 # Shared
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "Element", "HtmlElement", "Node", "Storage"] }
+web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "Element", "HtmlElement", "Node", "Storage", "Navigator", "Clipboard"] }
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
