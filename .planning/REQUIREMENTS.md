@@ -21,9 +21,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### UX Polish
 
-- [ ] **UX-01**: All data pages show meaningful empty states with contextual CTAs when no data exists
-- [ ] **UX-02**: All data-fetching pages use skeleton loading screens instead of blank/spinner
-- [ ] **UX-03**: All mutations (save, delete, update) show consistent success/error feedback
+- [x] **UX-01**: All data pages show meaningful empty states with contextual CTAs when no data exists
+- [x] **UX-02**: All data-fetching pages use skeleton loading screens instead of blank/spinner
+- [x] **UX-03**: All mutations (save, delete, update) show consistent success/error feedback
 
 ## v2 Requirements
 
@@ -66,9 +66,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-04 | Phase 4 | Complete |
 | INTL-01 | Phase 3 | Complete |
 | INTL-02 | Phase 4 | Complete |
-| UX-01 | Phase 5 | Pending |
-| UX-02 | Phase 5 | Pending |
-| UX-03 | Phase 5 | Pending |
+| UX-01 | Phase 5 | Complete |
+| UX-02 | Phase 5 | Complete |
+| UX-03 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 9 total

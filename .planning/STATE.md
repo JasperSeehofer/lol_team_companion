@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-17T01:05:29.445Z"
+last_updated: "2026-03-17T15:30:01.257Z"
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 19
+  completed_plans: 15
 ---
 
 ## Position
@@ -26,3 +26,5 @@ Phase 04 (Inline Intel) is next — gap closure phase. Needs planning before exe
 - [Phase 04-inline-intel]: DraftBoard warning_slots prop uses dual champion lookup (display name + canonical Data Dragon ID) to bridge draft slots vs pool entry identifier mismatch
 - [Phase 04-inline-intel]: Used riven Champion::identifier() for Data Dragon name mapping — no HashMap needed, riven enum has static lookup
 - [Phase 04-inline-intel]: get_opponent_intel_full added alongside existing get_opponent_intel for backward compatibility
+- [Phase 05-post-game-loop-polish]: Used AtomicU64 in StoredValue for toast ID gen (Cell<u64> not Sync)
+- [Phase 05-post-game-loop-polish]: Added Navigator+Clipboard to web-sys features for clipboard copy in error toasts
