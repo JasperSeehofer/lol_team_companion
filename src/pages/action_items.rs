@@ -1,4 +1,4 @@
-use crate::components::ui::ErrorBanner;
+use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind};
 use crate::models::action_item::ActionItem;
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -194,11 +194,12 @@ pub fn ActionItemsPage() -> impl IntoView {
     let items = Resource::new(|| (), |_| get_action_items());
     let members = Resource::new(|| (), |_| get_team_members_list());
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+
     let (status_filter, set_status_filter) = signal("all".to_string());
     let (assignee_filter, set_assignee_filter) = signal("all".to_string());
     let (new_text, set_new_text) = signal(String::new());
     let (new_assignee, set_new_assignee) = signal(String::new());
-    let (error_msg, set_error_msg) = signal(Option::<String>::None);
 
     let add_item = move |_| {
         let text = new_text.get_untracked();
@@ -216,19 +217,23 @@ pub fn ActionItemsPage() -> impl IntoView {
                 Ok(_) => {
                     set_new_text.set(String::new());
                     set_new_assignee.set(String::new());
-                    set_error_msg.set(None);
+                    toast.show.run((ToastKind::Success, "Action item added".into()));
                     items.refetch();
                 }
-                Err(e) => set_error_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
 
     let change_status = move |id: String, status: String| {
         leptos::task::spawn_local(async move {
+            let msg = if status == "done" { "Marked complete" } else { "Status updated" };
             match update_item_status(id, status).await {
-                Ok(_) => items.refetch(),
-                Err(e) => set_error_msg.set(Some(format!("Error: {e}"))),
+                Ok(_) => {
+                    items.refetch();
+                    toast.show.run((ToastKind::Success, msg.into()));
+                }
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -237,7 +242,7 @@ pub fn ActionItemsPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match delete_item(id).await {
                 Ok(_) => items.refetch(),
-                Err(e) => set_error_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -249,13 +254,9 @@ pub fn ActionItemsPage() -> impl IntoView {
                 <A href="/team/dashboard" attr:class="text-accent hover:underline text-sm">"Back to Dashboard"</A>
             </div>
 
-            // Error display
-            {move || error_msg.get().map(|msg| view! {
-                <ErrorBanner message=msg />
-            })}
 
             // Quick stats
-            <Suspense fallback=move || view! { <div class="text-muted text-sm">"Loading..."</div> }>
+            <Suspense fallback=move || view! { <SkeletonLine width="w-48" height="h-5" /> }>
                 {move || items.get().map(|result| match result {
                     Ok(ref all_items) => {
                         let open_count = all_items.iter().filter(|i| i.status == "open").count();
@@ -305,10 +306,10 @@ pub fn ActionItemsPage() -> impl IntoView {
                                         Ok(_) => {
                                             set_new_text.set(String::new());
                                             set_new_assignee.set(String::new());
-                                            set_error_msg.set(None);
+                                            toast.show.run((ToastKind::Success, "Action item added".into()));
                                             items.refetch();
                                         }
-                                        Err(e) => set_error_msg.set(Some(format!("Error: {e}"))),
+                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                                     }
                                 });
                             }
@@ -381,7 +382,7 @@ pub fn ActionItemsPage() -> impl IntoView {
             </div>
 
             // Items list
-            <Suspense fallback=move || view! { <div class="text-muted text-sm">"Loading action items..."</div> }>
+            <Suspense fallback=move || view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                 {move || items.get().map(|result| match result {
                     Ok(all_items) => {
                         let sf = status_filter.get();

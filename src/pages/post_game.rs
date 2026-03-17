@@ -1,4 +1,4 @@
-use crate::components::ui::{ErrorBanner, StatusMessage};
+use crate::components::ui::{ErrorBanner, SkeletonCard, ToastContext, ToastKind};
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
 use leptos::prelude::*;
@@ -308,7 +308,7 @@ pub fn PostGamePage() -> impl IntoView {
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
     let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
 
-    let (status_msg, set_status_msg) = signal(Option::<String>::None);
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let action_item_count: RwSignal<Option<usize>> = RwSignal::new(None);
     let (editing_id, set_editing_id) = signal(Option::<String>::None);
     let (match_riot_id, set_match_riot_id) = signal(String::new());
@@ -440,10 +440,10 @@ pub fn PostGamePage() -> impl IntoView {
                 match update_review(json).await {
                     Ok(n_items) => {
                         action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
-                        set_status_msg.set(Some("Review updated!".into()));
+                        toast.show.run((ToastKind::Success, "Review updated".into()));
                         reviews.refetch();
                     }
-                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             } else {
                 match create_review(json).await {
@@ -452,10 +452,10 @@ pub fn PostGamePage() -> impl IntoView {
                             set_editing_id.set(Some(id));
                         }
                         action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
-                        set_status_msg.set(Some("Review created!".into()));
+                        toast.show.run((ToastKind::Success, "Review saved".into()));
                         reviews.refetch();
                     }
-                    Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             }
         });
@@ -466,10 +466,10 @@ pub fn PostGamePage() -> impl IntoView {
             match delete_review(review_id).await {
                 Ok(_) => {
                     clear_editor();
-                    set_status_msg.set(Some("Review deleted.".into()));
+                    toast.show.run((ToastKind::Success, "Review deleted".into()));
                     reviews.refetch();
                 }
-                Err(e) => set_status_msg.set(Some(format!("Error: {e}"))),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         });
     };
@@ -480,10 +480,6 @@ pub fn PostGamePage() -> impl IntoView {
                 <h1 class="text-3xl font-bold text-primary">"Post-Game Review"</h1>
                 <p class="text-muted text-sm mt-1">"Analyze games, track patterns, and improve together"</p>
             </div>
-
-            {move || status_msg.get().map(|msg| {
-                view! { <StatusMessage message=msg /> }
-            })}
 
             {move || action_item_count.get().map(|n| {
                 let label = if n == 1 {
@@ -507,7 +503,7 @@ pub fn PostGamePage() -> impl IntoView {
                     >"+ New Review"</button>
 
                     // Saved reviews
-                    <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading..."</div> }>
+                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                         {move || reviews.get().map(|result| match result {
                             Ok(list) if list.is_empty() => view! {
                                 <div class="text-center py-6">
