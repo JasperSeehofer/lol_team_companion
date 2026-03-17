@@ -1,6 +1,6 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, ToastContext, ToastKind};
+use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{Champion, ChampionNote, ChampionStatSummary};
 use crate::models::draft::{BanPriority, Draft, DraftAction};
 use crate::models::opponent::OpponentPlayerIntel;
@@ -1668,7 +1668,7 @@ pub fn DraftPage() -> impl IntoView {
                                         </div>
 
                                         // Existing series list
-                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading series..."</div> }>
+                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonLine width="w-24" height="h-4" /><SkeletonCard height="h-8" /><SkeletonCard height="h-8" /></div> }>
                                             {move || series_resource.get().map(|result| match result {
                                                 Ok(list) if list.is_empty() => view! {
                                                     <p class="text-dimmed text-sm">"No series yet."</p>
@@ -1739,7 +1739,7 @@ pub fn DraftPage() -> impl IntoView {
             // Board + Comments
             <div class="flex gap-4">
                 <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
-                    <Suspense fallback=|| view! { <div class="text-muted text-center py-8">"Loading champions..."</div> }>
+                    <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
                         {move || champions_resource.get().map(|result| match result {
                             Err(e) => view! {
                                 <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
@@ -1938,7 +1938,7 @@ pub fn DraftPage() -> impl IntoView {
                             {if current_tab == "pools" {
                                 view! {
                                     <div class="flex flex-col gap-3">
-                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading pools..."</div> }>
+                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-16" /><SkeletonCard height="h-16" /></div> }>
                                             {move || team_pools.get().map(|result| match result {
                                                 Ok(pools) if pools.is_empty() => view! {
                                                     <p class="text-dimmed text-sm">"No starters with champion pools yet."</p>
@@ -2070,7 +2070,7 @@ pub fn DraftPage() -> impl IntoView {
                                 view! {
                                     <div class="flex flex-col gap-3">
                                         // Opponent selector
-                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading opponents..."</div> }>
+                                        <Suspense fallback=|| view! { <SkeletonCard height="h-8" /> }>
                                             {move || opponents_list.get().map(|result| match result {
                                                 Ok(opps) if opps.is_empty() => view! {
                                                     <p class="text-dimmed text-sm">"No opponents scouted yet. Add opponents from the Opponents page."</p>
@@ -2214,7 +2214,7 @@ pub fn DraftPage() -> impl IntoView {
                                                             "Matchup notes for "
                                                             <span class="text-primary font-medium">{c.clone()}</span>
                                                         </p>
-                                                        <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading notes..."</div> }>
+                                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonLine width="w-full" height="h-3" /><SkeletonLine width="w-3/4" height="h-3" /></div> }>
                                                             {move || matchup_notes.get().map(|result| match result {
                                                                 Ok(notes) if notes.is_empty() => view! {
                                                                     <p class="text-dimmed text-sm">"No matchup notes found for this champion."</p>
@@ -2296,7 +2296,7 @@ pub fn DraftPage() -> impl IntoView {
                 {move || active_slot_label().map(|label| view! {
                     <p class="text-accent-hover text-sm font-medium mb-2">{label}</p>
                 })}
-                <Suspense fallback=|| view! { <div class="text-muted">"Loading champions..."</div> }>
+                <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load champions: {e}") />
@@ -2785,7 +2785,7 @@ pub fn DraftPage() -> impl IntoView {
                 {move || tendencies_open.get().then(|| {
                     view! {
                         <div class="px-4 pb-4">
-                            <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading tendencies..."</div> }>
+                            <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                                 {move || tendency_data.get().map(|result| match result {
                                     Ok(tendencies) => {
                                         // Filter to champions with 2+ appearances
@@ -2913,7 +2913,7 @@ pub fn DraftPage() -> impl IntoView {
                 {move || analytics_open.get().then(|| {
                     view! {
                         <div class="px-4 pb-4">
-                            <Suspense fallback=|| view! { <div class="text-dimmed text-sm">"Loading analytics..."</div> }>
+                            <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-16" /><SkeletonCard height="h-16" /></div> }>
                                 {move || analytics_data.get().map(|result| match result {
                                     Ok(data) => {
                                         let has_data = data.blue_games + data.red_games > 0
