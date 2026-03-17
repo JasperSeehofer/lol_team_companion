@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-17T15:31:43.952Z"
+last_updated: "2026-03-17T15:43:44.625Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 19
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 ## Position
@@ -29,3 +29,4 @@ Phase 04 (Inline Intel) is next — gap closure phase. Needs planning before exe
 - [Phase 05-post-game-loop-polish]: Used AtomicU64 in StoredValue for toast ID gen (Cell<u64> not Sync)
 - [Phase 05-post-game-loop-polish]: Added Navigator+Clipboard to web-sys features for clipboard copy in error toasts
 - [Phase 05]: batch_create_action_items_from_review uses list_open_action_items for dedup to reuse existing query; create_review returns (String, usize) tuple for review_id + items_created count
+- [Phase 05-post-game-loop-polish]: ChecklistSection and LiveNavigator sub-components receive ToastContext by value (Copy) instead of WriteSignal — cleaner API, no wrapper needed
