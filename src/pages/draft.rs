@@ -3,7 +3,7 @@ use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::ui::ErrorBanner;
 use crate::models::champion::{Champion, ChampionNote, ChampionStatSummary};
 use crate::models::draft::{BanPriority, Draft, DraftAction};
-use crate::models::opponent::OpponentPlayer;
+use crate::models::opponent::OpponentPlayerIntel;
 use crate::models::series::Series;
 use crate::models::team::Team;
 use crate::pages::game_plan::check_draft_has_game_plan;
@@ -417,6 +417,74 @@ pub async fn get_opponent_intel(
         Some((_, players)) => Ok(players),
         None => Ok(Vec::new()),
     }
+}
+
+/// Get enriched opponent intel: champion frequencies, OTP detection, and Riot API mastery data.
+///
+/// Keyed on opponent_id — loads once per opponent selection. Does not depend on pick state.
+#[server]
+pub async fn get_opponent_intel_full(
+    opponent_id: String,
+) -> Result<Vec<OpponentPlayerIntel>, ServerFnError> {
+    use crate::server::db;
+    use crate::server::riot;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let players = match db::get_opponent(&db, &opponent_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some((_, players)) => players,
+        None => return Ok(Vec::new()),
+    };
+
+    let mut results = Vec::new();
+    for player in players {
+        // Compute champion frequencies from scouted recent_champions list.
+        let mut freq_map: HashMap<String, u32> = HashMap::new();
+        for champ in &player.recent_champions {
+            *freq_map.entry(champ.clone()).or_insert(0) += 1;
+        }
+        let total_games = player.recent_champions.len() as u32;
+        let mut champion_frequencies: Vec<(String, u32)> = freq_map.into_iter().collect();
+        champion_frequencies.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // OTP detection: most-played champion accounts for >60% of scouted games.
+        let otp_champion = champion_frequencies.first().and_then(|(name, count)| {
+            if total_games > 0 && (*count as f64 / total_games as f64) > 0.60 {
+                Some(name.clone())
+            } else {
+                None
+            }
+        });
+
+        // Mastery data — gracefully absent when API key missing or no PUUID.
+        let mastery_data = if riot::has_api_key() {
+            if let Some(ref puuid) = player.riot_puuid {
+                match riot::fetch_champion_masteries(puuid).await {
+                    Ok(masteries) => masteries.into_iter().take(10).collect(),
+                    Err(_) => Vec::new(),
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        results.push(OpponentPlayerIntel {
+            player,
+            champion_frequencies,
+            mastery_data,
+            otp_champion,
+        });
+    }
+    Ok(results)
 }
 
 /// Get all matchup notes from team members that mention a specific champion.
@@ -835,9 +903,9 @@ pub fn DraftPage() -> impl IntoView {
         move || selected_opponent_id.get(),
         move |opp_id| async move {
             if opp_id.is_empty() {
-                Ok(Vec::<OpponentPlayer>::new())
+                Ok(Vec::<OpponentPlayerIntel>::new())
             } else {
-                get_opponent_intel(opp_id).await
+                get_opponent_intel_full(opp_id).await
             }
         },
     );
@@ -2027,23 +2095,24 @@ pub fn DraftPage() -> impl IntoView {
                                                 }.into_any(),
                                             })}
                                         </Suspense>
-                                        // Opponent players
+                                        // Opponent players — enhanced intel: frequencies, OTP badge, mastery
                                         <Suspense fallback=|| view! { <div class="text-muted text-sm">"Loading..."</div> }>
                                             {move || {
                                                 let draft_champs = all_draft_champs.clone();
                                                 opponent_players.get().map(move |result| match result {
-                                                    Ok(players) if players.is_empty() && !selected_opponent_id.get_untracked().is_empty() => view! {
+                                                    Ok(intel) if intel.is_empty() && !selected_opponent_id.get_untracked().is_empty() => view! {
                                                         <p class="text-dimmed text-sm">"No players scouted for this opponent."</p>
                                                     }.into_any(),
-                                                    Ok(players) if players.is_empty() => view! {
+                                                    Ok(intel) if intel.is_empty() => view! {
                                                         <span></span>
                                                     }.into_any(),
-                                                    Ok(players) => {
+                                                    Ok(intel) => {
                                                         let draft_set = draft_champs.clone();
                                                         view! {
                                                             <div class="flex flex-col gap-2">
-                                                                {players.into_iter().map(|player| {
+                                                                {intel.into_iter().map(|pi| {
                                                                     let draft_set_inner = draft_set.clone();
+                                                                    let player = pi.player.clone();
                                                                     let role_label = match player.role.as_str() {
                                                                         "top" => "TOP",
                                                                         "jungle" | "jng" => "JNG",
@@ -2052,31 +2121,69 @@ pub fn DraftPage() -> impl IntoView {
                                                                         "support" | "sup" => "SUP",
                                                                         other => other,
                                                                     };
+                                                                    let otp = pi.otp_champion.clone();
+                                                                    let freqs = pi.champion_frequencies.clone();
+                                                                    let mastery = pi.mastery_data.clone();
+                                                                    let no_puuid = player.riot_puuid.is_none();
                                                                     view! {
                                                                         <div class="bg-surface rounded p-2">
-                                                                            <div class="flex items-center gap-2 mb-1">
+                                                                            // Player header with role, name, and OTP badge
+                                                                            <div class="flex items-center gap-2 mb-1 flex-wrap">
                                                                                 <span class="text-xs font-bold text-red-400 uppercase">{role_label.to_string()}</span>
                                                                                 <span class="text-xs text-secondary">{player.name.clone()}</span>
+                                                                                {otp.map(|otp_name| view! {
+                                                                                    <span class="bg-red-700 text-white text-xs px-1.5 py-0.5 rounded-full">
+                                                                                        "OTP: " {otp_name}
+                                                                                    </span>
+                                                                                })}
                                                                             </div>
-                                                                            {if player.recent_champions.is_empty() {
+                                                                            // Champion frequency list
+                                                                            {if freqs.is_empty() {
                                                                                 view! { <p class="text-dimmed text-xs">"No recent champions"</p> }.into_any()
                                                                             } else {
                                                                                 view! {
                                                                                     <div class="flex flex-wrap gap-1">
-                                                                                        {player.recent_champions.iter().map(|champ| {
-                                                                                            let is_drafted = draft_set_inner.contains(champ);
+                                                                                        {freqs.into_iter().map(|(champ, count)| {
+                                                                                            let is_drafted = draft_set_inner.contains(&champ);
+                                                                                            let label = format!("{} ({})", champ, count);
                                                                                             let cls = if is_drafted {
                                                                                                 "bg-overlay rounded px-1.5 py-0.5 text-xs text-dimmed line-through opacity-50"
                                                                                             } else {
                                                                                                 "bg-overlay rounded px-1.5 py-0.5 text-xs text-primary"
                                                                                             };
                                                                                             view! {
-                                                                                                <span class=cls>{champ.clone()}</span>
+                                                                                                <span class=cls>{label}</span>
                                                                                             }
                                                                                         }).collect_view()}
                                                                                     </div>
                                                                                 }.into_any()
                                                                             }}
+                                                                            // Mastery section (only shown when mastery data available)
+                                                                            {if mastery.is_empty() {
+                                                                                if no_puuid {
+                                                                                    view! {
+                                                                                        <p class="text-dimmed text-xs mt-1 italic">"No Riot account linked — mastery data unavailable"</p>
+                                                                                    }.into_any()
+                                                                                } else {
+                                                                                    view! { <span></span> }.into_any()
+                                                                                }
+                                                                            } else {
+                                                                                view! {
+                                                                                    <div class="mt-2">
+                                                                                        <p class="text-muted text-xs font-medium mb-1">"Mastery"</p>
+                                                                                        <div class="flex flex-wrap gap-1">
+                                                                                            {mastery.into_iter().map(|(champ_name, level, points)| {
+                                                                                                let pts_k = points / 1000;
+                                                                                                let label = format!("{} Lv.{} ({}k)", champ_name, level, pts_k);
+                                                                                                view! {
+                                                                                                    <span class="bg-overlay rounded px-1.5 py-0.5 text-xs text-secondary">{label}</span>
+                                                                                                }
+                                                                                            }).collect_view()}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                }.into_any()
+                                                                            }}
+                                                                            // Player notes
                                                                             {player.notes.as_ref().map(|notes| view! {
                                                                                 <p class="text-dimmed text-xs mt-1 italic">{notes.clone()}</p>
                                                                             })}
