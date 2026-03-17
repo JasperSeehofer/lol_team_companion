@@ -92,7 +92,7 @@ Plans:
   2. Draft planner shows an opponent tendency sidebar listing historical picks and bans from scouting data for the current opponent
   3. Win condition tracker page shows each declared win condition alongside a pass/fail record across recent post-game reviews
   4. Intel panels in the draft planner do not trigger reactive refetches on every champion pick — only on explicit user actions
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 04-01-PLAN.md — Pool warning badges on draft pick slots (DraftBoard prop + client-side Memo computation)
@@ -121,5 +121,5 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5
 | 1.1 Playwright Bug Audit | 3/3 | Complete   | 2026-03-14 |
 | 2. Aggregation Layer | 3/3 | Complete   | 2026-03-15 |
 | 3. Smart Dashboard | 2/2 | Complete   | 2026-03-15 |
-| 4. Inline Intel | 0/3 | Planned | - |
+| 4. Inline Intel | 2/3 | In Progress|  |
 | 5. Post-Game Loop + Polish | 0/TBD | Gap closure | - |

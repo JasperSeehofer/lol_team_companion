@@ -17,7 +17,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Intelligence
 
 - [x] **INTL-01**: Smart dashboard surfaces prep priorities (upcoming game context, incomplete workflows, recent action items)
-- [ ] **INTL-02**: Win condition tracker shows whether declared win conditions were achieved over time
+- [x] **INTL-02**: Win condition tracker shows whether declared win conditions were achieved over time
 
 ### UX Polish
 
@@ -65,7 +65,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-03 | Phase 4 | Pending |
 | PIPE-04 | Phase 4 | Pending |
 | INTL-01 | Phase 3 | Complete |
-| INTL-02 | Phase 4 | Pending |
+| INTL-02 | Phase 4 | Complete |
 | UX-01 | Phase 5 | Pending |
 | UX-02 | Phase 5 | Pending |
 | UX-03 | Phase 5 | Pending |
