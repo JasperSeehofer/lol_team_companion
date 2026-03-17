@@ -1,7 +1,7 @@
 ---
 phase: 5
 slug: post-game-loop-polish
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-03-17
