@@ -1,5 +1,5 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
-use crate::components::ui::{EmptyState, SkeletonCard, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
@@ -329,6 +329,10 @@ pub fn ChampionPoolPage() -> impl IntoView {
         }
     });
 
+    let has_team = Resource::new(
+        || (),
+        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+    );
     let pool = Resource::new(|| (), |_| get_pool());
     let champions_resource = Resource::new(|| (), |_| get_pool_champions());
     let stats_resource = Resource::new(|| (), |_| get_my_champion_stats());
@@ -511,14 +515,19 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     .collect();
 
                                 if role_entries.is_empty() {
-                                    return view! {
-                                        <EmptyState
-                                            icon="🎯"
-                                            message="Your champion pool is empty — add champions to track your picks and matchups"
-                                            cta_label="Add a Champion"
-                                            cta_href="#add-champion"
-                                        />
-                                    }.into_any();
+                                    let user_has_team = has_team.get().unwrap_or(false);
+                                    if user_has_team {
+                                        return view! {
+                                            <EmptyState
+                                                icon="🎯"
+                                                message="Your champion pool is empty — add champions to track your picks and matchups"
+                                                cta_label="Add a Champion"
+                                                cta_href="#add-champion"
+                                            />
+                                        }.into_any();
+                                    } else {
+                                        return view! { <NoTeamState /> }.into_any();
+                                    }
                                 }
 
                                 view! {

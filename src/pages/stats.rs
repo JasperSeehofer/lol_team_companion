@@ -1,5 +1,5 @@
 use crate::components::stat_card::StatCard;
-use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard};
+use crate::components::ui::{EmptyState, ErrorBanner, NoTeamState, SkeletonCard};
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -254,6 +254,10 @@ pub fn StatsPage() -> impl IntoView {
         }
     });
 
+    let has_team = Resource::new(
+        || (),
+        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+    );
     let api_key = Resource::new(|| (), |_| check_api_key());
     let stats = Resource::new(|| (), |_| get_team_stats());
     let (sync_result, set_sync_result) = signal(Option::<Result<String, String>>::None);
@@ -419,14 +423,21 @@ pub fn StatsPage() -> impl IntoView {
                     Err(e) => view! {
                         <ErrorBanner message=format!("Failed to load stats: {e}") />
                     }.into_any(),
-                    Ok(rows) if rows.is_empty() => view! {
-                        <EmptyState
-                            icon="📊"
-                            message="No match stats yet — link your Riot account and play some games to see stats here"
-                            cta_label="Link Riot Account"
-                            cta_href="/profile"
-                        />
-                    }.into_any(),
+                    Ok(rows) if rows.is_empty() => {
+                        let user_has_team = has_team.get().unwrap_or(false);
+                        if user_has_team {
+                            view! {
+                                <EmptyState
+                                    icon="📊"
+                                    message="No match stats yet — link your Riot account and play some games to see stats here"
+                                    cta_label="Link Riot Account"
+                                    cta_href="/profile"
+                                />
+                            }.into_any()
+                        } else {
+                            view! { <NoTeamState /> }.into_any()
+                        }
+                    },
                     Ok(rows) => {
                         let all_matches = group_matches(&rows);
                         let unique_players: Vec<String> = {
