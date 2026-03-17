@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-17T15:52:29Z"
+last_updated: "2026-03-17T17:03:06.827Z"
 progress:
   total_phases: 6
-  completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  completed_phases: 5
+  total_plans: 21
+  completed_plans: 20
 ---
 
 ## Position
@@ -33,3 +33,4 @@ All 19 plans across 6 phases complete. Milestone v1.0 achieved.
 - [Phase 05-post-game-loop-polish]: Sub-components (OpponentDetail, PlayerCard) use_context::<ToastContext>() directly rather than receiving error_msg prop
 - [Phase 05-05]: opponents.rs uses has_team resource (calls get_team_dashboard) to distinguish no-team vs no-opponents for correct NoTeamState vs EmptyState selection
 - [Phase 05-05]: champion_pool empty state at role-level per active tab; dashboard StatusMessage signals removed entirely and replaced with toast
+- [Phase 05-post-game-loop-polish]: SkeletonGrid cols=4 for champion picker grids; stacked SkeletonCard for list-type data in Suspense fallbacks
