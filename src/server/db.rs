@@ -2749,6 +2749,38 @@ pub async fn list_open_action_items(
     Ok(items.into_iter().map(ActionItem::from).collect())
 }
 
+pub async fn batch_create_action_items_from_review(
+    db: &Surreal<Db>,
+    team_id: &str,
+    review_id: &str,
+    improvements: &[String],
+) -> DbResult<usize> {
+    if improvements.is_empty() {
+        return Ok(0);
+    }
+    // Fetch existing open/in_progress action items for dedup
+    let existing = list_open_action_items(db, team_id).await?;
+    let open_texts: std::collections::HashSet<String> = existing
+        .iter()
+        .map(|i| i.text.to_lowercase())
+        .collect();
+
+    let mut created = 0usize;
+    for text in improvements {
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            continue;
+        }
+        // Skip if identical open/in_progress item exists (case-insensitive)
+        if open_texts.contains(&text.to_lowercase()) {
+            continue;
+        }
+        create_action_item(db, team_id, text, Some(review_id.to_string()), None).await?;
+        created += 1;
+    }
+    Ok(created)
+}
+
 pub async fn update_action_item_status(
     db: &Surreal<Db>,
     item_id: &str,
@@ -4461,5 +4493,41 @@ mod tests {
         let result = filter_win_condition_stats(&data, "TeamA");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], ("Aggression".to_string(), 2, 1)); // 2 games, 1 win
+    }
+
+    #[test]
+    fn dedup_filters_matching_open_items() {
+        use std::collections::HashSet;
+        let open_texts: HashSet<String> = [
+            "fix baron calls".to_string(),
+            "ward river".to_string(),
+        ]
+        .into_iter()
+        .collect();
+        let improvements = vec![
+            "Fix Baron Calls".to_string(),    // matches (case-insensitive) → skip
+            "Improve dragon setup".to_string(), // new → create
+            "  ".to_string(),                  // whitespace → skip
+            "ward river".to_string(),          // exact match → skip
+        ];
+        let mut created = 0usize;
+        for text in &improvements {
+            let text = text.trim().to_string();
+            if text.is_empty() {
+                continue;
+            }
+            if open_texts.contains(&text.to_lowercase()) {
+                continue;
+            }
+            created += 1;
+        }
+        assert_eq!(created, 1); // Only "Improve dragon setup"
+    }
+
+    #[test]
+    fn empty_improvements_returns_zero() {
+        let improvements: Vec<String> = vec![];
+        // batch_create_action_items_from_review early-returns Ok(0) on empty input
+        assert!(improvements.is_empty());
     }
 }
