@@ -39,6 +39,7 @@ pub fn DraftBoard(
     highlighted_slot: ReadSignal<Option<usize>>,
     on_slot_clear: Callback<usize>,
     #[prop(optional)] slot_comments: Option<ReadSignal<Vec<Option<String>>>>,
+    #[prop(optional)] warning_slots: Option<Signal<Vec<Option<(String, String)>>>>,
 ) -> impl IntoView {
     let (first_pick_blue, set_first_pick_blue) = signal(true);
     let champion_map = StoredValue::new(champion_map);
@@ -167,6 +168,10 @@ pub fn DraftBoard(
                             m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
                         });
                         let on_slot_clear = on_slot_clear;
+                        let warning = warning_slots.and_then(|ws| {
+                            let warnings = ws.get();
+                            warnings.get(slot_idx).cloned().flatten()
+                        });
                         view! {
                             <div class="relative h-full w-full">
                                 <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>
@@ -174,6 +179,17 @@ pub fn DraftBoard(
                                         <img src=icon_url alt=champ_name.clone() class="h-full aspect-square object-cover" />
                                         {is_first_pick.then(|| view! {
                                             <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-xs font-bold px-1 leading-tight rounded-br">"1st"</div>
+                                        })}
+                                        {warning.map(|(player_name, class_detail)| {
+                                            let tooltip = format!("Not in {}'s pool. {}", player_name, class_detail);
+                                            view! {
+                                                <div
+                                                    class="absolute top-0 right-0 bg-amber-500 text-white text-xs font-bold px-1 leading-tight rounded-bl z-10 cursor-help"
+                                                    title=tooltip
+                                                >
+                                                    <span class="text-[10px]">{"\u{26A0}"}</span>
+                                                </div>
+                                            }
                                         })}
                                     </div>
                                     <div class={if is_blue { "flex-1 flex flex-col justify-center px-2 min-w-0" } else { "flex-1 flex flex-col justify-center items-end px-2 min-w-0" }}>
