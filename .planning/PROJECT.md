@@ -36,11 +36,25 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 
 ### Active
 
+**v1.1 — Polish, Draft & Opponents Rework:**
+- [ ] Fix tree drafter, game plan view, roster, hydration, drag-and-drop bugs (BUG-01–05)
+- [ ] UX polish: toasts, timestamps, search, champion pool overhaul, role icons (UX-04–10)
+- [ ] Draft: opponent dropdown, intel improvements, pool notes sidebar (DRFT-01–05)
+- [ ] Game plan: autofill from draft, fix empty view, champion pre-fill (PLAN-01–03)
+- [ ] Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04)
+- [ ] Plan effectiveness dashboard, draft-integrated champion notes (XFEAT-01–02)
+- [ ] Testing infrastructure: real test data, Playwright CLI workflow (TEST-01–02)
+
+**v2.0 — Solo Mode & Match Intelligence (deferred):**
+- [ ] Solo player mode (toggle, solo queue tracking, goals/learnings, profile dashboard)
+- [ ] Match detail view with "gather more info" from Riot API
+- [ ] Match as launchpad: create draft → game plan → review chain
 - [ ] Ban recommendations based on team champion win rate data (INTL-03)
 - [ ] Stats-informed draft pick scoring using match history (INTL-04)
 - [ ] Post-game lesson recall when facing previously-seen opponent (INTL-05)
 - [ ] Draft outcome correlation ("your team wins 70% with engage comps") (INTL-06)
 - [ ] Game day guided wizard flow (FLOW-01)
+- [ ] Series view, champion pool health check, action item completion rate
 
 ### Out of Scope
 
@@ -50,8 +64,21 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - Mobile responsive redesign — desktop-first; mobile comes after intelligence features
 - Public leaderboards / social — shifts product from private team tool to public platform
 - Riot API live in-game overlay — requires desktop client
-- Auto opponent stats via Riot API — rate limits make per-game scouting expensive
+- Auto opponent stats via Riot API — rate limits make per-game scouting expensive (note: v1.1 adds targeted fetch on save, not background sync)
 - Offline mode — real-time data is core value
+
+## Current Milestone: v1.1 Polish, Draft & Opponents Rework
+
+**Goal:** Fix bugs, polish UX, overhaul champion pool/draft/opponents experience, and establish real test infrastructure.
+
+**Target features:**
+- Bug fixes (tree drafter, game plan view, roster, hydration, drag-and-drop)
+- UX polish (toasts, timestamps, team search, champion pool overhaul, role icons)
+- Draft improvements (opponent dropdown, intel panel, pool notes sidebar)
+- Game plan enhancements (autofill from draft, champion pre-fill)
+- Opponents redesign (5-role form, auto-fetch, OTP detection, mastery, pool analysis)
+- Cross-feature intelligence (plan effectiveness, draft-integrated notes)
+- Testing infrastructure (real test data, Playwright CLI)
 
 ## Context
 
@@ -87,4 +114,4 @@ Known tech debt from v1.0:
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
 ---
-*Last updated: 2026-03-18 after v1.0 milestone*
+*Last updated: 2026-03-19 after v1.1 milestone start*
