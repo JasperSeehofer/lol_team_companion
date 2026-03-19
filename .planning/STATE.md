@@ -5,7 +5,7 @@ milestone_name: Polish, Draft & Opponents Rework
 status: active
 last_updated: "2026-03-19"
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -13,25 +13,38 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-19 — Milestone v1.1 started
+Phase: 6 of 11 (Phase 6: Bug Fixes)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-03-19 — Roadmap revised: TEST-02 moved from Phase 11 to Phase 6
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Milestone v1.1 — Polish, Draft & Opponents Rework
+**Current focus:** Phase 6 — Bug Fixes
 
 ## Decisions
 
 - v1.1 scoped to bugs, UX polish, draft/opponents rework, and testing infrastructure
 - Solo player mode, match detail expansion, and remaining INTL items deferred to v2.0
-- Plan effectiveness and draft-integrated pool notes included as cross-feature items
-- Pool health check, series view, action item rate deferred to v2.0
+- PLAN-02 assigned to Phase 6 (same underlying fix as BUG-02: game plan navigation)
+- TEST-02 (Playwright CLI workflow) moved to Phase 6 so browser verification is available for all subsequent phases
+- TEST-01 (seed real test data) stays in Phase 11 — needs features built first before seeding
+- Phase 8 isolated for champion pool overhaul + draft role icons (substantial UI rework)
+- Phase 9 (Draft & Game Plan) depends on Phase 8 so role assignment is available during draft work
+- Opponents redesign (Phase 10) depends on Phase 9 so opponent dropdown in draft is built first
+- Testing (Phase 11) runs last — needs built features to seed data against
 
-## Accumulated Context
+## Blockers/Concerns
 
-All context from v1.0 archived to `.planning/milestones/`. See MILESTONES.md for summary.
+- BUG-02 and PLAN-02 describe the same underlying fix (game plan navigation); both assigned to Phase 6 to consolidate the work
+
+## Session Continuity
+
+Last session: 2026-03-19
+Stopped at: Roadmap revised (TEST-02 to Phase 6), requirements mapped, ready to plan Phase 6
+Resume file: None

@@ -106,40 +106,40 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUG-01 | — | Pending |
-| BUG-02 | — | Pending |
-| BUG-03 | — | Pending |
-| BUG-04 | — | Pending |
-| BUG-05 | — | Pending |
-| UX-04 | — | Pending |
-| UX-05 | — | Pending |
-| UX-06 | — | Pending |
-| UX-07 | — | Pending |
-| UX-08 | — | Pending |
-| UX-09 | — | Pending |
-| UX-10 | — | Pending |
-| DRFT-01 | — | Pending |
-| DRFT-02 | — | Pending |
-| DRFT-03 | — | Pending |
-| DRFT-04 | — | Pending |
-| DRFT-05 | — | Pending |
-| PLAN-01 | — | Pending |
-| PLAN-02 | — | Pending |
-| PLAN-03 | — | Pending |
-| OPP-01 | — | Pending |
-| OPP-02 | — | Pending |
-| OPP-03 | — | Pending |
-| OPP-04 | — | Pending |
-| XFEAT-01 | — | Pending |
-| XFEAT-02 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
+| BUG-01 | Phase 6 | Pending |
+| BUG-02 | Phase 6 | Pending |
+| BUG-03 | Phase 6 | Pending |
+| BUG-04 | Phase 6 | Pending |
+| BUG-05 | Phase 6 | Pending |
+| PLAN-02 | Phase 6 | Pending |
+| TEST-02 | Phase 6 | Pending |
+| UX-04 | Phase 7 | Pending |
+| UX-05 | Phase 7 | Pending |
+| UX-06 | Phase 7 | Pending |
+| UX-07 | Phase 7 | Pending |
+| UX-09 | Phase 7 | Pending |
+| UX-08 | Phase 8 | Pending |
+| UX-10 | Phase 8 | Pending |
+| DRFT-01 | Phase 9 | Pending |
+| DRFT-02 | Phase 9 | Pending |
+| DRFT-03 | Phase 9 | Pending |
+| DRFT-04 | Phase 9 | Pending |
+| DRFT-05 | Phase 9 | Pending |
+| PLAN-01 | Phase 9 | Pending |
+| PLAN-03 | Phase 9 | Pending |
+| OPP-01 | Phase 10 | Pending |
+| OPP-02 | Phase 10 | Pending |
+| OPP-03 | Phase 10 | Pending |
+| OPP-04 | Phase 10 | Pending |
+| XFEAT-01 | Phase 11 | Pending |
+| XFEAT-02 | Phase 11 | Pending |
+| TEST-01 | Phase 11 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-19*
-*Last updated: 2026-03-19 after initial definition*
+*Last updated: 2026-03-19 after TEST-02 moved from Phase 11 to Phase 6*
