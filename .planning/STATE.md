@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: active
-last_updated: "2026-03-19"
+status: planning
+stopped_at: Phase 6 context gathered
+last_updated: "2026-03-19T15:20:17.338Z"
+last_activity: "2026-03-19 — Roadmap revised: TEST-02 moved from Phase 11 to Phase 6"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
+  percent: 0
 ---
 
 ## Current Position
@@ -45,6 +48,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-19
-Stopped at: Roadmap revised (TEST-02 to Phase 6), requirements mapped, ready to plan Phase 6
-Resume file: None
+Last session: 2026-03-19T15:20:17.330Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-bug-fixes/06-CONTEXT.md
