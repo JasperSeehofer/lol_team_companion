@@ -214,8 +214,6 @@ pub fn ProfilePage() -> impl IntoView {
                                                 <EmptyState
                                                     icon="🔗"
                                                     message="Link your Riot account to track match stats and see champion performance across the app"
-                                                    cta_label="Link Account"
-                                                    cta_href="#link-account"
                                                 />
                                             }.into_any(),
                                         }}

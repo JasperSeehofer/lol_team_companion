@@ -8,3 +8,4 @@ pub mod series;
 pub mod team;
 pub mod team_note;
 pub mod user;
+pub mod utils;

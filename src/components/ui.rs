@@ -107,7 +107,7 @@ fn ToastOverlay(
     set_toasts: WriteSignal<Vec<ToastEntry>>,
 ) -> impl IntoView {
     view! {
-        <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
+        <div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
             {move || toasts.get().into_iter().map(|t| {
                 let id = t.id;
                 let is_error = t.kind == ToastKind::Error;
