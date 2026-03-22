@@ -47,7 +47,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
   6. Playwright CLI workflow is configured with auth fixture and page navigation helpers so agents can run browser verification without manual setup
 **Plans**: 3 plans
 Plans:
-- [ ] 06-01-PLAN.md — Test infrastructure: shared helpers, regression scaffold, agent-browser setup
+- [x] 06-01-PLAN.md — Test infrastructure: shared helpers, regression scaffold, agent-browser setup
 - [ ] 06-02-PLAN.md — Bug fixes: BUG-01 through BUG-05 + PLAN-02 with regression tests
 - [ ] 06-03-PLAN.md — Audit spec refactor + full suite verification
 
@@ -118,7 +118,7 @@ Plans:
 | 3. Smart Dashboard | v1.0 | 2/2 | Complete | 2026-03-15 |
 | 4. Inline Intel | v1.0 | 3/3 | Complete | 2026-03-17 |
 | 5. Post-Game Loop + Polish | v1.0 | 7/7 | Complete | 2026-03-18 |
-| 6. Bug Fixes | v1.1 | 0/3 | Planning | - |
+| 6. Bug Fixes | v1.1 | 1/3 | In Progress|  |
 | 7. UX Polish | v1.1 | 0/? | Not started | - |
 | 8. Champion Pool & Role UI | v1.1 | 0/? | Not started | - |
 | 9. Draft & Game Plan | v1.1 | 0/? | Not started | - |
