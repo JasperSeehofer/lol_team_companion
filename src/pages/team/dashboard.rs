@@ -866,7 +866,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                             view! {
                                                 <div
                                                     class=move || format!(
-                                                        "bg-elevated border rounded-lg p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
+                                                        "relative overflow-hidden bg-elevated border rounded-lg p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
                                                         if drag_over.get() { "border-accent bg-overlay" } else { "border-divider" }
                                                     )
                                                     on:dragover=move |ev| {
@@ -888,6 +888,20 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         }
                                                     }
                                                 >
+                                                    // Watermark role icon
+                                                    {if !role_icon_url(role).is_empty() {
+                                                        view! {
+                                                            <img
+                                                                src=role_icon_url(role)
+                                                                alt=""
+                                                                aria-hidden="true"
+                                                                class="absolute bottom-0 right-0 w-14 h-14 opacity-10 invert pointer-events-none select-none translate-x-2 translate-y-2"
+                                                            />
+                                                        }.into_any()
+                                                    } else {
+                                                        view! { <span></span> }.into_any()
+                                                    }}
+
                                                     // Role icon
                                                     {if !role_icon_url(role).is_empty() {
                                                         view! {
@@ -957,7 +971,15 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 {coaches.into_iter().map(|m| {
                                                     let is_member_leader = m.user_id == created_by_for_coaches;
                                                     view! {
-                                                        <div class="bg-elevated border border-divider rounded-lg p-3 flex items-center gap-3">
+                                                        <div class="relative overflow-hidden bg-elevated border border-divider rounded-lg p-3 flex items-center gap-3">
+                                                            // Watermark clipboard icon for coach
+                                                            <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"
+                                                                     class="absolute bottom-0 right-0 w-14 h-14 opacity-10 text-muted pointer-events-none select-none translate-x-2 translate-y-2"
+                                                                     aria-hidden="true">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+                                                                </svg>
+                                                            </div>
                                                             <span class="bg-blue-500/20 text-blue-400 rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
                                                                 {m.username.chars().next().unwrap_or('?').to_string()}
                                                             </span>
@@ -992,12 +1014,13 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     let is_self = m.user_id == current_user_id;
                                                     let is_member_leader = m.user_id == created_by_for_subs;
                                                     let current_role = m.role.clone();
+                                                    let role_for_wm = m.role.clone();
                                                     let display_name = m.username.clone();
                                                     let (role_msg, set_role_msg) = signal(Option::<String>::None);
 
                                                     view! {
                                                         <div
-                                                            class="bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
+                                                            class="relative bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
                                                             draggable="true"
                                                             on:dragstart=move |ev| {
                                                                 if let Some(dt) = ev.data_transfer() {
@@ -1005,6 +1028,21 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 }
                                                             }
                                                         >
+                                                            // Watermark role icon (clipped to card)
+                                                            <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                                                                {if !role_icon_url(&role_for_wm).is_empty() {
+                                                                    view! {
+                                                                        <img
+                                                                            src=role_icon_url(&role_for_wm)
+                                                                            alt=""
+                                                                            aria-hidden="true"
+                                                                            class="absolute bottom-0 right-0 w-14 h-14 opacity-10 invert pointer-events-none select-none translate-x-2 translate-y-2"
+                                                                        />
+                                                                    }.into_any()
+                                                                } else {
+                                                                    view! { <span></span> }.into_any()
+                                                                }}
+                                                            </div>
                                                             <div class="flex items-center gap-2 min-w-0">
                                                                 <span class="text-muted text-xs select-none" title="Drag to assign to a role slot">"⠿"</span>
                                                                 <span class="text-primary font-medium truncate">{display_name}</span>
