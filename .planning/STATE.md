@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: unknown
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-22T11:56:51.369Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-22T12:09:56.251Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 ## Current Position
 
 Phase: 06 (bug-fixes) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Project Reference
 
@@ -36,6 +36,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - Opponents redesign (Phase 10) depends on Phase 9 so opponent dropdown in draft is built first
 - Testing (Phase 11) runs last — needs built features to seed data against
 - [Phase 06]: Used agent-browser npm package (Vercel Labs) for browser verification skill instead of Playwright MCP
+- [Phase 06-bug-fixes]: Slot-to-slot drag: clear source before fill_slot to bypass already_used guard
+- [Phase 06-bug-fixes]: Use plan_id query param for View Game Plan link (draft_id already serves prefill)
 
 ## Blockers/Concerns
 
@@ -43,6 +45,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-22T11:56:51.368Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-03-22T12:09:56.250Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None

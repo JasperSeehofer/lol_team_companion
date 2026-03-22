@@ -48,7 +48,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 **Plans**: 3 plans
 Plans:
 - [x] 06-01-PLAN.md — Test infrastructure: shared helpers, regression scaffold, agent-browser setup
-- [ ] 06-02-PLAN.md — Bug fixes: BUG-01 through BUG-05 + PLAN-02 with regression tests
+- [x] 06-02-PLAN.md — Bug fixes: BUG-01 through BUG-05 + PLAN-02 with regression tests
 - [ ] 06-03-PLAN.md — Audit spec refactor + full suite verification
 
 ### Phase 7: UX Polish
