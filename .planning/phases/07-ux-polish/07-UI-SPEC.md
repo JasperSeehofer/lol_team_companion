@@ -56,15 +56,17 @@ Project uses Tailwind utility classes directly. No custom font scale override in
 | Role | Tailwind Class | Size | Weight | Line Height |
 |------|---------------|------|--------|-------------|
 | Display / Page heading | `text-3xl font-bold` | 30px | 700 | 1.2 |
-| Section heading | `text-xl font-bold` or `text-lg font-semibold` | 20px / 18px | 700 / 600 | 1.25 |
+| Section heading | `text-xl font-bold` | 20px | 700 | 1.25 |
 | Body | `text-sm` | 14px | 400 | 1.5 |
-| Label / Meta | `text-xs` | 12px | 400–500 | 1.4 |
+| Label / Meta | `text-xs` | 12px | 400 | 1.4 |
 
-Phase 7 introduces no new type sizes. All new text elements (search prompt, member count, timestamp display, search results) use `text-sm` (14px, weight 400) for body copy and `text-xs` (12px, weight 400–500) for meta labels.
+Phase 7 introduces no new type sizes. All new text elements (search prompt, member count, timestamp display, search results) use `text-sm` (14px, weight 400) for body copy and `text-xs` (12px, weight 400) for meta labels.
 
 Two weights in use:
 - Regular: 400 (`font-normal` — default, no class needed)
-- Semibold/Bold: 600–700 (`font-semibold` / `font-bold`)
+- Bold: 700 (`font-bold`)
+
+`font-semibold` (600) is not part of the declared scale. Any existing `font-semibold` usages encountered during Phase 7 work must be updated to `font-bold`.
 
 Source: Observed throughout `dashboard.rs`, `nav.rs`, and `ui.rs`.
 
@@ -141,6 +143,7 @@ Source: `input.css` token definitions; CLAUDE.md theming rules.
 ### UX-07: Team Join Search
 
 - Replaces the current full-list render with a search-filtered view inside "Join an Existing Team".
+- **Focal point:** The search input anchors the visual hierarchy of this section — it is the first interactive element, full-width, and draws the eye before any results appear.
 - **Input component:** `<input type="text">` styled as `w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent`
 - Placeholder text: `"Search teams by name..."`
 - Reactive signal: `RwSignal<String>` for the search query; filter applied client-side on the already-loaded `teams_resource`.
@@ -148,7 +151,7 @@ Source: `input.css` token definitions; CLAUDE.md theming rules.
   1. Empty query (`query.is_empty()` = true): show `<p class="text-muted text-sm">"Type to search for teams..."</p>`
   2. Non-empty query, results found: show filtered team cards (see card spec below)
   3. Non-empty query, no results: show `<p class="text-dimmed text-sm">"No teams match your search."</p>`
-- **Search result card layout:** horizontal row — team name (`text-primary font-semibold`) + region (`text-muted text-sm`) + member count (`text-muted text-sm` — e.g. `"5 members"`) + "Request to Join" button (`bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-sm`)
+- **Search result card layout:** horizontal row — team name (`text-primary font-bold`) + region (`text-muted text-sm`) + member count (`text-muted text-sm` — e.g. `"5 members"`) + "Request to Join" button (`bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-sm`)
 - Member count requires `member_count: Option<u32>` added to `Team` model and `list_all_teams()` query updated.
 - Filter matches `team.name` only (case-insensitive `contains`). Source: CONTEXT.md D-08.
 
@@ -157,6 +160,7 @@ Source: `input.css` token definitions; CLAUDE.md theming rules.
 - **Trigger:** Only when the assigned role has a Community Dragon icon URL (i.e. `!role_icon_url(role).is_empty()`).
 - No watermark for `"unassigned"`, `"sub"`, `"coach"` roles from the `role_icon_url()` fallback branch. Source: CONTEXT.md D-11.
 - **Coach cards:** Use an inline SVG clipboard/whiteboard icon (20x20, `text-muted`) as the watermark — Community Dragon has no coach SVG. The icon is rendered identically to the role watermark (absolute, bottom-right, faded).
+- **Focal point:** The role watermark anchors the bottom-right of each card, creating a visual anchor that reinforces the assigned role at a glance without competing with the member name at top-left.
 - **Watermark image spec:**
   - Class: `absolute bottom-0 right-0 w-14 h-14 opacity-10 invert pointer-events-none select-none translate-x-2 translate-y-2`
   - `alt=""` and `aria-hidden="true"` (purely decorative)
