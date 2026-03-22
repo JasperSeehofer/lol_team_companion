@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: unknown
 stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-22T13:39:57.916Z"
+last_updated: "2026-03-22T13:43:41.163Z"
 progress:
   total_phases: 6
   completed_phases: 2
@@ -14,8 +14,8 @@ progress:
 
 ## Current Position
 
-Phase: 07 (ux-polish) — EXECUTING
-Plan: 2 of 2
+Phase: 8
+Plan: Not started
 
 ## Project Reference
 
