@@ -7,32 +7,14 @@
  * Requires a running dev server: cargo leptos watch
  */
 import { test, expect } from "./fixtures";
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-}
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("stats: page loads with empty state", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/stats");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/stats");
+  await page.waitForTimeout(500);
 
   // Page should render (h1 visible)
   await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
@@ -57,9 +39,8 @@ test("profile: page loads and shows username", async ({ authedPage }) => {
   const page = authedPage;
   const errors = captureErrors(page);
 
-  await page.goto("/profile");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/profile");
+  await page.waitForTimeout(500);
 
   // Page should render (h1 visible)
   await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
@@ -84,9 +65,8 @@ test("opponents: page loads", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/opponents");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/opponents");
+  await page.waitForTimeout(500);
 
   // Page should render (not blank, not just a loading spinner forever)
   // Check for h1 or any meaningful content
@@ -111,9 +91,8 @@ test("action-items: page loads", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/action-items");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/action-items");
+  await page.waitForTimeout(500);
 
   // Page should render (not blank)
   const hasHeading = await page.locator("h1").isVisible({ timeout: 5000 }).catch(() => false);
@@ -137,9 +116,8 @@ test("team-builder: page loads and basic interaction", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/team-builder");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/team-builder");
+  await page.waitForTimeout(500);
 
   // Page should render
   await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });

@@ -5,33 +5,14 @@
  * Requires a running dev server: cargo leptos watch
  */
 import { test, expect } from "./fixtures";
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-}
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("team: create a new team", async ({ authedPage }) => {
   const page = authedPage;
   const errors = captureErrors(page);
   const teamName = `AuditTeam_${Date.now()}`;
 
-  await page.goto("/team/roster");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
+  await navigateTo(page, "/team/roster");
 
   // Fill team name input
   const teamNameInput = page.locator('input[name="name"]');
@@ -75,9 +56,7 @@ test("team: dashboard shows roster slots", async ({ teamPage }) => {
 
   // If not on the dashboard, navigate there explicitly
   if (!page.url().includes("/team/dashboard")) {
-    await page.goto("/team/dashboard");
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await navigateTo(page, "/team/dashboard");
   }
 
   // Verify the dashboard renders meaningful content
@@ -109,9 +88,7 @@ test("team: dashboard shows action items panel", async ({ teamPage }) => {
   await page.waitForTimeout(500);
 
   if (!page.url().includes("/team/dashboard")) {
-    await page.goto("/team/dashboard");
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await navigateTo(page, "/team/dashboard");
   }
 
   // Panel heading must be visible — hard assertion
@@ -138,9 +115,7 @@ test("team: dashboard shows post-game reviews panel", async ({ teamPage }) => {
   await page.waitForTimeout(500);
 
   if (!page.url().includes("/team/dashboard")) {
-    await page.goto("/team/dashboard");
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await navigateTo(page, "/team/dashboard");
   }
 
   // Panel heading must be visible — hard assertion
@@ -167,9 +142,7 @@ test("team: dashboard shows pool gap warnings panel", async ({ teamPage }) => {
   await page.waitForTimeout(500);
 
   if (!page.url().includes("/team/dashboard")) {
-    await page.goto("/team/dashboard");
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await navigateTo(page, "/team/dashboard");
   }
 
   // Panel heading must be visible — hard assertion
@@ -192,9 +165,7 @@ test("team: join with invalid code shows error", async ({ authedPage }) => {
   const page = authedPage;
   const errors = captureErrors(page);
 
-  await page.goto("/team/roster");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
+  await navigateTo(page, "/team/roster");
 
   // Look for a "Join Team" section with a code input or a list of teams to join
   const joinSection = page.locator('button:has-text("Join"), button:has-text("Request to Join")').first();

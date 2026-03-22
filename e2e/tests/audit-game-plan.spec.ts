@@ -7,33 +7,15 @@
  * Uses teamPage fixture since game plans are scoped to a team.
  */
 import { test, expect } from "./fixtures";
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-}
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("game-plan: create a new game plan", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
   const planName = `AuditPlan_${Date.now()}`;
 
-  await page.goto("/game-plan");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/game-plan");
+  await page.waitForTimeout(500);
 
   // Fill the plan name input (prop:value-controlled input near label)
   const planNameInput = page.locator("input").first();
@@ -56,9 +38,8 @@ test("game-plan: plan appears in saved plans list", async ({ teamPage }) => {
   const page = teamPage;
   const planName = `AuditPlanList_${Date.now()}`;
 
-  await page.goto("/game-plan");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/game-plan");
+  await page.waitForTimeout(500);
 
   // Create and save a plan
   const planNameInput = page.locator("input").first();
@@ -96,9 +77,7 @@ test("game-plan: draft_id prefill works without crash", async ({ teamPage }) => 
   expect(panics).toHaveLength(0);
 
   // Navigate to clean game-plan — also should not crash
-  await page.goto("/game-plan");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
+  await navigateTo(page, "/game-plan");
   await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
 });
 
@@ -107,9 +86,8 @@ test("game-plan: checklist interaction (if available)", async ({ teamPage }) => 
   const errors = captureErrors(page);
   const planName = `AuditChecklist_${Date.now()}`;
 
-  await page.goto("/game-plan");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/game-plan");
+  await page.waitForTimeout(500);
 
   // Create and save a plan first
   const planNameInput = page.locator("input").first();

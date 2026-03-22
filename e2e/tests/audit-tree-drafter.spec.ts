@@ -14,39 +14,21 @@
  * - Add branch: "+" button on hover over any node (title="Add branch")
  */
 import { test, expect } from "./fixtures";
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 /**
  * Create a tree and return its name.
  * Navigates to /tree-drafter, fills the new tree form, and waits for the tree to appear.
  */
 async function createTree(page: import("@playwright/test").Page, name: string): Promise<void> {
-  await page.goto("/tree-drafter");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/tree-drafter");
+  await page.waitForTimeout(500);
 
   const treeInput = page.locator('input[placeholder="Tree name..."]');
   await treeInput.fill(name);
   await page.locator('button:has-text("Create Tree")').click();
   // Wait for tree to be created and appear in the sidebar
   await page.waitForTimeout(2000);
-}
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
 }
 
 test("tree-drafter: create a new tree", async ({ teamPage }) => {

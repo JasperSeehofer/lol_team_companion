@@ -7,24 +7,7 @@
  * NOTE: Save draft requires a team — uses teamPage fixture which pre-creates one.
  */
 import { test, expect } from "./fixtures";
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-}
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test(
   "draft: save new draft and verify Update Draft button appears",
@@ -33,9 +16,8 @@ test(
     const errors = captureErrors(page);
     const draftName = `AuditDraft_${Date.now()}`;
 
-    await page.goto("/draft");
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await navigateTo(page, "/draft");
+    await page.waitForTimeout(500);
 
     // Fill the draft name in the first textbox
     await page.getByRole("textbox").first().fill(draftName);
@@ -65,9 +47,8 @@ test(
     const page = teamPage;
     const draftName = `AuditListBug_${Date.now()}`;
 
-    await page.goto("/draft");
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await navigateTo(page, "/draft");
+    await page.waitForTimeout(500);
 
     // Save a draft
     await page.getByRole("textbox").first().fill(draftName);
@@ -97,9 +78,8 @@ test("draft: load draft from saved list", async ({ teamPage }) => {
   const page = teamPage;
   const draftName = `AuditLoad_${Date.now()}`;
 
-  await page.goto("/draft");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1500);
+  await navigateTo(page, "/draft");
+  await page.waitForTimeout(1000);
 
   // Save a draft first
   await page.getByRole("textbox").first().fill(draftName);
@@ -139,9 +119,8 @@ test("draft: delete a draft", async ({ teamPage }) => {
   const page = teamPage;
   const draftName = `AuditDelete_${Date.now()}`;
 
-  await page.goto("/draft");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/draft");
+  await page.waitForTimeout(500);
 
   // Save a draft
   await page.getByRole("textbox").first().fill(draftName);
@@ -177,9 +156,8 @@ test("draft: no console errors during interactions", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/draft");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/draft");
+  await page.waitForTimeout(500);
 
   // Fill draft name
   await page.getByRole("textbox").first().fill(`AuditInteract_${Date.now()}`);

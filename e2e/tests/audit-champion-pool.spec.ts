@@ -8,32 +8,14 @@
  * consistent test environment with a known user.
  */
 import { test, expect } from "./fixtures";
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-}
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("champion-pool: page loads with empty state", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/champion-pool");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/champion-pool");
+  await page.waitForTimeout(500);
 
   // Page should render — h1 or main content visible
   await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
@@ -59,9 +41,8 @@ test("champion-pool: add a champion to pool", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/champion-pool");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1500);
+  await navigateTo(page, "/champion-pool");
+  await page.waitForTimeout(1000);
 
   // Look for an autocomplete input to search for a champion
   const autocompleteInput = page.locator("input").first();
@@ -118,9 +99,8 @@ test("champion-pool: remove a champion from pool", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/champion-pool");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1500);
+  await navigateTo(page, "/champion-pool");
+  await page.waitForTimeout(1000);
 
   // First check if there are any existing pool entries with remove buttons
   const removeBtn = page.locator('button:has-text("Remove"), button[aria-label*="remove"], button[title*="remove"]').first();

@@ -10,21 +10,17 @@
  * Requires a running dev server: cargo leptos watch
  */
 import { test, expect } from "./fixtures";
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("full pipeline: draft with picks → game plan prefill → save → source draft roundtrip", async ({
   authedPage,
 }) => {
   const page = authedPage;
   const timestamp = Date.now();
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
-  });
+  const errors = captureErrors(page);
 
   // --- 1. Create team ---
-  await page.goto("/team/roster");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(500);
+  await navigateTo(page, "/team/roster");
 
   const teamNameInput = page.locator('input[name="name"]');
   if (await teamNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -40,9 +36,8 @@ test("full pipeline: draft with picks → game plan prefill → save → source 
   }
 
   // --- 2. Create draft with champion picks ---
-  await page.goto("/draft");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1500);
+  await navigateTo(page, "/draft");
+  await page.waitForTimeout(1000);
 
   // Fill draft name
   await page.getByRole("textbox").first().fill(`PipeDraft_${timestamp}`);
@@ -134,20 +129,14 @@ test("full pipeline: draft with picks → game plan prefill → save → source 
   await expect(page.locator("nav")).toBeVisible();
 
   // No real JS errors
-  const realErrors = errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-  expect(realErrors).toHaveLength(0);
+  expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
 test("game plan page loads cleanly with draft_id query param", async ({
   authedPage,
 }) => {
   const page = authedPage;
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
-  });
+  const errors = captureErrors(page);
 
   // Navigate to game plan with a non-existent draft_id — should not crash
   await page.goto("/game-plan?draft_id=draft:nonexistent");
@@ -159,20 +148,14 @@ test("game plan page loads cleanly with draft_id query param", async ({
   expect(bodyText).toMatch(/game|plan|strategy/i);
   await expect(page.locator("nav")).toBeVisible();
 
-  const realErrors = errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-  expect(realErrors).toHaveLength(0);
+  expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
 test("post-game page loads cleanly with draft_id query param", async ({
   authedPage,
 }) => {
   const page = authedPage;
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
-  });
+  const errors = captureErrors(page);
 
   await page.goto("/post-game?draft_id=draft:nonexistent");
   await page.waitForLoadState("networkidle");
@@ -183,8 +166,5 @@ test("post-game page loads cleanly with draft_id query param", async ({
   expect(bodyText).toMatch(/post|game|review/i);
   await expect(page.locator("nav")).toBeVisible();
 
-  const realErrors = errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-  expect(realErrors).toHaveLength(0);
+  expect(filterRealErrors(errors)).toHaveLength(0);
 });

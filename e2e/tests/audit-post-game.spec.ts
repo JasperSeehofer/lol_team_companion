@@ -7,32 +7,14 @@
  * Uses teamPage fixture since reviews are scoped to a team.
  */
 import { test, expect } from "./fixtures";
-
-/**
- * Capture console errors for a page, filtering known-harmless noise.
- */
-function captureErrors(page: import("@playwright/test").Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(`[console.error] ${msg.text()}`);
-  });
-  return errors;
-}
-
-function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
-  );
-}
+import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("post-game: create a new review", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/post-game");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/post-game");
+  await page.waitForTimeout(500);
 
   // Fill "What Went Well" textarea
   const wentWellTextarea = page.locator("textarea").first();
@@ -79,9 +61,8 @@ test("post-game: draft_id param loads without crash", async ({ teamPage }) => {
 test("post-game: review appears in saved list", async ({ teamPage }) => {
   const page = teamPage;
 
-  await page.goto("/post-game");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/post-game");
+  await page.waitForTimeout(500);
 
   // Create a review
   const wentWellTextarea = page.locator("textarea").first();
@@ -114,9 +95,8 @@ test("post-game: no console errors during form interactions", async ({ teamPage 
   const page = teamPage;
   const errors = captureErrors(page);
 
-  await page.goto("/post-game");
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1000);
+  await navigateTo(page, "/post-game");
+  await page.waitForTimeout(500);
 
   // Interact with all textarea fields
   const textareas = page.locator("textarea");
