@@ -114,4 +114,4 @@ Known tech debt from v1.0:
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
 ---
-*Last updated: 2026-03-19 after v1.1 milestone start*
+*Last updated: 2026-03-22 after Phase 06 (bug-fixes) — all 5 regressions fixed, shared e2e infra established, full audit suite green*
