@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: unknown
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-22T13:34:03.606Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-22T13:39:57.916Z"
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 ## Current Position
@@ -40,6 +40,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 06-bug-fixes]: Use plan_id query param for View Game Plan link (draft_id already serves prefill)
 - [Phase 06-bug-fixes]: BUG-05 regression test uses soft assertion + WASM-panic check due to Playwright headless DragEvent limitation
 - [Phase 07-ux-polish]: format_timestamp_with_now takes explicit now for deterministic unit tests; public format_timestamp calls it with Utc::now()
+- [Phase 07-02]: Bench card watermark uses inner overflow-hidden div to avoid clipping the role select dropdown
+- [Phase 07-02]: Coach watermark uses inline clipboard SVG (no Community Dragon icon available for coach)
 
 ## Blockers/Concerns
 
@@ -47,6 +49,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-22T13:34:03.605Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-03-22T13:39:57.915Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
