@@ -9,11 +9,11 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 
 ### Bug Fixes
 
-- [ ] **BUG-01**: Tree drafter "Branch from here" makes UI unresponsive — user can branch from any node and continue drafting
-- [ ] **BUG-02**: "View game plan" from draft opens empty game plan — clicking navigates to the correct populated game plan
-- [ ] **BUG-03**: Team leader disappears from roster under certain conditions — team leader always visible in roster
-- [ ] **BUG-04**: Nav resource read outside Suspense causes hydration warning — no hydration mismatch warnings in console
-- [ ] **BUG-05**: Draft drag-and-drop copies icon link instead of moving pick/ban — dragging a champion moves it to the target slot and empties the source
+- [x] **BUG-01**: Tree drafter "Branch from here" makes UI unresponsive — user can branch from any node and continue drafting
+- [x] **BUG-02**: "View game plan" from draft opens empty game plan — clicking navigates to the correct populated game plan
+- [x] **BUG-03**: Team leader disappears from roster under certain conditions — team leader always visible in roster
+- [x] **BUG-04**: Nav resource read outside Suspense causes hydration warning — no hydration mismatch warnings in console
+- [x] **BUG-05**: Draft drag-and-drop copies icon link instead of moving pick/ban — dragging a champion moves it to the target slot and empties the source
 
 ### UX Polish
 
@@ -36,7 +36,7 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 ### Game Plan
 
 - [ ] **PLAN-01**: Game plan auto-fills strategy tag from source draft's tags and name as "<draft name> plan"
-- [ ] **PLAN-02**: Clicking "view game plan" from draft navigates to the correct existing game plan with data populated
+- [x] **PLAN-02**: Clicking "view game plan" from draft navigates to the correct existing game plan with data populated
 - [ ] **PLAN-03**: Creating game plan from draft pre-fills our champions and enemy champions from the draft
 
 ### Opponents
@@ -106,12 +106,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUG-01 | Phase 6 | Pending |
-| BUG-02 | Phase 6 | Pending |
-| BUG-03 | Phase 6 | Pending |
-| BUG-04 | Phase 6 | Pending |
-| BUG-05 | Phase 6 | Pending |
-| PLAN-02 | Phase 6 | Pending |
+| BUG-01 | Phase 6 | Complete |
+| BUG-02 | Phase 6 | Complete |
+| BUG-03 | Phase 6 | Complete |
+| BUG-04 | Phase 6 | Complete |
+| BUG-05 | Phase 6 | Complete |
+| PLAN-02 | Phase 6 | Complete |
 | TEST-02 | Phase 6 | Complete |
 | UX-04 | Phase 7 | Pending |
 | UX-05 | Phase 7 | Pending |
