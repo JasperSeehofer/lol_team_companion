@@ -177,7 +177,7 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 3. Add a `<Route>` in `src/app.rs`
 4. Add a nav link in `src/components/nav.rs` if needed
 5. Add a smoke test entry to `e2e/tests/pages.spec.ts` (`AUTHED_PAGES` array if auth-required, or `PUBLIC_PAGES` in `smoke.spec.ts` if public)
-6. **Verify via Playwright MCP**: navigate to the new route, snapshot, confirm it renders without errors
+6. **Verify via agent-browser or e2e test**: navigate to the new route, snapshot, confirm it renders without errors
 
 ### New DB table
 
@@ -384,29 +384,29 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 ### Starting a dev session
 1. Start dev server in background: `cargo leptos watch` (use `run_in_background`)
 2. Wait for ready: `./scripts/wait_for_server.sh 120`
-3. Register + log in via Playwright MCP so subsequent page visits are authenticated
+3. Register + log in via the e2e auth fixture or agent-browser so subsequent page visits are authenticated
 
-### Browser verification with Playwright MCP
+### Browser verification
 
-The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, and more. **Use it liberally** — it's the primary way to catch UI/runtime bugs that the compiler can't.
+Use the Playwright e2e test suite and agent-browser skill for browser verification. **Run tests liberally** — they are the primary way to catch UI/runtime bugs that the compiler can't.
 
 **Recommended after UI changes (interactive sessions):**
-1. `browser_navigate` to the affected page
-2. `browser_snapshot` — read the accessibility tree to confirm the page rendered correctly
+1. Run a targeted Playwright test: `cd e2e && npx playwright test <spec> -g "<test name>"`
+2. Or take a quick screenshot: `npx agent-browser screenshot http://127.0.0.1:3002/<route>`
 3. Check for missing elements, broken text, wrong state
-4. If the change involves interaction (click, form submit, drag), perform the interaction via MCP and snapshot again to verify the result
+4. If the change involves interaction (click, form submit, drag), run the relevant e2e test or use agent-browser to click through and snapshot again
 
-**When to use MCP vs Playwright e2e tests:**
-- **MCP (interactive):** Quick one-off checks during development. Verify a page renders, click through a flow, inspect state after a mutation.
+**When to use agent-browser vs Playwright e2e tests:**
+- **agent-browser (interactive):** Quick one-off checks during development via agent-browser skill. Navigate, screenshot, interact.
 - **e2e tests (`just e2e`):** Regression suite. Run before committing or when validating multiple pages at once.
 
-**Auth for MCP sessions:**
-1. Registration auto-logs in and redirects to `/team/dashboard`. `browser_navigate` to `/auth/register`, fill form, submit, then wait for the hard navigation to `/team/dashboard` to complete.
-2. Alternatively, navigate to `/auth/login` directly if you already have credentials.
+**Auth for agent-browser sessions:**
+1. Use the `authenticatePage` helper from `e2e/tests/fixtures.ts` as a reference for the auth flow.
+2. Register via `/auth/register` — registration auto-logs in and redirects to `/team/dashboard`.
 3. All subsequent navigations in the same browser session are authenticated.
 
 **Common verification patterns:**
-- New page: navigate → snapshot → confirm page-specific content visible, no error banners
+- New page: navigate → screenshot/snapshot → confirm page-specific content visible, no error banners
 - Form submission: fill fields → submit → snapshot → confirm success message or redirect
 - List mutation (add/delete): perform action → snapshot → confirm list updated
 - Error handling: trigger an error condition → snapshot → confirm error banner appears with useful message
@@ -416,7 +416,7 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 - `cargo leptos watch` auto-recompiles on file save
 - rust-analyzer LSP provides real-time type errors
 - `just check-ssr` for a quick compile check when LSP is insufficient
-- **Verify the affected page in the browser via MCP when feasible** — compiler checks alone miss rendering bugs, wrong CSS, missing data, and broken interactions
+- **Verify the affected page in the browser when feasible** — use agent-browser or `cd e2e && npx playwright test` — compiler checks alone miss rendering bugs, wrong CSS, missing data, and broken interactions
 
 ### Debugging reactive bugs without a browser
 Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are **signal lifecycle issues** that the Rust compiler cannot catch. When diagnosing these:
@@ -433,7 +433,7 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 
 ### Gotchas learned from browser testing
 
-45. **`WebFetch` cannot reach localhost** — It auto-upgrades HTTP to HTTPS, which fails for `127.0.0.1`. Use `curl` via Bash for fetching local pages, or Playwright MCP / e2e tests for browser interaction.
+45. **`WebFetch` cannot reach localhost** — It auto-upgrades HTTP to HTTPS, which fails for `127.0.0.1`. Use `curl` via Bash for fetching local pages, or agent-browser / e2e tests for browser interaction.
 
 46. **Extracting text from Leptos SSR HTML** — The HTML contains large inline `<script>` blocks (hot-reload, hydration). Use Python's `HTMLParser` to strip scripts and extract visible text content. Raw `sed` approaches break on multi-line scripts.
 
@@ -472,7 +472,7 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 
 ## Plugins & MCP Servers
 
-- **Playwright MCP** — interactive browser testing (navigate, snapshot, click). Configured in `.mcp.json` — auto-available when Claude Code starts. Install once: `npm install -g @anthropic/mcp-playwright`
+- **agent-browser** — Vercel's agent-browser skill for interactive browser verification during development. Installed as a Claude Code skill in `.claude/skills/agent-browser/`.
 - **Context7** — up-to-date library docs; add "use context7" to prompts for live documentation lookup
 - **GitHub MCP** — rich GitHub integration (PRs, issues, code search) via `GITHUB_TOKEN` env var
 
