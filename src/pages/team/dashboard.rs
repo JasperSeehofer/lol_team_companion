@@ -616,10 +616,22 @@ pub fn TeamDashboard() -> impl IntoView {
                             .filter(|m| m.role == "coach" && m.roster_type != "starter")
                             .cloned()
                             .collect();
-                        let subs: Vec<TeamMember> = members.iter()
+                        let mut subs: Vec<TeamMember> = members.iter()
                             .filter(|m| m.roster_type != "starter" && m.role != "coach")
                             .cloned()
                             .collect();
+
+                        // BUG-03: Ensure the team leader is always visible in the bench section.
+                        // The leader may be absent if their team_member record has an unexpected state.
+                        // If not found in any partition, insert them at the top of the bench.
+                        let leader_in_any = starters.iter().any(|m| m.user_id == created_by)
+                            || coaches.iter().any(|m| m.user_id == created_by)
+                            || subs.iter().any(|m| m.user_id == created_by);
+                        if !leader_in_any {
+                            if let Some(leader_member) = members.iter().find(|m| m.user_id == created_by) {
+                                subs.insert(0, leader_member.clone());
+                            }
+                        }
 
                         let created_by_for_starters = created_by.clone();
                         let created_by_for_coaches = created_by.clone();

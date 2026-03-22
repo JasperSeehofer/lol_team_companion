@@ -63,6 +63,16 @@ pub fn DraftBoard(
                         "w-10 h-10 rounded border border-dashed border-outline bg-surface flex items-center justify-center cursor-pointer hover:border-gray-400"
                     }
                 }
+                draggable="true"
+                on:dragstart=move |ev: web_sys::DragEvent| {
+                    let slots = draft_slots.get_untracked();
+                    if let Some(Some(champ_name)) = slots.get(slot_idx) {
+                        if let Some(dt) = ev.data_transfer() {
+                            let _ = dt.set_data("text/plain", champ_name);
+                            let _ = dt.set_data("text/x-source-slot", &slot_idx.to_string());
+                        }
+                    }
+                }
                 on:click=move |_| on_slot_click.run(slot_idx)
                 on:dragover=move |ev: web_sys::DragEvent| ev.prevent_default()
                 on:drop={
@@ -70,8 +80,20 @@ pub fn DraftBoard(
                     move |ev: web_sys::DragEvent| {
                         ev.prevent_default();
                         if let Some(dt) = ev.data_transfer() {
+                            // Read source slot first — if this is a slot-to-slot move,
+                            // clear the source before filling the target so the "already used"
+                            // guard in fill_slot does not block the move (BUG-05).
+                            let source_slot: Option<usize> = dt
+                                .get_data("text/x-source-slot")
+                                .ok()
+                                .and_then(|s| s.parse::<usize>().ok());
                             if let Ok(name) = dt.get_data("text/plain") {
                                 if !name.is_empty() {
+                                    if let Some(src) = source_slot {
+                                        if src != slot_idx {
+                                            on_slot_clear.run(src);
+                                        }
+                                    }
                                     on_slot_drop.run((slot_idx, name));
                                 }
                             }
@@ -139,6 +161,16 @@ pub fn DraftBoard(
                         "h-16 rounded border border-dashed border-outline bg-surface overflow-hidden cursor-pointer hover:border-gray-400"
                     }
                 }
+                draggable="true"
+                on:dragstart=move |ev: web_sys::DragEvent| {
+                    let slots = draft_slots.get_untracked();
+                    if let Some(Some(champ_name)) = slots.get(slot_idx) {
+                        if let Some(dt) = ev.data_transfer() {
+                            let _ = dt.set_data("text/plain", champ_name);
+                            let _ = dt.set_data("text/x-source-slot", &slot_idx.to_string());
+                        }
+                    }
+                }
                 on:click=move |_| on_slot_click.run(slot_idx)
                 on:dragover=move |ev: web_sys::DragEvent| ev.prevent_default()
                 on:drop={
@@ -146,8 +178,20 @@ pub fn DraftBoard(
                     move |ev: web_sys::DragEvent| {
                         ev.prevent_default();
                         if let Some(dt) = ev.data_transfer() {
+                            // Read source slot first — if this is a slot-to-slot move,
+                            // clear the source before filling the target so the "already used"
+                            // guard in fill_slot does not block the move (BUG-05).
+                            let source_slot: Option<usize> = dt
+                                .get_data("text/x-source-slot")
+                                .ok()
+                                .and_then(|s| s.parse::<usize>().ok());
                             if let Ok(name) = dt.get_data("text/plain") {
                                 if !name.is_empty() {
+                                    if let Some(src) = source_slot {
+                                        if src != slot_idx {
+                                            on_slot_clear.run(src);
+                                        }
+                                    }
                                     on_slot_drop.run((slot_idx, name));
                                 }
                             }

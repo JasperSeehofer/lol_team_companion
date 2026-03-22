@@ -115,58 +115,68 @@ pub fn Nav() -> impl IntoView {
 
     let any_dropdown_open = move || menu_open.get() || notif_open.get();
 
-    let is_authed = move || user.get().and_then(|r| r.ok()).flatten().is_some();
-
     let close_link = Callback::new(move |_: ()| close_all());
 
     let nav_links = move |extra_class: &'static str| {
         let link_cls = format!("{extra_class} text-secondary hover:text-primary transition-colors");
-        let link_cls2 = link_cls.clone();
-        let link_cls3 = link_cls.clone();
-        let link_cls4 = link_cls.clone();
-        let link_cls5 = link_cls.clone();
-        let link_cls6 = link_cls.clone();
-        let link_cls7 = link_cls.clone();
-        let link_cls8 = link_cls.clone();
+        // Wrap auth-gated links in Suspense so SSR renders the fallback (nothing)
+        // and WASM hydration renders the real links after the Resource resolves.
+        // This eliminates the SSR vs hydration mismatch (BUG-04).
+        let auth_link_cls = link_cls.clone();
         view! {
             <A href="/" attr:class=link_cls
                 on:click=move |_| close_link.run(())>
                 "Home"
             </A>
-            {move || if is_authed() {
-                view! {
-                    <A href="/team/dashboard" attr:class=link_cls2.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Team"
-                    </A>
-                    <A href="/draft" attr:class=link_cls3.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Draft"
-                    </A>
-                    <A href="/tree-drafter" attr:class=link_cls4.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Tree Drafter"
-                    </A>
-                    <A href="/stats" attr:class=link_cls5.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Stats"
-                    </A>
-                    <A href="/game-plan" attr:class=link_cls6.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Game Plan"
-                    </A>
-                    <A href="/post-game" attr:class=link_cls7.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Post Game"
-                    </A>
-                    <A href="/opponents" attr:class=link_cls8.clone()
-                        on:click=move |_| close_link.run(())>
-                        "Opponents"
-                    </A>
-                }.into_any()
-            } else {
-                view! { <span></span> }.into_any()
-            }}
+            <Suspense fallback=move || view! { <span></span> }>
+                {move || {
+                    let cls = auth_link_cls.clone();
+                    Suspend::new(async move {
+                        let authed = user.await.ok().flatten().is_some();
+                        if authed {
+                            let cls2 = cls.clone();
+                            let cls3 = cls.clone();
+                            let cls4 = cls.clone();
+                            let cls5 = cls.clone();
+                            let cls6 = cls.clone();
+                            let cls7 = cls.clone();
+                            let cls8 = cls.clone();
+                            view! {
+                                <A href="/team/dashboard" attr:class=cls2
+                                    on:click=move |_| close_link.run(())>
+                                    "Team"
+                                </A>
+                                <A href="/draft" attr:class=cls3
+                                    on:click=move |_| close_link.run(())>
+                                    "Draft"
+                                </A>
+                                <A href="/tree-drafter" attr:class=cls4
+                                    on:click=move |_| close_link.run(())>
+                                    "Tree Drafter"
+                                </A>
+                                <A href="/stats" attr:class=cls5
+                                    on:click=move |_| close_link.run(())>
+                                    "Stats"
+                                </A>
+                                <A href="/game-plan" attr:class=cls6
+                                    on:click=move |_| close_link.run(())>
+                                    "Game Plan"
+                                </A>
+                                <A href="/post-game" attr:class=cls7
+                                    on:click=move |_| close_link.run(())>
+                                    "Post Game"
+                                </A>
+                                <A href="/opponents" attr:class=cls8
+                                    on:click=move |_| close_link.run(())>
+                                    "Opponents"
+                                </A>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }
+                    })
+                }}
+            </Suspense>
         }
     };
 
