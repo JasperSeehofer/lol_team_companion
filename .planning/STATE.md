@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: unknown
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-22T12:09:56.251Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-03-22T12:30:35.112Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 ## Current Position
@@ -38,6 +38,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 06]: Used agent-browser npm package (Vercel Labs) for browser verification skill instead of Playwright MCP
 - [Phase 06-bug-fixes]: Slot-to-slot drag: clear source before fill_slot to bypass already_used guard
 - [Phase 06-bug-fixes]: Use plan_id query param for View Game Plan link (draft_id already serves prefill)
+- [Phase 06-bug-fixes]: BUG-05 regression test uses soft assertion + WASM-panic check due to Playwright headless DragEvent limitation
 
 ## Blockers/Concerns
 
@@ -45,6 +46,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:09:56.250Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-03-22T12:30:35.111Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None

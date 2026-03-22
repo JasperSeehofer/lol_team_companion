@@ -27,7 +27,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 
 ## Phase Details
 
-- [ ] **Phase 6: Bug Fixes** - Eliminate known regressions and configure Playwright CLI so the app is stable and verifiable before adding new surface
+- [x] **Phase 6: Bug Fixes** - Eliminate known regressions and configure Playwright CLI so the app is stable and verifiable before adding new surface (completed 2026-03-22)
 - [ ] **Phase 7: UX Polish** - Small, independent UX improvements that make the app feel polished
 - [ ] **Phase 8: Champion Pool & Role UI** - Overhaul champion pool management and add role assignment to draft picks
 - [ ] **Phase 9: Draft & Game Plan** - Improve draft tooling with opponent context, pool notes sidebar, and game plan autofill
@@ -49,7 +49,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 Plans:
 - [x] 06-01-PLAN.md — Test infrastructure: shared helpers, regression scaffold, agent-browser setup
 - [x] 06-02-PLAN.md — Bug fixes: BUG-01 through BUG-05 + PLAN-02 with regression tests
-- [ ] 06-03-PLAN.md — Audit spec refactor + full suite verification
+- [x] 06-03-PLAN.md — Audit spec refactor + full suite verification
 
 ### Phase 7: UX Polish
 **Goal**: Small, independent UX improvements are in place — toasts, timestamps, profile UI, team search, and role indicators all behave as expected
@@ -118,7 +118,7 @@ Plans:
 | 3. Smart Dashboard | v1.0 | 2/2 | Complete | 2026-03-15 |
 | 4. Inline Intel | v1.0 | 3/3 | Complete | 2026-03-17 |
 | 5. Post-Game Loop + Polish | v1.0 | 7/7 | Complete | 2026-03-18 |
-| 6. Bug Fixes | v1.1 | 1/3 | In Progress|  |
+| 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
 | 7. UX Polish | v1.1 | 0/? | Not started | - |
 | 8. Champion Pool & Role UI | v1.1 | 0/? | Not started | - |
 | 9. Draft & Game Plan | v1.1 | 0/? | Not started | - |
