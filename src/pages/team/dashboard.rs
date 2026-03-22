@@ -1,6 +1,7 @@
 use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
+use crate::models::utils::format_timestamp;
 use leptos::prelude::*;
 use leptos_router::components::A;
 
@@ -1204,7 +1205,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         view! {
                                                             <div class="bg-elevated border border-divider rounded-lg p-3">
                                                                 {preview.created_at.map(|d| view! {
-                                                                    <p class="text-xs text-muted mb-1">{d}</p>
+                                                                    <p class="text-xs text-muted mb-1">{format_timestamp(&d)}</p>
                                                                 })}
                                                                 {top_improvements.into_iter().map(|imp| view! {
                                                                     <p class="text-sm text-secondary truncate">{imp}</p>
@@ -1437,7 +1438,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                     view! { <span></span> }.into_any()
                                                                 }}
                                                                 <span class="text-dimmed text-xs ml-auto">
-                                                                    {note.created_at.clone().unwrap_or_default()}
+                                                                    {note.created_at.as_deref().map(format_timestamp).unwrap_or_default()}
                                                                 </span>
                                                             </div>
 

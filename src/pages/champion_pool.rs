@@ -3,6 +3,7 @@ use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext,
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
+use crate::models::utils::format_timestamp;
 use leptos::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -1082,7 +1083,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                     {lessons.into_iter().map(|note| {
                                                                                         let note_for_edit = note.clone();
                                                                                         let note_id = note.id.clone().unwrap_or_default();
-                                                                                        let date = note.created_at.as_deref().unwrap_or("").chars().take(10).collect::<String>();
+                                                                                        let date = note.created_at.as_deref().map(format_timestamp).unwrap_or_default();
                                                                                         view! {
                                                                                             <div class="bg-surface/30 border border-outline/30 rounded-lg p-3 group">
                                                                                                 <div class="flex items-start justify-between gap-2">
