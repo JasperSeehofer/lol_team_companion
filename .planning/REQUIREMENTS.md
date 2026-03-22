@@ -17,9 +17,9 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 
 ### UX Polish
 
-- [ ] **UX-04**: Toast notifications render below the header section, not overlapping it
-- [ ] **UX-05**: Timestamps display human-readable format without decimal digits or "Z" suffix (e.g. "Mar 19, 2026 14:30")
-- [ ] **UX-06**: Profile page shows a single "Link Account" button, not two
+- [x] **UX-04**: Toast notifications render below the header section, not overlapping it
+- [x] **UX-05**: Timestamps display human-readable format without decimal digits or "Z" suffix (e.g. "Mar 19, 2026 14:30")
+- [x] **UX-06**: Profile page shows a single "Link Account" button, not two
 - [ ] **UX-07**: Team join uses a search bar with autocomplete/suggested results instead of listing all teams
 - [ ] **UX-08**: Champion pool has larger champion icons, drag-and-drop between tiers, and reworked matchup entry (no redundant type selection, opponent champion uses searchable champion list)
 - [ ] **UX-09**: Team roster cards display role icons (top/jg/mid/bot/sup) as visual background indicators
@@ -113,9 +113,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUG-05 | Phase 6 | Complete |
 | PLAN-02 | Phase 6 | Complete |
 | TEST-02 | Phase 6 | Complete |
-| UX-04 | Phase 7 | Pending |
-| UX-05 | Phase 7 | Pending |
-| UX-06 | Phase 7 | Pending |
+| UX-04 | Phase 7 | Complete |
+| UX-05 | Phase 7 | Complete |
+| UX-06 | Phase 7 | Complete |
 | UX-07 | Phase 7 | Pending |
 | UX-09 | Phase 7 | Pending |
 | UX-08 | Phase 8 | Pending |

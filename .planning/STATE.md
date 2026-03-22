@@ -3,26 +3,26 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: unknown
-stopped_at: Phase 7 context gathered
-last_updated: "2026-03-22T12:50:05.538Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-22T13:34:03.606Z"
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
 ---
 
 ## Current Position
 
-Phase: 7
-Plan: Not started
+Phase: 07 (ux-polish) — EXECUTING
+Plan: 2 of 2
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 06 — bug-fixes
+**Current focus:** Phase 07 — ux-polish
 
 ## Decisions
 
@@ -39,6 +39,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 06-bug-fixes]: Slot-to-slot drag: clear source before fill_slot to bypass already_used guard
 - [Phase 06-bug-fixes]: Use plan_id query param for View Game Plan link (draft_id already serves prefill)
 - [Phase 06-bug-fixes]: BUG-05 regression test uses soft assertion + WASM-panic check due to Playwright headless DragEvent limitation
+- [Phase 07-ux-polish]: format_timestamp_with_now takes explicit now for deterministic unit tests; public format_timestamp calls it with Utc::now()
 
 ## Blockers/Concerns
 
@@ -46,6 +47,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:50:05.537Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-ux-polish/07-CONTEXT.md
+Last session: 2026-03-22T13:34:03.605Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None
