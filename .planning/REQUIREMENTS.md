@@ -54,7 +54,7 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 ### Testing
 
 - [ ] **TEST-01**: All test accounts and teams deleted; 2 test teams created with 5 real Riot-linked accounts each, populated with champion pools, notes, and example data
-- [ ] **TEST-02**: Playwright CLI workflow configured for testing/verification agents with auth fixture and page navigation helpers
+- [x] **TEST-02**: Playwright CLI workflow configured for testing/verification agents with auth fixture and page navigation helpers
 
 ## v2.0 Requirements
 
@@ -112,7 +112,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUG-04 | Phase 6 | Pending |
 | BUG-05 | Phase 6 | Pending |
 | PLAN-02 | Phase 6 | Pending |
-| TEST-02 | Phase 6 | Pending |
+| TEST-02 | Phase 6 | Complete |
 | UX-04 | Phase 7 | Pending |
 | UX-05 | Phase 7 | Pending |
 | UX-06 | Phase 7 | Pending |
