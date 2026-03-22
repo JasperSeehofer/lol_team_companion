@@ -9,6 +9,7 @@ pub struct Team {
     pub name: String,
     pub region: String,
     pub created_by: String,
+    pub member_count: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

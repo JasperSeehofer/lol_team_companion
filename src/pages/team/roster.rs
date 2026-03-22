@@ -112,6 +112,7 @@ pub fn RosterPage() -> impl IntoView {
         }
     });
 
+    let (search_query, set_search_query) = signal(String::new());
     let create_team_action = ServerAction::<CreateTeam>::new();
     let link_riot = ServerAction::<LinkRiotAccount>::new();
     let teams_resource = Resource::new(|| (), |_| list_teams());
@@ -179,45 +180,70 @@ pub fn RosterPage() -> impl IntoView {
             // Join Existing Team
             <section>
                 <h2 class="text-2xl font-bold text-primary mb-1">"Join an Existing Team"</h2>
-                <p class="text-muted text-sm mb-4">"Find a team below and click Join to become a member."</p>
+                <p class="text-muted text-sm mb-4">"Search for a team by name and request to join."</p>
+
+                <input
+                    type="text"
+                    placeholder="Search teams by name..."
+                    prop:value=move || search_query.get()
+                    on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                    class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent mb-4"
+                />
 
                 <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                     {move || teams_resource.get().map(|result| match result {
-                        Ok(teams) if teams.is_empty() => view! {
-                            <p class="text-dimmed text-sm">"No teams yet. Be the first to create one!"</p>
-                        }.into_any(),
-                        Ok(teams) => view! {
-                            <div class="flex flex-col gap-2">
-                                {teams.into_iter().map(|team| {
-                                    let team_id = team.id.clone().unwrap_or_default();
-                                    let team_name = team.name.clone();
-                                    let region = team.region.clone();
+                        Ok(teams) => {
+                            let search_val = search_query.get();
+                            if search_val.is_empty() {
+                                view! {
+                                    <p class="text-muted text-sm">"Type to search for teams..."</p>
+                                }.into_any()
+                            } else {
+                                let filtered: Vec<_> = teams.into_iter()
+                                    .filter(|t| t.name.to_lowercase().contains(&search_val.to_lowercase()))
+                                    .collect();
+                                if filtered.is_empty() {
                                     view! {
-                                        <div class="bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between">
-                                            <div>
-                                                <span class="text-primary font-medium">{team_name.clone()}</span>
-                                                <span class="text-muted text-sm ml-2">{region}</span>
-                                            </div>
-                                            <button
-                                                class="bg-overlay hover:bg-accent hover:text-accent-contrast text-secondary text-sm font-medium rounded px-3 py-1.5 transition-colors"
-                                                on:click=move |_| {
-                                                    let id = team_id.clone();
-                                                    let tname = team_name.clone();
-                                                    leptos::task::spawn_local(async move {
-                                                        match request_to_join(id).await {
-                                                            Ok(_) => toast.show.run((ToastKind::Success, format!("Join request sent to {}!", tname))),
-                                                            Err(e) => toast.show.run((ToastKind::Error, e.to_string())),
-                                                        }
-                                                    });
+                                        <p class="text-dimmed text-sm">"No teams match your search."</p>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <div class="flex flex-col gap-2">
+                                            {filtered.into_iter().map(|team| {
+                                                let team_id = team.id.clone().unwrap_or_default();
+                                                let team_name = team.name.clone();
+                                                let region = team.region.clone();
+                                                let member_count = team.member_count.unwrap_or(0);
+                                                view! {
+                                                    <div class="bg-elevated border border-divider rounded-lg px-4 py-3 flex items-center justify-between">
+                                                        <div class="flex items-center gap-3">
+                                                            <span class="text-primary font-bold">{team_name.clone()}</span>
+                                                            <span class="text-muted text-sm">{region}</span>
+                                                            <span class="text-muted text-sm">{member_count} " members"</span>
+                                                        </div>
+                                                        <button
+                                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-sm transition-colors"
+                                                            on:click=move |_| {
+                                                                let id = team_id.clone();
+                                                                let tname = team_name.clone();
+                                                                leptos::task::spawn_local(async move {
+                                                                    match request_to_join(id).await {
+                                                                        Ok(_) => toast.show.run((ToastKind::Success, format!("Join request sent to {}!", tname))),
+                                                                        Err(e) => toast.show.run((ToastKind::Error, e.to_string())),
+                                                                    }
+                                                                });
+                                                            }
+                                                        >
+                                                            "Request to Join"
+                                                        </button>
+                                                    </div>
                                                 }
-                                            >
-                                                "Request to Join"
-                                            </button>
+                                            }).collect_view()}
                                         </div>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        }.into_any(),
+                                    }.into_any()
+                                }
+                            }
+                        },
                         Err(e) => view! {
                             <p class="text-red-400 text-sm">{e.to_string()}</p>
                         }.into_any(),

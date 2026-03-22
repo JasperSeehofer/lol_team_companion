@@ -52,6 +52,7 @@ struct DbTeam {
     name: String,
     region: String,
     created_by: RecordId,
+    member_count: Option<u32>,
 }
 
 impl From<DbTeam> for Team {
@@ -61,6 +62,7 @@ impl From<DbTeam> for Team {
             name: t.name,
             region: t.region,
             created_by: t.created_by.to_sql(),
+            member_count: t.member_count,
         }
     }
 }
@@ -600,7 +602,7 @@ pub async fn remove_team_member(db: &Surreal<Db>, team_id: &str, user_id: &str) 
 }
 
 pub async fn list_all_teams(db: &Surreal<Db>) -> DbResult<Vec<Team>> {
-    let mut r = db.query("SELECT * FROM team ORDER BY name ASC").await?;
+    let mut r = db.query("SELECT *, (SELECT count() FROM team_member WHERE team = $parent.id GROUP ALL)[0].count AS member_count FROM team ORDER BY name ASC").await?;
     let teams: Vec<DbTeam> = r.take(0).unwrap_or_default();
     Ok(teams.into_iter().map(Team::from).collect())
 }
