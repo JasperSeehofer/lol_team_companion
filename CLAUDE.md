@@ -23,8 +23,11 @@ cargo check --features ssr
 # Fast type-check (WASM/hydrate target)
 cargo check --features hydrate --target wasm32-unknown-unknown
 
-# Run server tests
-cargo test --features ssr
+# Run server tests (integration tests OOM with BFD linker — use --lib)
+cargo test --features ssr --lib
+
+# Pipeline flow test: draft → game-plan linking (requires running server)
+just flow-test
 
 # Adjust log level (default: info, app crate: debug)
 RUST_LOG=debug cargo leptos watch
@@ -323,7 +326,7 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 
 ### Testing
 
-39. **Run tests with `--features ssr`** — `cargo test --features ssr` runs all 44 tests (19 unit + 25 integration). Integration tests live in `tests/` and use an in-memory SurrealDB via `tests/common/mod.rs`. Unit tests live in `#[cfg(test)]` blocks in model and server files.
+39. **Run tests with `--features ssr --lib`** — `cargo test --features ssr --lib` runs unit tests only. Integration tests in `tests/` OOM during BFD linking and are skipped. Unit tests live in `#[cfg(test)]` blocks in model and server files.
 
 40. **`ORDER BY` only on selected fields in partial SELECTs** — SurrealDB 3.x rejects `ORDER BY <field>` if the field is not included in a partial `SELECT` clause. Either add the field to the `SELECT` or use `SELECT *`.
 
@@ -376,6 +379,8 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 
 ## Claude Code Dev Workflow
 
+> These guidelines are for interactive Claude Code sessions. GSD agents follow plan-specific verification.
+
 ### Starting a dev session
 1. Start dev server in background: `cargo leptos watch` (use `run_in_background`)
 2. Wait for ready: `./scripts/wait_for_server.sh 120`
@@ -385,7 +390,7 @@ schema.surql             # DB schema (loaded on startup via include_str!)
 
 The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, and more. **Use it liberally** — it's the primary way to catch UI/runtime bugs that the compiler can't.
 
-**After every UI change:**
+**Recommended after UI changes (interactive sessions):**
 1. `browser_navigate` to the affected page
 2. `browser_snapshot` — read the accessibility tree to confirm the page rendered correctly
 3. Check for missing elements, broken text, wrong state
@@ -411,7 +416,7 @@ The MCP server (`.mcp.json`) gives access to `browser_navigate`, `browser_snapsh
 - `cargo leptos watch` auto-recompiles on file save
 - rust-analyzer LSP provides real-time type errors
 - `just check-ssr` for a quick compile check when LSP is insufficient
-- **Always verify the affected page in the browser via MCP** — compiler checks alone miss rendering bugs, wrong CSS, missing data, and broken interactions
+- **Verify the affected page in the browser via MCP when feasible** — compiler checks alone miss rendering bugs, wrong CSS, missing data, and broken interactions
 
 ### Debugging reactive bugs without a browser
 Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are **signal lifecycle issues** that the Rust compiler cannot catch. When diagnosing these:
@@ -420,9 +425,10 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 3. **Look for missing teardown** — switching contexts (node, tree, tab) should cancel pending timers and suppress auto-save Effects before updating signals
 4. **Verify with both `cargo check --features ssr` and `cargo check --features hydrate --target wasm32-unknown-unknown`** — some bugs only surface in one target (e.g. unused variable warnings from `#[cfg(feature = "hydrate")]` guards)
 
-### Periodic / before committing
+### Periodic / before committing (optional, recommended for interactive sessions)
 - `just verify` — check both targets + test + lint + fmt
-- `just smoke` — health check + API smoke tests (requires running server)
+- `just smoke` — health check + API smoke tests + pipeline flow test (requires running server)
+- `just flow-test` — pipeline flow test: draft → game-plan linking (requires running server)
 - `just e2e` — full Playwright e2e suite (requires running server)
 
 ### Gotchas learned from browser testing
@@ -462,9 +468,11 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 
 56. **E2e WASM Effect settle delay** — After registration or login, the hard-nav Effect (`window.location().set_href()`) fires asynchronously via WASM hydration. In Playwright tests, subsequent `page.goto()` calls can be interrupted by this delayed redirect. Fix: add `await page.waitForTimeout(500)` after `waitForURL` to let the Effect fire before navigating.
 
+57. **Leptos 0.8 server fn URLs have hash suffixes** — `#[server]` generates URLs like `/api/save_draft9651846416477648343` (not `/api/save_draft`). The hash changes on recompile. curl-based tests must discover real URLs from the WASM binary: `strings target/site/pkg/lol_team_companion.wasm | grep -oP "^/api/${fn_name}[0-9]+"`. See `scripts/flow_test.sh` for the `resolve_fn()` pattern.
+
 ## Plugins & MCP Servers
 
-- **Playwright MCP** — interactive browser testing (navigate, snapshot, click)
+- **Playwright MCP** — interactive browser testing (navigate, snapshot, click). Configured in `.mcp.json` — auto-available when Claude Code starts. Install once: `npm install -g @anthropic/mcp-playwright`
 - **Context7** — up-to-date library docs; add "use context7" to prompts for live documentation lookup
 - **GitHub MCP** — rich GitHub integration (PRs, issues, code search) via `GITHUB_TOKEN` env var
 

@@ -54,8 +54,12 @@ e2e-ui:
 verify: check test lint
     cargo fmt --check
 
+# Pipeline flow test: draft → game-plan → post-game linking (requires running server)
+flow-test:
+    ./scripts/flow_test.sh
+
 # Runtime smoke tests (requires running server)
-smoke: health api-test
+smoke: health api-test flow-test
 
 # Wait for dev server to be ready (max timeout_seconds)
 wait-for-server seconds="60":
