@@ -699,6 +699,31 @@ pub fn GamePlanPage() -> impl IntoView {
         set_win_condition_tag.set(p.win_condition_tag.clone().unwrap_or_default());
     });
 
+    // BUG-02/PLAN-02: Auto-load a specific plan when ?plan_id=X is in the URL.
+    // When navigating from "View Game Plan" on the draft page, the URL includes
+    // plan_id=<id>. This Effect finds the matching plan in the loaded list and
+    // calls load_plan to populate the editor, so the correct plan opens immediately.
+    let plan_id_from_url = query.with(|q| q.get("plan_id").map(|s| s.clone()));
+    let plan_id_applied = RwSignal::new(false);
+    {
+        let plan_id_from_url = plan_id_from_url.clone();
+        Effect::new(move |_| {
+            if plan_id_applied.get() {
+                return;
+            }
+            let Some(ref target_id) = plan_id_from_url else { return };
+            if target_id.is_empty() {
+                return;
+            }
+            if let Some(Ok(list)) = plans.get() {
+                if let Some(plan) = list.into_iter().find(|p| p.id.as_deref() == Some(target_id.as_str())) {
+                    load_plan.run(plan);
+                    plan_id_applied.set(true);
+                }
+            }
+        });
+    }
+
     let our_sigs_for_build = our_champ_signals.clone();
     let enemy_sigs_for_build = enemy_champ_signals.clone();
     let build_plan = move || -> GamePlan {

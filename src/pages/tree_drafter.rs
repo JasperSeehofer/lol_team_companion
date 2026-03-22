@@ -631,6 +631,13 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         Ok(_) => {
                             toast.show.run((ToastKind::Success, "Node saved".into()));
                             nodes_resource.refetch();
+                            // BUG-01: Cancel any pending auto-save timer and suppress the
+                            // auto-save Effect BEFORE calling select_node. This closes the
+                            // race window where nodes_resource.refetch() could trigger reactive
+                            // updates that fire the auto-save Effect while select_node is
+                            // updating all editor signals in batch.
+                            cancel_autosave_timer();
+                            suppress_autosave.set(true);
                             // Select the newly created node with its actions
                             let actions = build_actions_from_slots(&branch_slots_for_select);
                             let new_node = DraftTreeNode {

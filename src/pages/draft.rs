@@ -2701,7 +2701,7 @@ pub fn DraftPage() -> impl IntoView {
                                                             <div class="flex-shrink-0 flex flex-col gap-1 bg-surface border border-outline/50 rounded-lg px-3 py-2 text-xs">
                                                                 <span class="text-muted">"A game plan already exists."</span>
                                                                 <div class="flex gap-1.5">
-                                                                    <a href="/game-plan"
+                                                                    <a href=format!("/game-plan?plan_id={existing_plan_id}")
                                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded px-2 py-0.5 transition-colors">
                                                                         "View Game Plan"
                                                                     </a>
