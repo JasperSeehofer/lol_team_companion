@@ -61,7 +61,10 @@ Plans:
   3. Profile page shows a single "Link Account" button instead of two
   4. Team join page has a search bar with autocomplete suggestions instead of a full team list
   5. Roster cards display role icons (top/jg/mid/bot/sup) as visual background indicators
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 07-01-PLAN.md — Toast positioning, timestamp formatter with unit tests, profile button dedup
+- [ ] 07-02-PLAN.md — Team join search with member count, roster role watermark icons
 
 ### Phase 8: Champion Pool & Role UI
 **Goal**: Champion pool management is substantially improved with larger icons, drag-and-drop between tiers, and reworked matchup entry; draft picks have role assignment via clickable role icons
@@ -119,7 +122,7 @@ Plans:
 | 4. Inline Intel | v1.0 | 3/3 | Complete | 2026-03-17 |
 | 5. Post-Game Loop + Polish | v1.0 | 7/7 | Complete | 2026-03-18 |
 | 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
-| 7. UX Polish | v1.1 | 0/? | Not started | - |
+| 7. UX Polish | v1.1 | 0/2 | Not started | - |
 | 8. Champion Pool & Role UI | v1.1 | 0/? | Not started | - |
 | 9. Draft & Game Plan | v1.1 | 0/? | Not started | - |
 | 10. Opponents Redesign | v1.1 | 0/? | Not started | - |
