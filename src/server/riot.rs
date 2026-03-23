@@ -166,3 +166,66 @@ pub async fn fetch_player_champions(puuid: &str, count: usize) -> Result<Vec<Str
 
     Ok(champions)
 }
+
+/// Combined intel fetch: champion names, per-match role data, and mastery data in a single call.
+///
+/// - `recent_champions`: unique champion names played (same dedup as `fetch_player_champions`)
+/// - `champion_with_role`: (champion_name, team_position) per match — NOT deduplicated, used for role distribution
+/// - `mastery_data`: (champion_name, mastery_level, mastery_points) from champion mastery endpoint
+pub struct PlayerIntelData {
+    pub recent_champions: Vec<String>,
+    pub champion_with_role: Vec<(String, String)>,
+    pub mastery_data: Vec<(String, i32, i32)>,
+}
+
+pub async fn fetch_player_intel(
+    puuid: &str,
+    match_count: usize,
+) -> Result<PlayerIntelData, RiotError> {
+    let api = api();
+    let match_ids = api
+        .match_v5()
+        .get_match_ids_by_puuid(
+            riven::consts::RegionalRoute::EUROPE,
+            puuid,
+            Some(match_count as i32),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
+
+    let mut recent_champions = Vec::new();
+    let mut champion_with_role: Vec<(String, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for mid in match_ids {
+        let Some(m) = api
+            .match_v5()
+            .get_match(riven::consts::RegionalRoute::EUROPE, &mid)
+            .await?
+        else {
+            continue;
+        };
+        if let Some(p) = m.info.participants.iter().find(|p| p.puuid == puuid) {
+            let champion_name = p.champion_name.clone();
+            let team_position = p.team_position.clone();
+            // Track per-match role data (not deduplicated)
+            champion_with_role.push((champion_name.clone(), team_position));
+            // Track unique champions for recent_champions
+            if seen.insert(champion_name.clone()) {
+                recent_champions.push(champion_name);
+            }
+        }
+    }
+
+    let mastery_data = fetch_champion_masteries(puuid).await?;
+
+    Ok(PlayerIntelData {
+        recent_champions,
+        champion_with_role,
+        mastery_data,
+    })
+}
