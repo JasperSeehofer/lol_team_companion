@@ -91,7 +91,11 @@ Plans:
   4. User can navigate back from champion detail view to the champion selection list via a back button
   5. When a pooled champion is picked in a draft, a sidebar shows that champion's pool notes (matchups, power spikes, synergies)
   6. Creating a game plan from a draft pre-fills the strategy tag from the draft's tags, names it "<draft name> plan", and populates our champions and enemy champions
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 09-01-PLAN.md — Opponent autocomplete dropdown, ban filtering, back button in matchup detail
+- [ ] 09-02-PLAN.md — Notes tab in intel sidebar with champion sub-tabs and pool notes
+- [ ] 09-03-PLAN.md — Game plan autofill: name, strategy tag, per-role strategy from draft
 
 ### Phase 10: Opponents Redesign
 **Goal**: Opponent profiles are rebuilt with a structured 5-role form, auto-fetched Riot data, OTP detection, mastery badges, and pool analysis
@@ -127,6 +131,6 @@ Plans:
 | 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
-| 9. Draft & Game Plan | v1.1 | 0/? | Not started | - |
+| 9. Draft & Game Plan | v1.1 | 0/3 | Not started | - |
 | 10. Opponents Redesign | v1.1 | 0/? | Not started | - |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |
