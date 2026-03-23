@@ -114,4 +114,4 @@ Known tech debt from v1.0:
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
 ---
-*Last updated: 2026-03-22 after Phase 07 (ux-polish) — toast positioning fixed, format_timestamp helper with 10 tests, profile dedup, team search with member counts, roster watermark icons*
+*Last updated: 2026-03-23 after Phase 08 (champion-pool-role-ui) — champion pool card grid with drag-and-drop tier changes, matchup autocomplete with opponent icons, draft role badges with auto-guess and popover selection*
