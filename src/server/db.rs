@@ -383,6 +383,24 @@ pub async fn get_champion_notes(
     Ok(entries.into_iter().map(ChampionNote::from).collect())
 }
 
+pub async fn get_pool_notes_for_champions(
+    db: &Surreal<Db>,
+    user_id: &str,
+    champions: &[String],
+) -> DbResult<Vec<ChampionNote>> {
+    if champions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let mut r = db
+        .query("SELECT *, <string>created_at AS created_at FROM champion_note WHERE user = type::record('user', $user_key) AND champion IN $champions ORDER BY champion, note_type, created_at DESC")
+        .bind(("user_key", user_key))
+        .bind(("champions", champions.to_vec()))
+        .await?;
+    let entries: Vec<DbChampionNote> = r.take(0).unwrap_or_default();
+    Ok(entries.into_iter().map(ChampionNote::from).collect())
+}
+
 pub async fn add_champion_note(
     db: &Surreal<Db>,
     user_id: &str,

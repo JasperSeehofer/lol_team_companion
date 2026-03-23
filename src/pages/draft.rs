@@ -3,7 +3,7 @@ use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{Champion, ChampionNote, ChampionStatSummary};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
-use crate::models::opponent::OpponentPlayerIntel;
+use crate::models::opponent::{Opponent, OpponentPlayerIntel};
 use crate::models::series::Series;
 use crate::models::team::Team;
 use crate::pages::game_plan::check_draft_has_game_plan;
@@ -650,6 +650,45 @@ pub async fn get_draft_game_plan_counts() -> Result<Vec<(String, usize)>, Server
     Ok(counts.into_iter().collect())
 }
 
+#[server]
+pub async fn get_pool_notes_for_champions(
+    champions_json: String,
+) -> Result<Vec<(String, Vec<ChampionNote>)>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let champions: Vec<String> = serde_json::from_str(&champions_json)
+        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+
+    let notes = db::get_pool_notes_for_champions(&surreal, &user.id, &champions)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Group by champion
+    let mut map: std::collections::HashMap<String, Vec<ChampionNote>> =
+        std::collections::HashMap::new();
+    for note in notes {
+        map.entry(note.champion.clone()).or_default().push(note);
+    }
+    // Return in same order as input champions list
+    Ok(champions
+        .into_iter()
+        .map(|c| {
+            let ns = map.remove(&c).unwrap_or_default();
+            (c, ns)
+        })
+        .collect())
+}
+
 fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>], roles: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .into_iter()
@@ -852,6 +891,8 @@ pub fn DraftPage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let (draft_name, set_draft_name) = signal(String::new());
     let (opponent, set_opponent) = signal(String::new());
+    let (opp_filter_text, set_opp_filter_text) = signal(String::new());
+    let (opp_dropdown_open, set_opp_dropdown_open) = signal(false);
     let (selected_team_id, set_selected_team_id) = signal(String::new());
     let (rating, set_rating) = signal(Option::<String>::None);
     let (our_side, set_our_side) = signal("blue".to_string());
@@ -913,6 +954,22 @@ pub fn DraftPage() -> impl IntoView {
             }
         },
     );
+    let filtered_opponents = move || {
+        let text = opp_filter_text.get().to_lowercase();
+        let all: Vec<Opponent> = opponents_list
+            .get()
+            .and_then(|r| r.ok())
+            .unwrap_or_default();
+        if text.is_empty() {
+            all
+        } else {
+            all.into_iter()
+                .filter(|o| o.name.to_lowercase().contains(&text))
+                .take(8)
+                .collect()
+        }
+    };
+
     let matchup_notes = Resource::new(
         move || matchup_champion.get(),
         move |champ_opt| async move {
@@ -982,7 +1039,21 @@ pub fn DraftPage() -> impl IntoView {
 
                 set_loaded_draft_id.set(d_id);
                 set_draft_name.set(d_name);
-                set_opponent.set(d_opp);
+                // D-05: backward compat — d_opp may be an opponent ID or legacy free-text name
+                if !d_opp.is_empty() {
+                    set_opponent.set(d_opp.clone());
+                    if let Some(Ok(opps)) = opponents_list.get_untracked() {
+                        if let Some(matched) = opps.iter().find(|o| o.id.as_deref() == Some(d_opp.as_str())) {
+                            set_opp_filter_text.set(matched.name.clone());
+                            set_selected_opponent_id.set(d_opp.clone());
+                        } else {
+                            // Legacy free-text fallback
+                            set_opp_filter_text.set(d_opp.clone());
+                        }
+                    } else {
+                        set_opp_filter_text.set(d_opp.clone());
+                    }
+                }
                 set_selected_team_id.set(d_team_id);
                 set_rating.set(d_rating);
                 set_our_side.set(d_our_side);
@@ -1401,15 +1472,154 @@ pub fn DraftPage() -> impl IntoView {
                             })}
                         </Suspense>
                     </div>
-                    // Opponent
+                    // Opponent — searchable dropdown + Add New button (D-01, D-02, D-03)
                     <div>
                         <label class="block text-secondary text-sm mb-1">"Opponent (optional)"</label>
-                        <input
-                            type="text"
-                            prop:value=move || opponent.get()
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
-                            on:input=move |ev| set_opponent.set(event_target_value(&ev))
-                        />
+                        <div class="flex gap-2 items-start">
+                            <div class="relative flex-1">
+                                <input
+                                    type="text"
+                                    prop:value=move || opp_filter_text.get()
+                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                                    placeholder="Search opponents..."
+                                    on:input=move |ev| {
+                                        let val = event_target_value(&ev);
+                                        set_opp_filter_text.set(val.clone());
+                                        // Clear the stored opponent ID when user types freely
+                                        set_opponent.set(String::new());
+                                        set_opp_dropdown_open.set(true);
+                                    }
+                                    on:focus=move |_| set_opp_dropdown_open.set(true)
+                                    on:blur=move |_| {
+                                        #[cfg(feature = "hydrate")]
+                                        {
+                                            use wasm_bindgen::prelude::*;
+                                            let cb = Closure::once(move || set_opp_dropdown_open.set(false));
+                                            if let Some(win) = web_sys::window() {
+                                                let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                                                    cb.as_ref().unchecked_ref(), 150,
+                                                );
+                                            }
+                                            cb.forget();
+                                        }
+                                        #[cfg(not(feature = "hydrate"))]
+                                        set_opp_dropdown_open.set(false);
+                                    }
+                                />
+                                {move || {
+                                    if !opp_dropdown_open.get() {
+                                        return view! { <div></div> }.into_any();
+                                    }
+                                    let items = filtered_opponents();
+                                    let filter_val = opp_filter_text.get();
+                                    if items.is_empty() {
+                                        view! {
+                                            <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden">
+                                                <div class="px-3 py-2 text-dimmed text-sm">
+                                                    {if filter_val.is_empty() {
+                                                        "No opponents scouted yet"
+                                                    } else {
+                                                        "No opponents match"
+                                                    }}
+                                                </div>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                                                {items.into_iter().map(|opp| {
+                                                    let id = opp.id.clone().unwrap_or_default();
+                                                    let name = opp.name.clone();
+                                                    let id_for_select = id.clone();
+                                                    let name_for_select = name.clone();
+                                                    view! {
+                                                        <button
+                                                            class="w-full flex items-center gap-2 px-3 py-2 hover:bg-overlay transition-colors text-left cursor-pointer text-primary text-sm"
+                                                            on:mousedown=move |ev| {
+                                                                ev.prevent_default();
+                                                                set_opponent.set(id_for_select.clone());
+                                                                set_opp_filter_text.set(name_for_select.clone());
+                                                                set_opp_dropdown_open.set(false);
+                                                                // D-04: auto-open intel sidebar
+                                                                set_selected_opponent_id.set(id_for_select.clone());
+                                                                set_intel_open.set(true);
+                                                            }
+                                                        >
+                                                            {name}
+                                                        </button>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }}
+                            </div>
+                            // D-03: Add New Opponent button
+                            <button
+                                class="px-3 py-2 rounded-lg bg-overlay hover:bg-overlay-strong text-secondary hover:text-primary text-sm transition-colors cursor-pointer flex-shrink-0"
+                                on:click=move |_| {
+                                    let name_val = draft_name.get_untracked();
+                                    let opp_val = opponent.get_untracked();
+                                    let side_val = our_side.get_untracked();
+                                    let rate_val = rating.get_untracked();
+                                    let slots_val = draft_slots.get_untracked();
+                                    let comments_val = comments.get_untracked();
+                                    let sc_val = slot_comments.get_untracked();
+                                    let ra_val = role_assignments.get_untracked();
+                                    let tags_val = tags.get_untracked();
+                                    let wc_val = win_conditions.get_untracked();
+                                    let wo_val = watch_out.get_untracked();
+                                    let existing_id = loaded_draft_id.get_untracked();
+                                    let team_id_val = selected_team_id.get_untracked();
+                                    let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
+                                    let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
+
+                                    if name_val.trim().is_empty() {
+                                        toast.show.run((ToastKind::Error, "Give this draft a name first -- notes weren't saved.".into()));
+                                        return;
+                                    }
+
+                                    leptos::task::spawn_local(async move {
+                                        let saved_id = if let Some(ref did) = existing_id {
+                                            let actions = build_actions(slots_val, &sc_val, &ra_val);
+                                            let acts_json = serde_json::to_string(&actions).unwrap_or_default();
+                                            let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
+                                            let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
+                                            let opp_opt = if opp_val.is_empty() { None } else { Some(opp_val) };
+                                            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
+                                            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
+                                            match update_draft(did.clone(), name_val, opp_opt, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await {
+                                                Ok(()) => Some(did.clone()),
+                                                Err(_) => Some(did.clone()),
+                                            }
+                                        } else {
+                                            let actions = build_actions(slots_val, &sc_val, &ra_val);
+                                            let acts_json = serde_json::to_string(&actions).unwrap_or_default();
+                                            let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
+                                            let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
+                                            let opp_opt = if opp_val.is_empty() { None } else { Some(opp_val) };
+                                            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
+                                            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
+                                            let tid = if team_id_val.is_empty() { None } else { Some(team_id_val) };
+                                            match save_draft(name_val, opp_opt, tid, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await {
+                                                Ok(new_id) => Some(new_id),
+                                                Err(_) => None,
+                                            }
+                                        };
+
+                                        if let Some(did) = saved_id {
+                                            #[cfg(feature = "hydrate")]
+                                            if let Some(window) = web_sys::window() {
+                                                let url = format!("/opponents?return_to=draft&draft_id={}", did);
+                                                let _ = window.location().set_href(&url);
+                                            }
+                                        }
+                                    });
+                                }
+                            >
+                                "+ Add New Opponent"
+                            </button>
+                        </div>
                     </div>
                 </div>
                 // Our Side toggle
@@ -2132,31 +2342,18 @@ pub fn DraftPage() -> impl IntoView {
                             } else if current_tab == "their_picks" {
                                 view! {
                                     <div class="flex flex-col gap-3">
-                                        // Opponent selector
-                                        <Suspense fallback=|| view! { <SkeletonCard height="h-8" /> }>
-                                            {move || opponents_list.get().map(|result| match result {
-                                                Ok(opps) if opps.is_empty() => view! {
-                                                    <p class="text-dimmed text-sm">"No opponents scouted yet. Add opponents from the Opponents page."</p>
-                                                }.into_any(),
-                                                Ok(opps) => view! {
-                                                    <select
-                                                        class="w-full bg-overlay border border-outline rounded px-2 py-1.5 text-primary text-sm focus:outline-none focus:border-accent"
-                                                        prop:value=move || selected_opponent_id.get()
-                                                        on:change=move |ev| set_selected_opponent_id.set(event_target_value(&ev))
-                                                    >
-                                                        <option value="">"-- Select Opponent --"</option>
-                                                        {opps.into_iter().map(|opp| {
-                                                            let id = opp.id.clone().unwrap_or_default();
-                                                            let name = opp.name.clone();
-                                                            view! { <option value=id>{name}</option> }
-                                                        }).collect_view()}
-                                                    </select>
-                                                }.into_any(),
-                                                Err(e) => view! {
-                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
-                                                }.into_any(),
-                                            })}
-                                        </Suspense>
+                                        // D-06: Opponent select removed — header dropdown is the single source of truth.
+                                        // selected_opponent_id is set by the header opponent autocomplete.
+                                        {move || {
+                                            let opp_id = selected_opponent_id.get();
+                                            if opp_id.is_empty() {
+                                                view! {
+                                                    <p class="text-dimmed text-sm">"Select an opponent from the draft header to view their intel."</p>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }
+                                        }}
                                         // Opponent players — enhanced intel: frequencies, OTP badge, mastery
                                         <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
                                             {move || {
@@ -2393,6 +2590,7 @@ pub fn DraftPage() -> impl IntoView {
                         set_loaded_draft_id.set(None);
                         set_draft_name.set(String::new());
                         set_opponent.set(String::new());
+                        set_opp_filter_text.set(String::new());
                         set_rating.set(None);
                         set_tags.set(Vec::new());
                         set_win_conditions.set(String::new());
