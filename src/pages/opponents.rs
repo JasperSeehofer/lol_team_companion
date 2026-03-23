@@ -1,5 +1,6 @@
 use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
-use crate::models::opponent::{Opponent, OpponentPlayer};
+use crate::models::opponent::{is_stale, Opponent, OpponentPlayer};
+use crate::models::utils::format_timestamp;
 use leptos::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -337,7 +338,27 @@ pub async fn fetch_player_intel_fn(
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Types
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, PartialEq)]
+enum FetchState {
+    Idle,
+    Fetching,
+    Success,
+    Error(String),
+}
+
+const ROLES: [(&str, &str); 5] = [
+    ("top", "Top"),
+    ("jungle", "Jungle"),
+    ("mid", "Mid"),
+    ("bot", "Bot"),
+    ("support", "Support"),
+];
+
+// ---------------------------------------------------------------------------
+// Components
 // ---------------------------------------------------------------------------
 
 #[component]
@@ -370,7 +391,7 @@ pub fn OpponentsPage() -> impl IntoView {
 
     let opponents = Resource::new(|| (), |_| get_opponents());
     let selected_id: RwSignal<Option<String>> = RwSignal::new(None);
-    let new_name: RwSignal<String> = RwSignal::new(String::new());
+    let creating: RwSignal<bool> = RwSignal::new(false);
 
     // Detail resource: refetch when selected_id changes
     let detail = Resource::new(
@@ -382,24 +403,6 @@ pub fn OpponentsPage() -> impl IntoView {
             }
         },
     );
-
-    let do_create = move || {
-        let name = new_name.get_untracked();
-        if name.trim().is_empty() {
-            return;
-        }
-        new_name.set(String::new());
-        leptos::task::spawn_local(async move {
-            match create_opponent(name).await {
-                Ok(id) => {
-                    selected_id.set(Some(id));
-                    opponents.refetch();
-                    toast.show.run((ToastKind::Success, "Opponent added".into()));
-                }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-            }
-        });
-    };
 
     let on_delete = Callback::new(move |id: String| {
         leptos::task::spawn_local(async move {
@@ -437,27 +440,16 @@ pub fn OpponentsPage() -> impl IntoView {
             }}
 
             <div class="flex items-center justify-between mb-6">
-                <h1 class="text-2xl font-bold text-primary">"Opponents"</h1>
-                <div class="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="New opponent name..."
-                        prop:value=move || new_name.get()
-                        on:input=move |ev| new_name.set(event_target_value(&ev))
-                        on:keydown=move |ev| {
-                            if ev.key() == "Enter" {
-                                do_create();
-                            }
-                        }
-                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent"
-                    />
-                    <button
-                        on:click=move |_| do_create()
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
-                    >
-                        "+ New Opponent"
-                    </button>
-                </div>
+                <h1 class="text-2xl font-semibold text-primary">"Opponents"</h1>
+                <button
+                    on:click=move |_| {
+                        selected_id.set(None);
+                        creating.set(true);
+                    }
+                    class="bg-accent text-accent-contrast hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
+                >
+                    "+ New Opponent"
+                </button>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -492,7 +484,10 @@ pub fn OpponentsPage() -> impl IntoView {
                                                 let opp_name = opp.name.clone();
                                                 view! {
                                                     <button
-                                                        on:click=move |_| selected_id.set(Some(opp_id_click.clone()))
+                                                        on:click=move |_| {
+                                                            creating.set(false);
+                                                            selected_id.set(Some(opp_id_click.clone()));
+                                                        }
                                                         class=move || {
                                                             let base = "w-full text-left px-4 py-3 border-b border-divider/50 hover:bg-elevated transition-colors cursor-pointer";
                                                             let is_sel = selected_id.get().as_deref() == Some(opp_id.as_str());
@@ -519,44 +514,238 @@ pub fn OpponentsPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Right column: detail panel
+                // Right column: creation form, detail panel, or placeholder
                 <div class="lg:col-span-2">
-                    <Suspense fallback=move || view! { <SkeletonCard height="h-64" /> }>
-                        {move || Suspend::new(async move {
-                            match detail.await {
-                                Ok(Some((opp, players))) => {
-                                    view! {
-                                        <OpponentDetail
-                                            opponent=opp
-                                            players=players
-                                            on_save_done=move || {
-                                                opponents.refetch();
-                                                detail.refetch();
-                                                toast.show.run((ToastKind::Success, "Opponent updated".into()));
+                    {move || {
+                        if creating.get() {
+                            view! {
+                                <CreationForm
+                                    on_done=move |new_id: String| {
+                                        creating.set(false);
+                                        selected_id.set(Some(new_id));
+                                        opponents.refetch();
+                                    }
+                                    on_discard=move || creating.set(false)
+                                />
+                            }.into_any()
+                        } else {
+                            view! {
+                                <Suspense fallback=move || view! { <SkeletonCard height="h-64" /> }>
+                                    {move || Suspend::new(async move {
+                                        match detail.await {
+                                            Ok(Some((opp, players))) => {
+                                                view! {
+                                                    <OpponentDetail
+                                                        opponent=opp
+                                                        players=players
+                                                        on_save_done=move || {
+                                                            opponents.refetch();
+                                                            detail.refetch();
+                                                            toast.show.run((ToastKind::Success, "Opponent updated".into()));
+                                                        }
+                                                        on_delete=on_delete
+                                                        on_player_change=move || detail.refetch()
+                                                    />
+                                                }.into_any()
                                             }
-                                            on_delete=on_delete
-                                            on_player_change=move || detail.refetch()
-                                        />
-                                    }.into_any()
-                                }
-                                Ok(None) => {
-                                    view! {
-                                        <div class="bg-surface rounded-xl border border-divider p-8 text-center text-muted">
-                                            "Select an opponent from the list or create a new one."
-                                        </div>
-                                    }.into_any()
-                                }
-                                Err(e) => view! {
-                                    <div class="text-red-400 text-sm">{e.to_string()}</div>
-                                }.into_any(),
-                            }
-                        })}
-                    </Suspense>
+                                            Ok(None) => {
+                                                view! {
+                                                    <div class="bg-surface rounded-xl border border-divider p-8 text-center text-muted">
+                                                        "Select an opponent from the list or create a new one."
+                                                    </div>
+                                                }.into_any()
+                                            }
+                                            Err(e) => view! {
+                                                <div class="text-red-400 text-sm">{e.to_string()}</div>
+                                            }.into_any(),
+                                        }
+                                    })}
+                                </Suspense>
+                            }.into_any()
+                        }
+                    }}
                 </div>
             </div>
         </div>
     }
 }
+
+// ---------------------------------------------------------------------------
+// CreationForm component
+// ---------------------------------------------------------------------------
+
+#[component]
+fn CreationForm(
+    on_done: impl Fn(String) + Copy + Send + Sync + 'static,
+    on_discard: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+
+    let team_name: RwSignal<String> = RwSignal::new(String::new());
+    let name_error: RwSignal<Option<String>> = RwSignal::new(None);
+    let saving: RwSignal<bool> = RwSignal::new(false);
+
+    // Per-role input signals: [top, jungle, mid, bot, support]
+    let role_inputs: [RwSignal<String>; 5] = [
+        RwSignal::new(String::new()),
+        RwSignal::new(String::new()),
+        RwSignal::new(String::new()),
+        RwSignal::new(String::new()),
+        RwSignal::new(String::new()),
+    ];
+    let validation_errors: [RwSignal<Option<String>>; 5] = [
+        RwSignal::new(None),
+        RwSignal::new(None),
+        RwSignal::new(None),
+        RwSignal::new(None),
+        RwSignal::new(None),
+    ];
+
+    let on_save_fetch = move |_| {
+        // Validate team name
+        let name = team_name.get_untracked();
+        if name.trim().is_empty() {
+            name_error.set(Some("Team name is required".into()));
+            return;
+        }
+        name_error.set(None);
+
+        // Validate Riot ID fields
+        let mut has_error = false;
+        let mut inputs_vals: Vec<String> = Vec::new();
+        for i in 0..5 {
+            let val = role_inputs[i].get_untracked();
+            if !val.trim().is_empty() && !val.contains('#') {
+                validation_errors[i].set(Some("Use Name#Tag format (e.g. Faker#KR1)".into()));
+                has_error = true;
+            } else {
+                validation_errors[i].set(None);
+            }
+            inputs_vals.push(val);
+        }
+        if has_error {
+            return;
+        }
+
+        // Build players_json: Vec<(role, Option<riot_id>)>
+        let players: Vec<(String, Option<String>)> = ROLES.iter().enumerate().map(|(i, (role_key, _))| {
+            let v = inputs_vals[i].trim().to_string();
+            let opt = if v.is_empty() { None } else { Some(v) };
+            (role_key.to_string(), opt)
+        }).collect();
+
+        let players_json = serde_json::to_string(&players).unwrap_or_default();
+        let inputs_vals_clone = inputs_vals.clone();
+
+        saving.set(true);
+        leptos::task::spawn_local(async move {
+            match create_opponent_with_players_fn(name, players_json).await {
+                Ok((opponent_id, player_ids)) => {
+                    saving.set(false);
+                    toast.show.run((ToastKind::Success, "Opponent saved and players fetched".into()));
+                    let done_id = opponent_id.clone();
+
+                    // Sequential fetch for players that have a riot ID
+                    for (i, player_id) in player_ids.into_iter().enumerate() {
+                        let riot_id = inputs_vals_clone.get(i).cloned().unwrap_or_default();
+                        let riot_id = riot_id.trim().to_string();
+                        if !riot_id.is_empty() {
+                            let _ = fetch_player_intel_fn(player_id, riot_id).await;
+                        }
+                    }
+
+                    on_done(done_id);
+                }
+                Err(e) => {
+                    saving.set(false);
+                    toast.show.run((ToastKind::Error, format!("{e}")));
+                }
+            }
+        });
+    };
+
+    view! {
+        <div class="bg-surface rounded-xl border border-divider p-6">
+            <h2 class="text-base font-semibold text-primary mb-4">"New Opponent Team"</h2>
+
+            // Team name input
+            <div class="mb-4">
+                <input
+                    type="text"
+                    placeholder="Opponent team name..."
+                    prop:value=move || team_name.get()
+                    on:input=move |ev| team_name.set(event_target_value(&ev))
+                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                />
+                {move || {
+                    if let Some(err) = name_error.get() {
+                        view! { <p class="text-xs text-red-400 mt-1">{err}</p> }.into_any()
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }
+                }}
+            </div>
+
+            // 5 role rows
+            <div class="flex flex-col gap-2 mb-4">
+                {ROLES.iter().enumerate().map(|(i, (_, role_display))| {
+                    let role_sig = role_inputs[i];
+                    let err_sig = validation_errors[i];
+                    let role_label = *role_display;
+                    view! {
+                        <div>
+                            <div class="flex items-center gap-2 py-1">
+                                <span class="w-20 text-sm text-secondary font-medium">{role_label}</span>
+                                <input
+                                    type="text"
+                                    placeholder="Name#Tag (e.g. Faker#KR1)"
+                                    prop:value=move || role_sig.get()
+                                    on:input=move |ev| role_sig.set(event_target_value(&ev))
+                                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                                />
+                            </div>
+                            {move || {
+                                if let Some(err) = err_sig.get() {
+                                    view! { <p class="text-xs text-red-400 ml-22 pl-2">{err}</p> }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }
+                            }}
+                        </div>
+                    }
+                }).collect_view()}
+            </div>
+
+            // Footer buttons
+            <div class="flex justify-end gap-3 mt-4">
+                <button
+                    on:click=move |_| on_discard()
+                    class="bg-elevated border border-divider text-secondary text-sm px-4 py-2 rounded-lg hover:bg-overlay cursor-pointer"
+                >
+                    "Discard Form"
+                </button>
+                <button
+                    on:click=on_save_fetch
+                    disabled=move || saving.get()
+                    class=move || {
+                        let base = "bg-accent text-accent-contrast text-sm px-4 py-2 rounded-lg font-medium hover:bg-accent-hover cursor-pointer";
+                        if saving.get() {
+                            format!("{base} opacity-50 cursor-not-allowed")
+                        } else {
+                            base.to_string()
+                        }
+                    }
+                >
+                    {move || if saving.get() { "Saving..." } else { "Save & Fetch" }}
+                </button>
+            </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OpponentDetail component
+// ---------------------------------------------------------------------------
 
 #[component]
 fn OpponentDetail(
@@ -570,13 +759,36 @@ fn OpponentDetail(
     let opp_id = opponent.id.clone().unwrap_or_default();
     let opp_id_save = opp_id.clone();
     let opp_id_delete = opp_id.clone();
-    let opp_id_add = opp_id.clone();
 
     let name = RwSignal::new(opponent.name.clone());
     let notes = RwSignal::new(opponent.notes.clone().unwrap_or_default());
     let confirm_delete = RwSignal::new(false);
-    let add_player_name = RwSignal::new(String::new());
-    let add_player_role = RwSignal::new("top".to_string());
+    let refreshing_all: RwSignal<bool> = RwSignal::new(false);
+
+    // Per-role fetch states (5 slots matching ROLES order)
+    let fetch_states: [RwSignal<FetchState>; 5] = [
+        RwSignal::new(FetchState::Idle),
+        RwSignal::new(FetchState::Idle),
+        RwSignal::new(FetchState::Idle),
+        RwSignal::new(FetchState::Idle),
+        RwSignal::new(FetchState::Idle),
+    ];
+
+    // Build ordered players vec matching ROLES order
+    let players_by_role: [Option<OpponentPlayer>; 5] = {
+        let find_player = |role_key: &str| {
+            players.iter().find(|p| p.role == role_key).cloned()
+        };
+        [
+            find_player("top"),
+            find_player("jungle"),
+            find_player("mid"),
+            find_player("bot"),
+            find_player("support"),
+        ]
+    };
+
+    let players_stored = StoredValue::new(players_by_role);
 
     let on_save = move |_| {
         let id = opp_id_save.clone();
@@ -590,58 +802,90 @@ fn OpponentDetail(
         });
     };
 
-    let on_add_player = move |_| {
-        let p_name = add_player_name.get_untracked();
-        let p_role = add_player_role.get_untracked();
-        if p_name.trim().is_empty() {
-            return;
+    let on_refresh_all = move |_| {
+        let players_snap = players_stored.get_value();
+        refreshing_all.set(true);
+        for i in 0..5 {
+            fetch_states[i].set(FetchState::Idle);
         }
-        let oid = opp_id_add.clone();
-        add_player_name.set(String::new());
+        let fetch_states_clone = fetch_states;
         leptos::task::spawn_local(async move {
-            match add_player(oid, p_name, p_role).await {
-                Ok(_) => {
-                    on_player_change();
-                    toast.show.run((ToastKind::Success, "Player added".into()));
+            let mut success_count = 0u32;
+            for (i, maybe_player) in players_snap.iter().enumerate() {
+                if let Some(player) = maybe_player {
+                    if let Some(riot_id) = &player.riot_summoner_name {
+                        if !riot_id.trim().is_empty() {
+                            let pid = player.id.clone().unwrap_or_default();
+                            let rid = riot_id.clone();
+                            fetch_states_clone[i].set(FetchState::Fetching);
+                            match fetch_player_intel_fn(pid, rid).await {
+                                Ok(()) => {
+                                    fetch_states_clone[i].set(FetchState::Success);
+                                    success_count += 1;
+                                }
+                                Err(e) => {
+                                    fetch_states_clone[i].set(FetchState::Error(e.to_string()));
+                                }
+                            }
+                        }
+                    }
                 }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+            }
+            refreshing_all.set(false);
+            on_player_change();
+            if success_count == 5 {
+                toast.show.run((ToastKind::Success, "All players refreshed".into()));
+            } else if success_count > 0 {
+                toast.show.run((ToastKind::Success, format!("{success_count}/5 players refreshed")));
             }
         });
     };
 
-    let roles = vec!["top", "jungle", "mid", "bot", "support"];
-
     view! {
         <div class="bg-surface rounded-xl border border-divider">
             // Header
-            <div class="px-6 py-4 border-b border-divider flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-primary">"Opponent Details"</h2>
-                <div class="flex gap-2">
+            <div class="px-6 py-4 border-b border-divider flex items-center justify-between gap-2">
+                <input
+                    type="text"
+                    prop:value=move || name.get()
+                    on:input=move |ev| name.set(event_target_value(&ev))
+                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                    placeholder="Team name..."
+                />
+                <div class="flex gap-2 shrink-0">
                     <button
                         on:click=on_save
                         class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
                     >
                         "Save"
                     </button>
+                    <button
+                        on:click=on_refresh_all
+                        disabled=move || refreshing_all.get()
+                        class="bg-elevated border border-divider text-secondary text-sm px-3 py-2 rounded-lg hover:bg-overlay disabled:opacity-50 cursor-pointer"
+                    >
+                        {move || if refreshing_all.get() { "Refreshing..." } else { "Refresh All" }}
+                    </button>
                     {move || {
                         let id = opp_id_delete.clone();
                         if confirm_delete.get() {
                             view! {
                                 <div class="flex gap-1">
+                                    <span class="text-sm text-secondary self-center">"Confirm delete?"</span>
                                     <button
                                         on:click=move |_| {
                                             on_delete.run(id.clone());
                                             confirm_delete.set(false);
                                         }
-                                        class="bg-red-700 hover:bg-red-600 text-white font-semibold px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
+                                        class="bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-2 rounded-lg transition-colors cursor-pointer"
                                     >
-                                        "Confirm"
+                                        "Delete"
                                     </button>
                                     <button
                                         on:click=move |_| confirm_delete.set(false)
-                                        class="bg-elevated hover:bg-overlay-strong text-secondary px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
+                                        class="bg-elevated border border-divider text-secondary text-sm px-3 py-2 rounded-lg hover:bg-overlay cursor-pointer"
                                     >
-                                        "Cancel"
+                                        "Keep Opponent"
                                     </button>
                                 </div>
                             }.into_any()
@@ -649,7 +893,7 @@ fn OpponentDetail(
                             view! {
                                 <button
                                     on:click=move |_| confirm_delete.set(true)
-                                    class="bg-red-700/20 hover:bg-red-700 text-red-400 hover:text-white font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
+                                    class="text-red-400 text-sm hover:text-red-300 cursor-pointer"
                                 >
                                     "Delete"
                                 </button>
@@ -659,274 +903,392 @@ fn OpponentDetail(
                 </div>
             </div>
 
-            // Name and notes
-            <div class="px-6 py-4 space-y-4 border-b border-divider">
-                <div>
-                    <label class="block text-xs font-medium text-muted mb-1">"Name"</label>
-                    <input
-                        type="text"
-                        prop:value=move || name.get()
-                        on:input=move |ev| name.set(event_target_value(&ev))
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent"
-                    />
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-muted mb-1">"Notes"</label>
-                    <textarea
-                        prop:value=move || notes.get()
-                        on:input=move |ev| notes.set(event_target_value(&ev))
-                        rows="3"
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent resize-y"
-                        placeholder="General scouting notes..."
-                    />
-                </div>
+            // Notes
+            <div class="px-6 py-4 border-b border-divider">
+                <label class="block text-xs font-medium text-muted mb-1">"Notes"</label>
+                <textarea
+                    prop:value=move || notes.get()
+                    on:input=move |ev| notes.set(event_target_value(&ev))
+                    rows="2"
+                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent resize-y"
+                    placeholder="General scouting notes..."
+                />
             </div>
 
-            // Players section
-            <div class="px-6 py-4">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-sm font-semibold text-secondary">"Players"</h3>
-                </div>
-
-                // Add player form
-                <div class="flex gap-2 mb-4">
-                    <input
-                        type="text"
-                        placeholder="Player name..."
-                        prop:value=move || add_player_name.get()
-                        on:input=move |ev| add_player_name.set(event_target_value(&ev))
-                        class="flex-1 bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent"
-                    />
-                    <select
-                        prop:value=move || add_player_role.get()
-                        on:change=move |ev| add_player_role.set(event_target_value(&ev))
-                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-sm text-primary focus:outline-none focus:border-accent"
-                    >
-                        {roles.iter().map(|r| {
-                            let r_val = r.to_string();
-                            let r_label = match *r {
-                                "top" => "Top",
-                                "jungle" => "Jungle",
-                                "mid" => "Mid",
-                                "bot" => "Bot",
-                                "support" => "Support",
-                                _ => r,
-                            };
-                            view! { <option value=r_val>{r_label}</option> }
-                        }).collect_view()}
-                    </select>
-                    <button
-                        on:click=on_add_player
-                        class="bg-elevated hover:bg-overlay-strong text-secondary hover:text-primary font-medium px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
-                    >
-                        "+ Add"
-                    </button>
-                </div>
-
-                // Player list
-                <div class="space-y-3">
-                    {players.into_iter().map(|player| {
-                        view! {
+            // 5 PlayerCard rows
+            <div class="px-6 py-4 flex flex-col gap-3">
+                {ROLES.iter().enumerate().map(|(i, (role_key, role_display))| {
+                    let maybe_player = players_stored.with_value(|p| p[i].clone());
+                    let fs = fetch_states[i];
+                    let opp_id_for_slot = opp_id.clone();
+                    let role_key_str = role_key.to_string();
+                    let role_display_str = role_display.to_string();
+                    match maybe_player {
+                        Some(player) => view! {
                             <PlayerCard
                                 player=player
+                                fetch_state=fs
                                 on_change=on_player_change
                             />
-                        }
-                    }).collect_view()}
-                </div>
+                        }.into_any(),
+                        None => view! {
+                            <EmptyRoleSlot
+                                role_key=role_key_str
+                                role_display=role_display_str
+                                opponent_id=opp_id_for_slot
+                                on_added=on_player_change
+                            />
+                        }.into_any(),
+                    }
+                }).collect_view()}
             </div>
         </div>
     }
 }
 
+// ---------------------------------------------------------------------------
+// EmptyRoleSlot — shown when a role has no player yet
+// ---------------------------------------------------------------------------
+
+#[component]
+fn EmptyRoleSlot(
+    role_key: String,
+    role_display: String,
+    opponent_id: String,
+    on_added: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let riot_id_input: RwSignal<String> = RwSignal::new(String::new());
+
+    let role_key_clone = role_key.clone();
+    let opponent_id_clone = opponent_id.clone();
+
+    let on_add = move |_| {
+        let riot_id = riot_id_input.get_untracked();
+        let oid = opponent_id_clone.clone();
+        let rk = role_key_clone.clone();
+        leptos::task::spawn_local(async move {
+            let name = riot_id.trim().to_string();
+            match add_player(oid, name, rk).await {
+                Ok(_) => on_added(),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+            }
+        });
+    };
+
+    view! {
+        <div class="bg-elevated rounded-lg border border-divider/50 p-4">
+            <div class="flex items-center gap-2">
+                <span class="w-20 text-sm font-semibold text-secondary">{role_display}</span>
+                <input
+                    type="text"
+                    placeholder="Name#Tag (e.g. Faker#KR1)"
+                    prop:value=move || riot_id_input.get()
+                    on:input=move |ev| riot_id_input.set(event_target_value(&ev))
+                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                />
+                <button
+                    on:click=on_add
+                    class="text-xs text-secondary hover:text-primary bg-surface hover:bg-overlay border border-divider px-3 py-2 rounded-lg cursor-pointer"
+                >
+                    "+ Add"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PlayerCard component
+// ---------------------------------------------------------------------------
+
 #[component]
 fn PlayerCard(
     player: OpponentPlayer,
+    fetch_state: RwSignal<FetchState>,
     on_change: impl Fn() + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let player_id = player.id.clone().unwrap_or_default();
-    let player_id_save = player_id.clone();
-    let player_id_remove = player_id.clone();
-    let player_id_fetch = player_id.clone();
+    let player_id_refresh = player_id.clone();
 
-    let p_name = RwSignal::new(player.name.clone());
-    let p_role = RwSignal::new(player.role.clone());
-    let p_summoner = RwSignal::new(player.riot_summoner_name.clone().unwrap_or_default());
-    let p_notes = RwSignal::new(player.notes.clone().unwrap_or_default());
-    let p_champions = RwSignal::new(player.recent_champions.clone());
-    let fetching = RwSignal::new(false);
-
-    let role_label = match player.role.as_str() {
+    let role_display = match player.role.as_str() {
         "top" => "Top",
         "jungle" => "Jungle",
         "mid" => "Mid",
         "bot" => "Bot",
         "support" => "Support",
         _ => &player.role,
-    };
-    let role_label = role_label.to_string();
+    }
+    .to_string();
 
-    let on_save_player = move |_| {
-        let id = player_id_save.clone();
-        let n = p_name.get_untracked();
-        let r = p_role.get_untracked();
-        let s = p_summoner.get_untracked();
-        let nt = p_notes.get_untracked();
-        leptos::task::spawn_local(async move {
-            match save_player(id, n, r, s, nt).await {
-                Ok(()) => {
-                    on_change();
-                    toast.show.run((ToastKind::Success, "Player saved".into()));
-                }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-            }
-        });
-    };
+    let p_summoner: RwSignal<String> = RwSignal::new(
+        player.riot_summoner_name.clone().unwrap_or_default(),
+    );
+    let pool_expanded: RwSignal<bool> = RwSignal::new(false);
 
-    let on_remove = move |_| {
-        let id = player_id_remove.clone();
-        leptos::task::spawn_local(async move {
-            match remove_player(id).await {
-                Ok(()) => on_change(),
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-            }
-        });
-    };
+    // Compute intel once from player data
+    let intel = player.compute_intel();
+    let otp_champion = intel.otp_champion.clone();
+    let mastery_data = player.mastery_data();
+    let last_fetched = player.last_fetched.clone();
+    let recent_champions = player.recent_champions.clone();
+    let comfort_picks = player.comfort_picks();
+    let role_distribution = player.role_distribution();
+    let pool_sz = player.pool_size();
 
-    let on_fetch = move |_| {
-        let id = player_id_fetch.clone();
+    // Build mastery lookup: champion_name -> (level, points)
+    let mastery_map: std::collections::HashMap<String, (i32, i32)> = mastery_data
+        .iter()
+        .map(|(name, level, pts)| (name.clone(), (*level, *pts)))
+        .collect();
+
+    // Sort champions by mastery points descending
+    let mut sorted_champions = recent_champions.clone();
+    sorted_champions.sort_by(|a, b| {
+        let pa = mastery_map.get(a).map(|(_, pts)| *pts).unwrap_or(0);
+        let pb = mastery_map.get(b).map(|(_, pts)| *pts).unwrap_or(0);
+        pb.cmp(&pa)
+    });
+    // Deduplicate while preserving mastery-sorted order
+    let mut seen = std::collections::HashSet::new();
+    sorted_champions.retain(|c| seen.insert(c.clone()));
+
+    let mastery_map_stored = StoredValue::new(mastery_map);
+
+    let on_refresh = move |_| {
+        let pid = player_id_refresh.clone();
         let summoner = p_summoner.get_untracked();
         if summoner.trim().is_empty() {
             toast.show.run((ToastKind::Error, "Enter a summoner name (Name#Tag) first".into()));
             return;
         }
-        fetching.set(true);
+        fetch_state.set(FetchState::Fetching);
+        let summoner_clone = summoner.clone();
         leptos::task::spawn_local(async move {
-            match fetch_champions(id, summoner).await {
-                Ok(champs) => {
-                    p_champions.set(champs);
-                    fetching.set(false);
+            match fetch_player_intel_fn(pid, summoner_clone).await {
+                Ok(()) => {
+                    fetch_state.set(FetchState::Success);
                     on_change();
+                    // Auto-clear success after 3s
+                    #[cfg(feature = "hydrate")]
+                    {
+                        use wasm_bindgen::prelude::*;
+                        let cb = Closure::once(move || {
+                            fetch_state.set(FetchState::Idle);
+                        });
+                        if let Some(win) = web_sys::window() {
+                            let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                                cb.as_ref().unchecked_ref(),
+                                3000,
+                            );
+                        }
+                        cb.forget();
+                    }
                 }
                 Err(e) => {
-                    fetching.set(false);
-                    toast.show.run((ToastKind::Error, format!("{e}")));
+                    fetch_state.set(FetchState::Error(e.to_string()));
                 }
             }
         });
     };
 
-    let roles = vec!["top", "jungle", "mid", "bot", "support"];
+    // Recency badge text and class
+    let recency_display = match &last_fetched {
+        None => None,
+        Some(lf) if lf.is_empty() => None,
+        Some(lf) => Some((format_timestamp(lf), is_stale(lf))),
+    };
 
     view! {
         <div class="bg-elevated rounded-lg border border-divider/50 p-4">
-            <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold uppercase text-accent bg-accent/10 px-2 py-0.5 rounded">
-                        {role_label}
-                    </span>
-                </div>
-                <div class="flex gap-1.5">
-                    <button
-                        on:click=on_save_player
-                        class="text-xs text-secondary hover:text-primary bg-surface hover:bg-elevated px-2 py-1 rounded transition-colors cursor-pointer"
-                    >
-                        "Save"
-                    </button>
-                    <button
-                        on:click=on_remove
-                        class="text-xs text-red-400 hover:text-red-300 bg-surface hover:bg-red-700/20 px-2 py-1 rounded transition-colors cursor-pointer"
-                    >
-                        "Remove"
-                    </button>
-                </div>
+            // Row 1: header
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <span class="text-sm font-semibold text-secondary">{role_display}</span>
+
+                // OTP badge
+                {otp_champion.as_ref().map(|champ| {
+                    let champ = champ.clone();
+                    view! {
+                        <span class="text-xs bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded px-2 py-0.5">
+                            "\u{26a0} OTP: "{champ}
+                        </span>
+                    }
+                })}
+
+                // Recency badge
+                {match recency_display {
+                    None => view! {
+                        <span class="text-xs text-dimmed">"Never fetched"</span>
+                    }.into_any(),
+                    Some((text, stale)) => view! {
+                        <span class=if stale { "text-xs text-orange-400" } else { "text-xs text-muted" }>
+                            "Last fetched: "{text}
+                        </span>
+                    }.into_any(),
+                }}
+
+                // Refresh icon button
+                <button
+                    on:click=on_refresh
+                    title="Refresh player data"
+                    class="ml-auto w-8 h-8 flex items-center justify-center rounded text-muted hover:text-secondary hover:bg-elevated transition-colors cursor-pointer"
+                >
+                    {move || {
+                        if fetch_state.get() == FetchState::Fetching {
+                            view! {
+                                <svg class="animate-spin w-4 h-4 text-muted" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            }.into_any()
+                        } else {
+                            // Refresh/reload icon (two arrows in circle)
+                            view! {
+                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            }.into_any()
+                        }
+                    }}
+                </button>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <div>
-                    <label class="block text-xs text-muted mb-1">"Name"</label>
-                    <input
-                        type="text"
-                        prop:value=move || p_name.get()
-                        on:input=move |ev| p_name.set(event_target_value(&ev))
-                        class="w-full bg-surface/50 border border-outline/50 rounded px-2 py-1 text-sm text-primary focus:outline-none focus:border-accent"
-                    />
-                </div>
-                <div>
-                    <label class="block text-xs text-muted mb-1">"Role"</label>
-                    <select
-                        prop:value=move || p_role.get()
-                        on:change=move |ev| p_role.set(event_target_value(&ev))
-                        class="w-full bg-surface/50 border border-outline/50 rounded px-2 py-1 text-sm text-primary focus:outline-none focus:border-accent"
-                    >
-                        {roles.iter().map(|r| {
-                            let r_val = r.to_string();
-                            let r_label = match *r {
-                                "top" => "Top",
-                                "jungle" => "Jungle",
-                                "mid" => "Mid",
-                                "bot" => "Bot",
-                                "support" => "Support",
-                                _ => r,
-                            };
-                            view! { <option value=r_val>{r_label}</option> }
-                        }).collect_view()}
-                    </select>
-                </div>
-            </div>
-
+            // Row 2: Riot ID input + fetch status icon
             <div class="mb-3">
-                <label class="block text-xs text-muted mb-1">"Summoner Name (Name#Tag)"</label>
-                <div class="flex gap-2">
+                <div class="flex items-center gap-2">
                     <input
                         type="text"
-                        placeholder="Faker#KR1"
+                        placeholder="Name#Tag (e.g. Faker#KR1)"
                         prop:value=move || p_summoner.get()
                         on:input=move |ev| p_summoner.set(event_target_value(&ev))
-                        class="flex-1 bg-surface/50 border border-outline/50 rounded px-2 py-1 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                        class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
                     />
-                    <button
-                        on:click=on_fetch
-                        disabled=move || fetching.get()
-                        class="bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-medium px-3 py-1 rounded transition-colors cursor-pointer"
-                    >
-                        {move || if fetching.get() { "Fetching..." } else { "Fetch Champs" }}
-                    </button>
+                    // Fetch status icon
+                    {move || match fetch_state.get() {
+                        FetchState::Idle => view! { <span></span> }.into_any(),
+                        FetchState::Fetching => view! {
+                            <svg class="animate-spin w-4 h-4 text-muted shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        }.into_any(),
+                        FetchState::Success => view! {
+                            <span class="text-green-400 w-4 h-4 text-sm shrink-0">"✓"</span>
+                        }.into_any(),
+                        FetchState::Error(_) => view! {
+                            <span class="text-red-400 w-4 h-4 text-sm shrink-0">"✗"</span>
+                        }.into_any(),
+                    }}
                 </div>
+                // Error message below input
+                {move || match fetch_state.get() {
+                    FetchState::Error(msg) => view! {
+                        <p class="text-xs text-red-400 mt-1">{msg}</p>
+                    }.into_any(),
+                    _ => view! { <span></span> }.into_any(),
+                }}
             </div>
 
-            // Recent champions
-            {move || {
-                let champs = p_champions.get();
-                if champs.is_empty() {
+            // Row 3: Champion pills (sorted by mastery points)
+            {if sorted_champions.is_empty() {
+                view! { <span></span> }.into_any()
+            } else {
+                let pills = sorted_champions.iter().map(|champ_name| {
+                    let name = champ_name.clone();
+                    let level_display = mastery_map_stored.with_value(|m| {
+                        m.get(&name).map(|(lvl, _)| format!(" M{}", lvl))
+                    });
+                    let display = match level_display {
+                        Some(suffix) => format!("{}{}", name, suffix),
+                        None => name,
+                    };
                     view! {
-                        <div class="text-xs text-muted italic">"No champions fetched yet"</div>
-                    }.into_any()
-                } else {
-                    view! {
-                        <div class="flex flex-wrap gap-1.5 mb-3">
-                            {champs.into_iter().map(|c| {
-                                view! {
-                                    <span class="text-xs bg-surface border border-divider/50 text-secondary rounded px-2 py-0.5">
-                                        {c}
-                                    </span>
-                                }
-                            }).collect_view()}
-                        </div>
-                    }.into_any()
-                }
+                        <span class="text-xs bg-surface border border-divider/50 text-secondary rounded px-2 py-1">
+                            {display}
+                        </span>
+                    }
+                }).collect_view();
+                view! {
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        {pills}
+                    </div>
+                }.into_any()
             }}
 
+            // Row 4: Pool Analysis (collapsible)
             <div>
-                <label class="block text-xs text-muted mb-1">"Notes"</label>
-                <textarea
-                    prop:value=move || p_notes.get()
-                    on:input=move |ev| p_notes.set(event_target_value(&ev))
-                    rows="2"
-                    class="w-full bg-surface/50 border border-outline/50 rounded px-2 py-1 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent resize-y"
-                    placeholder="Player tendencies, comfort picks..."
-                />
+                <button
+                    on:click=move |_| pool_expanded.update(|v| *v = !*v)
+                    class="text-xs text-muted hover:text-secondary cursor-pointer flex items-center gap-1"
+                >
+                    {move || if pool_expanded.get() { "Pool Analysis \u{25be}" } else { "Pool Analysis \u{25b8}" }}
+                </button>
+                {move || {
+                    if pool_expanded.get() {
+                        let has_data = pool_sz > 0 || !comfort_picks.is_empty();
+                        if has_data {
+                            // Role distribution display
+                            let role_dist_text = if role_distribution.is_empty() {
+                                String::new()
+                            } else {
+                                let total_matches: u32 = role_distribution.iter().map(|(_, c)| c).sum();
+                                let mut parts: Vec<String> = role_distribution.iter().map(|(role, count)| {
+                                    let display = match role.as_str() {
+                                        "TOP" => "Top",
+                                        "JUNGLE" => "Jungle",
+                                        "MIDDLE" => "Mid",
+                                        "BOTTOM" => "Bot",
+                                        "UTILITY" => "Support",
+                                        _ => role.as_str(),
+                                    };
+                                    let pct = if total_matches > 0 {
+                                        (*count as f32 / total_matches as f32 * 100.0).round() as u32
+                                    } else {
+                                        0
+                                    };
+                                    format!("{} {}%", display, pct)
+                                }).collect();
+                                parts.sort();
+                                parts.join(" / ")
+                            };
+
+                            // Comfort picks display
+                            let comfort_text = if comfort_picks.is_empty() {
+                                String::new()
+                            } else {
+                                comfort_picks.iter()
+                                    .map(|(name, pct)| format!("{} {:.0}%", name, pct))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            };
+
+                            let plural = if pool_sz != 1 { "s" } else { "" };
+
+                            view! {
+                                <div class="mt-2 text-xs text-muted space-y-0.5">
+                                    <p>"Pool: "{pool_sz}" champion"{plural}</p>
+                                    {if !role_dist_text.is_empty() {
+                                        view! { <p>"Roles: "{role_dist_text}</p> }.into_any()
+                                    } else {
+                                        view! { <span></span> }.into_any()
+                                    }}
+                                    {if !comfort_text.is_empty() {
+                                        view! { <p>"Comfort: "{comfort_text}</p> }.into_any()
+                                    } else {
+                                        view! { <span></span> }.into_any()
+                                    }}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <p class="text-xs text-muted mt-2">"Fetch player data to see pool analysis."</p>
+                            }.into_any()
+                        }
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }
+                }}
             </div>
         </div>
     }
