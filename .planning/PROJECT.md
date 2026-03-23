@@ -42,7 +42,7 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - ✓ Draft: opponent dropdown, intel improvements, pool notes sidebar (DRFT-01–05) — Phase 9
 - ✓ Game plan: autofill from draft, strategy tag + role strategies pre-fill (PLAN-01, PLAN-03) — Phase 9
 - [ ] Game plan: fix empty view (PLAN-02 — completed in Phase 6)
-- [ ] Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04)
+- ✓ Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04) — Phase 10
 - [ ] Plan effectiveness dashboard, draft-integrated champion notes (XFEAT-01–02)
 - [ ] Testing infrastructure: real test data, Playwright CLI workflow (TEST-01–02)
 
