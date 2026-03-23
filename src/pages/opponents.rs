@@ -219,6 +219,123 @@ pub async fn fetch_champions(
     Ok(champions)
 }
 
+/// Create an opponent with an initial set of players in a single server call.
+///
+/// Returns (opponent_id, player_ids) so the UI can immediately trigger per-player intel fetches
+/// without an extra round-trip to get the newly created player IDs.
+///
+/// `players_json`: JSON-encoded `Vec<(String, Option<String>)>` where each tuple is
+/// `(role, riot_summoner_name_or_none)`.
+#[server]
+pub async fn create_opponent_with_players_fn(
+    name: String,
+    players_json: String,
+) -> Result<(String, Vec<String>), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let team_id = match db::get_user_team_id(&surreal, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(id) => id,
+        None => return Err(ServerFnError::new("No team")),
+    };
+
+    let players: Vec<(String, Option<String>)> = serde_json::from_str(&players_json)
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let (opponent_id, player_ids) =
+        db::create_opponent_with_players(&surreal, &team_id, name, None, players)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok((opponent_id, player_ids))
+}
+
+/// Fetch combined Riot API intel for a player (champions, per-match roles, mastery) and persist it.
+///
+/// Computes role distribution from per-match `team_position` data and stores as JSON.
+/// Returns `Ok(())` immediately if `riot_summoner_name` is empty — no error for optional field.
+#[server]
+pub async fn fetch_player_intel_fn(
+    player_id: String,
+    riot_summoner_name: String,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use crate::server::riot;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    // Empty summoner name is not an error — skip gracefully
+    if riot_summoner_name.trim().is_empty() {
+        return Ok(());
+    }
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    if !riot::has_api_key() {
+        return Err(ServerFnError::new("No Riot API key configured"));
+    }
+
+    // Parse "GameName#TagLine" format
+    let parts: Vec<&str> = riot_summoner_name.split('#').collect();
+    if parts.len() != 2 {
+        return Err(ServerFnError::new(
+            "Summoner name must be in Name#Tag format",
+        ));
+    }
+
+    let puuid = riot::get_puuid(parts[0], parts[1])
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    let intel = riot::fetch_player_intel(&puuid, 20)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Compute role distribution: count occurrences of each team_position
+    let mut role_counts: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
+    for (_champion, position) in &intel.champion_with_role {
+        if !position.is_empty() {
+            *role_counts.entry(position.clone()).or_insert(0) += 1;
+        }
+    }
+    let role_dist: Vec<(String, u32)> = role_counts.into_iter().collect();
+
+    let mastery_json = serde_json::to_string(&intel.mastery_data).unwrap_or_default();
+    let role_dist_json = serde_json::to_string(&role_dist).unwrap_or_default();
+
+    db::update_opponent_player_intel(
+        &surreal,
+        &player_id,
+        Some(puuid),
+        intel.recent_champions,
+        Some(mastery_json),
+        Some(role_dist_json),
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
