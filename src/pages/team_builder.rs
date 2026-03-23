@@ -186,6 +186,7 @@ pub async fn save_comp_as_draft(
             champion: champ.clone(),
             order: i as i32,
             comment: None,
+            role: None,
         })
         .collect();
 

@@ -2,7 +2,7 @@ use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{Champion, ChampionNote, ChampionStatSummary};
-use crate::models::draft::{BanPriority, Draft, DraftAction};
+use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
 use crate::models::opponent::OpponentPlayerIntel;
 use crate::models::series::Series;
 use crate::models::team::Team;
@@ -650,7 +650,7 @@ pub async fn get_draft_game_plan_counts() -> Result<Vec<(String, usize)>, Server
     Ok(counts.into_iter().collect())
 }
 
-fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>]) -> Vec<DraftAction> {
+fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>], roles: &[Option<String>]) -> Vec<DraftAction> {
     slots
         .into_iter()
         .enumerate()
@@ -665,6 +665,7 @@ fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>]) -
                     champion: champ,
                     order: i as i32,
                     comment: slot_comments.get(i).cloned().flatten(),
+                    role: roles.get(i).cloned().flatten(),
                 }
             })
         })
@@ -863,6 +864,9 @@ pub fn DraftPage() -> impl IntoView {
     // Per-slot rationale comments (Phase 1)
     let (slot_comments, set_slot_comments) = signal(vec![None::<String>; 20]);
     let (slot_comment_input, set_slot_comment_input) = signal(String::new());
+    // Role assignments per pick slot (Phase 8 - role badges)
+    let (role_assignments, set_role_assignments) = signal(vec![None::<String>; 20]);
+    let (role_auto_guessed, set_role_auto_guessed) = signal(vec![true; 20]);
     // Composition tags + win conditions (Phase 2)
     let (tags, set_tags) = signal(Vec::<String>::new());
     let (win_conditions, set_win_conditions) = signal(String::new());
@@ -997,10 +1001,20 @@ pub fn DraftPage() -> impl IntoView {
                     }
                 }
                 let next = (0..20).find(|&i| slots[i].is_none());
+                // Populate role_assignments from loaded actions
+                let mut loaded_roles = vec![None::<String>; 20];
+                for action in &d_actions {
+                    let idx = action.order as usize;
+                    if idx < 20 {
+                        loaded_roles[idx] = action.role.clone();
+                    }
+                }
                 set_draft_slots.set(slots);
                 set_slot_comments.set(sc);
                 set_slot_comment_input.set(String::new());
                 set_active_slot.set(next);
+                set_role_assignments.set(loaded_roles);
+                set_role_auto_guessed.set(vec![false; 20]); // loaded roles are user-confirmed
                 if let Some(gn) = d_game_number {
                     set_active_game_number.set(gn);
                 }
@@ -1032,12 +1046,45 @@ pub fn DraftPage() -> impl IntoView {
         if already_used {
             return;
         }
-        set_draft_slots.update(|s| s[slot_idx] = Some(champion_name));
+        set_draft_slots.update(|s| s[slot_idx] = Some(champion_name.clone()));
         set_highlighted_slot.set(None);
         let updated = draft_slots.get_untracked();
         let next = (0..20).find(|&i| updated[i].is_none());
         set_active_slot.set(next);
+
+        // Auto-guess role for pick slots only (Phase 8)
+        let (_, kind, _) = slot_meta(slot_idx);
+        if kind == "pick" {
+            let guessed = champions_resource.get_untracked()
+                .and_then(|r| r.ok())
+                .and_then(|champs| champs.into_iter().find(|c| c.name == champion_name || c.id == champion_name))
+                .map(|c| guess_role_from_tags(&c.tags).to_string())
+                .unwrap_or_else(|| "mid".to_string());
+            set_role_assignments.update(|roles| {
+                if let Some(slot) = roles.get_mut(slot_idx) {
+                    *slot = Some(guessed);
+                }
+            });
+            set_role_auto_guessed.update(|flags| {
+                if let Some(flag) = flags.get_mut(slot_idx) {
+                    *flag = true;
+                }
+            });
+        }
     };
+
+    let on_role_set_cb = Callback::new(move |(slot_idx, role): (usize, String)| {
+        set_role_assignments.update(|roles| {
+            if let Some(slot) = roles.get_mut(slot_idx) {
+                *slot = Some(role);
+            }
+        });
+        set_role_auto_guessed.update(|flags| {
+            if let Some(flag) = flags.get_mut(slot_idx) {
+                *flag = false;
+            }
+        });
+    });
 
     let on_champion_select = Callback::new(move |champ: Champion| {
         if let Some(slot) = active_slot.get_untracked() {
@@ -1077,6 +1124,17 @@ pub fn DraftPage() -> impl IntoView {
         set_draft_slots.update(|s| s[slot_idx] = None);
         set_highlighted_slot.set(None);
         set_active_slot.set(Some(slot_idx));
+        // Also clear role for this slot
+        set_role_assignments.update(|roles| {
+            if let Some(slot) = roles.get_mut(slot_idx) {
+                *slot = None;
+            }
+        });
+        set_role_auto_guessed.update(|flags| {
+            if let Some(flag) = flags.get_mut(slot_idx) {
+                *flag = true;
+            }
+        });
     });
 
     let phase_label = move || match active_slot.get() {
@@ -1107,7 +1165,8 @@ pub fn DraftPage() -> impl IntoView {
         let rate = rating.get_untracked();
         let side = our_side.get_untracked();
         let sc = slot_comments.get_untracked();
-        let actions = build_actions(draft_slots.get_untracked(), &sc);
+        let ra = role_assignments.get_untracked();
+        let actions = build_actions(draft_slots.get_untracked(), &sc, &ra);
         let acts_json = serde_json::to_string(&actions).unwrap_or_default();
         let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
         let tags_json = serde_json::to_string(&tags.get_untracked()).unwrap_or_default();
@@ -1184,6 +1243,7 @@ pub fn DraftPage() -> impl IntoView {
         let rate = rating.get();
         let side = our_side.get();
         let sc = slot_comments.get();
+        let ra_val = role_assignments.get();
         let tags_val = tags.get();
         let wc_val = win_conditions.get();
         let wo_val = watch_out.get();
@@ -1207,7 +1267,7 @@ pub fn DraftPage() -> impl IntoView {
         #[cfg(feature = "hydrate")]
         {
             // Pre-compute all values before the closure
-            let actions = build_actions(slots_val, &sc);
+            let actions = build_actions(slots_val, &sc, &ra_val);
             let acts_json = serde_json::to_string(&actions).unwrap_or_default();
             let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
             let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
@@ -1760,6 +1820,9 @@ pub fn DraftPage() -> impl IntoView {
                                         on_slot_clear=on_slot_clear
                                         slot_comments=slot_comments
                                         warning_slots=Signal::from(warning_slots_memo)
+                                        role_assignments=role_assignments
+                                        role_auto_guessed=role_auto_guessed
+                                        on_role_set=on_role_set_cb
                                     />
                                 }.into_any()
                             }

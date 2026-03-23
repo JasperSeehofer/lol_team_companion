@@ -1,4 +1,5 @@
 use crate::models::champion::Champion;
+use crate::models::draft::role_icon_url;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -40,9 +41,13 @@ pub fn DraftBoard(
     on_slot_clear: Callback<usize>,
     #[prop(optional)] slot_comments: Option<ReadSignal<Vec<Option<String>>>>,
     #[prop(optional)] warning_slots: Option<Signal<Vec<Option<(String, String)>>>>,
+    #[prop(optional)] role_assignments: Option<ReadSignal<Vec<Option<String>>>>,
+    #[prop(optional)] role_auto_guessed: Option<ReadSignal<Vec<bool>>>,
+    #[prop(optional)] on_role_set: Option<Callback<(usize, String)>>,
 ) -> impl IntoView {
     let (first_pick_blue, set_first_pick_blue) = signal(true);
     let champion_map = StoredValue::new(champion_map);
+    let role_popover_open: RwSignal<Option<usize>> = RwSignal::new(None);
 
     let render_ban_slot = move |slot_idx: usize| {
         let (_, _, label) = slot_meta(slot_idx);
@@ -216,6 +221,16 @@ pub fn DraftBoard(
                             let warnings = ws.get();
                             warnings.get(slot_idx).cloned().flatten()
                         });
+                        let role = role_assignments.and_then(|ra| {
+                            let roles = ra.get();
+                            roles.get(slot_idx).cloned().flatten()
+                        });
+                        let is_auto = role_auto_guessed.map(|ag| {
+                            let guessed = ag.get();
+                            guessed.get(slot_idx).copied().unwrap_or(true)
+                        }).unwrap_or(true);
+                        let role_for_badge = role.clone();
+                        let role_for_popover = role.clone();
                         view! {
                             <div class="relative h-full w-full">
                                 <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>
@@ -253,6 +268,91 @@ pub fn DraftBoard(
                                         }}
                                     </div>
                                 </div>
+                                // Role badge — bottom-right corner of the pick slot
+                                {
+                                    let badge_title = if let Some(ref r) = role_for_badge {
+                                        if is_auto {
+                                            "Auto-guessed from champion class \u{2014} click to change".to_string()
+                                        } else {
+                                            format!("{} \u{2014} click to change", r)
+                                        }
+                                    } else {
+                                        "Assign role".to_string()
+                                    };
+                                    let badge_class = if role_for_badge.is_some() && !is_auto {
+                                        "absolute bottom-0 right-0 w-5 h-5 bg-base/80 rounded-full flex items-center justify-center cursor-pointer z-10 border border-solid border-accent"
+                                    } else {
+                                        "absolute bottom-0 right-0 w-5 h-5 bg-base/80 rounded-full flex items-center justify-center cursor-pointer z-10 opacity-50 border border-dashed border-outline"
+                                    };
+                                    let icon_url_opt = role_for_badge.as_deref().map(role_icon_url).unwrap_or("").to_string();
+                                    let role_label = role_for_badge.clone().unwrap_or_default();
+                                    view! {
+                                        <button
+                                            class=badge_class
+                                            title=badge_title.clone()
+                                            aria-label=badge_title
+                                            on:click=move |ev| {
+                                                ev.stop_propagation();
+                                                role_popover_open.update(|v| {
+                                                    *v = if *v == Some(slot_idx) { None } else { Some(slot_idx) };
+                                                });
+                                            }
+                                        >
+                                            {if !icon_url_opt.is_empty() {
+                                                view! { <img src=icon_url_opt class="w-4 h-4" alt=role_label /> }.into_any()
+                                            } else {
+                                                view! { <span class="text-[8px] text-dimmed">"?"</span> }.into_any()
+                                            }}
+                                        </button>
+                                        // Popover (5 role buttons in a row)
+                                        {move || {
+                                            let is_open = role_popover_open.get() == Some(slot_idx);
+                                            if is_open {
+                                                let roles_list: &[(&str, &str)] = &[
+                                                    ("top", "Top"),
+                                                    ("jungle", "Jng"),
+                                                    ("mid", "Mid"),
+                                                    ("bot", "Bot"),
+                                                    ("support", "Sup"),
+                                                ];
+                                                view! {
+                                                    <div
+                                                        class="absolute bottom-full mb-1 right-0 z-50 bg-surface border border-divider rounded-xl p-2 shadow-lg flex gap-1"
+                                                        on:click=move |ev| ev.stop_propagation()
+                                                    >
+                                                        {roles_list.iter().map(|&(r, label)| {
+                                                            let icon = role_icon_url(r);
+                                                            let is_current = role_for_popover.as_deref() == Some(r);
+                                                            let r_string = r.to_string();
+                                                            view! {
+                                                                <button
+                                                                    class=if is_current {
+                                                                        "flex flex-col items-center gap-1 p-1 rounded-lg bg-overlay text-primary cursor-pointer"
+                                                                    } else {
+                                                                        "flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-overlay cursor-pointer"
+                                                                    }
+                                                                    title=r
+                                                                    on:click=move |ev| {
+                                                                        ev.stop_propagation();
+                                                                        if let Some(cb) = on_role_set {
+                                                                            cb.run((slot_idx, r_string.clone()));
+                                                                        }
+                                                                        role_popover_open.set(None);
+                                                                    }
+                                                                >
+                                                                    <img src=icon class="w-6 h-6" alt=r />
+                                                                    <span class="text-[10px] text-muted capitalize">{label}</span>
+                                                                </button>
+                                                            }
+                                                        }).collect_view()}
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }
+                                        }}
+                                    }
+                                }
                                 {if is_highlighted {
                                     view! {
                                         <button

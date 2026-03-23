@@ -883,6 +883,8 @@ struct DbDraftAction {
     champion: String,
     order: i32,
     comment: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
 }
 
 impl From<DbDraftAction> for DraftAction {
@@ -895,6 +897,7 @@ impl From<DbDraftAction> for DraftAction {
             champion: a.champion,
             order: a.order,
             comment: a.comment,
+            role: a.role,
         }
     }
 }
@@ -951,13 +954,14 @@ pub async fn save_draft(
 
     for action in actions {
         let dk = draft_key.clone();
-        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment")
+        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment, role = $role")
             .bind(("draft_key", dk))
             .bind(("phase", action.phase))
             .bind(("side", action.side))
             .bind(("champion", action.champion))
             .bind(("order", action.order))
             .bind(("comment", action.comment))
+            .bind(("role", action.role))
             .await?
             .check()?;
     }
@@ -1039,13 +1043,14 @@ pub async fn update_draft(
 
     for action in actions {
         let dk = draft_key.clone();
-        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment")
+        db.query("CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $phase, side = $side, champion = $champion, `order` = $order, comment = $comment, role = $role")
             .bind(("draft_key", dk))
             .bind(("phase", action.phase))
             .bind(("side", action.side))
             .bind(("champion", action.champion))
             .bind(("order", action.order))
             .bind(("comment", action.comment))
+            .bind(("role", action.role))
             .await?
             .check()?;
     }
@@ -1210,6 +1215,7 @@ pub async fn get_tree_nodes(db: &Surreal<Db>, tree_id: &str) -> DbResult<Vec<Dra
                 champion: a.champion,
                 order: a.order,
                 comment: a.comment,
+                role: None,
             });
     }
 
