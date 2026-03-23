@@ -31,7 +31,7 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 - [x] **DRFT-02**: Draft intel panel has a link to opponents page that auto-saves the current draft before navigating
 - [x] **DRFT-03**: Banned champions are filtered out of the matchup champion selection in intel panel
 - [x] **DRFT-04**: User can navigate back from champion detail to champion selection via a back button in intel panel
-- [ ] **DRFT-05**: Champion pool notes (matchups, power spikes, synergies) appear in a draft sidebar when a pooled champion is picked
+- [x] **DRFT-05**: Champion pool notes (matchups, power spikes, synergies) appear in a draft sidebar when a pooled champion is picked
 
 ### Game Plan
 
@@ -124,7 +124,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DRFT-02 | Phase 9 | Complete |
 | DRFT-03 | Phase 9 | Complete |
 | DRFT-04 | Phase 9 | Complete |
-| DRFT-05 | Phase 9 | Pending |
+| DRFT-05 | Phase 9 | Complete |
 | PLAN-01 | Phase 9 | Pending |
 | PLAN-03 | Phase 9 | Pending |
 | OPP-01 | Phase 10 | Pending |
