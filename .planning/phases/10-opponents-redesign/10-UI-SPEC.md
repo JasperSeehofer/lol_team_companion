@@ -57,7 +57,6 @@ Declared values (multiples of 4):
 
 **Exceptions:**
 - Touch targets for icon buttons (refresh, collapse toggle): minimum 32px × 32px (`w-8 h-8`) to ensure clickability
-- Champion pills use compact padding: `px-2 py-0.5` (8px × 2px) — existing project pattern
 
 **Source:** Existing `opponents.rs` pattern: `px-4 py-3`, `p-4`, `gap-2`, `gap-6`. Confirmed from CONTEXT.md and RESEARCH.md.
 
@@ -70,15 +69,15 @@ Declared values (multiples of 4):
 | Body | 14px | 400 (regular) | 1.5 | `text-sm` |
 | Label / badge | 12px | 400 (regular) | 1.4 | `text-xs` |
 | Section heading | 16px | 600 (semibold) | 1.2 | `text-base font-semibold` |
-| Page heading | 24px | 700 (bold) | 1.2 | `text-2xl font-bold` |
+| Page heading | 24px | 600 (semibold) | 1.2 | `text-2xl font-semibold` |
 
 **Notes:**
 - Body (`text-sm` / 14px) is the dominant size for all form inputs, player names, and champion pills — consistent with existing opponents.rs usage
 - Label (`text-xs` / 12px) for all badges: OTP badge, mastery level suffix, recency timestamp, pool analysis metrics
 - Section headings (`text-base font-semibold`) for card header role labels and panel section titles
-- Page heading (`text-2xl font-bold`) for the `<h1>"Opponents"</h1>` — preserve existing
+- Page heading (`text-2xl font-semibold`) for the `<h1>"Opponents"</h1>`
 
-**Source:** Existing `opponents.rs` typography: `text-sm`, `text-xs`, `text-2xl font-bold`, `text-sm font-semibold`. Pre-populated from codebase.
+**Source:** Existing `opponents.rs` typography: `text-sm`, `text-xs`, `text-2xl font-bold`, `text-sm font-semibold`. Pre-populated from codebase. Weight consolidated to 2 (400 + 600) — page h1 updated from `font-bold` to `font-semibold`.
 
 ---
 
@@ -96,14 +95,14 @@ Declared values (multiples of 4):
 
 **Accent reserved for:**
 1. "Save & Fetch" primary CTA button (`bg-accent text-accent-contrast`)
-2. "Refresh All" team-level button (`bg-accent text-accent-contrast`)
-3. Selected opponent row highlight border or background tint in the list panel
-4. Back-to-draft navigation link (`text-accent hover:underline`)
+2. Selected opponent row highlight border or background tint in the list panel
+3. Back-to-draft navigation link (`text-accent hover:underline`)
 
 **Accent NOT used for:**
+- "Refresh All" button (secondary style — see Interaction Contract)
 - Individual player refresh icon buttons (use `text-muted hover:text-secondary`)
 - Collapse/expand toggle (use `text-muted`)
-- Cancel / secondary buttons (use `bg-elevated border-divider text-secondary`)
+- Discard Form / secondary buttons (use `bg-elevated border-divider text-secondary`)
 - Role labels (use `text-secondary`)
 - Champion pills (use `bg-surface border-divider/50 text-secondary`)
 
@@ -141,6 +140,13 @@ Reused from project (no new components needed beyond what's listed):
 
 ## Layout Contract
 
+### Focal Point
+
+The primary focal point of each page state is:
+- **List state (no opponent selected):** The "+ New Opponent" button in the page header — it is the only accent element and draws the first action.
+- **Creation mode:** The "Save & Fetch" CTA at the bottom-right of the form — sole accent button, anchors the form completion action.
+- **Detail mode (existing opponent):** The summoner name input of the first unfetched or stale player card — directs attention to data that needs refreshing.
+
 ### Page Layout (preserved)
 ```
 max-w-7xl mx-auto px-4 sm:px-6 py-8
@@ -167,7 +173,7 @@ The header `<input> + button` is replaced. Creation now opens inline within the 
   │     │ [Role icon] Bot     [Name#Tag input   ] │
   │     │ [Role icon] Support [Name#Tag input   ] │
   │     └─────────────────────────────────────────┘
-  └── [Cancel] [Save & Fetch] buttons (right-aligned)
+  └── [Discard Form] [Save & Fetch] buttons (right-aligned)
 ```
 
 Role label width: fixed `w-20` to align all inputs. Role label: `text-sm text-secondary font-medium`.
@@ -187,7 +193,7 @@ bg-elevated rounded-lg border border-divider/50 p-4
 │     [Role icon 20px]  [Summoner name text-sm font-medium]
 │     [OTP badge if triggered]
 │     [Recency badge "Last fetched: 2d ago" text-xs]
-│     [Refresh icon button w-8 h-8 text-muted]
+│     [Refresh icon button w-8 h-8 text-muted title="Refresh player data"]
 │
 ├── Row 2 (Riot ID input):
 │     [prop:value controlled input, Name#Tag, text-sm bg-surface/50 border-outline/50]
@@ -196,7 +202,7 @@ bg-elevated rounded-lg border border-divider/50 p-4
 ├── Row 3 (champion pills, shown when data exists):
 │     flex-wrap gap-1
 │     [Champion M7] [Champion M5] ... (sorted by mastery points desc)
-│     Each pill: text-xs bg-surface border border-divider/50 text-secondary rounded px-2 py-0.5
+│     Each pill: text-xs bg-surface border border-divider/50 text-secondary rounded px-2 py-1
 │
 └── Row 4 (Pool Analysis — collapsible, collapsed by default):
       [Pool Analysis ▾] toggle button text-xs text-muted
@@ -241,19 +247,20 @@ bg-elevated rounded-lg border border-divider/50 p-4
 
 ### Refresh All Button
 - Location: opponent detail panel header, right side
-- Appearance: `bg-elevated border border-divider text-secondary text-sm px-3 py-1.5 rounded-lg hover:bg-overlay` (secondary style, not accent — accent is reserved for Save & Fetch)
+- Appearance: `bg-elevated border border-divider text-secondary text-sm px-3 py-2 rounded-lg hover:bg-overlay` (secondary style, not accent — accent is reserved for Save & Fetch)
 - While fetching: disabled, shows "Refreshing..." text
 - After completion: toast "All players refreshed" or "X/5 players refreshed" if partial failures
 
 ### Individual Refresh Button
 - Small icon button: `w-8 h-8 flex items-center justify-center rounded text-muted hover:text-secondary hover:bg-elevated transition-colors cursor-pointer`
 - Icon: refresh/reload unicode or simple SVG (2 arrows in circle)
+- Accessibility: `title="Refresh player data"` attribute on the button element
 - While fetching: replaces icon with spinner
 
 ### Delete Opponent
 - Trigger: "Delete" button in detail panel header (`text-red-400 text-sm hover:text-red-300`)
-- Confirmation: inline confirm state replaces the button with "Confirm delete?" + [Cancel] [Delete] buttons — same pattern as existing `confirm_delete: RwSignal<bool>` in opponents.rs
-- Confirmation Delete button: `bg-red-700 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-red-600`
+- Confirmation: inline confirm state replaces the button with "Confirm delete?" + [Keep Opponent] [Delete] buttons — same pattern as existing `confirm_delete: RwSignal<bool>` in opponents.rs
+- Confirmation Delete button: `bg-red-700 text-white text-sm px-3 py-2 rounded-lg hover:bg-red-600`
 - No modal overlay — inline confirmation is the established project pattern
 
 ---
@@ -265,9 +272,9 @@ bg-elevated rounded-lg border border-divider/50 p-4
 | Page heading | "Opponents" |
 | Primary CTA — new opponent | "+ New Opponent" |
 | Primary CTA — save form | "Save & Fetch" |
-| Secondary CTA — cancel creation | "Cancel" |
+| Secondary CTA — cancel creation | "Discard Form" |
 | Team-level refresh | "Refresh All" |
-| Individual player refresh | (icon only, no label) |
+| Individual player refresh | (icon only, no label — `title="Refresh player data"`) |
 | Empty state heading | "No opponents scouted yet" |
 | Empty state body | "Add an opponent team to start tracking their picks, bans, and champion tendencies." |
 | Empty state CTA | "Add Opponent" |
@@ -294,7 +301,7 @@ bg-elevated rounded-lg border border-divider/50 p-4
 | Delete trigger button | "Delete" |
 | Delete confirm prompt | "Confirm delete?" |
 | Delete confirm button | "Delete" (red, destructive) |
-| Delete cancel button | "Cancel" |
+| Delete cancel button | "Keep Opponent" |
 
 **Source:** CONTEXT.md D-06 (OTP badge text), D-07 (mastery pill format), D-08 (recency format), D-10–D-12 (pool analysis labels), D-14 (Save & Fetch CTA), D-15 (per-player error), D-17 (Refresh All). Empty state copy from existing opponents.rs (adapted). All destructive confirmation copy from existing opponents.rs `confirm_delete` pattern.
 
