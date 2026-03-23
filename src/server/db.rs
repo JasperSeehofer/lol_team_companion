@@ -2228,6 +2228,12 @@ struct DbOpponentPlayer {
     riot_summoner_name: Option<String>,
     recent_champions: Vec<String>,
     notes: Option<String>,
+    #[serde(default)]
+    last_fetched: Option<String>,
+    #[serde(default)]
+    mastery_data_json: Option<String>,
+    #[serde(default)]
+    role_distribution_json: Option<String>,
 }
 
 impl From<DbOpponentPlayer> for OpponentPlayer {
@@ -2241,6 +2247,9 @@ impl From<DbOpponentPlayer> for OpponentPlayer {
             riot_summoner_name: p.riot_summoner_name,
             recent_champions: p.recent_champions,
             notes: p.notes,
+            last_fetched: p.last_fetched,
+            mastery_data_json: p.mastery_data_json,
+            role_distribution_json: p.role_distribution_json,
         }
     }
 }

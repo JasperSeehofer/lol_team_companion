@@ -185,6 +185,9 @@ DEFINE FIELD IF NOT EXISTS riot_puuid ON opponent_player TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS riot_summoner_name ON opponent_player TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS recent_champions ON opponent_player TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS notes ON opponent_player TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS last_fetched ON opponent_player TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS mastery_data_json ON opponent_player TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS role_distribution_json ON opponent_player TYPE option<string>;
 
 -- Series (best-of sets)
 DEFINE TABLE IF NOT EXISTS series SCHEMAFULL;
