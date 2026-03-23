@@ -38,6 +38,7 @@ All spacing uses Tailwind v4 utility classes. The project's implicit scale follo
 |-------|-------|-------|
 | xs | 4px (`gap-1`, `p-1`) | Icon gaps, tight inline padding |
 | sm | 8px (`gap-2`, `p-2`) | Compact element spacing, champion grid gaps |
+| sm+ | 12px (`gap-3`, `p-3`) | Intel sidebar element gaps, sub-tab row gaps |
 | md | 16px (`gap-4`, `p-4`) | Default element spacing, panel padding |
 | lg | 24px (`gap-6`, `p-6`) | Section padding, sidebar inner padding |
 | xl | 32px (`gap-8`, `p-8`) | Layout gaps between major sections |
@@ -45,9 +46,10 @@ All spacing uses Tailwind v4 utility classes. The project's implicit scale follo
 | 3xl | 64px | Page-level spacing (not used in this phase) |
 
 Exceptions:
-- Intel sidebar container: `p-4` (16px) with `gap-3` (12px) between elements — existing pattern, retain as-is (source: `draft.rs:1970`)
-- Tab buttons: `px-2 py-1.5` — existing pattern, retain as-is (source: `draft.rs:1987`)
-- Touch targets for buttons: minimum 32px height (existing `py-1.5` on tab buttons + `py-2` on dropdown items)
+- Tab buttons: `px-2 py-2` — use `py-2` (8px) for all tab buttons in this phase; do not introduce `py-1.5` (6px) in new code
+- Touch targets for buttons: minimum 32px height via `py-2` on tab buttons and dropdown items
+
+Note: `py-1.5` (6px) exists in current `draft.rs` tab buttons as a legacy value. It is not a permitted token for new code in this phase. Any new tab or button element must use `py-2` (8px).
 
 ---
 
@@ -57,14 +59,14 @@ All type uses Tailwind utility classes. The project uses `text-xs`, `text-sm`, `
 
 | Role | Size | Weight | Line Height | Tailwind Class |
 |------|------|--------|-------------|----------------|
-| Label / metadata | 12px | 500 (medium) | 1.5 | `text-xs font-medium` |
+| Label / metadata | 12px | 600 (semibold) | 1.5 | `text-xs font-semibold` |
 | Body / inputs | 14px | 400 (regular) | 1.5 | `text-sm` |
 | UI element headings | 14px | 600 (semibold) | 1.4 | `text-sm font-semibold` |
 | Section headings | 16px | 600 (semibold) | 1.2 | `text-base font-semibold` |
 
 Source: existing patterns in `draft.rs` intel sidebar and `champion_autocomplete.rs`.
 
-**Permitted weights:** regular (400) and semibold (600) only. `font-medium` (500) is used only for tab buttons and small labels — existing convention, retain.
+**Permitted weights:** regular (400) and semibold (600) only. `font-medium` (500) must not be used in new code for this phase. Existing `font-medium` in legacy code is not to be replicated; all new label and metadata elements use `font-semibold`.
 
 ---
 
@@ -101,6 +103,8 @@ All colors use semantic CSS custom property tokens defined in `input.css`. Never
 - Dividers: `border-divider`
 - Input borders: `border-outline` / `border-outline/50`
 
+**Primary visual focal point:** The opponent autocomplete input in the draft header is the primary visual anchor of this phase — it is the entry point for all opponent-context features and must be immediately visible above the draft board without scrolling.
+
 ---
 
 ## Component Inventory
@@ -112,7 +116,7 @@ New UI elements introduced in this phase. All reuse existing Tailwind patterns f
 Pattern: Reuse `ChampionAutocomplete` structure with `Vec<Opponent>` instead of `Vec<Champion>`.
 
 ```
-[  Search opponents...  ▾ ]  [ + Add New ]
+[  Search opponents...  ▾ ]  [ + Add New Opponent ]
 [─────────────────────────]
 [ Team Evil                ]   ← bg-elevated, border-divider dropdown
 [ Team Alpha               ]
@@ -139,8 +143,8 @@ Second row of tabs inside the Notes tab — one per our-side picked champion.
 ```
 
 - Sub-tab row: `flex gap-1 flex-wrap border-b border-divider pb-2`
-- Active sub-tab: `px-2 py-1 rounded-t text-xs font-medium border-b-2 border-accent text-primary bg-transparent`
-- Inactive sub-tab: `px-2 py-1 rounded-t text-xs font-medium text-muted hover:text-secondary transition-colors cursor-pointer`
+- Active sub-tab: `px-2 py-1 rounded-t text-xs font-semibold border-b-2 border-accent text-primary bg-transparent`
+- Inactive sub-tab: `px-2 py-1 rounded-t text-xs font-semibold text-muted hover:text-secondary transition-colors cursor-pointer`
 - Champion portrait (optional, Claude's discretion): 20×20px (`w-5 h-5`) rounded Community Dragon icon inline before name
 
 ### 4. Collapsible Note Type Section
@@ -157,7 +161,7 @@ One section per note type (matchup, power_spike, combo, lesson, synergy, positio
 ```
 
 - Section header: `flex items-center justify-between py-2 cursor-pointer hover:text-primary transition-colors`
-- Section label: `text-xs font-medium text-secondary uppercase tracking-wide`
+- Section label: `text-xs font-semibold text-secondary uppercase tracking-wide`
 - Toggle icon: inline chevron SVG, 12×12px, rotates 90° when expanded (`transition-transform`)
 - Section body: `flex flex-col gap-1 pb-2`
 - Note item: `text-xs text-muted leading-relaxed`
@@ -201,7 +205,7 @@ No visual changes to the game plan page — autofill is a data behavior change o
 | Element | Copy |
 |---------|------|
 | Primary CTA — opponent dropdown placeholder | "Search opponents..." |
-| Primary CTA — add new opponent | "+ Add New" |
+| Primary CTA — add new opponent | "+ Add New Opponent" |
 | Primary CTA — back to champion list | "← Back to champions" |
 | Primary CTA — notes tab | "Notes" |
 | Empty state — no opponents in dropdown | "No opponents scouted yet" (shown inline in dropdown when `opponents_list` is empty) |
@@ -210,8 +214,8 @@ No visual changes to the game plan page — autofill is a data behavior change o
 | Empty state — no picks on our side in Notes tab | "Pick champions on your side to see pool notes." |
 | Error state — opponent list load failure | "Couldn't load opponents. Try refreshing." |
 | Error state — pool notes load failure | "Couldn't load notes." (inline, non-blocking) |
-| Auto-save toast on "Add New" click (if name empty) | "Give this draft a name first — notes weren't saved." |
-| Auto-save toast on "Add New" click (success) | "Draft saved." (existing ToastKind::Success pattern) |
+| Auto-save toast on "Add New Opponent" click (if name empty) | "Give this draft a name first — notes weren't saved." |
+| Auto-save toast on "Add New Opponent" click (success) | "Draft saved." (existing ToastKind::Success pattern) |
 | Game plan name prefill | "{draft_name} plan" (editable) |
 | Game plan role strategy prefill | "{ChampionName}: " (editable prompt) |
 | Destructive confirmation | None — no destructive actions in this phase |
