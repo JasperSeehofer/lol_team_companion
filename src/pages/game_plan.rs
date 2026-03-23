@@ -2,7 +2,7 @@ use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
-use crate::models::draft::Draft;
+use crate::models::draft::{most_common_tag, Draft};
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
 use leptos::prelude::*;
 
@@ -640,6 +640,38 @@ pub fn GamePlanPage() -> impl IntoView {
             if let Some(did) = &draft.id {
                 set_draft_id.set(did.clone());
             }
+            // D-16: Pre-fill plan name as "<draft name> plan"
+            if !draft.name.is_empty() {
+                set_plan_name.set(format!("{} plan", draft.name));
+            }
+            // D-17: Pre-fill strategy tag from most common draft tag
+            if let Some(tag) = most_common_tag(&draft.tags) {
+                set_win_condition_tag.set(tag);
+            }
+            // D-19: Pre-fill per-role strategy fields from DraftAction.role assignments
+            // role_strats is Vec<String> indexed: 0=top, 1=jungle, 2=mid, 3=bot, 4=support
+            let our_side = draft.our_side.clone();
+            let mut role_strat_values = vec![String::new(); 5];
+            for action in &draft.actions {
+                if action.side == our_side && action.phase.contains("pick") {
+                    if let Some(role) = &action.role {
+                        let idx = match role.as_str() {
+                            "top" => Some(0),
+                            "jungle" => Some(1),
+                            "mid" => Some(2),
+                            "bot" => Some(3),
+                            "support" => Some(4),
+                            _ => None,
+                        };
+                        if let Some(i) = idx {
+                            if role_strat_values[i].is_empty() {
+                                role_strat_values[i] = format!("{}: ", action.champion);
+                            }
+                        }
+                    }
+                }
+            }
+            set_role_strats.set(role_strat_values);
             prefill_applied.set(true);
             set_champs_locked.set(true);
         }
