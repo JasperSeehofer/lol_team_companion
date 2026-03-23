@@ -2,27 +2,27 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Ready to plan
-stopped_at: Phase 9 context gathered
-last_updated: "2026-03-23T09:54:17.674Z"
+status: Ready to execute
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-23T10:34:18.019Z"
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
 ---
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
+Phase: 09 (draft-game-plan) — EXECUTING
+Plan: 2 of 3
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 08 — champion-pool-role-ui
+**Current focus:** Phase 09 — draft-game-plan
 
 ## Decisions
 
@@ -45,6 +45,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 08-02]: serde(default) on DraftAction.role ensures backward compatibility with saved drafts missing the role key
 - [Phase 08-02]: Role badge uses dashed border + 50% opacity for auto-guessed, solid accent border for user-confirmed
 - [Phase 08-champion-pool-role-ui]: Champion pool card grid: 3-column grid with aspect-square portraits, drag-and-drop tiers via DataTransfer, matchup autocomplete with 'vs {name}' auto-fill
+- [Phase 09]: Opponent autocomplete stores ID in Draft.opponent with legacy free-text fallback (D-05)
+- [Phase 09]: Intel sidebar opponent select removed (D-06) — header dropdown is single source of truth
 
 ## Blockers/Concerns
 
@@ -52,6 +54,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-23T09:54:17.672Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-draft-game-plan/09-CONTEXT.md
+Last session: 2026-03-23T10:34:18.018Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: None

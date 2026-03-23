@@ -93,7 +93,7 @@ Plans:
   6. Creating a game plan from a draft pre-fills the strategy tag from the draft's tags, names it "<draft name> plan", and populates our champions and enemy champions
 **Plans**: 3 plans
 Plans:
-- [ ] 09-01-PLAN.md — Opponent autocomplete dropdown, ban filtering, back button in matchup detail
+- [x] 09-01-PLAN.md — Opponent autocomplete dropdown, ban filtering, back button in matchup detail
 - [ ] 09-02-PLAN.md — Notes tab in intel sidebar with champion sub-tabs and pool notes
 - [ ] 09-03-PLAN.md — Game plan autofill: name, strategy tag, per-role strategy from draft
 
@@ -131,6 +131,6 @@ Plans:
 | 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
-| 9. Draft & Game Plan | v1.1 | 0/3 | Not started | - |
+| 9. Draft & Game Plan | v1.1 | 1/3 | In Progress|  |
 | 10. Opponents Redesign | v1.1 | 0/? | Not started | - |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |
