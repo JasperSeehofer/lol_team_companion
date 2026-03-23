@@ -5,6 +5,7 @@ use crate::models::champion::{
 };
 use crate::models::utils::format_timestamp;
 use leptos::prelude::*;
+use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -382,6 +383,10 @@ pub fn ChampionPoolPage() -> impl IntoView {
         do_add();
     });
 
+    // Drag-and-drop state
+    let dragging_over_tier: RwSignal<Option<&'static str>> = RwSignal::new(None);
+    let dragging_champ: RwSignal<Option<(String, String)>> = RwSignal::new(None); // (champion, role)
+
     // Note form state
     let (note_form_open, set_note_form_open) = signal(false);
     let (note_form_type, set_note_form_type) = signal("matchup".to_string());
@@ -389,6 +394,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let (note_form_content, set_note_form_content) = signal(String::new());
     let (note_form_difficulty, set_note_form_difficulty) = signal(Option::<u8>::None);
     let (note_form_editing_id, set_note_form_editing_id) = signal(Option::<String>::None);
+    let matchup_opponent_value = RwSignal::new(String::new());
 
     let clear_note_form = move || {
         set_note_form_open.set(false);
@@ -397,6 +403,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
         set_note_form_content.set(String::new());
         set_note_form_difficulty.set(None);
         set_note_form_editing_id.set(None);
+        matchup_opponent_value.set(String::new());
     };
 
     let do_save_note = Callback::new(move |_: ()| {
@@ -439,6 +446,12 @@ pub fn ChampionPoolPage() -> impl IntoView {
     });
 
     let edit_note = Callback::new(move |note: ChampionNote| {
+        if note.note_type == "matchup" {
+            let opponent = note.title.strip_prefix("vs ").unwrap_or(&note.title).to_string();
+            matchup_opponent_value.set(opponent);
+        } else {
+            matchup_opponent_value.set(String::new());
+        }
         set_note_form_editing_id.set(note.id);
         set_note_form_type.set(note.note_type);
         set_note_form_title.set(note.title);
@@ -538,7 +551,43 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                 .filter(|e| e.tier == tier)
                                                 .collect();
                                             view! {
-                                                <div class=format!("border rounded-xl p-4 {}", tier_color(tier))>
+                                                <div
+                                                    class=move || {
+                                                        let is_drag_target = dragging_over_tier.get() == Some(tier);
+                                                        let base = format!("border rounded-xl p-4 {}", tier_color(tier));
+                                                        if is_drag_target {
+                                                            format!("{} border-accent/60 bg-accent/10", base)
+                                                        } else {
+                                                            base
+                                                        }
+                                                    }
+                                                    on:dragover=move |ev: web_sys::DragEvent| {
+                                                        ev.prevent_default();
+                                                        dragging_over_tier.set(Some(tier));
+                                                    }
+                                                    on:dragleave=move |_| {
+                                                        dragging_over_tier.set(None);
+                                                    }
+                                                    on:drop=move |ev: web_sys::DragEvent| {
+                                                        ev.prevent_default();
+                                                        dragging_over_tier.set(None);
+                                                        dragging_champ.set(None);
+                                                        if let Some(dt) = ev.data_transfer() {
+                                                            let champ = dt.get_data("text/x-champion").unwrap_or_default();
+                                                            let role = dt.get_data("text/x-role").unwrap_or_default();
+                                                            let src_tier = dt.get_data("text/x-source-tier").unwrap_or_default();
+                                                            if !champ.is_empty() && src_tier != tier {
+                                                                let tier_str = tier.to_string();
+                                                                leptos::task::spawn_local(async move {
+                                                                    match set_champion_tier(champ, role, tier_str).await {
+                                                                        Ok(_) => pool.refetch(),
+                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                >
                                                     <h3 class=format!("text-xs font-semibold uppercase tracking-wider mb-3 {}", tier_label_color(tier))>
                                                         {tier_label(tier)}
                                                         {(!tier_entries.is_empty()).then(|| view! {
@@ -551,16 +600,25 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                         }.into_any()
                                                     } else {
                                                         view! {
-                                                            <div class="flex flex-wrap gap-2">
+                                                            <div class="grid grid-cols-3 gap-2">
                                                                 {tier_entries.into_iter().map(|entry| {
                                                                     let champ = entry.champion.clone();
                                                                     let role_val = entry.role.clone();
                                                                     let champ_for_class = champ.clone();
                                                                     let role_for_class = role_val.clone();
+                                                                    let champ_for_style = champ.clone();
+                                                                    let role_for_style = role_val.clone();
                                                                     let champ_for_select = champ.clone();
                                                                     let role_for_select = role_val.clone();
                                                                     let champ_for_remove = champ.clone();
                                                                     let role_for_remove = role_val.clone();
+                                                                    let champ_for_drag = champ.clone();
+                                                                    let role_for_drag = role_val.clone();
+                                                                    let champ_for_dragstart = champ.clone();
+                                                                    let role_for_dragstart = role_val.clone();
+                                                                    let champ_for_dragstart2 = champ.clone();
+                                                                    let role_for_dragstart2 = role_val.clone();
+                                                                    let champ_for_stats = champ.clone();
                                                                     let comfort = entry.comfort_level;
                                                                     let meta = entry.meta_tag.clone();
 
@@ -576,63 +634,59 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                 let is_selected = selected_entry.get()
                                                                                     .map(|(c, r)| c == champ_for_class && r == role_for_class)
                                                                                     .unwrap_or(false);
-                                                                                if is_selected {
-                                                                                    "flex items-center gap-1.5 bg-accent/10 border border-accent/50 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer group"
-                                                                                } else {
-                                                                                    "flex items-center gap-1.5 bg-elevated border border-divider rounded-lg px-2.5 py-1.5 hover:border-accent/50 transition-colors cursor-pointer group"
+                                                                                let is_dragging = dragging_champ.get()
+                                                                                    .map(|(c, r)| c == champ_for_drag && r == role_for_drag)
+                                                                                    .unwrap_or(false);
+                                                                                let mut cls = String::from("relative bg-elevated border rounded-xl overflow-hidden cursor-pointer group");
+                                                                                if is_dragging {
+                                                                                    cls.push_str(" opacity-50");
                                                                                 }
+                                                                                if is_selected {
+                                                                                    cls.push_str(" border-accent/60");
+                                                                                } else {
+                                                                                    cls.push_str(" border-divider hover:border-accent/30");
+                                                                                }
+                                                                                cls
+                                                                            }
+                                                                            style=move || {
+                                                                                let is_selected = selected_entry.get()
+                                                                                    .map(|(c, r)| c == champ_for_style && r == role_for_style)
+                                                                                    .unwrap_or(false);
+                                                                                if is_selected {
+                                                                                    "box-shadow: 0 0 8px color-mix(in oklch, var(--color-accent) 30%, transparent)"
+                                                                                } else {
+                                                                                    ""
+                                                                                }
+                                                                            }
+                                                                            draggable="true"
+                                                                            on:dragstart=move |ev: web_sys::DragEvent| {
+                                                                                if let Some(dt) = ev.data_transfer() {
+                                                                                    let _ = dt.set_data("text/x-champion", &champ_for_dragstart);
+                                                                                    let _ = dt.set_data("text/x-role", &role_for_dragstart);
+                                                                                    let _ = dt.set_data("text/x-source-tier", tier);
+                                                                                }
+                                                                                dragging_champ.set(Some((champ_for_dragstart2.clone(), role_for_dragstart2.clone())));
+                                                                            }
+                                                                            on:dragend=move |_| {
+                                                                                dragging_champ.set(None);
                                                                             }
                                                                             on:click=move |_| {
                                                                                 set_selected_entry.set(Some((champ_for_select.clone(), role_for_select.clone())));
                                                                                 set_detail_tab.set("overview");
                                                                             }
                                                                         >
+                                                                            // Portrait — full width, square aspect
                                                                             {if !img_url.is_empty() {
                                                                                 view! {
-                                                                                    <img src=img_url alt=display_name.clone() class="w-7 h-7 rounded object-cover" />
+                                                                                    <img src=img_url.clone() alt=display_name.clone()
+                                                                                         class="w-full aspect-square object-cover object-top" />
                                                                                 }.into_any()
                                                                             } else {
-                                                                                view! { <span></span> }.into_any()
+                                                                                view! { <div class="w-full aspect-square bg-surface"></div> }.into_any()
                                                                             }}
-                                                                            <div class="flex flex-col min-w-0">
-                                                                                <span class="text-primary text-sm truncate">{display_name.clone()}</span>
-                                                                                <div class="flex items-center gap-1">
-                                                                                    // Comfort stars (compact)
-                                                                                    {comfort.map(|lvl| {
-                                                                                        let stars: String = (0..5).map(|i| if i < lvl { '\u{2605}' } else { '\u{2606}' }).collect();
-                                                                                        view! { <span class="text-accent text-[10px] leading-none">{stars}</span> }
-                                                                                    })}
-                                                                                    // Meta tag badge
-                                                                                    {meta.as_ref().map(|t| {
-                                                                                        let cls = meta_tag_class(t);
-                                                                                        let label = match t.as_str() {
-                                                                                            "strong" => "S",
-                                                                                            "neutral" => "~",
-                                                                                            "weak" => "W",
-                                                                                            _ => "?",
-                                                                                        };
-                                                                                        view! {
-                                                                                            <span class=format!("text-[9px] px-1 rounded border font-bold {cls}")>{label}</span>
-                                                                                        }
-                                                                                    })}
-                                                                                    // Match stats badge
-                                                                                    {move || {
-                                                                                        let champ_name = champ.clone();
-                                                                                        stats_resource.get().and_then(|r| r.ok()).and_then(|stats| {
-                                                                                            stats.into_iter().find(|s| s.champion == champ_name)
-                                                                                        }).map(|s| {
-                                                                                            let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
-                                                                                            view! {
-                                                                                                <span class="text-[9px] px-1 rounded bg-overlay text-muted whitespace-nowrap" title="Games / Win% / KDA from match history">
-                                                                                                    {format!("{}G {}%W {:.1}", s.games, wr, s.avg_kda)}
-                                                                                                </span>
-                                                                                            }
-                                                                                        })
-                                                                                    }}
-                                                                                </div>
-                                                                            </div>
+                                                                            // Remove button — top-right corner, hover reveal
                                                                             <button
-                                                                                class="text-overlay-strong hover:text-red-400 ml-auto transition-colors opacity-0 group-hover:opacity-100 cursor-pointer flex-shrink-0"
+                                                                                class="absolute top-1 right-1 w-5 h-5 bg-red-700 text-white text-xs rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer z-10"
                                                                                 title="Remove"
                                                                                 on:click=move |ev| {
                                                                                     ev.stop_propagation();
@@ -645,7 +699,38 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         }
                                                                                     });
                                                                                 }
-                                                                            >"\u{00d7}"</button>
+                                                                            >{"\u{00D7}"}</button>
+                                                                            // Metadata below portrait
+                                                                            <div class="p-1 flex flex-col gap-1">
+                                                                                <span class="text-xs font-bold text-primary truncate">{display_name}</span>
+                                                                                <div class="flex items-center gap-1">
+                                                                                    {comfort.map(|lvl| {
+                                                                                        let stars: String = (0..5).map(|i| if i < lvl { '\u{2605}' } else { '\u{2606}' }).collect();
+                                                                                        view! { <span class="text-accent text-xs">{stars}</span> }
+                                                                                    })}
+                                                                                    {meta.as_ref().map(|t| {
+                                                                                        let cls = meta_tag_class(t);
+                                                                                        let label = match t.as_str() {
+                                                                                            "strong" => "S", "neutral" => "~", "weak" => "W", _ => "?",
+                                                                                        };
+                                                                                        view! { <span class=format!("text-[9px] px-1 rounded border font-bold {cls}")>{label}</span> }
+                                                                                    })}
+                                                                                </div>
+                                                                                // Stats line (text-[10px] text-dimmed)
+                                                                                {move || {
+                                                                                    let champ_name = champ_for_stats.clone();
+                                                                                    stats_resource.get().and_then(|r| r.ok()).and_then(|stats| {
+                                                                                        stats.into_iter().find(|s| s.champion == champ_name)
+                                                                                    }).map(|s| {
+                                                                                        let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
+                                                                                        view! {
+                                                                                            <span class="text-[10px] text-dimmed" title="Games / Win% / KDA">
+                                                                                                {format!("{}G {}%W {:.1}", s.games, wr, s.avg_kda)}
+                                                                                            </span>
+                                                                                        }
+                                                                                    })
+                                                                                }}
+                                                                            </div>
                                                                         </div>
                                                                     }
                                                                 }).collect_view()}
@@ -933,6 +1018,15 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                         let matchups: Vec<&ChampionNote> = notes.iter()
                                                                             .filter(|n| n.note_type == "matchup")
                                                                             .collect();
+                                                                        // Build name→Champion map for opponent icon lookup
+                                                                        let champ_name_map = StoredValue::new(
+                                                                            champions_resource.get()
+                                                                                .and_then(|r| r.ok())
+                                                                                .unwrap_or_default()
+                                                                                .into_iter()
+                                                                                .map(|c| (c.name.clone(), c))
+                                                                                .collect::<HashMap<String, Champion>>()
+                                                                        );
                                                                         if matchups.is_empty() {
                                                                             view! {
                                                                                 <p class="text-dimmed text-xs italic py-2">"No matchup notes yet. Add one to track how you play against specific champions."</p>
@@ -947,11 +1041,18 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         let difficulty_stars: String = note.difficulty
                                                                                             .map(|d| (0..5).map(|i| if i < d { '\u{2605}' } else { '\u{2606}' }).collect())
                                                                                             .unwrap_or_default();
+                                                                                        // Look up opponent icon URL from title "vs {Name}"
+                                                                                        let opponent_icon: Option<String> = note_clone.title.strip_prefix("vs ").and_then(|opponent_name| {
+                                                                                            champ_name_map.with_value(|m| m.get(opponent_name).map(|c| c.image_full.clone()))
+                                                                                        });
                                                                                         view! {
                                                                                             <div class="bg-surface/30 border border-outline/30 rounded-lg p-3">
                                                                                                 <div class="flex items-start justify-between gap-2">
                                                                                                     <div class="min-w-0 flex-1">
                                                                                                         <div class="flex items-center gap-2">
+                                                                                                            {opponent_icon.map(|icon_url| view! {
+                                                                                                                <img src=icon_url class="w-6 h-6 rounded-full object-cover" />
+                                                                                                            })}
                                                                                                             <span class="text-primary text-sm font-medium">{note_clone.title.clone()}</span>
                                                                                                             {(!difficulty_stars.is_empty()).then(|| view! {
                                                                                                                 <span class="text-red-400 text-[10px]" title="Difficulty">{difficulty_stars}</span>
@@ -1168,12 +1269,37 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     <label class="block text-muted text-xs font-medium mb-1">
                                         {if is_matchup { "Opponent Champion" } else { "Title" }}
                                     </label>
-                                    <input type="text"
-                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
-                                        placeholder=move || if note_form_type.get() == "matchup" { "e.g. Syndra" } else { "e.g. Level 6 all-in" }
-                                        prop:value=move || note_form_title.get()
-                                        on:input=move |ev| set_note_form_title.set(event_target_value(&ev))
-                                    />
+                                    {if is_matchup {
+                                        let champs_for_form: Vec<Champion> = champions_resource.get()
+                                            .and_then(|r| r.ok())
+                                            .unwrap_or_default();
+                                        let champs_for_autocomplete = champs_for_form.clone();
+                                        let champs_map = StoredValue::new(
+                                            champs_for_form.iter().map(|c| (c.id.clone(), c.clone())).collect::<HashMap<String, Champion>>()
+                                        );
+                                        view! {
+                                            <ChampionAutocomplete
+                                                champions=champs_for_autocomplete
+                                                value=matchup_opponent_value
+                                                placeholder="Search opponent champion..."
+                                                on_select=Callback::new(move |champ_id: String| {
+                                                    let display_name = champs_map.with_value(|m|
+                                                        m.get(&champ_id).map(|c| c.name.clone()).unwrap_or(champ_id.clone())
+                                                    );
+                                                    set_note_form_title.set(format!("vs {}", display_name));
+                                                })
+                                            />
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <input type="text"
+                                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                                                placeholder="e.g. Level 6 all-in"
+                                                prop:value=move || note_form_title.get()
+                                                on:input=move |ev| set_note_form_title.set(event_target_value(&ev))
+                                            />
+                                        }.into_any()
+                                    }}
                                 </div>
 
                                 // Difficulty (matchups only)
