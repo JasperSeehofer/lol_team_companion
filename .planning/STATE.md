@@ -4,18 +4,18 @@ milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: Ready to execute
 stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-23T10:34:18.019Z"
+last_updated: "2026-03-23T10:35:16.735Z"
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 ## Current Position
 
 Phase: 09 (draft-game-plan) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Project Reference
 
@@ -47,6 +47,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 08-champion-pool-role-ui]: Champion pool card grid: 3-column grid with aspect-square portraits, drag-and-drop tiers via DataTransfer, matchup autocomplete with 'vs {name}' auto-fill
 - [Phase 09]: Opponent autocomplete stores ID in Draft.opponent with legacy free-text fallback (D-05)
 - [Phase 09]: Intel sidebar opponent select removed (D-06) — header dropdown is single source of truth
+- [Phase 09]: Pool notes query uses champion name (not ID) matching since champion_note stores by name; collapsed_note_types defaults to all except matchup
 
 ## Blockers/Concerns
 

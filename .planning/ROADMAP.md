@@ -94,7 +94,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 09-01-PLAN.md — Opponent autocomplete dropdown, ban filtering, back button in matchup detail
-- [ ] 09-02-PLAN.md — Notes tab in intel sidebar with champion sub-tabs and pool notes
+- [x] 09-02-PLAN.md — Notes tab in intel sidebar with champion sub-tabs and pool notes
 - [ ] 09-03-PLAN.md — Game plan autofill: name, strategy tag, per-role strategy from draft
 
 ### Phase 10: Opponents Redesign
