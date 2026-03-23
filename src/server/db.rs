@@ -2299,7 +2299,7 @@ pub async fn get_opponent(
         .unwrap_or(opponent_id)
         .to_string();
     let mut r = db
-        .query("SELECT * FROM type::record('opponent', $opp_key); SELECT * FROM opponent_player WHERE opponent = type::record('opponent', $opp_key) ORDER BY role ASC")
+        .query("SELECT * FROM type::record('opponent', $opp_key); SELECT *, <string>last_fetched AS last_fetched FROM opponent_player WHERE opponent = type::record('opponent', $opp_key) ORDER BY role ASC")
         .bind(("opp_key", opp_key))
         .await?;
     let opp: Option<DbOpponent> = r.take(0)?;
@@ -2441,6 +2441,99 @@ pub async fn update_opponent_player_champions(
     db.query("UPDATE type::record('opponent_player', $player_key) SET recent_champions = $champions")
         .bind(("player_key", player_key))
         .bind(("champions", champions))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// Create an opponent and its player slots atomically in a single transaction.
+///
+/// Each entry in `players` is `(role, riot_summoner_name)`. Player `name` defaults to empty
+/// string and will be populated on first Riot API fetch or manual edit.
+///
+/// Returns `(opponent_id, player_ids)` where `player_ids.len() == players.len()`.
+pub async fn create_opponent_with_players(
+    db: &Surreal<Db>,
+    team_id: &str,
+    name: String,
+    notes: Option<String>,
+    players: Vec<(String, Option<String>)>,
+) -> DbResult<(String, Vec<String>)> {
+    let team_key = team_id
+        .strip_prefix("team:")
+        .unwrap_or(team_id)
+        .to_string();
+
+    // Step 1: Create the opponent record
+    let mut opp_resp = db
+        .query("CREATE opponent SET name = $opp_name, team = type::record('team', $team_key), notes = $opp_notes")
+        .bind(("opp_name", name.clone()))
+        .bind(("team_key", team_key.clone()))
+        .bind(("opp_notes", notes))
+        .await?;
+    let opp_row: Option<IdRecord> = opp_resp.take(0)?;
+    let opponent_id = match opp_row {
+        Some(r) => r.id.to_sql(),
+        None => return Err(DbError::Other("Failed to create opponent".into())),
+    };
+
+    // Step 2: Create all player slots in a transaction
+    let opp_key = opponent_id
+        .strip_prefix("opponent:")
+        .unwrap_or(&opponent_id)
+        .to_string();
+
+    let mut query = String::from("BEGIN TRANSACTION;\n");
+    for i in 0..players.len() {
+        query.push_str(&format!(
+            "CREATE opponent_player SET opponent = type::record('opponent', $opp_key), name = '', role = $role_{i}, riot_summoner_name = $summoner_{i};\n"
+        ));
+    }
+    query.push_str("COMMIT TRANSACTION;");
+
+    let mut q = db.query(query).bind(("opp_key", opp_key));
+    for (i, (role, summoner)) in players.iter().enumerate() {
+        q = q
+            .bind((format!("role_{i}"), role.clone()))
+            .bind((format!("summoner_{i}"), summoner.clone()));
+    }
+
+    let mut response = q.await?.check()?;
+
+    // Result indexing: 0=BEGIN (no-op), 1..=n=player CREATEs, n+1=COMMIT (no-op)
+    let mut player_ids = Vec::with_capacity(players.len());
+    for i in 0..players.len() {
+        let player_row: Option<IdRecord> = response.take(i + 1)?;
+        match player_row {
+            Some(r) => player_ids.push(r.id.to_sql()),
+            None => return Err(DbError::Other(format!("Failed to create player slot {i}"))),
+        }
+    }
+
+    Ok((opponent_id, player_ids))
+}
+
+/// Persist enriched data fetched from the Riot API for a single opponent player.
+///
+/// Sets `last_fetched = time::now()` server-side to record when the data was written.
+pub async fn update_opponent_player_intel(
+    db: &Surreal<Db>,
+    player_id: &str,
+    riot_puuid: Option<String>,
+    recent_champions: Vec<String>,
+    mastery_data_json: Option<String>,
+    role_distribution_json: Option<String>,
+) -> DbResult<()> {
+    let player_key = player_id
+        .strip_prefix("opponent_player:")
+        .unwrap_or(player_id)
+        .to_string();
+    db.query("UPDATE type::record('opponent_player', $player_key) SET riot_puuid = $riot_puuid, recent_champions = $recent_champions, mastery_data_json = $mastery_data_json, role_distribution_json = $role_distribution_json, last_fetched = time::now()")
+        .bind(("player_key", player_key))
+        .bind(("riot_puuid", riot_puuid))
+        .bind(("recent_champions", recent_champions))
+        .bind(("mastery_data_json", mastery_data_json))
+        .bind(("role_distribution_json", role_distribution_json))
         .await?
         .check()?;
     Ok(())
