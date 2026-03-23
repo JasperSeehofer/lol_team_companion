@@ -31,7 +31,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 - [x] **Phase 7: UX Polish** - Small, independent UX improvements that make the app feel polished (completed 2026-03-22)
 - [x] **Phase 8: Champion Pool & Role UI** - Overhaul champion pool management and add role assignment to draft picks (completed 2026-03-23)
 - [x] **Phase 9: Draft & Game Plan** - Improve draft tooling with opponent context, pool notes sidebar, and game plan autofill (completed 2026-03-23)
-- [ ] **Phase 10: Opponents Redesign** - Rebuild opponent scouting with 5-role form, Riot API fetch, and pool analysis
+- [x] **Phase 10: Opponents Redesign** - Rebuild opponent scouting with 5-role form, Riot API fetch, and pool analysis (completed 2026-03-23)
 - [ ] **Phase 11: Cross-Feature & Testing** - Plan effectiveness dashboard, draft-integrated notes, and real seeded test data
 
 ### Phase 6: Bug Fixes
@@ -110,7 +110,7 @@ Plans:
 Plans:
 - [x] 10-01-PLAN.md — Schema extension, model enrichment, compute_intel with unit tests, batch DB functions
 - [x] 10-02-PLAN.md — Combined Riot API fetch function, new server functions for creation and intel fetch
-- [ ] 10-03-PLAN.md — Full UI redesign: 5-role form, enriched player cards, pool analysis, e2e test
+- [x] 10-03-PLAN.md — Full UI redesign: 5-role form, enriched player cards, pool analysis, e2e test
 
 ### Phase 11: Cross-Feature & Testing
 **Goal**: Plan effectiveness is visible in the UI, champion pool notes appear in the draft sidebar, and the app has real seeded test data
@@ -136,5 +136,5 @@ Plans:
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete   | 2026-03-23 |
-| 10. Opponents Redesign | v1.1 | 2/3 | In Progress|  |
+| 10. Opponents Redesign | v1.1 | 3/3 | Complete   | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |

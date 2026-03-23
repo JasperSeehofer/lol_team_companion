@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Ready to execute
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-03-23T12:38:48.778Z"
+status: Phase complete — ready for verification
+stopped_at: "Checkpoint: Task 3 human-verify in 10-03-PLAN.md"
+last_updated: "2026-03-23T13:10:55.383Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 ## Current Position
@@ -53,6 +53,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 10-opponents-redesign]: Two-step create_opponent_with_players chosen over single-transaction subquery to avoid name-based lookup ambiguity
 - [Phase 10-opponents-redesign]: get_opponent query uses <string>last_fetched cast for datetime-to-String deserialization (consistent with created_at pattern)
 - [Phase 10]: Use engine::local::Db (not engine::any::Any) for DB type in server fns — consistent with existing opponents.rs pattern
+- [Phase 10-03]: teamPage fixture required for e2e tests — opponents need a team to display non-empty-state content
 
 ## Blockers/Concerns
 
@@ -60,6 +61,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-23T12:38:48.776Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-03-23T13:10:55.381Z
+Stopped at: Checkpoint: Task 3 human-verify in 10-03-PLAN.md
 Resume file: None
