@@ -30,7 +30,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 - [x] **Phase 6: Bug Fixes** - Eliminate known regressions and configure Playwright CLI so the app is stable and verifiable before adding new surface (completed 2026-03-22)
 - [x] **Phase 7: UX Polish** - Small, independent UX improvements that make the app feel polished (completed 2026-03-22)
 - [x] **Phase 8: Champion Pool & Role UI** - Overhaul champion pool management and add role assignment to draft picks (completed 2026-03-23)
-- [ ] **Phase 9: Draft & Game Plan** - Improve draft tooling with opponent context, pool notes sidebar, and game plan autofill
+- [x] **Phase 9: Draft & Game Plan** - Improve draft tooling with opponent context, pool notes sidebar, and game plan autofill (completed 2026-03-23)
 - [ ] **Phase 10: Opponents Redesign** - Rebuild opponent scouting with 5-role form, Riot API fetch, and pool analysis
 - [ ] **Phase 11: Cross-Feature & Testing** - Plan effectiveness dashboard, draft-integrated notes, and real seeded test data
 
@@ -95,7 +95,7 @@ Plans:
 Plans:
 - [x] 09-01-PLAN.md — Opponent autocomplete dropdown, ban filtering, back button in matchup detail
 - [x] 09-02-PLAN.md — Notes tab in intel sidebar with champion sub-tabs and pool notes
-- [ ] 09-03-PLAN.md — Game plan autofill: name, strategy tag, per-role strategy from draft
+- [x] 09-03-PLAN.md — Game plan autofill: name, strategy tag, per-role strategy from draft
 
 ### Phase 10: Opponents Redesign
 **Goal**: Opponent profiles are rebuilt with a structured 5-role form, auto-fetched Riot data, OTP detection, mastery badges, and pool analysis
@@ -131,6 +131,6 @@ Plans:
 | 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
-| 9. Draft & Game Plan | v1.1 | 1/3 | In Progress|  |
+| 9. Draft & Game Plan | v1.1 | 3/3 | Complete   | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 0/? | Not started | - |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |

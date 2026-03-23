@@ -35,9 +35,9 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 
 ### Game Plan
 
-- [ ] **PLAN-01**: Game plan auto-fills strategy tag from source draft's tags and name as "<draft name> plan"
+- [x] **PLAN-01**: Game plan auto-fills strategy tag from source draft's tags and name as "<draft name> plan"
 - [x] **PLAN-02**: Clicking "view game plan" from draft navigates to the correct existing game plan with data populated
-- [ ] **PLAN-03**: Creating game plan from draft pre-fills our champions and enemy champions from the draft
+- [x] **PLAN-03**: Creating game plan from draft pre-fills our champions and enemy champions from the draft
 
 ### Opponents
 
@@ -125,8 +125,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DRFT-03 | Phase 9 | Complete |
 | DRFT-04 | Phase 9 | Complete |
 | DRFT-05 | Phase 9 | Complete |
-| PLAN-01 | Phase 9 | Pending |
-| PLAN-03 | Phase 9 | Pending |
+| PLAN-01 | Phase 9 | Complete |
+| PLAN-03 | Phase 9 | Complete |
 | OPP-01 | Phase 10 | Pending |
 | OPP-02 | Phase 10 | Pending |
 | OPP-03 | Phase 10 | Pending |

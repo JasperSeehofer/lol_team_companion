@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Ready to execute
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-03-23T10:35:20.123Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-03-23T10:38:36.636Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 ## Current Position
@@ -48,6 +48,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 09]: Opponent autocomplete stores ID in Draft.opponent with legacy free-text fallback (D-05)
 - [Phase 09]: Intel sidebar opponent select removed (D-06) — header dropdown is single source of truth
 - [Phase 09]: Pool notes query uses champion name (not ID) matching since champion_note stores by name; collapsed_note_types defaults to all except matchup
+- [Phase 09-draft-game-plan]: most_common_tag tiebreak: first occurrence in list (D-17), not alphabetical or random
+- [Phase 09-draft-game-plan]: Role strategy prefill: only our side pick actions; first pick per role wins
 
 ## Blockers/Concerns
 
@@ -55,6 +57,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-23T10:35:20.122Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-03-23T10:38:36.635Z
+Stopped at: Completed 09-03-PLAN.md
 Resume file: None
