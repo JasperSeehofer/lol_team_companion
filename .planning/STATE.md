@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Phase complete — ready for verification
+status: Ready to plan
 stopped_at: "Checkpoint: Task 3 human-verify in 10-03-PLAN.md"
-last_updated: "2026-03-23T13:10:55.383Z"
+last_updated: "2026-03-23T13:59:59.458Z"
 progress:
   total_phases: 6
   completed_phases: 5
@@ -14,8 +14,8 @@ progress:
 
 ## Current Position
 
-Phase: 10 (opponents-redesign) — EXECUTING
-Plan: 3 of 3
+Phase: 11
+Plan: Not started
 
 ## Project Reference
 
