@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: Ready to execute
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-23T12:34:43.416Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-03-23T12:38:48.778Z"
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 ## Current Position
 
 Phase: 10 (opponents-redesign) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Project Reference
 
@@ -52,6 +52,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 09-draft-game-plan]: Role strategy prefill: only our side pick actions; first pick per role wins
 - [Phase 10-opponents-redesign]: Two-step create_opponent_with_players chosen over single-transaction subquery to avoid name-based lookup ambiguity
 - [Phase 10-opponents-redesign]: get_opponent query uses <string>last_fetched cast for datetime-to-String deserialization (consistent with created_at pattern)
+- [Phase 10]: Use engine::local::Db (not engine::any::Any) for DB type in server fns — consistent with existing opponents.rs pattern
 
 ## Blockers/Concerns
 
@@ -59,6 +60,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-23T12:34:43.414Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-03-23T12:38:48.776Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
