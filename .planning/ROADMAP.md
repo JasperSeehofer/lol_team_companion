@@ -75,7 +75,10 @@ Plans:
   2. Adding a matchup in champion pool uses a searchable champion list for the opponent and has no redundant type selection
   3. Each picked champion in the draft has a clickable role icon that lets the user assign their lane
   4. Draft role icons default to an auto-guess based on champion class (e.g., marksman defaults to bot)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 08-01-PLAN.md — Champion pool card grid, drag-and-drop between tiers, matchup autocomplete
+- [ ] 08-02-PLAN.md — Draft role badges with auto-guess, popover selection, DraftAction model extension
 
 ### Phase 9: Draft & Game Plan
 **Goal**: Draft page connects to opponent context, surfaces pool notes inline, and game plan creation auto-fills from the source draft
@@ -123,7 +126,7 @@ Plans:
 | 5. Post-Game Loop + Polish | v1.0 | 7/7 | Complete | 2026-03-18 |
 | 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
-| 8. Champion Pool & Role UI | v1.1 | 0/? | Not started | - |
+| 8. Champion Pool & Role UI | v1.1 | 0/2 | In progress | - |
 | 9. Draft & Game Plan | v1.1 | 0/? | Not started | - |
 | 10. Opponents Redesign | v1.1 | 0/? | Not started | - |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |
