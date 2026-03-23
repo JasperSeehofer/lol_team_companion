@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Ready to execute
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-03-23T09:18:02.647Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 08-champion-pool-role-ui-01-PLAN.md
+last_updated: "2026-03-23T09:19:38.501Z"
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 ## Current Position
@@ -44,6 +44,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 07-02]: Coach watermark uses inline clipboard SVG (no Community Dragon icon available for coach)
 - [Phase 08-02]: serde(default) on DraftAction.role ensures backward compatibility with saved drafts missing the role key
 - [Phase 08-02]: Role badge uses dashed border + 50% opacity for auto-guessed, solid accent border for user-confirmed
+- [Phase 08-champion-pool-role-ui]: Champion pool card grid: 3-column grid with aspect-square portraits, drag-and-drop tiers via DataTransfer, matchup autocomplete with 'vs {name}' auto-fill
 
 ## Blockers/Concerns
 
@@ -51,6 +52,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-23T09:18:02.646Z
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-03-23T09:19:38.499Z
+Stopped at: Completed 08-champion-pool-role-ui-01-PLAN.md
 Resume file: None

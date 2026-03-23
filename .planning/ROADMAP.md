@@ -29,7 +29,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 
 - [x] **Phase 6: Bug Fixes** - Eliminate known regressions and configure Playwright CLI so the app is stable and verifiable before adding new surface (completed 2026-03-22)
 - [x] **Phase 7: UX Polish** - Small, independent UX improvements that make the app feel polished (completed 2026-03-22)
-- [ ] **Phase 8: Champion Pool & Role UI** - Overhaul champion pool management and add role assignment to draft picks
+- [x] **Phase 8: Champion Pool & Role UI** - Overhaul champion pool management and add role assignment to draft picks (completed 2026-03-23)
 - [ ] **Phase 9: Draft & Game Plan** - Improve draft tooling with opponent context, pool notes sidebar, and game plan autofill
 - [ ] **Phase 10: Opponents Redesign** - Rebuild opponent scouting with 5-role form, Riot API fetch, and pool analysis
 - [ ] **Phase 11: Cross-Feature & Testing** - Plan effectiveness dashboard, draft-integrated notes, and real seeded test data
@@ -77,7 +77,7 @@ Plans:
   4. Draft role icons default to an auto-guess based on champion class (e.g., marksman defaults to bot)
 **Plans**: 2 plans
 Plans:
-- [ ] 08-01-PLAN.md — Champion pool card grid, drag-and-drop between tiers, matchup autocomplete
+- [x] 08-01-PLAN.md — Champion pool card grid, drag-and-drop between tiers, matchup autocomplete
 - [x] 08-02-PLAN.md — Draft role badges with auto-guess, popover selection, DraftAction model extension
 
 ### Phase 9: Draft & Game Plan
@@ -126,7 +126,7 @@ Plans:
 | 5. Post-Game Loop + Polish | v1.0 | 7/7 | Complete | 2026-03-18 |
 | 6. Bug Fixes | v1.1 | 3/3 | Complete   | 2026-03-22 |
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
-| 8. Champion Pool & Role UI | v1.1 | 1/2 | In Progress|  |
+| 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
 | 9. Draft & Game Plan | v1.1 | 0/? | Not started | - |
 | 10. Opponents Redesign | v1.1 | 0/? | Not started | - |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |
