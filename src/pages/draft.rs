@@ -2651,7 +2651,135 @@ pub fn DraftPage() -> impl IntoView {
                                     </div>
                                 }.into_any()
                             } else {
-                                view! { <span></span> }.into_any()
+                                // Notes tab (D-10 through D-14)
+                                let toggle_note_type = Callback::new(move |nt: String| {
+                                    set_collapsed_note_types.update(|v| {
+                                        if v.contains(&nt) {
+                                            v.retain(|t| t != &nt);
+                                        } else {
+                                            v.push(nt);
+                                        }
+                                    });
+                                });
+                                view! {
+                                    <div class="flex flex-col gap-3">
+                                        {move || {
+                                            let picks = our_picks_for_notes();
+                                            if picks.is_empty() {
+                                                view! {
+                                                    <p class="text-dimmed text-sm">"Pick champions on your side to see pool notes."</p>
+                                                }.into_any()
+                                            } else {
+                                                let selected_tab = notes_champion_tab.get();
+                                                view! {
+                                                    <div class="flex flex-col gap-2">
+                                                        // Champion sub-tab row (D-11)
+                                                        <div class="flex gap-1 flex-wrap border-b border-divider pb-2">
+                                                            {picks.clone().into_iter().map(|champ| {
+                                                                let champ_for_click = champ.clone();
+                                                                let is_active = selected_tab == champ;
+                                                                view! {
+                                                                    <button
+                                                                        class=if is_active {
+                                                                            "px-2 py-1 rounded-t text-xs font-semibold border-b-2 border-accent text-primary bg-transparent cursor-pointer"
+                                                                        } else {
+                                                                            "px-2 py-1 rounded-t text-xs font-semibold text-muted hover:text-secondary transition-colors cursor-pointer"
+                                                                        }
+                                                                        on:click=move |_| set_notes_champion_tab.set(champ_for_click.clone())
+                                                                    >
+                                                                        {champ.clone()}
+                                                                    </button>
+                                                                }
+                                                            }).collect_view()}
+                                                        </div>
+                                                        // Selected champion's notes (D-12)
+                                                        {move || {
+                                                            let current_champ = notes_champion_tab.get();
+                                                            if current_champ.is_empty() {
+                                                                return view! { <span></span> }.into_any();
+                                                            }
+                                                            match pool_notes.get() {
+                                                                None => view! {
+                                                                    <div class="flex flex-col gap-1">
+                                                                        <SkeletonLine width="w-full" height="h-3" />
+                                                                        <SkeletonLine width="w-3/4" height="h-3" />
+                                                                    </div>
+                                                                }.into_any(),
+                                                                Some(Err(e)) => view! {
+                                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                                }.into_any(),
+                                                                Some(Ok(notes_data)) => {
+                                                                    let champ_notes = notes_data
+                                                                        .iter()
+                                                                        .find(|(c, _)| c == &current_champ)
+                                                                        .map(|(_, ns)| ns.clone())
+                                                                        .unwrap_or_default();
+                                                                    if champ_notes.is_empty() {
+                                                                        // Empty state (D-14)
+                                                                        view! {
+                                                                            <div class="flex flex-col items-center gap-2 py-6 text-center">
+                                                                                <span class="text-sm text-dimmed">"No notes for " {current_champ.clone()} " yet."</span>
+                                                                                <a href="/champion-pool" class="text-xs text-accent hover:underline cursor-pointer">"Add notes in Champion Pool"</a>
+                                                                            </div>
+                                                                        }.into_any()
+                                                                    } else {
+                                                                        // Group by note_type in collapsible sections (D-12)
+                                                                        view! {
+                                                                            <div class="flex flex-col">
+                                                                                {NOTE_TYPES.iter().filter_map(|&nt| {
+                                                                                    let notes_of_type: Vec<_> = champ_notes.iter()
+                                                                                        .filter(|n| n.note_type == nt)
+                                                                                        .collect();
+                                                                                    if notes_of_type.is_empty() {
+                                                                                        return None;
+                                                                                    }
+                                                                                    let nt_str = nt.to_string();
+                                                                                    let nt_for_toggle = nt_str.clone();
+                                                                                    let label = note_type_label(nt);
+                                                                                    let is_collapsed = collapsed_note_types.get().contains(&nt_str);
+                                                                                    let chevron = if is_collapsed { "▶" } else { "▼" };
+                                                                                    Some(view! {
+                                                                                        <div class="border-b border-divider last:border-b-0">
+                                                                                            <div
+                                                                                                class="flex items-center justify-between py-2 cursor-pointer hover:text-primary transition-colors"
+                                                                                                on:click=move |_| toggle_note_type.run(nt_for_toggle.clone())
+                                                                                            >
+                                                                                                <span class="text-xs font-semibold text-secondary uppercase tracking-wide">{label}</span>
+                                                                                                <span class="text-xs text-muted">{chevron}</span>
+                                                                                            </div>
+                                                                                            {if !is_collapsed {
+                                                                                                view! {
+                                                                                                    <div class="flex flex-col gap-1 pb-2">
+                                                                                                        {notes_of_type.into_iter().map(|note| {
+                                                                                                            let display = if note.title.is_empty() {
+                                                                                                                note.content.clone()
+                                                                                                            } else {
+                                                                                                                format!("{}: {}", note.title, note.content)
+                                                                                                            };
+                                                                                                            view! {
+                                                                                                                <p class="text-xs text-muted leading-relaxed">{display}</p>
+                                                                                                            }
+                                                                                                        }).collect_view()}
+                                                                                                    </div>
+                                                                                                }.into_any()
+                                                                                            } else {
+                                                                                                view! { <span></span> }.into_any()
+                                                                                            }}
+                                                                                        </div>
+                                                                                    })
+                                                                                }).collect_view()}
+                                                                            </div>
+                                                                        }.into_any()
+                                                                    }
+                                                                },
+                                                            }
+                                                        }}
+                                                    </div>
+                                                }.into_any()
+                                            }
+                                        }}
+                                    </div>
+                                }.into_any()
                             }}
                         </div>
                     }.into_any()
