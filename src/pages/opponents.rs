@@ -240,6 +240,11 @@ pub fn OpponentsPage() -> impl IntoView {
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
 
+    // return_to query param: when navigated from draft page
+    let params = leptos_router::hooks::use_query_map();
+    let return_to = move || params.read().get("return_to").unwrap_or_default();
+    let return_draft_id = move || params.read().get("draft_id").unwrap_or_default();
+
     // Team check for NoTeamState
     let has_team = Resource::new(
         || (),
@@ -294,6 +299,25 @@ pub fn OpponentsPage() -> impl IntoView {
 
     view! {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+            // Back to Draft link (when navigated from draft page via Add New Opponent)
+            {move || {
+                if return_to() == "draft" {
+                    let draft_id = return_draft_id();
+                    let href = if draft_id.is_empty() {
+                        "/draft".to_string()
+                    } else {
+                        format!("/draft?draft_id={}", draft_id)
+                    };
+                    view! {
+                        <a href=href class="flex items-center gap-1 text-sm text-accent hover:underline mb-4">
+                            <span>"\u{2190} Back to Draft"</span>
+                        </a>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }
+            }}
 
             <div class="flex items-center justify-between mb-6">
                 <h1 class="text-2xl font-bold text-primary">"Opponents"</h1>

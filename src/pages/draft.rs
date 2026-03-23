@@ -940,6 +940,15 @@ pub fn DraftPage() -> impl IntoView {
     let (intel_tab, set_intel_tab) = signal("pools".to_string());
     let (selected_opponent_id, set_selected_opponent_id) = signal(String::new());
     let (matchup_champion, set_matchup_champion) = signal(Option::<String>::None);
+    // Notes tab signals (Phase 09-02 — Pool Notes in Draft)
+    let (notes_champion_tab, set_notes_champion_tab) = signal(String::new());
+    let (collapsed_note_types, set_collapsed_note_types) = signal(vec![
+        "power_spike".to_string(),
+        "combo".to_string(),
+        "lesson".to_string(),
+        "synergy".to_string(),
+        "positioning".to_string(),
+    ]);
 
     let team_pools = Resource::new(|| (), |_| get_team_pools());
     let team_stats = Resource::new(|| (), |_| get_team_champion_stats());
@@ -979,6 +988,28 @@ pub fn DraftPage() -> impl IntoView {
             }
         },
     );
+
+    // Pool notes for our-side picks (Phase 09-02 — Pool Notes in Draft)
+    let our_picks_for_notes = move || {
+        let slots = draft_slots.get();
+        let our = our_side.get();
+        slots
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                let (side, kind, _) = slot_meta(*i);
+                side == our.as_str() && kind == "pick"
+            })
+            .filter_map(|(_, s)| s.clone())
+            .collect::<Vec<String>>()
+    };
+    let pool_notes = Resource::new(our_picks_for_notes, move |picks: Vec<String>| async move {
+        if picks.is_empty() {
+            return Ok(vec![]);
+        }
+        let json = serde_json::to_string(&picks).unwrap_or_default();
+        get_pool_notes_for_champions(json).await
+    });
 
     let champions_resource = Resource::new(|| (), |_| get_champions());
     let drafts = Resource::new(|| (), |_| list_drafts());
@@ -1094,6 +1125,50 @@ pub fn DraftPage() -> impl IntoView {
         }
     });
 
+    // Auto-open Notes tab when a newly picked champion has pool notes (D-13)
+    let prev_our_picks_count = RwSignal::new(0usize);
+    Effect::new(move |_| {
+        let picks = our_picks_for_notes();
+        let current_count = picks.len();
+        let prev_count = prev_our_picks_count.get_untracked();
+
+        if current_count > prev_count {
+            // A new pick was just added
+            if let Some(new_champ) = picks.last() {
+                if let Some(Ok(notes_data)) = pool_notes.get() {
+                    if notes_data
+                        .iter()
+                        .any(|(c, ns)| c == new_champ && !ns.is_empty())
+                    {
+                        set_intel_open.set(true);
+                        set_intel_tab.set("notes".to_string());
+                        set_notes_champion_tab.set(new_champ.clone());
+                        // Reset collapsed sections for new champion
+                        set_collapsed_note_types.set(vec![
+                            "power_spike".to_string(),
+                            "combo".to_string(),
+                            "lesson".to_string(),
+                            "synergy".to_string(),
+                            "positioning".to_string(),
+                        ]);
+                    }
+                }
+            }
+        }
+        prev_our_picks_count.set(current_count);
+    });
+
+    // Auto-select first champion sub-tab when Notes tab is opened and no sub-tab is selected (D-11)
+    Effect::new(move |_| {
+        let tab = intel_tab.get();
+        if tab == "notes" && notes_champion_tab.get_untracked().is_empty() {
+            let picks = our_picks_for_notes();
+            if let Some(first) = picks.first() {
+                set_notes_champion_tab.set(first.clone());
+            }
+        }
+    });
+
     let used_champions = move || {
         let mut used: Vec<String> = draft_slots
             .get()
@@ -1107,6 +1182,20 @@ pub fn DraftPage() -> impl IntoView {
             }
         }
         used
+    };
+
+    // Derive the set of banned champion names from draft slots (D-07)
+    let banned_champions = move || {
+        draft_slots
+            .get()
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                let (_, kind, _) = slot_meta(*i);
+                kind == "ban"
+            })
+            .filter_map(|(_, s)| s.clone())
+            .collect::<Vec<String>>()
     };
 
     let fill_slot = move |slot_idx: usize, champion_name: String| {
@@ -1607,6 +1696,7 @@ pub fn DraftPage() -> impl IntoView {
                                             }
                                         };
 
+                                        #[allow(unused_variables)]
                                         if let Some(did) = saved_id {
                                             #[cfg(feature = "hydrate")]
                                             if let Some(window) = web_sys::window() {
@@ -2180,7 +2270,7 @@ pub fn DraftPage() -> impl IntoView {
                         <div class="w-[350px] flex-shrink-0 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3 max-h-[600px] overflow-y-auto">
                             // Tab buttons
                             <div class="flex gap-1">
-                                {["pools", "their_picks", "matchups"].iter().map(|&tab| {
+                                {["pools", "their_picks", "matchups", "notes"].iter().map(|&tab| {
                                     let tab_str = tab.to_string();
                                     let tab_for_class = tab_str.clone();
                                     let tab_for_click = tab_str.clone();
@@ -2188,6 +2278,7 @@ pub fn DraftPage() -> impl IntoView {
                                         "pools" => "Our Pools",
                                         "their_picks" => "Their Picks",
                                         "matchups" => "Matchups",
+                                        "notes" => "Notes",
                                         _ => "",
                                     };
                                     view! {
@@ -2460,16 +2551,25 @@ pub fn DraftPage() -> impl IntoView {
                                         </Suspense>
                                     </div>
                                 }.into_any()
-                            } else {
+                            } else if current_tab == "matchups" {
                                 // Matchups tab
                                 view! {
                                     <div class="flex flex-col gap-3">
                                         {move || {
                                             let champ = matchup_champion.get();
                                             let draft_champs_inner = all_draft_champs_for_matchup.clone();
+                                            // D-07: collect banned champions to filter from matchup selection
+                                            let banned = banned_champions();
                                             if let Some(ref c) = champ {
                                                 view! {
                                                     <div>
+                                                        // D-08: Back button to return to champion list
+                                                        <button
+                                                            class="flex items-center gap-1 text-xs text-muted hover:text-secondary transition-colors cursor-pointer mb-2"
+                                                            on:click=move |_| set_matchup_champion.set(None)
+                                                        >
+                                                            <span>"\u{2190} Back to champions"</span>
+                                                        </button>
                                                         <p class="text-sm text-secondary mb-2">
                                                             "Matchup notes for "
                                                             <span class="text-primary font-medium">{c.clone()}</span>
@@ -2514,35 +2614,44 @@ pub fn DraftPage() -> impl IntoView {
                                                     </div>
                                                 }.into_any()
                                             } else {
-                                                // Show clickable list of drafted champions
+                                                // Show clickable list of drafted champions (D-07: ban filtered)
                                                 view! {
                                                     <div>
                                                         <p class="text-dimmed text-sm mb-2">"Select a drafted champion to view matchup notes."</p>
-                                                        {if draft_champs_inner.is_empty() {
-                                                            view! { <p class="text-dimmed text-xs">"No champions drafted yet."</p> }.into_any()
-                                                        } else {
-                                                            view! {
-                                                                <div class="flex flex-wrap gap-1">
-                                                                    {draft_champs_inner.into_iter().map(|champ| {
-                                                                        let champ_for_click = champ.clone();
-                                                                        view! {
-                                                                            <button
-                                                                                class="bg-overlay rounded px-2 py-1 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer"
-                                                                                on:click=move |_| set_matchup_champion.set(Some(champ_for_click.clone()))
-                                                                            >
-                                                                                {champ.clone()}
-                                                                            </button>
-                                                                        }
-                                                                    }).collect_view()}
-                                                                </div>
-                                                            }.into_any()
-                                                        }}
+                                                        {
+                                                            // D-07: filter out banned champions from matchup selection
+                                                            let available: Vec<String> = draft_champs_inner
+                                                                .into_iter()
+                                                                .filter(|champ| !banned.contains(champ))
+                                                                .collect();
+                                                            if available.is_empty() {
+                                                                view! { <p class="text-dimmed text-xs">"No non-banned champions drafted yet."</p> }.into_any()
+                                                            } else {
+                                                                view! {
+                                                                    <div class="flex flex-wrap gap-1">
+                                                                        {available.into_iter().map(|champ| {
+                                                                            let champ_for_click = champ.clone();
+                                                                            view! {
+                                                                                <button
+                                                                                    class="bg-overlay rounded px-2 py-1 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer"
+                                                                                    on:click=move |_| set_matchup_champion.set(Some(champ_for_click.clone()))
+                                                                                >
+                                                                                    {champ.clone()}
+                                                                                </button>
+                                                                            }
+                                                                        }).collect_view()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            }
+                                                        }
                                                     </div>
                                                 }.into_any()
                                             }
                                         }}
                                     </div>
                                 }.into_any()
+                            } else {
+                                view! { <span></span> }.into_any()
                             }}
                         </div>
                     }.into_any()
