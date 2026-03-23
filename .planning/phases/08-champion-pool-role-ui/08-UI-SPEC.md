@@ -34,7 +34,7 @@ Declared values (multiples of 4 only). All new UI must use these Tailwind utilit
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px (`gap-1`, `p-1`) | Icon gaps, badge inner padding, card close button position |
+| xs | 4px (`gap-1`, `p-1`) | Icon gaps, badge inner padding, card close button position, card metadata area padding |
 | sm | 8px (`gap-2`, `p-2`) | Card grid gap, tier bucket inner padding, role popover button gaps |
 | md | 16px (`p-4`, `gap-4`) | Tier bucket padding, section separation inside card metadata area |
 | lg | 24px (`p-6`, `mb-6`) | Tier section vertical spacing, detail panel padding |
@@ -42,9 +42,8 @@ Declared values (multiples of 4 only). All new UI must use these Tailwind utilit
 | 2xl | 48px | Major section breaks on champion pool page (not used inline) |
 
 Exceptions:
-- Champion card metadata area uses `p-1.5` (6px) — tight fit below portrait, intentional half-step
-- Role badge on draft slot: 16-20px badge size, positioned `bottom-0.5 right-0.5` (2px offset from corner)
 - Matchup opponent icon in notes list: 24px fixed width (`w-6 h-6`) — not on spacing scale, used as icon size
+- Role badge on draft slot: `bottom-0 right-0` (flush corner, 0px) — badge sits at corner with no inset
 
 ---
 
@@ -52,20 +51,22 @@ Exceptions:
 
 Established by the existing codebase. New UI in this phase must match these exact classes.
 
+Two weights only: 400 (regular) for body and secondary text; 700 (bold) for all labels, headings, and micro badges.
+
 | Role | Size | Weight | Line Height | Tailwind Class |
 |------|------|--------|-------------|----------------|
 | Body | 14px | 400 (regular) | 1.5 | `text-sm` |
-| Label | 12px | 500 (medium) | 1.4 | `text-xs font-medium` |
+| Label | 12px | 400 (regular) | 1.4 | `text-xs` |
 | Heading | 30px | 700 (bold) | 1.2 | `text-3xl font-bold` |
 | Micro | 10-11px | 700 (bold) | 1.0 | `text-[10px] font-bold` (tier badges, meta tags) |
 
-**Source:** Observed from `champion_pool.rs` page heading (`text-3xl font-bold`), pill labels (`text-sm`), tier headings (`text-xs font-semibold uppercase tracking-wider`), and meta badges (`text-[9px] font-bold`).
+**Source:** Observed from `champion_pool.rs` page heading (`text-3xl font-bold`), pill labels (`text-sm`), tier headings (`text-xs font-semibold uppercase tracking-wider` — pre-Phase-8 pattern, normalized to `text-xs font-bold` in all Phase 8 additions), and meta badges (`text-[9px] font-bold`).
 
 Phase 8 additions:
-- Champion card name: `text-xs font-medium` (12px/500) — truncated single line below portrait
+- Champion card name: `text-xs font-bold` (12px/700) — truncated single line below portrait
 - Card comfort stars: `text-xs` (12px/400) — secondary metadata
 - Card stats line: `text-[10px]` (10px/400) in `text-dimmed` — tertiary, de-emphasized
-- Role popover labels: `text-xs font-medium` — 5 role buttons, centered under icon
+- Role popover labels: `text-xs` (12px/400) — 5 role buttons, centered under icon
 
 ---
 
@@ -109,8 +110,8 @@ Uses semantic tokens from `input.css`. Do not use hardcoded hex values.
 [card: relative bg-elevated border rounded-xl overflow-hidden cursor-pointer group]
   [portrait: img w-full aspect-square object-cover object-top]
   [× button: absolute top-1 right-1, opacity-0 group-hover:opacity-100]
-  [metadata: p-1.5 flex flex-col gap-0.5]
-    [name: text-xs font-medium text-primary truncate]
+  [metadata: p-1 flex flex-col gap-1]
+    [name: text-xs font-bold text-primary truncate]
     [comfort stars: text-xs text-muted]
     [meta tag badge: text-[9px] px-1 rounded border font-bold — reuse existing cls logic]
     [stats line: text-[10px] text-dimmed — optional, shown only if stats exist]
@@ -137,8 +138,10 @@ Uses semantic tokens from `input.css`. Do not use hardcoded hex values.
 ### Role Badge Overlay (new — on draft pick slots)
 
 **Size:** 16px icon (`w-4 h-4`) inside a 20px container (`w-5 h-5`).
-**Position:** `absolute bottom-0.5 right-0.5` on the pick slot container (which must have `relative`).
+**Position:** `absolute bottom-0 right-0` on the pick slot container (which must have `relative`). Flush corner, no inset.
 **Background:** `bg-base/80` rounded circle (`rounded-full`) for contrast against champion portrait.
+
+**Accessibility:** Badge button must have both `title="{tooltip text}"` and `aria-label="{tooltip text}"` attributes for screen-reader robustness. Tooltip text follows the Copywriting Contract rules for role auto-guess and role confirmed states.
 
 **States:**
 - Auto-guessed: `opacity-50 border border-dashed border-outline`
@@ -156,9 +159,9 @@ Uses semantic tokens from `input.css`. Do not use hardcoded hex values.
 
 **Button structure (per role):**
 ```
-[button: flex flex-col items-center gap-0.5 p-1.5 rounded-lg hover:bg-overlay cursor-pointer]
+[button: flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-overlay cursor-pointer]
   [img: w-6 h-6 (Community Dragon SVG URL)]
-  [span: text-[10px] font-medium text-muted capitalize]
+  [span: text-[10px] text-muted capitalize]
 ```
 
 **Active role:** button gets `bg-overlay text-primary` to indicate current selection.
@@ -176,7 +179,7 @@ Uses semantic tokens from `input.css`. Do not use hardcoded hex values.
 ```
 [row: flex items-center gap-2]
   [opponent icon: img w-6 h-6 rounded-full] ← Community Dragon champion icon
-  ["Matchup" label: text-xs font-medium text-muted]
+  ["Matchup" label: text-xs text-muted]
   [vs champion name: text-xs text-secondary]
 ```
 
@@ -189,7 +192,7 @@ Uses semantic tokens from `input.css`. Do not use hardcoded hex values.
 | Element | Copy |
 |---------|------|
 | Primary CTA (champion pool) | "Add Champion" |
-| Primary CTA (draft role badge — unset) | No label; icon-only badge with `title="Assign role"` tooltip |
+| Primary CTA (draft role badge — unset) | No label; icon-only badge with `title="Assign role"` and `aria-label="Assign role"` |
 | Empty tier state | "No champions yet" (existing — keep as-is) |
 | Empty pool state heading | "Your champion pool is empty" |
 | Empty pool state body | "Add champions using the selector above to start organizing your pool." |
@@ -199,8 +202,8 @@ Uses semantic tokens from `input.css`. Do not use hardcoded hex values.
 | Matchup title auto-fill template | "vs {Champion Name}" |
 | Remove champion confirmation | None — × on hover is direct delete; no confirmation modal (pattern matches existing pill × behavior) |
 | Drag-and-drop tier change feedback | None — instant visual update, no toast needed |
-| Role auto-guess tooltip | `title="Auto-guessed from champion class — click to change"` on dashed-border badge |
-| Role confirmed tooltip | `title="{Role} — click to change"` on solid-border badge |
+| Role auto-guess tooltip | `title="Auto-guessed from champion class — click to change"` and `aria-label="Auto-guessed from champion class — click to change"` on dashed-border badge |
+| Role confirmed tooltip | `title="{Role} — click to change"` and `aria-label="{Role} — click to change"` on solid-border badge |
 
 **No destructive confirmation dialogs in this phase.** Remove champion (× button) is a direct action consistent with the existing pill-based delete pattern. Reversibility is provided by the "Add Champion" flow.
 
@@ -283,6 +286,9 @@ No third-party component registries. No registry vetting gate required.
 | Semantic tokens, typography, spacing | `input.css` + existing `champion_pool.rs` codebase | All pre-populated |
 | Copywriting strings | Researcher-defaulted (consistent with app tone) | All defaulted |
 | No design system setup | RESEARCH.md (no new libraries) | Confirmed |
+| Typography weight reduction (400+700 only) | UI-SPEC revision — checker BLOCK | Fixed |
+| Spacing on-grid fix (p-1, bottom-0 right-0) | UI-SPEC revision — checker BLOCK | Fixed |
+| Role badge aria-label addition | UI-SPEC revision — checker FLAG | Fixed |
 
 **No user questions were needed.** All design contract decisions were pre-populated from upstream artifacts and codebase inspection.
 
