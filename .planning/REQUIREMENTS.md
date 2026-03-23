@@ -41,10 +41,10 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 
 ### Opponents
 
-- [ ] **OPP-01**: New opponent form asks for team name and provides 5 role fields (top/jg/mid/bot/sup) with Riot ID input; on save, auto-fetches champion data from Riot API
-- [ ] **OPP-02**: Opponent players show OTP warning badge when >60% of recent games are on a single champion
-- [ ] **OPP-03**: Opponent player cards display champion mastery level badges and data recency indicator (last fetched date)
-- [ ] **OPP-04**: Each opponent player has a champion pool depth/breadth analysis showing pool size, role flexibility, and comfort picks
+- [x] **OPP-01**: New opponent form asks for team name and provides 5 role fields (top/jg/mid/bot/sup) with Riot ID input; on save, auto-fetches champion data from Riot API
+- [x] **OPP-02**: Opponent players show OTP warning badge when >60% of recent games are on a single champion
+- [x] **OPP-03**: Opponent player cards display champion mastery level badges and data recency indicator (last fetched date)
+- [x] **OPP-04**: Each opponent player has a champion pool depth/breadth analysis showing pool size, role flexibility, and comfort picks
 
 ### Cross-Feature
 
@@ -127,10 +127,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DRFT-05 | Phase 9 | Complete |
 | PLAN-01 | Phase 9 | Complete |
 | PLAN-03 | Phase 9 | Complete |
-| OPP-01 | Phase 10 | Pending |
-| OPP-02 | Phase 10 | Pending |
-| OPP-03 | Phase 10 | Pending |
-| OPP-04 | Phase 10 | Pending |
+| OPP-01 | Phase 10 | Complete |
+| OPP-02 | Phase 10 | Complete |
+| OPP-03 | Phase 10 | Complete |
+| OPP-04 | Phase 10 | Complete |
 | XFEAT-01 | Phase 11 | Pending |
 | XFEAT-02 | Phase 11 | Pending |
 | TEST-01 | Phase 11 | Pending |

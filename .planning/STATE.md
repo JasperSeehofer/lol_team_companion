@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: Ready to execute
-stopped_at: Phase 10 planned
-last_updated: "2026-03-23T12:30:00.000Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-23T12:34:43.416Z"
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 ## Current Position
 
-Phase: 10
-Plan: Ready (3 plans, 3 waves)
+Phase: 10 (opponents-redesign) — EXECUTING
+Plan: 2 of 3
 
 ## Project Reference
 
@@ -50,6 +50,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 09]: Pool notes query uses champion name (not ID) matching since champion_note stores by name; collapsed_note_types defaults to all except matchup
 - [Phase 09-draft-game-plan]: most_common_tag tiebreak: first occurrence in list (D-17), not alphabetical or random
 - [Phase 09-draft-game-plan]: Role strategy prefill: only our side pick actions; first pick per role wins
+- [Phase 10-opponents-redesign]: Two-step create_opponent_with_players chosen over single-transaction subquery to avoid name-based lookup ambiguity
+- [Phase 10-opponents-redesign]: get_opponent query uses <string>last_fetched cast for datetime-to-String deserialization (consistent with created_at pattern)
 
 ## Blockers/Concerns
 
@@ -57,6 +59,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-23T12:30:00.000Z
-Stopped at: Phase 10 planned, ready to execute
-Resume file: .planning/phases/10-opponents-redesign/10-01-PLAN.md
+Last session: 2026-03-23T12:34:43.414Z
+Stopped at: Completed 10-01-PLAN.md
+Resume file: None

@@ -108,7 +108,7 @@ Plans:
   4. Each opponent player has a pool analysis section showing pool size, role flexibility score, and identified comfort picks
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — Schema extension, model enrichment, compute_intel with unit tests, batch DB functions
+- [x] 10-01-PLAN.md — Schema extension, model enrichment, compute_intel with unit tests, batch DB functions
 - [ ] 10-02-PLAN.md — Combined Riot API fetch function, new server functions for creation and intel fetch
 - [ ] 10-03-PLAN.md — Full UI redesign: 5-role form, enriched player cards, pool analysis, e2e test
 
@@ -136,5 +136,5 @@ Plans:
 | 7. UX Polish | v1.1 | 2/2 | Complete   | 2026-03-22 |
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete   | 2026-03-23 |
-| 10. Opponents Redesign | v1.1 | 0/3 | Not started | - |
+| 10. Opponents Redesign | v1.1 | 1/3 | In Progress|  |
 | 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |
