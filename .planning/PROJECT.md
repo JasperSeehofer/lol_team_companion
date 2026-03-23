@@ -39,8 +39,9 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 **v1.1 — Polish, Draft & Opponents Rework:**
 - [ ] Fix tree drafter, game plan view, roster, hydration, drag-and-drop bugs (BUG-01–05)
 - [ ] UX polish: toasts, timestamps, search, champion pool overhaul, role icons (UX-04–10)
-- [ ] Draft: opponent dropdown, intel improvements, pool notes sidebar (DRFT-01–05)
-- [ ] Game plan: autofill from draft, fix empty view, champion pre-fill (PLAN-01–03)
+- ✓ Draft: opponent dropdown, intel improvements, pool notes sidebar (DRFT-01–05) — Phase 9
+- ✓ Game plan: autofill from draft, strategy tag + role strategies pre-fill (PLAN-01, PLAN-03) — Phase 9
+- [ ] Game plan: fix empty view (PLAN-02 — completed in Phase 6)
 - [ ] Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04)
 - [ ] Plan effectiveness dashboard, draft-integrated champion notes (XFEAT-01–02)
 - [ ] Testing infrastructure: real test data, Playwright CLI workflow (TEST-01–02)
