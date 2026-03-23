@@ -23,7 +23,7 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 - [x] **UX-07**: Team join uses a search bar with autocomplete/suggested results instead of listing all teams
 - [ ] **UX-08**: Champion pool has larger champion icons, drag-and-drop between tiers, and reworked matchup entry (no redundant type selection, opponent champion uses searchable champion list)
 - [x] **UX-09**: Team roster cards display role icons (top/jg/mid/bot/sup) as visual background indicators
-- [ ] **UX-10**: Draft pick cards contain a clickable role icon for role assignment, defaulting to auto-guess from champion class (marksman → bot, etc.)
+- [x] **UX-10**: Draft pick cards contain a clickable role icon for role assignment, defaulting to auto-guess from champion class (marksman → bot, etc.)
 
 ### Draft
 
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UX-07 | Phase 7 | Complete |
 | UX-09 | Phase 7 | Complete |
 | UX-08 | Phase 8 | Pending |
-| UX-10 | Phase 8 | Pending |
+| UX-10 | Phase 8 | Complete |
 | DRFT-01 | Phase 9 | Pending |
 | DRFT-02 | Phase 9 | Pending |
 | DRFT-03 | Phase 9 | Pending |

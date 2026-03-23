@@ -2,27 +2,27 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: unknown
-stopped_at: Phase 8 context gathered
-last_updated: "2026-03-22T14:42:36.483Z"
+status: Ready to execute
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-23T09:18:02.647Z"
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 7
+  completed_plans: 6
 ---
 
 ## Current Position
 
-Phase: 8
-Plan: Not started
+Phase: 08 (champion-pool-role-ui) — EXECUTING
+Plan: 2 of 2
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 07 — ux-polish
+**Current focus:** Phase 08 — champion-pool-role-ui
 
 ## Decisions
 
@@ -42,6 +42,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 07-ux-polish]: format_timestamp_with_now takes explicit now for deterministic unit tests; public format_timestamp calls it with Utc::now()
 - [Phase 07-02]: Bench card watermark uses inner overflow-hidden div to avoid clipping the role select dropdown
 - [Phase 07-02]: Coach watermark uses inline clipboard SVG (no Community Dragon icon available for coach)
+- [Phase 08-02]: serde(default) on DraftAction.role ensures backward compatibility with saved drafts missing the role key
+- [Phase 08-02]: Role badge uses dashed border + 50% opacity for auto-guessed, solid accent border for user-confirmed
 
 ## Blockers/Concerns
 
@@ -49,6 +51,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-22T14:42:36.482Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-champion-pool-role-ui/08-CONTEXT.md
+Last session: 2026-03-23T09:18:02.646Z
+Stopped at: Completed 08-02-PLAN.md
+Resume file: None
