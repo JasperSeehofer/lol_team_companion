@@ -31,6 +31,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             champion: "Azir".into(),
             order: 0,
             comment: None,
+            role: None,
         },
         DraftAction {
             id: None,
@@ -40,6 +41,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             champion: "Jinx".into(),
             order: 1,
             comment: Some("strong ADC".into()),
+            role: None,
         },
     ]
 }

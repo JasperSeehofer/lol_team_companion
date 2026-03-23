@@ -30,6 +30,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             champion: "Azir".into(),
             order: 0,
             comment: None,
+            role: None,
         },
         DraftAction {
             id: None,
@@ -39,6 +40,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             champion: "Jinx".into(),
             order: 1,
             comment: Some("strong ADC".into()),
+            role: None,
         },
     ]
 }
@@ -109,6 +111,7 @@ async fn test_update_draft_replaces_actions() {
         champion: "Thresh".into(),
         order: 0,
         comment: None,
+        role: None,
     }];
 
     db::update_draft(

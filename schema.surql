@@ -76,6 +76,7 @@ DEFINE FIELD IF NOT EXISTS side ON draft_action TYPE string;
 DEFINE FIELD IF NOT EXISTS champion ON draft_action TYPE string;
 DEFINE FIELD IF NOT EXISTS `order` ON draft_action TYPE int;
 DEFINE FIELD IF NOT EXISTS comment ON draft_action TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS role ON draft_action TYPE option<string>;
 
 -- Game plans
 DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;
