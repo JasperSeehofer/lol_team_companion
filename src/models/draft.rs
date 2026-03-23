@@ -79,6 +79,22 @@ pub fn role_icon_url(role: &str) -> &'static str {
     }
 }
 
+/// Returns the most common tag from a list. On tie, returns the first tag
+/// that appears with the maximum count (preserves list position as tiebreak).
+pub fn most_common_tag(tags: &[impl AsRef<str>]) -> Option<String> {
+    if tags.is_empty() {
+        return None;
+    }
+    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for tag in tags {
+        *counts.entry(tag.as_ref()).or_insert(0) += 1;
+    }
+    let max_count = *counts.values().max().unwrap_or(&0);
+    tags.iter()
+        .find(|t| counts[t.as_ref()] == max_count)
+        .map(|t| t.as_ref().to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Draft Trees
 // ---------------------------------------------------------------------------
@@ -240,6 +256,44 @@ mod tests {
         let json = serde_json::to_string(&t).unwrap();
         let back: DraftTree = serde_json::from_str(&json).unwrap();
         assert_eq!(t, back);
+    }
+
+    #[test]
+    fn most_common_tag_returns_most_frequent() {
+        assert_eq!(
+            most_common_tag(&["teamfight", "split-push", "teamfight"]),
+            Some("teamfight".to_string())
+        );
+    }
+
+    #[test]
+    fn most_common_tag_tie_returns_first() {
+        assert_eq!(
+            most_common_tag(&["teamfight", "split-push", "poke"]),
+            Some("teamfight".to_string())
+        );
+    }
+
+    #[test]
+    fn most_common_tag_empty_returns_none() {
+        let empty: &[&str] = &[];
+        assert_eq!(most_common_tag(empty), None);
+    }
+
+    #[test]
+    fn most_common_tag_single_returns_it() {
+        assert_eq!(
+            most_common_tag(&["poke"]),
+            Some("poke".to_string())
+        );
+    }
+
+    #[test]
+    fn most_common_tag_tied_max_returns_first_occurrence() {
+        assert_eq!(
+            most_common_tag(&["a", "b", "a", "b", "c"]),
+            Some("a".to_string())
+        );
     }
 
     #[test]
