@@ -48,12 +48,12 @@ Requirements for v1.1 Polish, Draft & Opponents Rework. Each maps to roadmap pha
 
 ### Cross-Feature
 
-- [ ] **XFEAT-01**: Plan effectiveness view aggregates post-game review outcomes per game plan, showing strategy success rate
-- [ ] **XFEAT-02**: Draft sidebar shows champion notes from the picker's champion pool (matchup tips, power spikes) when a pooled champion is selected (same data as DRFT-05, displayed contextually)
+- [x] **XFEAT-01**: Plan effectiveness view aggregates post-game review outcomes per game plan, showing strategy success rate
+- [x] **XFEAT-02**: Draft sidebar shows champion notes from the picker's champion pool (matchup tips, power spikes) when a pooled champion is selected (same data as DRFT-05, displayed contextually)
 
 ### Testing
 
-- [ ] **TEST-01**: All test accounts and teams deleted; 2 test teams created with 5 real Riot-linked accounts each, populated with champion pools, notes, and example data
+- [x] **TEST-01**: All test accounts and teams deleted; 2 test teams created with 5 real Riot-linked accounts each, populated with champion pools, notes, and example data
 - [x] **TEST-02**: Playwright CLI workflow configured for testing/verification agents with auth fixture and page navigation helpers
 
 ## v2.0 Requirements
@@ -131,9 +131,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPP-02 | Phase 10 | Complete |
 | OPP-03 | Phase 10 | Complete |
 | OPP-04 | Phase 10 | Complete |
-| XFEAT-01 | Phase 11 | Pending |
-| XFEAT-02 | Phase 11 | Pending |
-| TEST-01 | Phase 11 | Pending |
+| XFEAT-01 | Phase 11 | Complete |
+| XFEAT-02 | Phase 11 | Complete |
+| TEST-01 | Phase 11 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 28 total
