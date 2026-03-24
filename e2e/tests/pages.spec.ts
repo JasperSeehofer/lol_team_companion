@@ -16,6 +16,7 @@ const AUTHED_PAGES = [
   { path: "/champion-pool", content: /champion|pool|tier/i },
   { path: "/game-plan", content: /game|plan|strategy/i },
   { path: "/post-game", content: /post|game|review/i },
+  { path: "/analytics", content: /analytics|strategy|effectiveness/i },
 ];
 
 for (const { path, content } of AUTHED_PAGES) {
