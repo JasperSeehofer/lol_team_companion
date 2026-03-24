@@ -11,7 +11,7 @@
 # Usage: ./scripts/flow_test.sh [base_url]
 set -euo pipefail
 
-BASE_URL="${1:-http://127.0.0.1:3002}"
+BASE_URL="${1:-http://127.0.0.1:3020}"
 WASM_PATH="target/site/pkg/lol_team_companion.wasm"
 COOKIE_JAR="$(mktemp /tmp/lol_flow_cookies_XXXXXX)"
 trap 'rm -f "$COOKIE_JAR" /tmp/lol_flow_resp' EXIT

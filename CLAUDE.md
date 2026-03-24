@@ -11,7 +11,7 @@ A League of Legends team management app for coordinating drafts, tracking stats,
 ## Commands
 
 ```bash
-# Dev server with live-reload (runs on :3002, reload on :3003)
+# Dev server with live-reload (runs on :3020, reload on :3021)
 cargo leptos watch
 
 # Production build
@@ -44,7 +44,7 @@ cp .env.example .env   # Add RIOT_API_KEY, optionally SURREAL_DATA_DIR
 cargo leptos watch
 ```
 
-The app runs at `http://127.0.0.1:3002` with live-reload on port 3003.
+The app runs at `http://127.0.0.1:3020` with live-reload on port 3021.
 
 ## Architecture
 
@@ -392,7 +392,7 @@ Use the Playwright e2e test suite and agent-browser skill for browser verificati
 
 **Recommended after UI changes (interactive sessions):**
 1. Run a targeted Playwright test: `cd e2e && npx playwright test <spec> -g "<test name>"`
-2. Or take a quick screenshot: `npx agent-browser screenshot http://127.0.0.1:3002/<route>`
+2. Or take a quick screenshot: `npx agent-browser screenshot http://127.0.0.1:3020/<route>`
 3. Check for missing elements, broken text, wrong state
 4. If the change involves interaction (click, form submit, drag), run the relevant e2e test or use agent-browser to click through and snapshot again
 

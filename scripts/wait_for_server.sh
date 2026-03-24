@@ -4,7 +4,7 @@
 set -euo pipefail
 
 TIMEOUT="${1:-60}"
-BASE_URL="${2:-http://127.0.0.1:3002}"
+BASE_URL="${2:-http://127.0.0.1:3020}"
 
 echo "Waiting for $BASE_URL/healthz (timeout: ${TIMEOUT}s) ..."
 

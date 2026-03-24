@@ -8,7 +8,7 @@
 # Usage: ./scripts/api_test.sh [base_url] [email] [password]
 set -euo pipefail
 
-BASE_URL="${1:-http://127.0.0.1:3002}"
+BASE_URL="${1:-http://127.0.0.1:3020}"
 TIMESTAMP="$(date +%s)"
 EMAIL="${2:-apitest_${TIMESTAMP}@test.invalid}"
 PASSWORD="${3:-ApiTest1234!}"

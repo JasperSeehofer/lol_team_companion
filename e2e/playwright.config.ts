@@ -12,7 +12,7 @@ export default defineConfig({
   reporter: "list",
 
   use: {
-    baseURL: process.env.BASE_URL ?? "http://127.0.0.1:3002",
+    baseURL: process.env.BASE_URL ?? "http://127.0.0.1:3020",
     trace: "on-first-retry",
   },
 

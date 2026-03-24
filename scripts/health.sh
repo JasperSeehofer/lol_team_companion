@@ -3,7 +3,7 @@
 # Usage: ./scripts/health.sh [base_url]
 set -euo pipefail
 
-BASE_URL="${1:-http://127.0.0.1:3002}"
+BASE_URL="${1:-http://127.0.0.1:3020}"
 
 echo "Checking $BASE_URL/healthz ..."
 response=$(curl -sf "$BASE_URL/healthz") || {
