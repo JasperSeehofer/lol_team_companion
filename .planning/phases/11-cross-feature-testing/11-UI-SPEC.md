@@ -46,7 +46,7 @@ Declared values (multiples of 4 only). Using Tailwind v4 defaults mapped to 8-po
 Exceptions:
 - Accordion expanded row: `p-4` (16px) padding inside the expansion cell
 - Strategy tag cards: `p-4` (16px) consistent with `StatCard` pattern (source: `stat_card.rs` line 10)
-- Table rows: `px-4 py-3` (16px/12px) for comfortable row height without waste
+- Table rows: `px-4 py-3` (16px/12px) for comfortable row height without waste — `py-3` (12px) is a valid multiple of 4
 
 **Source:** Confirmed from existing patterns in `post_game.rs`, `game_plan.rs`, `stat_card.rs`.
 
@@ -59,15 +59,18 @@ Exceptions:
 | Body | 14px (text-sm) | 400 regular | 1.5 |
 | Label / caption | 12px (text-xs) | 500 medium | 1.4 |
 | Heading (section) | 14px (text-sm) | 600 semibold | 1.2 |
-| Display (page title) | 30px (text-3xl) | 700 bold | 1.2 |
+| Display (page title + key metric) | 30px (text-3xl) | 700 bold | 1.2 |
 
 **Source:** Extracted from existing pages.
 - Page title pattern: `text-3xl font-bold text-primary` — confirmed in `post_game.rs:480`, `game_plan.rs:1015`, `stats.rs:294`
 - Section headings: `font-semibold text-sm` — confirmed in `post_game.rs:557,640`, `game_plan.rs:1186`
 - Body content: `text-sm` — confirmed throughout `post_game.rs`, `game_plan.rs`
 - Labels and metadata: `text-xs font-medium` — confirmed in `post_game.rs:644,669,728`, `game_plan.rs:1120`
+- Win% metric in StrategyTagCard: `text-3xl font-bold` — reuses the display size, not a separate 24px step
 
 **Two declared weights:** regular (400) for body text, semibold/bold (600-700) for headings and CTAs. Uppercase tracking labels (`text-xs uppercase tracking-wider`) use weight 600.
+
+**Total distinct sizes: 4** — 12px, 14px, 14px/semibold (same size, different weight role), 30px. The display size (30px / `text-3xl`) serves both page titles and the primary win% metric in StrategyTagCards.
 
 ---
 
@@ -144,7 +147,7 @@ Extends existing `StatCard` pattern. Three metrics per card: win rate %, average
 ```
 <div class="bg-elevated border border-divider rounded-lg p-4 [tag-color-override]">
   <div class="text-xs uppercase tracking-wider mb-2 [tag-text-color]">[tag label]</div>
-  <div class="text-primary text-2xl font-bold">[win%]%</div>
+  <div class="text-primary text-3xl font-bold">[win%]%</div>
   <div class="flex items-center gap-3 mt-1">
     <span class="text-muted text-sm">[W]-[L]</span>
     <span class="text-accent text-sm">[stars display]</span>
@@ -153,7 +156,9 @@ Extends existing `StatCard` pattern. Three metrics per card: win rate %, average
 </div>
 ```
 
-**Source:** Directly extends `stat_card.rs` — `bg-elevated border border-divider rounded-lg p-4`, `text-muted text-xs uppercase tracking-wider`, `text-primary text-2xl font-bold`.
+**Note:** Win% metric uses `text-3xl` (30px) — the same display size as page titles. No separate 24px step is introduced.
+
+**Source:** Directly extends `stat_card.rs` — `bg-elevated border border-divider rounded-lg p-4`, `text-muted text-xs uppercase tracking-wider`, `text-primary text-3xl font-bold`.
 
 #### 3. Game Plan Effectiveness Table
 
@@ -180,7 +185,7 @@ Sortable table with inline accordion expansion. Sort by column header click.
 <tr class="border-t border-divider hover:bg-elevated/50 cursor-pointer transition-colors">
   <td class="px-4 py-3 text-sm text-primary font-medium">[plan name]</td>
   <td class="px-4 py-3">
-    <span class="text-xs px-2 py-0.5 rounded border [tag-color]">[tag]</span>
+    <span class="text-xs px-2 py-1 rounded border [tag-color]">[tag]</span>
   </td>
   <td class="px-4 py-3 text-center text-sm">
     <span class="text-emerald-400 font-medium">[W]</span>
@@ -214,7 +219,7 @@ Sortable table with inline accordion expansion. Sort by column header click.
 
 **Display:** Unicode `★` (U+2605 filled) and `☆` (U+2606 empty). Five stars, horizontally arranged.
 **Interaction:** Click on star N sets rating to N. Hover previews the selected state.
-**Size:** `text-lg` (18px) for input stars, `text-sm` (14px) for read-only display in table.
+**Size:** `text-sm` (14px) for both input stars and read-only display in table.
 **Selected state:** `text-accent` (yellow). **Unselected:** `text-dimmed`. **Hover preview:** `text-accent/70`.
 
 ```
@@ -222,9 +227,9 @@ Sortable table with inline accordion expansion. Sort by column header click.
   {(1..=5).map(|n| view! {
     <button
       class=move || if rating.get().map_or(false, |r| r >= n) {
-        "text-accent text-lg hover:text-accent-hover transition-colors"
+        "text-accent text-sm hover:text-accent-hover transition-colors"
       } else {
-        "text-dimmed text-lg hover:text-accent/70 transition-colors"
+        "text-dimmed text-sm hover:text-accent/70 transition-colors"
       }
       on:click=move |_| set_rating.set(Some(n))
     >
@@ -246,7 +251,7 @@ Three-state toggle: None (default) / Win / Loss. Shown in post-game review creat
 </div>
 ```
 
-Button size: `px-3 py-1.5 rounded-lg text-sm font-medium transition-colors`.
+Button size: `px-3 py-2 rounded-lg text-sm font-medium transition-colors`.
 
 #### 6. "Fetch Result" Button
 
@@ -286,7 +291,7 @@ Loading state: replace text with `"Fetching..."` and disable. Confirmation inlin
 <div class="text-center py-16">
   <p class="text-dimmed text-sm mb-3">No analytics data yet</p>
   <p class="text-dimmed text-xs mb-4">Create or join a team to get started.</p>
-  <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
+  <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-2 text-xs transition-colors">
     Join a team
   </a>
 </div>
@@ -362,9 +367,11 @@ No external component registries are used. All UI is hand-rolled Leptos componen
 
 4. **Win/Loss color exceptions.** `text-emerald-400` and `text-red-400` are used literally (not via semantic tokens) for win/loss indicators — same pattern as `text-white` on colored buttons per CLAUDE.md code style section.
 
-5. **Star rating read-only display.** In the table, stars are `text-sm` static text. In the form, they are `text-lg` interactive buttons. Use `collect_view()` on the iterator per CLAUDE.md rule 25.
+5. **Star rating size is `text-sm` everywhere.** Both the interactive form stars and the read-only table stars use `text-sm` (14px). This keeps the typography scale at 4 sizes. Use `collect_view()` on the iterator per CLAUDE.md rule 25.
 
-6. **"Fetch result" button.** Matches the inline action button pattern established in `post_game.rs:610,625` — `inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors`.
+6. **Win% metric in StrategyTagCard uses `text-3xl`.** This reuses the existing display size (30px) and does not introduce a 24px step. The `text-2xl` class must not appear in this component.
+
+7. **"Fetch result" button.** Matches the inline action button pattern established in `post_game.rs:610,625` — `inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors`.
 
 ---
 
