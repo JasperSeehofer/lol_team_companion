@@ -235,6 +235,73 @@ pub async fn delete_review(review_id: String) -> Result<(), ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+/// Auto-detect win/loss outcome from Riot API by matching the linked draft's picks
+/// against the user's recent match history.
+#[server]
+pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use crate::server::riot;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    // No Riot account linked — cannot auto-detect
+    let puuid = match user.riot_puuid {
+        Some(ref p) if !p.is_empty() => p.clone(),
+        _ => return Ok(None),
+    };
+
+    // Load the draft to find our side's picked champions
+    let draft = match db::get_draft_for_prefill(&surreal, &draft_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+
+    let our_side = draft.our_side.as_str();
+
+    // Collect champions that were picked (not banned) on our side
+    let our_picks: Vec<String> = draft
+        .actions
+        .iter()
+        .filter(|a| a.side == our_side && !a.phase.starts_with("ban") && !a.champion.is_empty())
+        .map(|a| a.champion.to_lowercase())
+        .collect();
+
+    if our_picks.is_empty() {
+        return Ok(None);
+    }
+
+    if !riot::has_api_key() {
+        return Ok(None);
+    }
+
+    // Fetch recent match history (up to 20 matches; check first 5 for a match)
+    let matches = riot::fetch_match_history(&puuid, None)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    for m in matches.into_iter().take(5) {
+        let played_champ = m.champion.to_lowercase();
+        if our_picks.contains(&played_champ) {
+            let outcome = if m.win { "win" } else { "loss" };
+            return Ok(Some(outcome.to_string()));
+        }
+    }
+
+    Ok(None) // No matching game found in recent history
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -320,6 +387,8 @@ pub fn PostGamePage() -> impl IntoView {
     let (open_notes, set_open_notes) = signal(String::new());
     let (win_loss, set_win_loss) = signal::<Option<String>>(None);
     let (rating, set_rating) = signal::<Option<u8>>(None);
+    let (fetching, set_fetching) = signal(false);
+    let (fetch_status, set_fetch_status) = signal::<Option<String>>(None);
 
     let clear_editor = move || {
         set_editing_id.set(None);
@@ -332,6 +401,8 @@ pub fn PostGamePage() -> impl IntoView {
         set_open_notes.set(String::new());
         set_win_loss.set(None);
         set_rating.set(None);
+        set_fetching.set(false);
+        set_fetch_status.set(None);
     };
 
     let load_review = move |r: &PostGameLearning| {
@@ -775,6 +846,67 @@ pub fn PostGamePage() -> impl IntoView {
                                     on:click=move |_| set_win_loss.set(Some("loss".into()))
                                 >"Loss"</button>
                             </div>
+
+                            // Fetch Result button (shown when no outcome set and a draft is linked)
+                            {move || {
+                                let wl = win_loss.get();
+                                let did = draft_id.get();
+                                if wl.is_none() && !did.is_empty() {
+                                    view! {
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors disabled:opacity-50"
+                                                on:click=move |_| {
+                                                    let did = draft_id.get_untracked();
+                                                    if did.is_empty() { return; }
+                                                    set_fetching.set(true);
+                                                    set_fetch_status.set(None);
+                                                    leptos::task::spawn_local(async move {
+                                                        match auto_detect_outcome(did).await {
+                                                            Ok(Some(result)) => {
+                                                                set_win_loss.set(Some(result));
+                                                                set_fetch_status.set(Some("detected".into()));
+                                                            }
+                                                            Ok(None) => {
+                                                                set_fetch_status.set(Some("Result not found \u{2014} select manually".into()));
+                                                            }
+                                                            Err(_) => {
+                                                                set_fetch_status.set(Some("Result not found \u{2014} select manually".into()));
+                                                            }
+                                                        }
+                                                        set_fetching.set(false);
+                                                    });
+                                                }
+                                                prop:disabled=move || fetching.get()
+                                            >
+                                                {move || if fetching.get() { "Fetching..." } else { "Fetch result" }}
+                                            </button>
+                                            {move || {
+                                                let status = fetch_status.get();
+                                                let wl = win_loss.get();
+                                                if let Some(s) = status {
+                                                    if s == "detected" {
+                                                        let cls = if wl.as_deref() == Some("win") {
+                                                            "text-emerald-400 text-xs"
+                                                        } else {
+                                                            "text-red-400 text-xs"
+                                                        };
+                                                        let label = if wl.as_deref() == Some("win") { "Win detected" } else { "Loss detected" };
+                                                        view! { <span class=cls>{label}</span> }.into_any()
+                                                    } else {
+                                                        view! { <span class="text-muted text-xs">{s}</span> }.into_any()
+                                                    }
+                                                } else {
+                                                    view! { <span></span> }.into_any()
+                                                }
+                                            }}
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }
+                            }}
                         </div>
 
                         // Star Rating input
