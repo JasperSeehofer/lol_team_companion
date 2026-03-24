@@ -37,6 +37,7 @@ Declared values (multiples of 4 only). Using Tailwind v4 defaults mapped to 8-po
 |-------|-------|-------|
 | xs | 4px (p-1) | Icon gaps, badge padding, tight inline spacing |
 | sm | 8px (p-2) | Compact element padding, tag pill spacing |
+| md-sm | 12px (py-3) | Table row vertical padding for comfortable row height |
 | md | 16px (p-4) | Default card padding, form field spacing |
 | lg | 24px (p-6) | Section-level padding, card group gaps |
 | xl | 32px (p-8) | Page horizontal padding, major layout gaps |
@@ -57,7 +58,7 @@ Exceptions:
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Body | 14px (text-sm) | 400 regular | 1.5 |
-| Label / caption | 12px (text-xs) | 500 medium | 1.4 |
+| Label / caption | 12px (text-xs) | 400 regular | 1.4 |
 | Heading (section) | 14px (text-sm) | 600 semibold | 1.2 |
 | Display (page title + key metric) | 30px (text-3xl) | 700 bold | 1.2 |
 
@@ -65,10 +66,10 @@ Exceptions:
 - Page title pattern: `text-3xl font-bold text-primary` — confirmed in `post_game.rs:480`, `game_plan.rs:1015`, `stats.rs:294`
 - Section headings: `font-semibold text-sm` — confirmed in `post_game.rs:557,640`, `game_plan.rs:1186`
 - Body content: `text-sm` — confirmed throughout `post_game.rs`, `game_plan.rs`
-- Labels and metadata: `text-xs font-medium` — confirmed in `post_game.rs:644,669,728`, `game_plan.rs:1120`
+- Labels and metadata: `text-xs` — confirmed in `post_game.rs:644,669,728`, `game_plan.rs:1120`
 - Win% metric in StrategyTagCard: `text-3xl font-bold` — reuses the display size, not a separate 24px step
 
-**Two declared weights:** regular (400) for body text, semibold/bold (600-700) for headings and CTAs. Uppercase tracking labels (`text-xs uppercase tracking-wider`) use weight 600.
+**Two declared weights:** regular (400) for body text and labels/captions, semibold-to-bold (600-700) for headings and CTAs.
 
 **Total distinct sizes: 4** — 12px, 14px, 14px/semibold (same size, different weight role), 30px. The display size (30px / `text-3xl`) serves both page titles and the primary win% metric in StrategyTagCards.
 
@@ -168,12 +169,12 @@ Sortable table with inline accordion expansion. Sort by column header click.
 ```
 <thead class="bg-overlay/50">
   <tr>
-    <th class="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Plan</th>
-    <th class="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Tag</th>
-    <th class="px-4 py-3 text-center text-xs font-medium text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
+    <th class="px-4 py-3 text-left text-xs text-muted uppercase tracking-wider">Plan</th>
+    <th class="px-4 py-3 text-left text-xs text-muted uppercase tracking-wider">Tag</th>
+    <th class="px-4 py-3 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
       W-L [sort icon]
     </th>
-    <th class="px-4 py-3 text-center text-xs font-medium text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
+    <th class="px-4 py-3 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
       Rating [sort icon]
     </th>
   </tr>
@@ -183,14 +184,14 @@ Sortable table with inline accordion expansion. Sort by column header click.
 **Data row (collapsed):**
 ```
 <tr class="border-t border-divider hover:bg-elevated/50 cursor-pointer transition-colors">
-  <td class="px-4 py-3 text-sm text-primary font-medium">[plan name]</td>
+  <td class="px-4 py-3 text-sm text-primary">[plan name]</td>
   <td class="px-4 py-3">
     <span class="text-xs px-2 py-1 rounded border [tag-color]">[tag]</span>
   </td>
   <td class="px-4 py-3 text-center text-sm">
-    <span class="text-emerald-400 font-medium">[W]</span>
+    <span class="text-emerald-400">[W]</span>
     <span class="text-muted mx-1">-</span>
-    <span class="text-red-400 font-medium">[L]</span>
+    <span class="text-red-400">[L]</span>
   </td>
   <td class="px-4 py-3 text-center text-sm text-accent">[★★★☆☆]</td>
 </tr>
@@ -251,7 +252,7 @@ Three-state toggle: None (default) / Win / Loss. Shown in post-game review creat
 </div>
 ```
 
-Button size: `px-3 py-2 rounded-lg text-sm font-medium transition-colors`.
+Button size: `px-3 py-2 rounded-lg text-sm font-semibold transition-colors`.
 
 #### 6. "Fetch Result" Button
 
@@ -372,6 +373,8 @@ No external component registries are used. All UI is hand-rolled Leptos componen
 6. **Win% metric in StrategyTagCard uses `text-3xl`.** This reuses the existing display size (30px) and does not introduce a 24px step. The `text-2xl` class must not appear in this component.
 
 7. **"Fetch result" button.** Matches the inline action button pattern established in `post_game.rs:610,625` — `inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors`.
+
+8. **No `font-medium` (500) anywhere.** The two declared weight groups are regular (400) for body and labels, and semibold-to-bold (600-700) for headings and CTAs. Table header labels use no explicit weight class (defaults to 400). Plan name cell in data rows uses no explicit weight class. Win/Loss toggle buttons use `font-semibold`. Do not add `font-medium` to any element.
 
 ---
 
