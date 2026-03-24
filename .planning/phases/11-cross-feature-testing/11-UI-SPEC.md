@@ -37,8 +37,7 @@ Declared values (multiples of 4 only). Using Tailwind v4 defaults mapped to 8-po
 |-------|-------|-------|
 | xs | 4px (p-1) | Icon gaps, badge padding, tight inline spacing |
 | sm | 8px (p-2) | Compact element padding, tag pill spacing |
-| md-sm | 12px (py-3) | Table row vertical padding for comfortable row height |
-| md | 16px (p-4) | Default card padding, form field spacing |
+| md | 16px (p-4) | Default card padding, form field spacing, table row padding |
 | lg | 24px (p-6) | Section-level padding, card group gaps |
 | xl | 32px (p-8) | Page horizontal padding, major layout gaps |
 | 2xl | 48px (py-12) | Page top padding, between major sections |
@@ -47,7 +46,7 @@ Declared values (multiples of 4 only). Using Tailwind v4 defaults mapped to 8-po
 Exceptions:
 - Accordion expanded row: `p-4` (16px) padding inside the expansion cell
 - Strategy tag cards: `p-4` (16px) consistent with `StatCard` pattern (source: `stat_card.rs` line 10)
-- Table rows: `px-4 py-3` (16px/12px) for comfortable row height without waste — `py-3` (12px) is a valid multiple of 4
+- Table rows: `px-4 py-4` (16px/16px) consistent spacing for comfortable row height
 
 **Source:** Confirmed from existing patterns in `post_game.rs`, `game_plan.rs`, `stat_card.rs`.
 
@@ -169,12 +168,12 @@ Sortable table with inline accordion expansion. Sort by column header click.
 ```
 <thead class="bg-overlay/50">
   <tr>
-    <th class="px-4 py-3 text-left text-xs text-muted uppercase tracking-wider">Plan</th>
-    <th class="px-4 py-3 text-left text-xs text-muted uppercase tracking-wider">Tag</th>
-    <th class="px-4 py-3 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
+    <th class="px-4 py-4 text-left text-xs text-muted uppercase tracking-wider">Plan</th>
+    <th class="px-4 py-4 text-left text-xs text-muted uppercase tracking-wider">Tag</th>
+    <th class="px-4 py-4 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
       W-L [sort icon]
     </th>
-    <th class="px-4 py-3 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
+    <th class="px-4 py-4 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary">
       Rating [sort icon]
     </th>
   </tr>
@@ -184,16 +183,16 @@ Sortable table with inline accordion expansion. Sort by column header click.
 **Data row (collapsed):**
 ```
 <tr class="border-t border-divider hover:bg-elevated/50 cursor-pointer transition-colors">
-  <td class="px-4 py-3 text-sm text-primary">[plan name]</td>
-  <td class="px-4 py-3">
+  <td class="px-4 py-4 text-sm text-primary">[plan name]</td>
+  <td class="px-4 py-4">
     <span class="text-xs px-2 py-1 rounded border [tag-color]">[tag]</span>
   </td>
-  <td class="px-4 py-3 text-center text-sm">
+  <td class="px-4 py-4 text-center text-sm">
     <span class="text-emerald-400">[W]</span>
     <span class="text-muted mx-1">-</span>
     <span class="text-red-400">[L]</span>
   </td>
-  <td class="px-4 py-3 text-center text-sm text-accent">[★★★☆☆]</td>
+  <td class="px-4 py-4 text-center text-sm text-accent">[★★★☆☆]</td>
 </tr>
 ```
 
