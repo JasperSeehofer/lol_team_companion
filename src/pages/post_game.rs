@@ -427,6 +427,8 @@ pub fn PostGamePage() -> impl IntoView {
                 }
             },
             created_by: String::new(),
+            win_loss: None,
+            rating: None,
         }
     };
 

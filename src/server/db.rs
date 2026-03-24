@@ -14,7 +14,8 @@ use crate::models::{
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{
         ActionItemPreview, ChampionPerformanceSummary, ChecklistInstance, ChecklistTemplate,
-        DashboardSummary, GamePlan, PoolGapWarning, PostGameLearning, PostGamePreview,
+        DashboardSummary, GamePlan, GamePlanEffectiveness, PoolGapWarning, PostGameLearning,
+        PostGamePreview, StrategyTagSummary,
     },
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
@@ -1844,7 +1845,7 @@ pub async fn save_post_game_learning(
         .strip_prefix("user:")
         .unwrap_or(&learning.created_by)
         .to_string();
-    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key)")
+    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating")
         .bind(("team_key", team_key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("game_plan_id", learning.game_plan_id))
@@ -1854,6 +1855,8 @@ pub async fn save_post_game_learning(
         .bind(("action_items", learning.action_items))
         .bind(("open_notes", learning.open_notes))
         .bind(("created_by_key", created_by_key))
+        .bind(("win_loss", learning.win_loss))
+        .bind(("rating", learning.rating))
         .await?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
@@ -1874,7 +1877,7 @@ pub async fn update_post_game_learning(
         .strip_prefix("post_game_learning:")
         .unwrap_or(id)
         .to_string();
-    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes")
+    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
         .bind(("key", key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("game_plan_id", learning.game_plan_id))
@@ -1883,6 +1886,8 @@ pub async fn update_post_game_learning(
         .bind(("improvements", learning.improvements))
         .bind(("action_items", learning.action_items))
         .bind(("open_notes", learning.open_notes))
+        .bind(("win_loss", learning.win_loss))
+        .bind(("rating", learning.rating))
         .await?
         .check()?;
     Ok(())
@@ -1900,6 +1905,10 @@ struct DbPostGameLearning {
     action_items: Vec<String>,
     open_notes: Option<String>,
     created_by: RecordId,
+    #[serde(default)]
+    win_loss: Option<String>,
+    #[serde(default)]
+    rating: Option<u8>,
 }
 
 impl From<DbPostGameLearning> for PostGameLearning {
@@ -1915,6 +1924,8 @@ impl From<DbPostGameLearning> for PostGameLearning {
             action_items: p.action_items,
             open_notes: p.open_notes,
             created_by: p.created_by.to_sql(),
+            win_loss: p.win_loss,
+            rating: p.rating,
         }
     }
 }
@@ -1942,6 +1953,94 @@ pub async fn delete_post_game_learning(db: &Surreal<Db>, id: &str) -> DbResult<(
         .await?
         .check()?;
     Ok(())
+}
+
+pub async fn get_analytics(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<(Vec<StrategyTagSummary>, Vec<GamePlanEffectiveness>)> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // Two queries in one round-trip (per project rule 29)
+    let mut r = db.query(
+        "SELECT * FROM game_plan WHERE team = type::record('team', $team_key); \
+         SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key) AND game_plan_id IS NOT NONE;"
+    )
+    .bind(("team_key", team_key))
+    .await?;
+
+    let plans: Vec<DbGamePlan> = r.take(0).unwrap_or_default();
+    let reviews: Vec<DbPostGameLearning> = r.take(1).unwrap_or_default();
+
+    // Convert to app models
+    let plans: Vec<GamePlan> = plans.into_iter().map(GamePlan::from).collect();
+    let reviews: Vec<PostGameLearning> = reviews.into_iter().map(PostGameLearning::from).collect();
+
+    // Group reviews by game_plan_id
+    let mut reviews_by_plan: HashMap<String, Vec<PostGameLearning>> = HashMap::new();
+    for review in reviews {
+        if let Some(ref plan_id) = review.game_plan_id {
+            reviews_by_plan.entry(plan_id.clone()).or_default().push(review);
+        }
+    }
+
+    // Build per-plan effectiveness
+    let mut plan_effectiveness: Vec<GamePlanEffectiveness> = Vec::new();
+    for plan in &plans {
+        let plan_id = match &plan.id {
+            Some(id) => id.clone(),
+            None => continue,
+        };
+        let plan_reviews = reviews_by_plan.remove(&plan_id).unwrap_or_default();
+        let wins = plan_reviews.iter().filter(|r| r.win_loss.as_deref() == Some("win")).count();
+        let losses = plan_reviews.iter().filter(|r| r.win_loss.as_deref() == Some("loss")).count();
+        let ratings: Vec<f32> = plan_reviews.iter()
+            .filter_map(|r| r.rating.map(|v| v as f32))
+            .collect();
+        let avg_rating = if ratings.is_empty() { None } else {
+            Some(ratings.iter().sum::<f32>() / ratings.len() as f32)
+        };
+
+        plan_effectiveness.push(GamePlanEffectiveness {
+            plan_id,
+            plan_name: plan.name.clone(),
+            tag: plan.win_condition_tag.clone(),
+            wins,
+            losses,
+            avg_rating,
+            reviews: plan_reviews,
+        });
+    }
+
+    // Build strategy tag summaries by grouping plan effectiveness by tag
+    let mut tag_map: HashMap<String, (usize, usize, usize, Vec<f32>)> = HashMap::new();
+    for pe in &plan_effectiveness {
+        if let Some(ref tag) = pe.tag {
+            if !tag.is_empty() {
+                let entry = tag_map.entry(tag.clone()).or_insert((0, 0, 0, Vec::new()));
+                entry.0 += pe.wins + pe.losses; // games_played
+                entry.1 += pe.wins;
+                entry.2 += pe.losses;
+                // Collect individual review ratings for accurate tag-level average
+                for review in &pe.reviews {
+                    if let Some(r) = review.rating {
+                        entry.3.push(r as f32);
+                    }
+                }
+            }
+        }
+    }
+
+    let tag_summaries: Vec<StrategyTagSummary> = tag_map.into_iter()
+        .map(|(tag, (games_played, wins, losses, ratings))| {
+            let avg_rating = if ratings.is_empty() { None } else {
+                Some(ratings.iter().sum::<f32>() / ratings.len() as f32)
+            };
+            StrategyTagSummary { tag, games_played, wins, losses, avg_rating }
+        })
+        .collect();
+
+    Ok((tag_summaries, plan_effectiveness))
 }
 
 // ---------------------------------------------------------------------------
