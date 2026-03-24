@@ -2,27 +2,27 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Ready to plan
-stopped_at: Phase 11 context gathered
-last_updated: "2026-03-24T10:32:10.914Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-03-24T12:02:09.670Z"
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  completed_phases: 6
+  total_plans: 17
+  completed_plans: 17
 ---
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
+Phase: 11 (cross-feature-testing) — EXECUTING
+Plan: 4 of 4
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 10 — opponents-redesign
+**Current focus:** Phase 11 — cross-feature-testing
 
 ## Decisions
 
@@ -54,6 +54,13 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 10-opponents-redesign]: get_opponent query uses <string>last_fetched cast for datetime-to-String deserialization (consistent with created_at pattern)
 - [Phase 10]: Use engine::local::Db (not engine::any::Any) for DB type in server fns — consistent with existing opponents.rs pattern
 - [Phase 10-03]: teamPage fixture required for e2e tests — opponents need a team to display non-empty-state content
+- [Phase 11-01]: serde(default) on PostGameLearning win_loss/rating fields for backward compat with existing DB records
+- [Phase 11-01]: Rust-side HashMap aggregation in get_analytics (not SurrealQL JOIN) for analytics — avoids join ambiguity, unit-testable
+- [Phase 11-cross-feature-testing]: Seed binary: inline champion pool CREATE in seed.rs since db.rs add_to_champion_pool lacks tier/notes/comfort fields
+- [Phase 11-cross-feature-testing]: Seed uses has_api_key() guard before Riot API calls; all failures are soft warnings so seed completes with static data when key absent
+- [Phase 11]: auto_detect_outcome uses get_draft_for_prefill + fetch_match_history with lowercase champion matching and 5-match limit to minimize Riot API calls
+- [Phase 11]: analytics.rs committed in Plan 02 (4a5b098) as Rule 1 fix for plan_id WASM compile error — plan_id_chevron clone added
+- [Phase 11]: No-team vs no-data empty states: both empty = no-team, plan_effectiveness has data but tag_summaries empty = no-data
 
 ## Blockers/Concerns
 
@@ -61,6 +68,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-24T10:32:10.913Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-cross-feature-testing/11-CONTEXT.md
+Last session: 2026-03-24T12:02:09.669Z
+Stopped at: Completed 11-03-PLAN.md
+Resume file: None
