@@ -79,6 +79,11 @@ name = "lol_team_companion"
 path = "src/main.rs"
 required-features = ["ssr"]
 
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"
+required-features = ["ssr"]
+
 [package.metadata.leptos]
 output-name = "lol_team_companion"
 site-root = "target/site"
