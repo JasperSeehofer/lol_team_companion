@@ -43,8 +43,8 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - ✓ Game plan: autofill from draft, strategy tag + role strategies pre-fill (PLAN-01, PLAN-03) — Phase 9
 - [ ] Game plan: fix empty view (PLAN-02 — completed in Phase 6)
 - ✓ Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04) — Phase 10
-- [ ] Plan effectiveness dashboard, draft-integrated champion notes (XFEAT-01–02)
-- [ ] Testing infrastructure: real test data, Playwright CLI workflow (TEST-01–02)
+- ✓ Plan effectiveness dashboard (XFEAT-01), draft-integrated champion notes (XFEAT-02) — Phase 11
+- ✓ Testing infrastructure: real test data seed binary (TEST-01), Playwright CLI workflow (TEST-02 — Phase 6) — Phase 11
 
 **v2.0 — Solo Mode & Match Intelligence (deferred):**
 - [ ] Solo player mode (toggle, solo queue tracking, goals/learnings, profile dashboard)
@@ -115,4 +115,4 @@ Known tech debt from v1.0:
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
 ---
-*Last updated: 2026-03-23 after Phase 08 (champion-pool-role-ui) — champion pool card grid with drag-and-drop tier changes, matchup autocomplete with opponent icons, draft role badges with auto-guess and popover selection*
+*Last updated: 2026-03-24 after Phase 11 (cross-feature-testing) — analytics page with strategy tag cards and game plan effectiveness table, post-game win/loss + rating fields, seed binary for realistic test data*
