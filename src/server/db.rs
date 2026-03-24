@@ -14,7 +14,8 @@ use crate::models::{
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{
         ActionItemPreview, ChampionPerformanceSummary, ChecklistInstance, ChecklistTemplate,
-        DashboardSummary, GamePlan, PoolGapWarning, PostGameLearning, PostGamePreview,
+        DashboardSummary, GamePlan, GamePlanEffectiveness, PoolGapWarning, PostGameLearning,
+        PostGamePreview, StrategyTagSummary,
     },
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
@@ -1952,6 +1953,94 @@ pub async fn delete_post_game_learning(db: &Surreal<Db>, id: &str) -> DbResult<(
         .await?
         .check()?;
     Ok(())
+}
+
+pub async fn get_analytics(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<(Vec<StrategyTagSummary>, Vec<GamePlanEffectiveness>)> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    // Two queries in one round-trip (per project rule 29)
+    let mut r = db.query(
+        "SELECT * FROM game_plan WHERE team = type::record('team', $team_key); \
+         SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key) AND game_plan_id IS NOT NONE;"
+    )
+    .bind(("team_key", team_key))
+    .await?;
+
+    let plans: Vec<DbGamePlan> = r.take(0).unwrap_or_default();
+    let reviews: Vec<DbPostGameLearning> = r.take(1).unwrap_or_default();
+
+    // Convert to app models
+    let plans: Vec<GamePlan> = plans.into_iter().map(GamePlan::from).collect();
+    let reviews: Vec<PostGameLearning> = reviews.into_iter().map(PostGameLearning::from).collect();
+
+    // Group reviews by game_plan_id
+    let mut reviews_by_plan: HashMap<String, Vec<PostGameLearning>> = HashMap::new();
+    for review in reviews {
+        if let Some(ref plan_id) = review.game_plan_id {
+            reviews_by_plan.entry(plan_id.clone()).or_default().push(review);
+        }
+    }
+
+    // Build per-plan effectiveness
+    let mut plan_effectiveness: Vec<GamePlanEffectiveness> = Vec::new();
+    for plan in &plans {
+        let plan_id = match &plan.id {
+            Some(id) => id.clone(),
+            None => continue,
+        };
+        let plan_reviews = reviews_by_plan.remove(&plan_id).unwrap_or_default();
+        let wins = plan_reviews.iter().filter(|r| r.win_loss.as_deref() == Some("win")).count();
+        let losses = plan_reviews.iter().filter(|r| r.win_loss.as_deref() == Some("loss")).count();
+        let ratings: Vec<f32> = plan_reviews.iter()
+            .filter_map(|r| r.rating.map(|v| v as f32))
+            .collect();
+        let avg_rating = if ratings.is_empty() { None } else {
+            Some(ratings.iter().sum::<f32>() / ratings.len() as f32)
+        };
+
+        plan_effectiveness.push(GamePlanEffectiveness {
+            plan_id,
+            plan_name: plan.name.clone(),
+            tag: plan.win_condition_tag.clone(),
+            wins,
+            losses,
+            avg_rating,
+            reviews: plan_reviews,
+        });
+    }
+
+    // Build strategy tag summaries by grouping plan effectiveness by tag
+    let mut tag_map: HashMap<String, (usize, usize, usize, Vec<f32>)> = HashMap::new();
+    for pe in &plan_effectiveness {
+        if let Some(ref tag) = pe.tag {
+            if !tag.is_empty() {
+                let entry = tag_map.entry(tag.clone()).or_insert((0, 0, 0, Vec::new()));
+                entry.0 += pe.wins + pe.losses; // games_played
+                entry.1 += pe.wins;
+                entry.2 += pe.losses;
+                // Collect individual review ratings for accurate tag-level average
+                for review in &pe.reviews {
+                    if let Some(r) = review.rating {
+                        entry.3.push(r as f32);
+                    }
+                }
+            }
+        }
+    }
+
+    let tag_summaries: Vec<StrategyTagSummary> = tag_map.into_iter()
+        .map(|(tag, (games_played, wins, losses, ratings))| {
+            let avg_rating = if ratings.is_empty() { None } else {
+                Some(ratings.iter().sum::<f32>() / ratings.len() as f32)
+            };
+            StrategyTagSummary { tag, games_played, wins, losses, avg_rating }
+        })
+        .collect();
+
+    Ok((tag_summaries, plan_effectiveness))
 }
 
 // ---------------------------------------------------------------------------
