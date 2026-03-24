@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A League of Legends team management web app for coordinating drafts, tracking stats, and planning games. Built with Rust/Leptos/SurrealDB. Features are connected — drafts flow into game plans, post-game reviews auto-generate action items, and the dashboard surfaces prep priorities, pool gaps, and recent patterns at a glance.
+A League of Legends team management web app for coordinating drafts, tracking stats, and planning games. Built with Rust/Leptos/SurrealDB. Features are deeply connected — drafts flow into game plans with autofill, post-game reviews track win/loss and rating per strategy, analytics surface plan effectiveness, and opponent scouting feeds intel into the draft sidebar.
 
 ## Core Value
 
@@ -33,20 +33,17 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - ✓ Meaningful empty states with CTAs on all pages (UX-01) — v1.0
 - ✓ Skeleton loading screens on all data pages (UX-02) — v1.0
 - ✓ Consistent mutation feedback via toast system (UX-03) — v1.0
+- ✓ Fix tree drafter, game plan view, roster, hydration, drag-and-drop bugs (BUG-01–05) — v1.1
+- ✓ UX polish: toasts, timestamps, search, champion pool overhaul, role icons (UX-04–10) — v1.1
+- ✓ Draft: opponent dropdown, intel improvements, pool notes sidebar (DRFT-01–05) — v1.1
+- ✓ Game plan: autofill from draft, fix empty view (PLAN-01–03) — v1.1
+- ✓ Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04) — v1.1
+- ✓ Plan effectiveness dashboard and draft-integrated champion notes (XFEAT-01–02) — v1.1
+- ✓ Testing infrastructure: seed binary and Playwright CLI workflow (TEST-01–02) — v1.1
 
 ### Active
 
-**v1.1 — Polish, Draft & Opponents Rework:**
-- [ ] Fix tree drafter, game plan view, roster, hydration, drag-and-drop bugs (BUG-01–05)
-- [ ] UX polish: toasts, timestamps, search, champion pool overhaul, role icons (UX-04–10)
-- ✓ Draft: opponent dropdown, intel improvements, pool notes sidebar (DRFT-01–05) — Phase 9
-- ✓ Game plan: autofill from draft, strategy tag + role strategies pre-fill (PLAN-01, PLAN-03) — Phase 9
-- [ ] Game plan: fix empty view (PLAN-02 — completed in Phase 6)
-- ✓ Opponents redesign: 5-role form, auto-fetch, OTP detection, mastery, pool depth (OPP-01–04) — Phase 10
-- ✓ Plan effectiveness dashboard (XFEAT-01), draft-integrated champion notes (XFEAT-02) — Phase 11
-- ✓ Testing infrastructure: real test data seed binary (TEST-01), Playwright CLI workflow (TEST-02 — Phase 6) — Phase 11
-
-**v2.0 — Solo Mode & Match Intelligence (deferred):**
+**v2.0 — Solo Mode & Match Intelligence:**
 - [ ] Solo player mode (toggle, solo queue tracking, goals/learnings, profile dashboard)
 - [ ] Match detail view with "gather more info" from Riot API
 - [ ] Match as launchpad: create draft → game plan → review chain
@@ -65,33 +62,25 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - Mobile responsive redesign — desktop-first; mobile comes after intelligence features
 - Public leaderboards / social — shifts product from private team tool to public platform
 - Riot API live in-game overlay — requires desktop client
-- Auto opponent stats via Riot API — rate limits make per-game scouting expensive (note: v1.1 adds targeted fetch on save, not background sync)
+- Auto opponent stats via Riot API — rate limits make per-game scouting expensive (v1.1 adds targeted fetch on save, not background sync)
 - Offline mode — real-time data is core value
-
-## Current Milestone: v1.1 Polish, Draft & Opponents Rework
-
-**Goal:** Fix bugs, polish UX, overhaul champion pool/draft/opponents experience, and establish real test infrastructure.
-
-**Target features:**
-- Bug fixes (tree drafter, game plan view, roster, hydration, drag-and-drop)
-- UX polish (toasts, timestamps, team search, champion pool overhaul, role icons)
-- Draft improvements (opponent dropdown, intel panel, pool notes sidebar)
-- Game plan enhancements (autofill from draft, champion pre-fill)
-- Opponents redesign (5-role form, auto-fetch, OTP detection, mastery, pool analysis)
-- Cross-feature intelligence (plan effectiveness, draft-integrated notes)
-- Testing infrastructure (real test data, Playwright CLI)
 
 ## Context
 
-Shipped v1.0 with 22,986 lines of Rust across 13 route components + server/DB layer.
+Shipped v1.1 with 26,686 lines of Rust across 15 route components + server/DB layer.
 Tech stack: Rust nightly / Leptos 0.8 / Axum 0.8 / SurrealDB 3.x / Tailwind CSS v4.
-Features are now connected end-to-end: draft → game plan → post-game → action items.
+Features are deeply connected end-to-end: draft → game plan → post-game → analytics → action items.
+Opponent scouting feeds intel into draft sidebar with OTP badges and pool analysis.
 Dashboard surfaces prep priorities with independently-loading panels.
 All pages have consistent UX (skeletons, empty states, toast feedback).
+Seed binary creates realistic demo data for all features.
 
-Known tech debt from v1.0:
-- Missing integration tests for DB aggregation functions
-- `post_game_champ_outcomes` returns empty (schema lacks win/loss field)
+v1.0 tech debt resolved in v1.1:
+- ✓ Integration tests for DB aggregation functions (added)
+- ✓ `post_game_champ_outcomes` empty results (schema now has win/loss + rating fields)
+
+Remaining tech debt:
+- `db.rs` is ~4,000 lines — splitting is a future refactor
 - Dashboard incomplete workflow counts not surfaced (deferred)
 
 ## Key Decisions
@@ -100,11 +89,16 @@ Known tech debt from v1.0:
 |----------|-----------|---------|
 | Intelligence before polish | Disconnected data was the bigger gap; polish followed naturally | ✓ Good — v1.0 shipped both |
 | No real-time sync | WebSocket adds complexity without proportional value for async team prep | ✓ Good — not needed |
-| Desktop-first | Competitive teams primarily prep on desktop | ✓ Good — appropriate for v1.0 |
-| Champion name normalization in Rust | SurrealDB lacks good string normalization; 3-pass lookup (exact ID, case-insensitive, fuzzy) | ✓ Good — enabled cross-feature joins |
+| Desktop-first | Competitive teams primarily prep on desktop | ✓ Good — appropriate for v1.x |
+| Champion name normalization in Rust | SurrealDB lacks good string normalization; 3-pass lookup | ✓ Good — enabled cross-feature joins |
 | In-memory filter for opponent stats | Unit-testable over SurrealQL join approach | ✓ Good — clean separation |
-| Toast system via context provider | AtomicU64 for ID gen (Cell not Sync); Callback::new for Copy closures | ✓ Good — works across all pages |
+| Toast system via context provider | AtomicU64 for ID gen; Callback::new for Copy closures | ✓ Good — works across all pages |
 | Gap closure phases (4, 5) | Milestone audit found requirements unsatisfied → created targeted phases | ✓ Good — systematic coverage |
+| agent-browser over Playwright MCP | npm package (Vercel Labs) simpler to integrate as Claude Code skill | ✓ Good — reliable browser verification |
+| Champion pool card grid with drag-and-drop | DataTransfer API for tier management; aspect-square portraits | ✓ Good — substantial UX improvement |
+| Opponent 5-role form with auto-fetch | Two-step create then fetch avoids transaction ambiguity | ✓ Good — reliable Riot API integration |
+| Rust-side HashMap aggregation for analytics | Avoids SurrealQL JOIN ambiguity; unit-testable | ✓ Good — clean separation |
+| serde(default) for backward compat | PostGameLearning and DraftAction fields default gracefully | ✓ Good — no migration needed |
 
 ## Constraints
 
@@ -115,4 +109,4 @@ Known tech debt from v1.0:
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
 ---
-*Last updated: 2026-03-24 after Phase 11 (cross-feature-testing) — analytics page with strategy tag cards and game plan effectiveness table, post-game win/loss + rating fields, seed binary for realistic test data*
+*Last updated: 2026-03-24 after v1.1 milestone completion*
