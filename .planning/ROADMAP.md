@@ -123,7 +123,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 11-01-PLAN.md — Model extension: PostGameLearning win_loss + rating fields, schema, DB layer, analytics query
-- [ ] 11-02-PLAN.md — Post-game form: win/loss selector, star rating, auto-detect outcome from Riot API
+- [x] 11-02-PLAN.md — Post-game form: win/loss selector, star rating, auto-detect outcome from Riot API
 - [ ] 11-03-PLAN.md — Analytics page: strategy tag cards, sortable table, accordion, route + nav link
 - [x] 11-04-PLAN.md — Seed binary: 2 teams, 10 users, full demo data with champion pools, drafts, plans, reviews
 
@@ -142,4 +142,4 @@ Plans:
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete   | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete    | 2026-03-23 |
-| 11. Cross-Feature & Testing | v1.1 | 2/4 | In Progress|  |
+| 11. Cross-Feature & Testing | v1.1 | 3/4 | In Progress|  |

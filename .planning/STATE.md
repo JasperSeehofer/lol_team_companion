@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
 status: Ready to execute
-stopped_at: Completed 11-04-PLAN.md
-last_updated: "2026-03-24T11:56:29.994Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-24T11:57:16.158Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 ## Current Position
 
 Phase: 11 (cross-feature-testing) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Project Reference
 
@@ -58,6 +58,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 11-01]: Rust-side HashMap aggregation in get_analytics (not SurrealQL JOIN) for analytics — avoids join ambiguity, unit-testable
 - [Phase 11-cross-feature-testing]: Seed binary: inline champion pool CREATE in seed.rs since db.rs add_to_champion_pool lacks tier/notes/comfort fields
 - [Phase 11-cross-feature-testing]: Seed uses has_api_key() guard before Riot API calls; all failures are soft warnings so seed completes with static data when key absent
+- [Phase 11]: auto_detect_outcome uses get_draft_for_prefill + fetch_match_history with lowercase champion matching and 5-match limit to minimize Riot API calls
 
 ## Blockers/Concerns
 
@@ -65,6 +66,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-24T11:56:29.993Z
-Stopped at: Completed 11-04-PLAN.md
+Last session: 2026-03-24T11:57:16.156Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
