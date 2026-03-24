@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish, Draft & Opponents Rework
-status: Ready to execute
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-24T11:57:16.158Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-03-24T12:02:09.670Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 ## Current Position
@@ -59,6 +59,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 - [Phase 11-cross-feature-testing]: Seed binary: inline champion pool CREATE in seed.rs since db.rs add_to_champion_pool lacks tier/notes/comfort fields
 - [Phase 11-cross-feature-testing]: Seed uses has_api_key() guard before Riot API calls; all failures are soft warnings so seed completes with static data when key absent
 - [Phase 11]: auto_detect_outcome uses get_draft_for_prefill + fetch_match_history with lowercase champion matching and 5-match limit to minimize Riot API calls
+- [Phase 11]: analytics.rs committed in Plan 02 (4a5b098) as Rule 1 fix for plan_id WASM compile error — plan_id_chevron clone added
+- [Phase 11]: No-team vs no-data empty states: both empty = no-team, plan_effectiveness has data but tag_summaries empty = no-data
 
 ## Blockers/Concerns
 
@@ -66,6 +68,6 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Session Continuity
 
-Last session: 2026-03-24T11:57:16.156Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-03-24T12:02:09.669Z
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None

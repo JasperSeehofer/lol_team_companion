@@ -10,6 +10,7 @@ use crate::components::ui::ToastProvider;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
     action_items::ActionItemsPage,
+    analytics::AnalyticsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
     draft::DraftPage,
@@ -71,6 +72,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/post-game") view=PostGamePage />
                         <Route path=path!("/opponents") view=OpponentsPage />
                         <Route path=path!("/action-items") view=ActionItemsPage />
+                        <Route path=path!("/analytics") view=AnalyticsPage />
                     </Routes>
                 </main>
             </ToastProvider>

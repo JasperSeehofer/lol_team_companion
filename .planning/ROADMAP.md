@@ -32,7 +32,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 - [x] **Phase 8: Champion Pool & Role UI** - Overhaul champion pool management and add role assignment to draft picks (completed 2026-03-23)
 - [x] **Phase 9: Draft & Game Plan** - Improve draft tooling with opponent context, pool notes sidebar, and game plan autofill (completed 2026-03-23)
 - [x] **Phase 10: Opponents Redesign** - Rebuild opponent scouting with 5-role form, Riot API fetch, and pool analysis (completed 2026-03-23)
-- [ ] **Phase 11: Cross-Feature & Testing** - Plan effectiveness dashboard, draft-integrated notes, and real seeded test data
+- [x] **Phase 11: Cross-Feature & Testing** - Plan effectiveness dashboard, draft-integrated notes, and real seeded test data (completed 2026-03-24)
 
 ### Phase 6: Bug Fixes
 **Goal**: The app works without known regressions and Playwright CLI is configured for browser verification — tree drafting, game plan navigation, roster display, hydration, and drag-and-drop all behave correctly, and agents can run browser checks from Phase 6 onward
@@ -124,7 +124,7 @@ Plans:
 Plans:
 - [x] 11-01-PLAN.md — Model extension: PostGameLearning win_loss + rating fields, schema, DB layer, analytics query
 - [x] 11-02-PLAN.md — Post-game form: win/loss selector, star rating, auto-detect outcome from Riot API
-- [ ] 11-03-PLAN.md — Analytics page: strategy tag cards, sortable table, accordion, route + nav link
+- [x] 11-03-PLAN.md — Analytics page: strategy tag cards, sortable table, accordion, route + nav link
 - [x] 11-04-PLAN.md — Seed binary: 2 teams, 10 users, full demo data with champion pools, drafts, plans, reviews
 
 ## Progress
@@ -142,4 +142,4 @@ Plans:
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete   | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete    | 2026-03-23 |
-| 11. Cross-Feature & Testing | v1.1 | 3/4 | In Progress|  |
+| 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete   | 2026-03-24 |

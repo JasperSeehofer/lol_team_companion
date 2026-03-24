@@ -141,6 +141,7 @@ pub fn Nav() -> impl IntoView {
                             let cls6 = cls.clone();
                             let cls7 = cls.clone();
                             let cls8 = cls.clone();
+                            let cls9 = cls.clone();
                             view! {
                                 <A href="/team/dashboard" attr:class=cls2
                                     on:click=move |_| close_link.run(())>
@@ -169,6 +170,10 @@ pub fn Nav() -> impl IntoView {
                                 <A href="/opponents" attr:class=cls8
                                     on:click=move |_| close_link.run(())>
                                     "Opponents"
+                                </A>
+                                <A href="/analytics" attr:class=cls9
+                                    on:click=move |_| close_link.run(())>
+                                    "Analytics"
                                 </A>
                             }.into_any()
                         } else {
