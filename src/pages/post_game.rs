@@ -318,6 +318,8 @@ pub fn PostGamePage() -> impl IntoView {
     let (improvements, set_improvements) = signal(String::new());
     let (action_items, set_action_items) = signal(String::new());
     let (open_notes, set_open_notes) = signal(String::new());
+    let (win_loss, set_win_loss) = signal::<Option<String>>(None);
+    let (rating, set_rating) = signal::<Option<u8>>(None);
 
     let clear_editor = move || {
         set_editing_id.set(None);
@@ -328,6 +330,8 @@ pub fn PostGamePage() -> impl IntoView {
         set_improvements.set(String::new());
         set_action_items.set(String::new());
         set_open_notes.set(String::new());
+        set_win_loss.set(None);
+        set_rating.set(None);
     };
 
     let load_review = move |r: &PostGameLearning| {
@@ -339,6 +343,8 @@ pub fn PostGamePage() -> impl IntoView {
         set_improvements.set(r.improvements.join("\n"));
         set_action_items.set(r.action_items.join("\n"));
         set_open_notes.set(r.open_notes.clone().unwrap_or_default());
+        set_win_loss.set(r.win_loss.clone());
+        set_rating.set(r.rating);
     };
 
     // URL param: auto-load review when ?review_id=X is present
@@ -427,8 +433,8 @@ pub fn PostGamePage() -> impl IntoView {
                 }
             },
             created_by: String::new(),
-            win_loss: None,
-            rating: None,
+            win_loss: win_loss.get_untracked(),
+            rating: rating.get_untracked(),
         }
     };
 
@@ -722,6 +728,81 @@ pub fn PostGamePage() -> impl IntoView {
                             Some(view! { <LinkedPlanCard plan_id=gp_id /> })
                         }
                     }}
+
+                    // Game Outcome and Plan Rating
+                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
+                        // Win/Loss selector
+                        <div class="flex flex-col gap-2">
+                            <span class="text-sm font-semibold text-primary">"Game Outcome"</span>
+                            <div class="flex gap-2">
+                                // None / unset button
+                                <button
+                                    type="button"
+                                    class=move || {
+                                        let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
+                                        if win_loss.get().is_none() {
+                                            format!("{base} bg-overlay text-muted")
+                                        } else {
+                                            format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
+                                        }
+                                    }
+                                    on:click=move |_| set_win_loss.set(None)
+                                >"---"</button>
+                                // Win button
+                                <button
+                                    type="button"
+                                    class=move || {
+                                        let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
+                                        if win_loss.get().as_deref() == Some("win") {
+                                            format!("{base} bg-emerald-500/20 text-emerald-400 border border-emerald-500/30")
+                                        } else {
+                                            format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
+                                        }
+                                    }
+                                    on:click=move |_| set_win_loss.set(Some("win".into()))
+                                >"Win"</button>
+                                // Loss button
+                                <button
+                                    type="button"
+                                    class=move || {
+                                        let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
+                                        if win_loss.get().as_deref() == Some("loss") {
+                                            format!("{base} bg-red-500/20 text-red-400 border border-red-500/30")
+                                        } else {
+                                            format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
+                                        }
+                                    }
+                                    on:click=move |_| set_win_loss.set(Some("loss".into()))
+                                >"Loss"</button>
+                            </div>
+                        </div>
+
+                        // Star Rating input
+                        <div class="flex flex-col gap-1">
+                            <span class="text-sm font-semibold text-primary">"Plan Rating"</span>
+                            <span class="text-xs text-muted">"How well did the plan work?"</span>
+                            <div class="flex gap-1">
+                                {(1u8..=5).map(|n| {
+                                    view! {
+                                        <button
+                                            type="button"
+                                            class=move || {
+                                                if rating.get().map_or(false, |r| r >= n) {
+                                                    "text-accent text-xl hover:text-accent transition-colors"
+                                                } else {
+                                                    "text-dimmed text-xl hover:text-accent/70 transition-colors"
+                                                }
+                                            }
+                                            on:click=move |_| set_rating.set(Some(n))
+                                            aria-label=format!("Rate how well the plan worked: {} of 5 stars", n)
+                                        >
+                                            {move || if rating.get().map_or(false, |r| r >= n) { "\u{2605}" } else { "\u{2606}" }}
+                                        </button>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        </div>
+                    </div>
 
                     // Structured feedback
                     <div class="grid grid-cols-3 gap-4">
