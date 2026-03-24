@@ -120,7 +120,12 @@ Plans:
   1. A plan effectiveness view aggregates post-game review outcomes per game plan and shows each strategy's success rate
   2. Draft sidebar shows champion pool notes (matchup tips, power spikes) contextually when a pooled champion is selected
   3. All legacy test accounts are removed; 2 test teams exist with 5 Riot-linked accounts each, populated with champion pools, notes, and example data
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 11-01-PLAN.md — Model extension: PostGameLearning win_loss + rating fields, schema, DB layer, analytics query
+- [ ] 11-02-PLAN.md — Post-game form: win/loss selector, star rating, auto-detect outcome from Riot API
+- [ ] 11-03-PLAN.md — Analytics page: strategy tag cards, sortable table, accordion, route + nav link
+- [ ] 11-04-PLAN.md — Seed binary: 2 teams, 10 users, full demo data with champion pools, drafts, plans, reviews
 
 ## Progress
 
@@ -137,4 +142,4 @@ Plans:
 | 8. Champion Pool & Role UI | v1.1 | 2/2 | Complete   | 2026-03-23 |
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete   | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete    | 2026-03-23 |
-| 11. Cross-Feature & Testing | v1.1 | 0/? | Not started | - |
+| 11. Cross-Feature & Testing | v1.1 | 0/4 | In progress | - |
