@@ -1844,7 +1844,7 @@ pub async fn save_post_game_learning(
         .strip_prefix("user:")
         .unwrap_or(&learning.created_by)
         .to_string();
-    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key)")
+    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating")
         .bind(("team_key", team_key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("game_plan_id", learning.game_plan_id))
@@ -1854,6 +1854,8 @@ pub async fn save_post_game_learning(
         .bind(("action_items", learning.action_items))
         .bind(("open_notes", learning.open_notes))
         .bind(("created_by_key", created_by_key))
+        .bind(("win_loss", learning.win_loss))
+        .bind(("rating", learning.rating))
         .await?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
@@ -1874,7 +1876,7 @@ pub async fn update_post_game_learning(
         .strip_prefix("post_game_learning:")
         .unwrap_or(id)
         .to_string();
-    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes")
+    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
         .bind(("key", key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("game_plan_id", learning.game_plan_id))
@@ -1883,6 +1885,8 @@ pub async fn update_post_game_learning(
         .bind(("improvements", learning.improvements))
         .bind(("action_items", learning.action_items))
         .bind(("open_notes", learning.open_notes))
+        .bind(("win_loss", learning.win_loss))
+        .bind(("rating", learning.rating))
         .await?
         .check()?;
     Ok(())
@@ -1900,6 +1904,10 @@ struct DbPostGameLearning {
     action_items: Vec<String>,
     open_notes: Option<String>,
     created_by: RecordId,
+    #[serde(default)]
+    win_loss: Option<String>,
+    #[serde(default)]
+    rating: Option<u8>,
 }
 
 impl From<DbPostGameLearning> for PostGameLearning {
@@ -1915,6 +1923,8 @@ impl From<DbPostGameLearning> for PostGameLearning {
             action_items: p.action_items,
             open_notes: p.open_notes,
             created_by: p.created_by.to_sql(),
+            win_loss: p.win_loss,
+            rating: p.rating,
         }
     }
 }

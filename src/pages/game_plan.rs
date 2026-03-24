@@ -375,6 +375,8 @@ pub async fn start_post_game_review(
         action_items: Vec::new(),
         open_notes: None,
         created_by: user.id,
+        win_loss: None,
+        rating: None,
     };
 
     db::save_post_game_learning(&surreal, review)

@@ -111,6 +111,8 @@ DEFINE FIELD IF NOT EXISTS action_items ON post_game_learning TYPE array<string>
 DEFINE FIELD IF NOT EXISTS open_notes ON post_game_learning TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_by ON post_game_learning TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS created_at ON post_game_learning TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS win_loss ON post_game_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS rating ON post_game_learning TYPE option<int>;
 
 -- Champion pool (personal champion pool per role)
 DEFINE TABLE IF NOT EXISTS champion_pool SCHEMAFULL;

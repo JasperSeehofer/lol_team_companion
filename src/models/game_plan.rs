@@ -38,6 +38,10 @@ pub struct PostGameLearning {
     pub action_items: Vec<String>,
     pub open_notes: Option<String>,
     pub created_by: String,
+    #[serde(default)]
+    pub win_loss: Option<String>,   // "win" | "loss" | None
+    #[serde(default)]
+    pub rating: Option<u8>,         // 1-5 stars | None
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -105,6 +109,35 @@ pub struct ChampionPerformanceSummary {
     pub games_in_plan: usize,
     pub post_game_wins: usize,
     pub post_game_losses: usize,
+}
+
+/// Strategy tag aggregation for analytics cards (per D-05, D-08)
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StrategyTagSummary {
+    pub tag: String,
+    pub games_played: usize,
+    pub wins: usize,
+    pub losses: usize,
+    pub avg_rating: Option<f32>,
+}
+
+/// Per-game-plan effectiveness row (per D-05, D-09)
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct GamePlanEffectiveness {
+    pub plan_id: String,
+    pub plan_name: String,
+    pub tag: Option<String>,
+    pub wins: usize,
+    pub losses: usize,
+    pub avg_rating: Option<f32>,
+    pub reviews: Vec<PostGameLearning>,
+}
+
+/// Full analytics payload returned by the server function (per D-07)
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AnalyticsPayload {
+    pub tag_summaries: Vec<StrategyTagSummary>,
+    pub plan_effectiveness: Vec<GamePlanEffectiveness>,
 }
 
 #[cfg(test)]
@@ -249,9 +282,79 @@ mod tests {
             action_items: vec!["Review baron fight vod".into()],
             open_notes: None,
             created_by: "user:u1".into(),
+            win_loss: None,
+            rating: None,
         };
         let json = serde_json::to_string(&pgl).unwrap();
         let back: PostGameLearning = serde_json::from_str(&json).unwrap();
         assert_eq!(pgl, back);
+    }
+
+    #[test]
+    fn post_game_learning_with_win_loss_rating_round_trips() {
+        let pgl = PostGameLearning {
+            id: Some("post_game_learning:2".into()),
+            team_id: "team:t1".into(),
+            match_riot_id: None,
+            game_plan_id: Some("game_plan:gp1".into()),
+            draft_id: None,
+            what_went_well: vec!["Great teamfight".into()],
+            improvements: vec!["Vision control".into()],
+            action_items: vec![],
+            open_notes: None,
+            created_by: "user:u1".into(),
+            win_loss: Some("win".into()),
+            rating: Some(4),
+        };
+        let json = serde_json::to_string(&pgl).unwrap();
+        let back: PostGameLearning = serde_json::from_str(&json).unwrap();
+        assert_eq!(pgl, back);
+        assert_eq!(back.win_loss, Some("win".into()));
+        assert_eq!(back.rating, Some(4));
+    }
+
+    #[test]
+    fn post_game_learning_without_new_fields_deserializes() {
+        // Simulate an old DB record that lacks win_loss and rating
+        let old_json = r#"{
+            "id": "post_game_learning:old",
+            "team_id": "team:t1",
+            "match_riot_id": null,
+            "game_plan_id": null,
+            "draft_id": null,
+            "what_went_well": [],
+            "improvements": [],
+            "action_items": [],
+            "open_notes": null,
+            "created_by": "user:u1"
+        }"#;
+        let pgl: PostGameLearning = serde_json::from_str(old_json).unwrap();
+        assert_eq!(pgl.win_loss, None);
+        assert_eq!(pgl.rating, None);
+    }
+
+    #[test]
+    fn strategy_tag_summary_round_trips() {
+        let summary = StrategyTagSummary {
+            tag: "teamfight".into(),
+            games_played: 10,
+            wins: 7,
+            losses: 3,
+            avg_rating: Some(4.2),
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: StrategyTagSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(summary, back);
+    }
+
+    #[test]
+    fn analytics_payload_empty_round_trips() {
+        let payload = AnalyticsPayload {
+            tag_summaries: Vec::new(),
+            plan_effectiveness: Vec::new(),
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        let back: AnalyticsPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(payload, back);
     }
 }
