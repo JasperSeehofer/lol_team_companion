@@ -43,9 +43,24 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 
 ### Active
 
-**v2.0 — Solo Mode & Match Intelligence:**
-- [ ] Solo player mode (toggle, solo queue tracking, goals/learnings, profile dashboard)
-- [ ] Match detail view with "gather more info" from Riot API
+## Current Milestone: v1.2 Solo Mode & Match Intelligence
+
+**Goal:** Open the app to individual players with solo queue tracking, personal goals, and learnings — plus richer match detail from the Riot API that connects back into champion pool and draft decisions.
+
+**Target features:**
+- [ ] Solo/team toggle with personal dashboard
+- [ ] Solo queue goal setting (rank targets, CS/min, death count)
+- [ ] Ranked climb tracker (LP gains/losses, streaks, rank history)
+- [ ] Personal learnings journal (post-game reflections, tagged by champion/matchup)
+- [ ] Match detail view — full participant data (10 players), items, damage, gold
+- [ ] Match timeline — objectives (dragons, baron, towers), key events
+- [ ] Personal performance breakdown (damage share, vision score, CS graphs)
+- [ ] Match → learning one-click flow
+- [ ] Champion performance trends over time (win rate, KDA, CS/min per champion)
+- [ ] Personal matchup notes (surfaced when picking that champion in draft)
+- [ ] Practice list with auto-tracked progress from match history
+
+**Future (deferred beyond v1.2):**
 - [ ] Match as launchpad: create draft → game plan → review chain
 - [ ] Ban recommendations based on team champion win rate data (INTL-03)
 - [ ] Stats-informed draft pick scoring using match history (INTL-04)
@@ -108,5 +123,22 @@ Remaining tech debt:
 - **DB monolith**: `db.rs` is ~4,000 lines — splitting is a future refactor
 - **Demo quality**: Should be polished enough to show a friend without caveats
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-03-24 after v1.1 milestone completion*
+*Last updated: 2026-03-25 after v1.2 milestone started*
