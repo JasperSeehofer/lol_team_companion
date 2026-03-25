@@ -59,7 +59,11 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
   4. User can filter match history by queue type (solo queue, flex, all)
   5. User sees a personal solo dashboard at a dedicated route showing recent matches, current ranked badge, and goal status placeholders
   6. User's current ranked tier, division, and LP are displayed; a ranked snapshot is recorded in the DB on each sync
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 12-01-PLAN.md — Schema, models, riot.rs region parameterization, ranked data infrastructure
+- [ ] 12-02-PLAN.md — Mode toggle in nav, auth redirects, team-only page gates, region dropdown
+- [ ] 12-03-PLAN.md — Solo dashboard page, ranked badge, queue filter, match sync, goal placeholders
 **UI hint**: yes
 
 ### Phase 13: Match Detail View
@@ -127,7 +131,7 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
-| 12. Solo Mode Infrastructure | v1.2 | 0/? | Not started | - |
+| 12. Solo Mode Infrastructure | v1.2 | 0/3 | In progress | - |
 | 13. Match Detail View | v1.2 | 0/? | Not started | - |
 | 14. Personal Learnings Journal | v1.2 | 0/? | Not started | - |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
