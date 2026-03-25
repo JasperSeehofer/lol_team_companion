@@ -44,7 +44,7 @@ Declared values (must be multiples of 4):
 Exceptions:
 - Item icon slots: 24px × 24px squares with 4px gap between them (6 item slots in a row) — uses `gap-1`
 - Champion icon in scoreboard: 28px × 28px
-- Timeline event markers: 8px × 8px circles for minor events (tower kills, champion kills); 10px × 10px for mid-significance events (dragon kills, inhibitors); 12px × 12px for major objective events (baron, herald). The three-tier size family (8/10/12px) encodes event significance levels, making 10px a deliberate mid-point between the grid values on either side rather than an arbitrary off-grid value.
+- Timeline event markers: 8px × 8px circles for minor events (tower kills, champion kills); 12px × 12px for mid-significance events (dragon kills, inhibitors); 16px × 16px for major objective events (baron, herald). The three-tier size family (8/12/16px) encodes event significance levels — all multiples of 4, with a clear 4px step between each tier.
 - Touch targets for filter toggle buttons: minimum 32px height (desktop-first, no 44px mobile requirement)
 - User's own scoreboard row highlight: 4px left border accent stripe (not a spacing value, a visual treatment)
 
@@ -113,13 +113,13 @@ Column widths: champion 36px | summoner 160px (flex-1) | KDA 80px | items 180px 
 Location: `src/pages/match_detail.rs`
 Structure: horizontal bar (full width, height 40px) with `bg-elevated border border-divider rounded-lg` as track; event markers positioned absolutely by `(event_timestamp / game_duration_ms) * 100%`
 Event marker shapes by type:
-- Dragon kill: circle, 10px, team-colored
-- Baron/Herald: circle, 12px, team-colored, bold outline
+- Dragon kill: circle, 12px, team-colored
+- Baron/Herald: circle, 16px, team-colored, bold outline
 - Tower kill: square, 8px, team-colored
-- Inhibitor: diamond (rotated square), 10px, team-colored
+- Inhibitor: diamond (rotated square), 12px, team-colored
 - Champion kill: circle, 8px, team-colored; first blood gets star icon overlay
-- Teamfight (4+ within 10s window): larger circle, 14px, split blue/red gradient
-- Ward placement (user's own): small dot, 6px, accent-colored
+- Teamfight (4+ within 10s window): larger circle, 16px, split blue/red gradient
+- Ward placement (user's own): small dot, 8px, accent-colored
 - User's own events: accent-colored ring/glow — `ring-2 ring-accent ring-offset-1 ring-offset-base`
 Click behavior: clicking a marker sets `selected_event: RwSignal<Option<TimelineEvent>>` which renders a detail section below the bar
 Hover behavior: tooltip via `title` attribute on the marker element (native browser tooltip, consistent with item icons per D-04)
@@ -213,7 +213,7 @@ Use existing `SkeletonCard` component from `src/components/ui.rs`. No new skelet
 | Empty state body | "This match hasn't been loaded yet. Click below to fetch it." |
 | Empty state CTA | "Load match" |
 | Loading state label | none — skeleton layout replaces text entirely |
-| Error state | "Could not load match data. Check your connection and try again." + "Retry" button |
+| Error state | "Could not load match data. Check your connection and try again." + "Retry load" button |
 | API key missing error | "Riot API key not configured. Ask an admin to add a RIOT_API_KEY." |
 | Timeline: no events after filter | "No events match the current filters." — text-sm text-muted text-center py-4 |
 | Performance section heading | "My Performance" |
@@ -255,7 +255,7 @@ No destructive actions in this phase.
 2. Server checks DB cache first — if hit, returns immediately
 3. If miss, calls Riot API `get_match` + `get_timeline`, stores to DB, returns result
 4. Suspense renders skeleton during the fetch; fills content on resolve
-5. On error: ErrorBanner + "Retry" button that re-invokes the resource `.refetch()`
+5. On error: ErrorBanner + "Retry load" button that re-invokes the resource `.refetch()`
 
 ---
 
