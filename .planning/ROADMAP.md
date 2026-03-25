@@ -63,7 +63,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 Plans:
 - [x] 12-01-PLAN.md — Schema, models, riot.rs region parameterization, ranked data infrastructure
 - [ ] 12-02-PLAN.md — Mode toggle in nav, auth redirects, team-only page gates, region dropdown
-- [ ] 12-03-PLAN.md — Solo dashboard page, ranked badge, queue filter, match sync, goal placeholders
+- [x] 12-03-PLAN.md — Solo dashboard page, ranked badge, queue filter, match sync, goal placeholders
 **UI hint**: yes
 
 ### Phase 13: Match Detail View
@@ -131,7 +131,7 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
-| 12. Solo Mode Infrastructure | v1.2 | 1/3 | In Progress|  |
+| 12. Solo Mode Infrastructure | v1.2 | 2/3 | In Progress|  |
 | 13. Match Detail View | v1.2 | 0/? | Not started | - |
 | 14. Personal Learnings Journal | v1.2 | 0/? | Not started | - |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
