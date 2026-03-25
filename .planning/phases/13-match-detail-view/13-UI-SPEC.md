@@ -42,9 +42,9 @@ Declared values (must be multiples of 4):
 | 3xl | 64px | Page-level spacing (not used in dense data views) |
 
 Exceptions:
-- Item icon slots: 24px × 24px squares with 2px gap between them (6 item slots in a row)
+- Item icon slots: 24px × 24px squares with 4px gap between them (6 item slots in a row) — uses `gap-1`
 - Champion icon in scoreboard: 28px × 28px
-- Timeline event markers: 8px × 8px circles on the timeline bar, 12px × 12px for objective events
+- Timeline event markers: 8px × 8px circles for minor events (tower kills, champion kills); 10px × 10px for mid-significance events (dragon kills, inhibitors); 12px × 12px for major objective events (baron, herald). The three-tier size family (8/10/12px) encodes event significance levels, making 10px a deliberate mid-point between the grid values on either side rather than an arbitrary off-grid value.
 - Touch targets for filter toggle buttons: minimum 32px height (desktop-first, no 44px mobile requirement)
 - User's own scoreboard row highlight: 4px left border accent stripe (not a spacing value, a visual treatment)
 
@@ -55,18 +55,18 @@ Exceptions:
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Body | 14px (text-sm) | 400 (normal) | 1.5 |
-| Label | 12px (text-xs) | 500 (medium) | 1.4 |
+| Label | 12px (text-xs) | 400 (normal) | 1.4 |
 | Heading | 20px (text-xl) | 600 (semibold) | 1.2 |
-| Display | 28px (text-3xl) | 700 (bold) | 1.2 |
+| Display | 28px (text-3xl) | 600 (semibold) | 1.2 |
 
-Source: pattern extracted from `solo_dashboard.rs` and `opponents.rs`. Section headings (`h2`) consistently use `text-xl font-semibold`. Page titles use `text-3xl font-bold`. Table body data uses `text-sm`. Metadata labels use `text-xs`.
+Source: pattern extracted from `solo_dashboard.rs` and `opponents.rs`. Section headings (`h2`) consistently use `text-xl font-semibold`. Page titles use `text-3xl font-semibold`. Table body data uses `text-sm`. Metadata labels use `text-xs`. Size contrast (12px / 14px / 20px / 28px) plus uppercase tracking on column headers provides sufficient hierarchy with only two weight steps.
 
 Applied to this phase:
-- Page title "Match Detail": text-3xl font-bold text-primary
+- Page title "Match Detail": text-3xl font-semibold text-primary
 - Section headings ("Blue Team", "Red Team", "Timeline", "My Performance"): text-xl font-semibold text-primary
-- Scoreboard data rows: text-sm, font-normal for most columns, font-medium for summoner name
+- Scoreboard data rows: text-sm font-normal for all columns including summoner name
 - KDA numerals: text-sm font-semibold text-primary
-- Column headers: text-xs font-medium text-muted uppercase tracking-wider
+- Column headers: text-xs font-normal text-muted uppercase tracking-wider
 - Timeline tooltip text: text-sm text-secondary
 - Performance bar labels: text-sm text-secondary
 - Performance bar numbers: text-sm font-semibold text-primary
@@ -144,7 +144,7 @@ Comparison toggle: pill toggle above the section — "vs Game Average" / "vs Lan
 ### ItemSlot
 Location: inline in ScoreboardTable (not extracted unless reused)
 Structure: `<img src="https://ddragon.leagueoflegends.com/cdn/{version}/img/item/{item_id}.png" class="w-6 h-6 rounded" title="{item_name}" />` or empty slot `<div class="w-6 h-6 rounded bg-elevated border border-divider/30" />` when no item
-Six slots rendered in `flex gap-0.5`
+Six slots rendered in `flex gap-1`
 
 ---
 
