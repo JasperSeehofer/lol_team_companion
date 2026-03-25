@@ -75,7 +75,11 @@ Plans:
   2. User can view match timeline events (dragon kills, baron kills, tower kills, champion kills) for a given match
   3. User can see their own performance breakdown within the match — damage share percentage, vision score, and CS compared to game average
   4. Match detail data loads on-demand the first time a user opens a match, then loads instantly from the DB cache on subsequent opens without another Riot API call
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 13-01-PLAN.md — Schema, models, Riot API extraction, DB cache, server function, unit tests
+- [ ] 13-02-PLAN.md — Match detail page UI (scoreboard, performance), route wiring, click-to-navigate
+- [ ] 13-03-PLAN.md — Timeline visualization, filter bar, event markers, visual verification
 **UI hint**: yes
 
 ### Phase 14: Personal Learnings Journal
@@ -132,7 +136,7 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
 | 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
-| 13. Match Detail View | v1.2 | 0/? | Not started | - |
+| 13. Match Detail View | v1.2 | 0/3 | Not started | - |
 | 14. Personal Learnings Journal | v1.2 | 0/? | Not started | - |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
 | 16. Draft Integration | v1.2 | 0/? | Not started | - |
