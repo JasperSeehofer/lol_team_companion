@@ -3,9 +3,11 @@ use leptos::web_sys;
 use leptos_router::components::A;
 
 #[server]
-pub async fn login_action(email: String, password: String) -> Result<(), ServerFnError> {
+pub async fn login_action(email: String, password: String) -> Result<String, ServerFnError> {
     use crate::server::auth::{AuthSession, Credentials};
-    use leptos_axum::redirect;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
 
     let mut auth: AuthSession = leptos_axum::extract().await?;
     let creds = Credentials { email, password };
@@ -14,8 +16,17 @@ pub async fn login_action(email: String, password: String) -> Result<(), ServerF
             auth.login(&user)
                 .await
                 .map_err(|e| ServerFnError::new(e.to_string()))?;
-            redirect("/team/dashboard");
-            Ok(())
+            let db = use_context::<Arc<Surreal<Db>>>()
+                .ok_or_else(|| ServerFnError::new("No DB context"))?;
+            let mode = db::get_user_mode(&db, &user.id)
+                .await
+                .unwrap_or_else(|_| "solo".to_string());
+            let dest = if mode == "team" {
+                "/team/dashboard".to_string()
+            } else {
+                "/solo".to_string()
+            };
+            Ok(dest)
         }
         Ok(None) => Err(ServerFnError::new("Invalid email or password")),
         Err(e) => Err(ServerFnError::new(e.to_string())),
@@ -28,9 +39,11 @@ pub fn LoginPage() -> impl IntoView {
 
     // Hard navigate after successful login so the nav refetches auth state
     Effect::new(move || {
-        if let Some(Ok(())) = login.value().get() {
+        #[allow(unused_variables)]
+        if let Some(Ok(dest)) = login.value().get() {
+            #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/team/dashboard");
+                let _ = window.location().set_href(&dest);
             }
         }
     });

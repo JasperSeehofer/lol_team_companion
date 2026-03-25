@@ -7,10 +7,9 @@ pub async fn register_action(
     username: String,
     email: String,
     password: String,
-) -> Result<(), ServerFnError> {
+) -> Result<String, ServerFnError> {
     use crate::server::auth::{hash_password, AuthSession, Credentials};
     use crate::server::db;
-    use leptos_axum::redirect;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
@@ -30,8 +29,8 @@ pub async fn register_action(
         let _ = auth.login(&user).await;
     }
 
-    redirect("/team/dashboard");
-    Ok(())
+    // New users default to solo mode (D-03)
+    Ok("/solo".to_string())
 }
 
 #[component]
@@ -40,9 +39,11 @@ pub fn RegisterPage() -> impl IntoView {
 
     // Hard navigate after successful registration + auto-login
     Effect::new(move || {
-        if let Some(Ok(())) = register.value().get() {
+        #[allow(unused_variables)]
+        if let Some(Ok(dest)) = register.value().get() {
+            #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/team/dashboard");
+                let _ = window.location().set_href(&dest);
             }
         }
     });

@@ -95,14 +95,21 @@ pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
 #[component]
 pub fn RosterPage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    // Auth redirect
+    // Auth redirect + mode detection
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
     Effect::new(move || {
-        if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
+        match auth_user.get() {
+            Some(Ok(None)) => {
+                #[cfg(feature = "hydrate")]
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/auth/login");
+                }
             }
+            Some(Ok(Some(u))) => {
+                is_solo_mode.set(u.mode == "solo");
+            }
+            _ => {}
         }
     });
 
@@ -129,7 +136,35 @@ pub fn RosterPage() -> impl IntoView {
     });
 
     view! {
-        <div class="max-w-2xl mx-auto py-8 px-6 flex flex-col gap-8">
+        <div class="max-w-2xl mx-auto py-8 px-6">
+            <h1 class="text-3xl font-bold text-primary mb-6">"Team Roster"</h1>
+            // Mode gate: show CTA for solo-mode users instead of team content
+            {move || if is_solo_mode.get() {
+                view! {
+                    <div class="py-8 text-center">
+                        <div class="bg-surface border border-outline rounded-xl p-6">
+                            <h2 class="text-xl font-semibold text-primary mb-2">"Team feature"</h2>
+                            <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
+                            <button
+                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer"
+                                on:click=move |_| {
+                                    leptos::task::spawn_local(async move {
+                                        let _ = crate::components::nav::set_user_mode("team".to_string()).await;
+                                        #[cfg(feature = "hydrate")]
+                                        if let Some(window) = web_sys::window() {
+                                            let _ = window.location().reload();
+                                        }
+                                    });
+                                }
+                            >
+                                "Switch to Team Mode"
+                            </button>
+                        </div>
+                    </div>
+                }.into_any()
+            } else {
+                view! {
+        <div class="flex flex-col gap-8">
             // No-team context message
             <EmptyState
                 icon="👥"
@@ -278,6 +313,9 @@ pub fn RosterPage() -> impl IntoView {
                     </div>
                 </ActionForm>
             </section>
+        </div>
+                }.into_any()
+            }}
         </div>
     }
 }

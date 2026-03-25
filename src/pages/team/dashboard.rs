@@ -571,14 +571,21 @@ fn role_icon_url(role: &str) -> &'static str {
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    // Auth redirect
+    // Auth redirect + mode detection
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
     Effect::new(move || {
-        if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
+        match auth_user.get() {
+            Some(Ok(None)) => {
+                #[cfg(feature = "hydrate")]
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/auth/login");
+                }
             }
+            Some(Ok(Some(u))) => {
+                is_solo_mode.set(u.mode == "solo");
+            }
+            _ => {}
         }
     });
 
@@ -593,7 +600,32 @@ pub fn TeamDashboard() -> impl IntoView {
         <div class="max-w-4xl mx-auto py-8 px-6">
             <h1 class="text-3xl font-bold text-primary mb-6">"Team Dashboard"</h1>
             <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
-                {move || dashboard.get().map(|result| match result {
+                {move || {
+                    if is_solo_mode.get() {
+                        return Some(view! {
+                            <div class="max-w-2xl py-8 text-center">
+                                <div class="bg-surface border border-outline rounded-xl p-6">
+                                    <h2 class="text-xl font-semibold text-primary mb-2">"Team feature"</h2>
+                                    <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
+                                    <button
+                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer"
+                                        on:click=move |_| {
+                                            leptos::task::spawn_local(async move {
+                                                let _ = crate::components::nav::set_user_mode("team".to_string()).await;
+                                                #[cfg(feature = "hydrate")]
+                                                if let Some(window) = web_sys::window() {
+                                                    let _ = window.location().reload();
+                                                }
+                                            });
+                                        }
+                                    >
+                                        "Switch to Team Mode"
+                                    </button>
+                                </div>
+                            </div>
+                        }.into_any());
+                    }
+                    dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
                         let is_leader = team.created_by == current_user_id;
                         let created_by = team.created_by.clone();
@@ -1359,7 +1391,7 @@ pub fn TeamDashboard() -> impl IntoView {
                     Err(e) => view! {
                         <ErrorBanner message=format!("Failed to load team data: {e}") />
                     }.into_any(),
-                })}
+                })}}
             </Suspense>
         </div>
     }

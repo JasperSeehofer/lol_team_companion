@@ -365,16 +365,22 @@ const ROLES: [(&str, &str); 5] = [
 
 #[component]
 pub fn OpponentsPage() -> impl IntoView {
-    #[allow(unused_variables)]
     let user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
 
-    // Auth redirect
-    #[cfg(feature = "hydrate")]
-    Effect::new(move |_| {
-        if let Some(Ok(None)) = user.get() {
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
+    // Auth redirect + mode detection
+    Effect::new(move || {
+        match user.get() {
+            Some(Ok(None)) => {
+                #[cfg(feature = "hydrate")]
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/auth/login");
+                }
             }
+            Some(Ok(Some(u))) => {
+                is_solo_mode.set(u.mode == "solo");
+            }
+            _ => {}
         }
     });
 
@@ -419,8 +425,41 @@ pub fn OpponentsPage() -> impl IntoView {
         });
     });
 
+    let gate_view = move || {
+        if is_solo_mode.get() {
+            Some(view! {
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+                    <h1 class="text-2xl font-semibold text-primary mb-6">"Opponents"</h1>
+                    <div class="max-w-2xl py-8 text-center">
+                        <div class="bg-surface border border-outline rounded-xl p-6">
+                            <h2 class="text-xl font-semibold text-primary mb-2">"Team feature"</h2>
+                            <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
+                            <button
+                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer"
+                                on:click=move |_| {
+                                    leptos::task::spawn_local(async move {
+                                        let _ = crate::components::nav::set_user_mode("team".to_string()).await;
+                                        #[cfg(feature = "hydrate")]
+                                        if let Some(window) = web_sys::window() {
+                                            let _ = window.location().reload();
+                                        }
+                                    });
+                                }
+                            >
+                                "Switch to Team Mode"
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            })
+        } else {
+            None
+        }
+    };
+
     view! {
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        {gate_view}
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8" style:display=move || if is_solo_mode.get() { "none" } else { "" }>
 
             // Back to Draft link (when navigated from draft page via Add New Opponent)
             {move || {

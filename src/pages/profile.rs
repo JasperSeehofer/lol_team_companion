@@ -2,6 +2,7 @@ use crate::components::ui::{EmptyState, SkeletonCard, SkeletonGrid, ToastContext
 use crate::models::champion::ChampionPoolEntry;
 use crate::models::user::PublicUser;
 use leptos::prelude::*;
+use leptos::web_sys;
 
 #[server]
 pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
@@ -78,6 +79,41 @@ pub async fn get_champion_pool() -> Result<Vec<ChampionPoolEntry>, ServerFnError
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+#[server]
+pub async fn save_region(region: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    db::set_user_region(&db, &user.id, &region)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+const REGIONS: &[(&str, &str)] = &[
+    ("EUW", "EUW (Europe West)"),
+    ("EUNE", "EUNE (Europe Nordic & East)"),
+    ("NA", "NA (North America)"),
+    ("KR", "KR (Korea)"),
+    ("BR", "BR (Brazil)"),
+    ("LAN", "LAN (Latin America North)"),
+    ("LAS", "LAS (Latin America South)"),
+    ("OCE", "OCE (Oceania)"),
+    ("TR", "TR (Turkey)"),
+    ("RU", "RU (Russia)"),
+    ("JP", "JP (Japan)"),
+    ("SG", "SG (Singapore)"),
+    ("TW", "TW (Taiwan)"),
+    ("VN", "VN (Vietnam)"),
+    ("ME", "ME (Middle East)"),
+];
+
 const POOL_ROLES: &[&str] = &["Top", "Jungle", "Mid", "ADC", "Support"];
 
 #[component]
@@ -139,6 +175,7 @@ pub fn ProfilePage() -> impl IntoView {
                         Ok(Some(u)) => {
                             let username = u.username.clone();
                             let riot_name = u.riot_summoner_name.clone();
+                            let initial_region = u.riot_region.clone().unwrap_or_default();
                             let (editing_username, set_editing_username) = signal(false);
                             let username_for_edit = username.clone();
                             view! {
@@ -219,6 +256,35 @@ pub fn ProfilePage() -> impl IntoView {
                                                 />
                                             }.into_any(),
                                         }}
+
+                                        // Region dropdown
+                                        <div class="mb-4">
+                                            <label class="block text-secondary text-sm mb-1">"Region"</label>
+                                            <select
+                                                class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary w-full max-w-xs cursor-pointer"
+                                                on:change=move |ev| {
+                                                    let region = event_target_value(&ev);
+                                                    leptos::task::spawn_local(async move {
+                                                        match save_region(region).await {
+                                                            Ok(()) => toast.show.run((ToastKind::Success, "Region saved".into())),
+                                                            Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                                                        }
+                                                    });
+                                                }
+                                            >
+                                                <option value="" selected={initial_region.is_empty()}>
+                                                    "Select your region"
+                                                </option>
+                                                {REGIONS.iter().map(|&(value, label)| {
+                                                    let sel = initial_region.clone();
+                                                    view! {
+                                                        <option value=value selected=move || sel == value>
+                                                            {label}
+                                                        </option>
+                                                    }
+                                                }).collect_view()}
+                                            </select>
+                                        </div>
 
                                         <ActionForm action=link_riot>
                                             <div class="flex flex-col gap-4">
