@@ -4916,4 +4916,50 @@ mod tests {
         // batch_create_action_items_from_review early-returns Ok(0) on empty input
         assert!(improvements.is_empty());
     }
+
+    // ----- Solo mode DB function stubs (Phase 12) -----
+    // These require a live SurrealDB instance. Marked #[ignore] for unit test runs.
+    // Run with: cargo test --features ssr --lib -- db::tests --ignored (when DB available)
+
+    #[tokio::test]
+    #[ignore = "requires SurrealDB instance"]
+    async fn test_get_user_mode_defaults_to_solo() {
+        // Setup: create user without explicit mode field
+        // Assert: get_user_mode returns "solo"
+        todo!("Promote to integration test when linker OOM is resolved");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires SurrealDB instance"]
+    async fn test_set_and_get_user_mode_round_trip() {
+        // Setup: create user, set_user_mode to "team"
+        // Assert: get_user_mode returns "team"
+        // Set back to "solo", assert returns "solo"
+        todo!("Promote to integration test when linker OOM is resolved");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires SurrealDB instance"]
+    async fn test_store_and_get_ranked_snapshot() {
+        // Setup: create user, store_ranked_snapshot with tier=Gold, div=II, lp=47
+        // Assert: get_latest_ranked_snapshot returns RankedInfo with matching fields
+        todo!("Promote to integration test when linker OOM is resolved");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires SurrealDB instance"]
+    async fn test_get_solo_matches_empty() {
+        // Setup: create user with no matches
+        // Assert: get_solo_matches returns empty vec
+        todo!("Promote to integration test when linker OOM is resolved");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires SurrealDB instance"]
+    async fn test_get_solo_matches_queue_filter() {
+        // Setup: create user, store matches with queue_id 420 and 440
+        // Assert: get_solo_matches(queue_filter=Some(420)) returns only solo/duo matches
+        // Assert: get_solo_matches(queue_filter=None) returns all matches
+        todo!("Promote to integration test when linker OOM is resolved");
+    }
 }
