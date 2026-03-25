@@ -2,33 +2,27 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
-status: planning
-stopped_at: Phase 12 context gathered
-last_updated: "2026-03-25T10:44:19.014Z"
-last_activity: 2026-03-25 — Roadmap created for v1.2 (5 phases, 20 requirements mapped)
+status: Ready to execute
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-03-25T12:14:27.853Z"
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 ## Current Position
 
-Phase: 12 of 16 (Solo Mode Infrastructure) — ready to plan
-Plan: —
-Status: Ready to plan Phase 12
-Last activity: 2026-03-25 — Roadmap created for v1.2 (5 phases, 20 requirements mapped)
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 12 (solo-mode-infrastructure) — EXECUTING
+Plan: 2 of 3
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 12 — Solo Mode Infrastructure
+**Current focus:** Phase 12 — solo-mode-infrastructure
 
 ## Decisions
 
@@ -37,6 +31,8 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Roadmap]: `personal_learning` is a separate table from `post_game_learning` — solo learnings must not mix with team-scoped records
 - [Roadmap]: Mode toggle persisted in DB user record, not WASM signal — survives hard navigation on login/logout
 - [Roadmap]: Phase 15 (Goals & LP History) depends on Phase 12 only, not Phase 13 or 14 — can be sequenced after either
+- [Phase 12]: EUW fallback for opponent Riot API calls: opponent players have no associated user region, hardcode EUW as safe fallback for get_puuid/fetch_player_intel/fetch_player_champions
+- [Phase 12]: store_matches_with_synced_by wrapper: preserved backward-compatible store_matches() API; solo sync calls store_matches_with_synced_by directly with user ID
 
 ## Blockers/Concerns
 
@@ -45,6 +41,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-03-25T10:44:19.013Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-solo-mode-infrastructure/12-CONTEXT.md
+Last session: 2026-03-25T12:14:27.852Z
+Stopped at: Completed 12-01-PLAN.md
+Resume file: None

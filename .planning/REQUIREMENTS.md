@@ -10,16 +10,16 @@ Requirements for Solo Mode & Match Intelligence milestone. Each maps to roadmap 
 ### Solo Mode
 
 - [ ] **SOLO-01**: User can toggle between team mode and solo mode, persisted across sessions
-- [ ] **SOLO-02**: User can sync solo queue match history without being on a team
+- [x] **SOLO-02**: User can sync solo queue match history without being on a team
 - [ ] **SOLO-03**: User can filter match history by queue type (solo queue, flex, all)
 - [ ] **SOLO-04**: User sees a personal solo dashboard with recent matches, ranked badge, learnings, and goal status
-- [ ] **SOLO-05**: User can select their region during Riot account linking (EUW, NA, KR, etc.)
+- [x] **SOLO-05**: User can select their region during Riot account linking (EUW, NA, KR, etc.)
 
 ### Ranked Tracking
 
-- [ ] **RANK-01**: User can see their current ranked tier, division, and LP
+- [x] **RANK-01**: User can see their current ranked tier, division, and LP
 - [ ] **RANK-02**: User can view LP history over time as a trend graph
-- [ ] **RANK-03**: System snapshots LP on each stats sync for history tracking
+- [x] **RANK-03**: System snapshots LP on each stats sync for history tracking
 
 ### Match Detail
 
@@ -87,12 +87,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SOLO-01 | Phase 12 | Pending |
-| SOLO-02 | Phase 12 | Pending |
+| SOLO-02 | Phase 12 | Complete |
 | SOLO-03 | Phase 12 | Pending |
 | SOLO-04 | Phase 12 | Pending |
-| SOLO-05 | Phase 12 | Pending |
-| RANK-01 | Phase 12 | Pending |
-| RANK-03 | Phase 12 | Pending |
+| SOLO-05 | Phase 12 | Complete |
+| RANK-01 | Phase 12 | Complete |
+| RANK-03 | Phase 12 | Complete |
 | MATCH-01 | Phase 13 | Pending |
 | MATCH-02 | Phase 13 | Pending |
 | MATCH-03 | Phase 13 | Pending |
