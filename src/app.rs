@@ -19,6 +19,7 @@ use crate::pages::{
     opponents::OpponentsPage,
     post_game::PostGamePage,
     profile::ProfilePage,
+    solo_dashboard::SoloDashboardPage,
     stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
     team_builder::TeamBuilderPage,
@@ -73,6 +74,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/opponents") view=OpponentsPage />
                         <Route path=path!("/action-items") view=ActionItemsPage />
                         <Route path=path!("/analytics") view=AnalyticsPage />
+                        <Route path=path!("/solo") view=SoloDashboardPage />
                     </Routes>
                 </main>
             </ToastProvider>

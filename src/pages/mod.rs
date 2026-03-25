@@ -8,6 +8,7 @@ pub mod home;
 pub mod opponents;
 pub mod post_game;
 pub mod profile;
+pub mod solo_dashboard;
 pub mod stats;
 pub mod team;
 pub mod team_builder;

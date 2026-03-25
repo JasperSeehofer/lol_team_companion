@@ -4504,6 +4504,32 @@ pub async fn update_last_solo_sync(db: &Surreal<Db>, user_id: &str) -> DbResult<
     Ok(())
 }
 
+/// Returns true if the user's last_solo_sync is None or older than 10 minutes.
+pub async fn get_should_auto_sync(db: &Surreal<Db>, user_id: &str) -> DbResult<bool> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct SyncRecord {
+        last_solo_sync: Option<surrealdb::types::Datetime>,
+    }
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let mut result = db
+        .query("SELECT last_solo_sync FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+    let record: Option<SyncRecord> = result.take(0).unwrap_or_default();
+    let should_sync = match record.and_then(|r| r.last_solo_sync) {
+        None => true,
+        Some(last) => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let last_secs: i64 = last.timestamp();
+            now - last_secs > 600
+        }
+    };
+    Ok(should_sync)
+}
+
 // ---------------------------------------------------------------------------
 // Solo Mode: Ranked snapshots
 // ---------------------------------------------------------------------------
