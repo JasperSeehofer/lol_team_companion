@@ -47,7 +47,8 @@ pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
     }
     let (game_name, tag_line) = (parts[0], parts[1]);
 
-    let puuid = riot::get_puuid(game_name, tag_line)
+    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
+    let puuid = riot::get_puuid(game_name, tag_line, platform)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 

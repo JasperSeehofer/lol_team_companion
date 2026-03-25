@@ -130,7 +130,8 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
             _ => continue,
         };
 
-        match riot::fetch_match_history(puuid, queue_id).await {
+        let platform = riot::platform_route_from_str("EUW");
+        match riot::fetch_match_history(puuid, queue_id, platform).await {
             Ok(matches) => {
                 let count = matches.len();
                 if let Err(e) = db::store_matches(&surreal, uid, matches).await {

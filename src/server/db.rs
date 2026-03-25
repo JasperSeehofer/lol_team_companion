@@ -1456,7 +1456,18 @@ pub async fn store_matches(
     user_id: &str,
     matches: Vec<crate::server::riot::MatchData>,
 ) -> DbResult<()> {
+    store_matches_with_synced_by(db, user_id, matches, None).await
+}
+
+pub async fn store_matches_with_synced_by(
+    db: &Surreal<Db>,
+    user_id: &str,
+    matches: Vec<crate::server::riot::MatchData>,
+    synced_by_user_id: Option<&str>,
+) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    let synced_by_key = synced_by_user_id
+        .map(|s| s.strip_prefix("user:").unwrap_or(s).to_string());
 
     for m in matches {
         let mut r = db
@@ -1478,11 +1489,16 @@ pub async fn store_matches(
                     .unwrap_or_default()
             });
 
+            let synced_by_clause = synced_by_key
+                .as_ref()
+                .map(|k| format!(", synced_by = type::record('user', '{k}')"))
+                .unwrap_or_default();
+
             let query = match &game_end_str {
                 Some(ge) => format!(
-                    "CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration, game_end = <datetime>'{ge}'"
+                    "CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration, game_end = <datetime>'{ge}'{synced_by_clause}"
                 ),
-                None => "CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration".to_string(),
+                None => format!("CREATE match SET match_id = $match_id, queue_id = $queue_id, game_duration = $game_duration{synced_by_clause}"),
             };
 
             let mut cr = db
@@ -4437,6 +4453,149 @@ pub struct DraftOutcomeData {
     pub red_wins: i32,
     pub tag_stats: Vec<(String, i32, i32)>,
     pub first_pick_stats: Vec<(String, i32, i32)>,
+}
+
+// ---------------------------------------------------------------------------
+// Solo Mode: User mode + region
+// ---------------------------------------------------------------------------
+
+pub async fn get_user_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct ModeRecord {
+        mode: Option<String>,
+    }
+    let mut result = db
+        .query("SELECT mode FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+    let row: Option<ModeRecord> = result.take(0)?;
+    Ok(row
+        .and_then(|r| r.mode)
+        .unwrap_or_else(|| "solo".to_string()))
+}
+
+pub async fn set_user_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET mode = $mode")
+        .bind(("user_key", user_key))
+        .bind(("mode", mode.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn set_user_region(db: &Surreal<Db>, user_id: &str, region: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET riot_region = $region")
+        .bind(("user_key", user_key))
+        .bind(("region", region.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn update_last_solo_sync(db: &Surreal<Db>, user_id: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET last_solo_sync = time::now()")
+        .bind(("user_key", user_key))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Solo Mode: Ranked snapshots
+// ---------------------------------------------------------------------------
+
+pub async fn store_ranked_snapshot(
+    db: &Surreal<Db>,
+    user_id: &str,
+    queue_type: &str,
+    tier: &str,
+    division: &str,
+    lp: i32,
+    wins: i32,
+    losses: i32,
+) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("CREATE ranked_snapshot SET user = type::record('user', $user_key), queue_type = $queue_type, tier = $tier, division = $division, lp = $lp, wins = $wins, losses = $losses")
+        .bind(("user_key", user_key))
+        .bind(("queue_type", queue_type.to_string()))
+        .bind(("tier", tier.to_string()))
+        .bind(("division", division.to_string()))
+        .bind(("lp", lp))
+        .bind(("wins", wins))
+        .bind(("losses", losses))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn get_latest_ranked_snapshot(
+    db: &Surreal<Db>,
+    user_id: &str,
+    queue_type: &str,
+) -> DbResult<Option<crate::models::user::RankedInfo>> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbRankedSnapshot {
+        queue_type: String,
+        tier: String,
+        division: String,
+        lp: i32,
+        wins: i32,
+        losses: i32,
+    }
+
+    let mut result = db
+        .query("SELECT queue_type, tier, division, lp, wins, losses FROM ranked_snapshot WHERE user = type::record('user', $user_key) AND queue_type = $queue_type ORDER BY snapshotted_at DESC LIMIT 1")
+        .bind(("user_key", user_key))
+        .bind(("queue_type", queue_type.to_string()))
+        .await?;
+
+    let row: Option<DbRankedSnapshot> = result.take(0)?;
+    Ok(row.map(|r| crate::models::user::RankedInfo {
+        queue_type: r.queue_type,
+        tier: r.tier,
+        division: r.division,
+        lp: r.lp,
+        wins: r.wins,
+        losses: r.losses,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Solo Mode: Solo matches
+// ---------------------------------------------------------------------------
+
+pub async fn get_solo_matches(
+    db: &Surreal<Db>,
+    user_id: &str,
+    queue_filter: Option<i32>,
+    limit: i32,
+) -> DbResult<Vec<crate::models::match_data::PlayerMatchStats>> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+
+    let rows: Vec<crate::models::match_data::PlayerMatchStats> = if let Some(qid) = queue_filter {
+        let mut result = db
+            .query("SELECT * FROM player_match WHERE user = type::record('user', $user_key) AND match.queue_id = $queue_id LIMIT $limit")
+            .bind(("user_key", user_key))
+            .bind(("queue_id", qid))
+            .bind(("limit", limit))
+            .await?;
+        result.take(0).unwrap_or_default()
+    } else {
+        let mut result = db
+            .query("SELECT * FROM player_match WHERE user = type::record('user', $user_key) LIMIT $limit")
+            .bind(("user_key", user_key))
+            .bind(("limit", limit))
+            .await?;
+        result.take(0).unwrap_or_default()
+    };
+
+    Ok(rows)
 }
 
 #[cfg(test)]

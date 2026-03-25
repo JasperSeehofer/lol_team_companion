@@ -466,7 +466,7 @@ pub async fn get_opponent_intel_full(
         // Mastery data — gracefully absent when API key missing or no PUUID.
         let mastery_data = if riot::has_api_key() {
             if let Some(ref puuid) = player.riot_puuid {
-                match riot::fetch_champion_masteries(puuid).await {
+                match riot::fetch_champion_masteries(puuid, riot::platform_route_from_str("EUW")).await {
                     Ok(masteries) => masteries.into_iter().take(10).collect(),
                     Err(_) => Vec::new(),
                 }

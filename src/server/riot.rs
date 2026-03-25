@@ -1,3 +1,4 @@
+use riven::consts::{PlatformRoute, RegionalRoute};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -33,11 +34,52 @@ fn api() -> riven::RiotApi {
     riven::RiotApi::new(key)
 }
 
-pub async fn get_puuid(game_name: &str, tag_line: &str) -> Result<String, RiotError> {
+pub fn platform_route_from_str(region: &str) -> PlatformRoute {
+    match region {
+        "EUW" => PlatformRoute::EUW1,
+        "EUNE" => PlatformRoute::EUN1,
+        "NA" => PlatformRoute::NA1,
+        "KR" => PlatformRoute::KR,
+        "BR" => PlatformRoute::BR1,
+        "LAN" => PlatformRoute::LA1,
+        "LAS" => PlatformRoute::LA2,
+        "OCE" => PlatformRoute::OC1,
+        "TR" => PlatformRoute::TR1,
+        "RU" => PlatformRoute::RU,
+        "JP" => PlatformRoute::JP1,
+        "SG" => PlatformRoute::SG2,
+        "TW" => PlatformRoute::TW2,
+        "VN" => PlatformRoute::VN2,
+        "ME" => PlatformRoute::ME1,
+        _ => PlatformRoute::EUW1, // safe fallback
+    }
+}
+
+/// account-v1 uses different regional grouping than match-v5
+pub fn account_region_for(platform: PlatformRoute) -> RegionalRoute {
+    match platform {
+        PlatformRoute::OC1
+        | PlatformRoute::SG2
+        | PlatformRoute::TW2
+        | PlatformRoute::VN2
+        | PlatformRoute::ME1 => RegionalRoute::SEA,
+        PlatformRoute::NA1 | PlatformRoute::BR1 | PlatformRoute::LA1 | PlatformRoute::LA2 => {
+            RegionalRoute::AMERICAS
+        }
+        PlatformRoute::KR | PlatformRoute::JP1 => RegionalRoute::ASIA,
+        _ => RegionalRoute::EUROPE,
+    }
+}
+
+pub async fn get_puuid(
+    game_name: &str,
+    tag_line: &str,
+    platform: PlatformRoute,
+) -> Result<String, RiotError> {
     let api = api();
     let account = api
         .account_v1()
-        .get_by_riot_id(riven::consts::RegionalRoute::EUROPE, game_name, tag_line)
+        .get_by_riot_id(account_region_for(platform), game_name, tag_line)
         .await?
         .ok_or_else(|| RiotError::Api(format!("Account {game_name}#{tag_line} not found")))?;
     Ok(account.puuid)
@@ -46,6 +88,7 @@ pub async fn get_puuid(game_name: &str, tag_line: &str) -> Result<String, RiotEr
 pub async fn fetch_match_history(
     puuid: &str,
     queue_id: Option<i32>,
+    platform: PlatformRoute,
 ) -> Result<Vec<MatchData>, RiotError> {
     let api = api();
 
@@ -54,7 +97,7 @@ pub async fn fetch_match_history(
     let match_ids = api
         .match_v5()
         .get_match_ids_by_puuid(
-            riven::consts::RegionalRoute::EUROPE,
+            platform.to_regional(),
             puuid,
             Some(20),
             None,
@@ -70,7 +113,7 @@ pub async fn fetch_match_history(
     for mid in match_ids {
         let Some(m) = api
             .match_v5()
-            .get_match(riven::consts::RegionalRoute::EUROPE, &mid)
+            .get_match(platform.to_regional(), &mid)
             .await?
         else {
             continue;
@@ -104,15 +147,15 @@ pub async fn fetch_match_history(
 /// Returns a list of (champion_name, mastery_level, mastery_points) tuples,
 /// ordered by mastery points descending (highest mastery first).
 ///
-/// Uses the EUW1 platform route to match the existing regional routing pattern.
 /// Returns an empty Vec on API error — callers should degrade gracefully.
 pub async fn fetch_champion_masteries(
     puuid: &str,
+    platform: PlatformRoute,
 ) -> Result<Vec<(String, i32, i32)>, RiotError> {
     let api = api();
     let masteries = api
         .champion_mastery_v4()
-        .get_all_champion_masteries_by_puuid(riven::consts::PlatformRoute::EUW1, puuid)
+        .get_all_champion_masteries_by_puuid(platform, puuid)
         .await?;
     let result = masteries
         .into_iter()
@@ -130,12 +173,16 @@ pub async fn fetch_champion_masteries(
     Ok(result)
 }
 
-pub async fn fetch_player_champions(puuid: &str, count: usize) -> Result<Vec<String>, RiotError> {
+pub async fn fetch_player_champions(
+    puuid: &str,
+    count: usize,
+    platform: PlatformRoute,
+) -> Result<Vec<String>, RiotError> {
     let api = api();
     let match_ids = api
         .match_v5()
         .get_match_ids_by_puuid(
-            riven::consts::RegionalRoute::EUROPE,
+            platform.to_regional(),
             puuid,
             Some(count as i32),
             None,
@@ -152,7 +199,7 @@ pub async fn fetch_player_champions(puuid: &str, count: usize) -> Result<Vec<Str
     for mid in match_ids {
         let Some(m) = api
             .match_v5()
-            .get_match(riven::consts::RegionalRoute::EUROPE, &mid)
+            .get_match(platform.to_regional(), &mid)
             .await?
         else {
             continue;
@@ -181,12 +228,13 @@ pub struct PlayerIntelData {
 pub async fn fetch_player_intel(
     puuid: &str,
     match_count: usize,
+    platform: PlatformRoute,
 ) -> Result<PlayerIntelData, RiotError> {
     let api = api();
     let match_ids = api
         .match_v5()
         .get_match_ids_by_puuid(
-            riven::consts::RegionalRoute::EUROPE,
+            platform.to_regional(),
             puuid,
             Some(match_count as i32),
             None,
@@ -204,7 +252,7 @@ pub async fn fetch_player_intel(
     for mid in match_ids {
         let Some(m) = api
             .match_v5()
-            .get_match(riven::consts::RegionalRoute::EUROPE, &mid)
+            .get_match(platform.to_regional(), &mid)
             .await?
         else {
             continue;
@@ -221,11 +269,113 @@ pub async fn fetch_player_intel(
         }
     }
 
-    let mastery_data = fetch_champion_masteries(puuid).await?;
+    let mastery_data = fetch_champion_masteries(puuid, platform).await?;
 
     Ok(PlayerIntelData {
         recent_champions,
         champion_with_role,
         mastery_data,
     })
+}
+
+pub struct RankedEntry {
+    pub queue_type: String,
+    pub tier: String,
+    pub division: String,
+    pub lp: i32,
+    pub wins: i32,
+    pub losses: i32,
+}
+
+pub async fn fetch_ranked_data(
+    puuid: &str,
+    platform: PlatformRoute,
+) -> Result<Vec<RankedEntry>, RiotError> {
+    let api = api();
+    let entries = api
+        .league_v4()
+        .get_league_entries_by_puuid(platform, puuid)
+        .await?;
+    Ok(entries
+        .into_iter()
+        .map(|e| RankedEntry {
+            queue_type: format!("{:?}", e.queue_type),
+            tier: e.tier.map(|t| format!("{:?}", t)).unwrap_or_default(),
+            division: e.rank.map(|d| format!("{:?}", d)).unwrap_or_default(),
+            lp: e.league_points,
+            wins: e.wins,
+            losses: e.losses,
+        })
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use riven::consts::{PlatformRoute, RegionalRoute};
+
+    #[test]
+    fn platform_route_from_str_all_regions() {
+        assert_eq!(platform_route_from_str("EUW"), PlatformRoute::EUW1);
+        assert_eq!(platform_route_from_str("EUNE"), PlatformRoute::EUN1);
+        assert_eq!(platform_route_from_str("NA"), PlatformRoute::NA1);
+        assert_eq!(platform_route_from_str("KR"), PlatformRoute::KR);
+        assert_eq!(platform_route_from_str("BR"), PlatformRoute::BR1);
+        assert_eq!(platform_route_from_str("LAN"), PlatformRoute::LA1);
+        assert_eq!(platform_route_from_str("LAS"), PlatformRoute::LA2);
+        assert_eq!(platform_route_from_str("OCE"), PlatformRoute::OC1);
+        assert_eq!(platform_route_from_str("TR"), PlatformRoute::TR1);
+        assert_eq!(platform_route_from_str("RU"), PlatformRoute::RU);
+        assert_eq!(platform_route_from_str("JP"), PlatformRoute::JP1);
+        assert_eq!(platform_route_from_str("SG"), PlatformRoute::SG2);
+        assert_eq!(platform_route_from_str("TW"), PlatformRoute::TW2);
+        assert_eq!(platform_route_from_str("VN"), PlatformRoute::VN2);
+        assert_eq!(platform_route_from_str("ME"), PlatformRoute::ME1);
+        assert_eq!(platform_route_from_str("unknown"), PlatformRoute::EUW1);
+        assert_eq!(platform_route_from_str(""), PlatformRoute::EUW1);
+    }
+
+    #[test]
+    fn account_region_mapping() {
+        // SEA group
+        assert_eq!(account_region_for(PlatformRoute::OC1), RegionalRoute::SEA);
+        assert_eq!(account_region_for(PlatformRoute::SG2), RegionalRoute::SEA);
+        assert_eq!(account_region_for(PlatformRoute::TW2), RegionalRoute::SEA);
+        assert_eq!(account_region_for(PlatformRoute::VN2), RegionalRoute::SEA);
+        assert_eq!(account_region_for(PlatformRoute::ME1), RegionalRoute::SEA);
+        // AMERICAS group
+        assert_eq!(
+            account_region_for(PlatformRoute::NA1),
+            RegionalRoute::AMERICAS
+        );
+        assert_eq!(
+            account_region_for(PlatformRoute::BR1),
+            RegionalRoute::AMERICAS
+        );
+        assert_eq!(
+            account_region_for(PlatformRoute::LA1),
+            RegionalRoute::AMERICAS
+        );
+        assert_eq!(
+            account_region_for(PlatformRoute::LA2),
+            RegionalRoute::AMERICAS
+        );
+        // ASIA group
+        assert_eq!(account_region_for(PlatformRoute::KR), RegionalRoute::ASIA);
+        assert_eq!(account_region_for(PlatformRoute::JP1), RegionalRoute::ASIA);
+        // EUROPE group
+        assert_eq!(
+            account_region_for(PlatformRoute::EUW1),
+            RegionalRoute::EUROPE
+        );
+        assert_eq!(
+            account_region_for(PlatformRoute::EUN1),
+            RegionalRoute::EUROPE
+        );
+        assert_eq!(
+            account_region_for(PlatformRoute::TR1),
+            RegionalRoute::EUROPE
+        );
+        assert_eq!(account_region_for(PlatformRoute::RU), RegionalRoute::EUROPE);
+    }
 }

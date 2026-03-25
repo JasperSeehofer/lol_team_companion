@@ -204,11 +204,12 @@ pub async fn fetch_champions(
         ));
     }
 
-    let puuid = riot::get_puuid(parts[0], parts[1])
+    let platform = riot::platform_route_from_str("EUW");
+    let puuid = riot::get_puuid(parts[0], parts[1], platform)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    let champions = riot::fetch_player_champions(&puuid, 20)
+    let champions = riot::fetch_player_champions(&puuid, 20, platform)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
@@ -302,11 +303,12 @@ pub async fn fetch_player_intel_fn(
         ));
     }
 
-    let puuid = riot::get_puuid(parts[0], parts[1])
+    let platform = riot::platform_route_from_str("EUW");
+    let puuid = riot::get_puuid(parts[0], parts[1], platform)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    let intel = riot::fetch_player_intel(&puuid, 20)
+    let intel = riot::fetch_player_intel(&puuid, 20, platform)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 

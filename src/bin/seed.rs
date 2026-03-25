@@ -206,7 +206,7 @@ async fn create_seed_team(
                 if lol_team_companion::server::riot::has_api_key() {
                     // Rate-limit: 150ms between calls
                     tokio::time::sleep(Duration::from_millis(150)).await;
-                    match lol_team_companion::server::riot::get_puuid(riot_name, "EUW").await {
+                    match lol_team_companion::server::riot::get_puuid(riot_name, "EUW", lol_team_companion::server::riot::platform_route_from_str("EUW")).await {
                         Ok(puuid) => {
                             if let Err(e) =
                                 db::update_user_riot(db, id.clone(), puuid, riot_name.to_string())

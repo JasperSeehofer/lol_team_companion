@@ -287,7 +287,8 @@ pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, Ser
     }
 
     // Fetch recent match history (up to 20 matches; check first 5 for a match)
-    let matches = riot::fetch_match_history(&puuid, None)
+    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
+    let matches = riot::fetch_match_history(&puuid, None, platform)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
