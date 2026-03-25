@@ -19,6 +19,18 @@ pub struct PublicUser {
     pub id: String,
     pub username: String,
     pub riot_summoner_name: Option<String>,
+    pub mode: String,
+    pub riot_region: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct RankedInfo {
+    pub queue_type: String,
+    pub tier: String,
+    pub division: String,
+    pub lp: i32,
+    pub wins: i32,
+    pub losses: i32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

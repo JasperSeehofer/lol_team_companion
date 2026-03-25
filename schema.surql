@@ -7,6 +7,9 @@ DEFINE FIELD IF NOT EXISTS riot_puuid ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS riot_summoner_name ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON user TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
+DEFINE FIELD IF NOT EXISTS mode ON user TYPE string DEFAULT 'solo';
+DEFINE FIELD IF NOT EXISTS riot_region ON user TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 
 -- Teams
 DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;
@@ -37,6 +40,7 @@ DEFINE FIELD IF NOT EXISTS game_duration ON match TYPE int;
 DEFINE FIELD IF NOT EXISTS game_end ON match TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS team_id ON match TYPE option<record<team>>;
 DEFINE INDEX IF NOT EXISTS match_id_unique ON match FIELDS match_id UNIQUE;
+DEFINE FIELD IF NOT EXISTS synced_by ON match TYPE option<record<user>>;
 
 -- Per-player match stats
 DEFINE TABLE IF NOT EXISTS player_match SCHEMAFULL;
@@ -240,3 +244,15 @@ DEFINE FIELD IF NOT EXISTS created_at ON checklist_instance TYPE datetime DEFAUL
 
 -- Sessions (for tower-sessions-surrealdb-store)
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;
+
+-- Ranked snapshots
+DEFINE TABLE IF NOT EXISTS ranked_snapshot SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON ranked_snapshot TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS queue_type ON ranked_snapshot TYPE string;
+DEFINE FIELD IF NOT EXISTS tier ON ranked_snapshot TYPE string;
+DEFINE FIELD IF NOT EXISTS division ON ranked_snapshot TYPE string;
+DEFINE FIELD IF NOT EXISTS lp ON ranked_snapshot TYPE int;
+DEFINE FIELD IF NOT EXISTS wins ON ranked_snapshot TYPE int;
+DEFINE FIELD IF NOT EXISTS losses ON ranked_snapshot TYPE int;
+DEFINE FIELD IF NOT EXISTS snapshotted_at ON ranked_snapshot TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS ranked_snapshot_user_queue ON ranked_snapshot FIELDS user, queue_type;

@@ -21,6 +21,8 @@ struct DbUser {
     password_hash: String,
     riot_puuid: Option<String>,
     riot_summoner_name: Option<String>,
+    mode: Option<String>,
+    riot_region: Option<String>,
 }
 
 impl From<DbUser> for AppUser {
@@ -32,6 +34,8 @@ impl From<DbUser> for AppUser {
             password_hash: u.password_hash,
             riot_puuid: u.riot_puuid,
             riot_summoner_name: u.riot_summoner_name,
+            mode: u.mode.unwrap_or_else(|| "solo".to_string()),
+            riot_region: u.riot_region,
         }
     }
 }
@@ -44,6 +48,8 @@ pub struct AppUser {
     pub password_hash: String,
     pub riot_puuid: Option<String>,
     pub riot_summoner_name: Option<String>,
+    pub mode: String,
+    pub riot_region: Option<String>,
 }
 
 impl AuthUser for AppUser {
