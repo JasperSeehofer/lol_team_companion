@@ -86,32 +86,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SOLO-01 | — | Pending |
-| SOLO-02 | — | Pending |
-| SOLO-03 | — | Pending |
-| SOLO-04 | — | Pending |
-| SOLO-05 | — | Pending |
-| RANK-01 | — | Pending |
-| RANK-02 | — | Pending |
-| RANK-03 | — | Pending |
-| MATCH-01 | — | Pending |
-| MATCH-02 | — | Pending |
-| MATCH-03 | — | Pending |
-| MATCH-04 | — | Pending |
-| LEARN-01 | — | Pending |
-| LEARN-02 | — | Pending |
-| LEARN-03 | — | Pending |
-| LEARN-04 | — | Pending |
-| LEARN-05 | — | Pending |
-| LEARN-06 | — | Pending |
-| XFEAT-03 | — | Pending |
-| XFEAT-04 | — | Pending |
+| SOLO-01 | Phase 12 | Pending |
+| SOLO-02 | Phase 12 | Pending |
+| SOLO-03 | Phase 12 | Pending |
+| SOLO-04 | Phase 12 | Pending |
+| SOLO-05 | Phase 12 | Pending |
+| RANK-01 | Phase 12 | Pending |
+| RANK-03 | Phase 12 | Pending |
+| MATCH-01 | Phase 13 | Pending |
+| MATCH-02 | Phase 13 | Pending |
+| MATCH-03 | Phase 13 | Pending |
+| MATCH-04 | Phase 13 | Pending |
+| LEARN-01 | Phase 14 | Pending |
+| LEARN-02 | Phase 14 | Pending |
+| LEARN-03 | Phase 14 | Pending |
+| RANK-02 | Phase 15 | Pending |
+| LEARN-04 | Phase 15 | Pending |
+| LEARN-05 | Phase 15 | Pending |
+| LEARN-06 | Phase 15 | Pending |
+| XFEAT-03 | Phase 16 | Pending |
+| XFEAT-04 | Phase 16 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after initial definition*
+*Last updated: 2026-03-25 after roadmap creation (traceability complete)*

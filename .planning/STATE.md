@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
-status: Defining requirements
+status: Ready to plan
 last_updated: "2026-03-25T00:00:00Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -13,27 +13,35 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 12 of 16 (Solo Mode Infrastructure) — ready to plan
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-25 — Milestone v1.2 started
+Status: Ready to plan Phase 12
+Last activity: 2026-03-25 — Roadmap created for v1.2 (5 phases, 20 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** v1.2 Solo Mode & Match Intelligence
+**Current focus:** Phase 12 — Solo Mode Infrastructure
 
 ## Decisions
 
-(None yet for v1.2)
+- [Roadmap]: Phase 12 must establish `synced_by` on `match` table and `mode` on `user` table before any other solo work — data model correctness gates all subsequent phases
+- [Roadmap]: Match timeline fetch is on-demand + DB-cached only (never eager during sync) — rate limit protection
+- [Roadmap]: `personal_learning` is a separate table from `post_game_learning` — solo learnings must not mix with team-scoped records
+- [Roadmap]: Mode toggle persisted in DB user record, not WASM signal — survives hard navigation on login/logout
+- [Roadmap]: Phase 15 (Goals & LP History) depends on Phase 12 only, not Phase 13 or 14 — can be sequenced after either
 
 ## Blockers/Concerns
 
-None
+- [Phase 12]: Region support scope — decide EUW-only vs. multi-region before writing solo sync; retrofitting touches every Riot API call
+- [Phase 15]: LP delta boundary logic across tier/division changes (promos, relegation, Master+ no-division) needs validation before implementing LP graph
 
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Defining v1.2 requirements — research phase
+Stopped at: Roadmap written — ready to run /gsd:plan-phase 12
+Resume file: None
