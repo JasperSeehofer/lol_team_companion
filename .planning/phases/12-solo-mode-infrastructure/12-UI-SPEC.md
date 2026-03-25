@@ -52,15 +52,17 @@ Exceptions:
 
 Source: existing codebase patterns extracted from stat_card.rs, nav.rs, ui.rs.
 
+Two weights only: 400 (regular) and 600 (semibold). Hierarchy between Display and Heading is maintained by size alone (28px vs 20px).
+
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Body | 14px (`text-sm`) | 400 (regular) | 1.5 |
 | Label | 12px (`text-xs`) | 400 (regular) | 1.4 |
 | Heading | 20px (`text-xl`) | 600 (semibold) | 1.2 |
-| Display | 24px (`text-2xl`) | 700 (bold) | 1.1 |
+| Display | 28px (`text-3xl`) | 600 (semibold) | 1.1 |
 
 Notes:
-- LP display inside ranked badge uses Display (24px bold) — the primary data point
+- LP display inside ranked badge uses Display (28px semibold) — the primary data point
 - Tier + division label (e.g. "Gold II") uses Heading (20px semibold)
 - All body text on match rows: Body (14px regular)
 - Stat labels (e.g. "RANKED SOLO", "RECENT MATCHES"): Label with `uppercase tracking-wider` — matches StatCard pattern
@@ -92,7 +94,7 @@ Additional semantic colors for this phase:
 - Win row left border: `border-l-4 border-blue-500` (existing stats page convention to check)
 - Loss row left border: `border-l-4 border-red-500/50`
 - LP loss delta: `text-red-400` (e.g. "-15 LP")
-- "Coming in Phase 15" placeholder label: `text-dimmed` — subdued to communicate not-yet-available state
+- "Coming in a future update" placeholder label: `text-dimmed` — subdued to communicate not-yet-available state
 - Team-only gate message banner: `bg-surface border border-outline` with `text-secondary` body — deliberately neutral (not red/error), it's an informational gate not a failure
 
 ---
@@ -134,7 +136,7 @@ New components this phase builds or extends. Each maps to a requirement.
 - Container: `bg-elevated border border-divider rounded-xl p-6` — card style matching StatCard
 - Anatomy:
   - Left: Tier emblem image 64×64px (`w-16 h-16`) — sourced from Data Dragon CDN ranked emblems
-  - Right column: tier + division (24px bold, `text-primary`), LP (20px semibold, `text-secondary`), "Solo/Duo" label (12px, `text-dimmed uppercase tracking-wider`)
+  - Right column: tier + division (28px semibold, `text-primary`), LP (20px semibold, `text-secondary`), "Solo/Duo" label (12px, `text-dimmed uppercase tracking-wider`)
 - Unranked state: Replace emblem with a greyed placeholder icon (SVG shield outline), text reads "Unranked"
 - Loading skeleton: `SkeletonCard height="h-28"` — matches existing pattern
 
@@ -151,6 +153,7 @@ New components this phase builds or extends. Each maps to a requirement.
 - Content per card: goal icon (SVG, `text-dimmed`), goal name (`text-secondary text-sm font-medium`), "Coming in a future update" label (`text-dimmed text-xs`)
 - Goal names: "Rank Target", "CS per Minute", "Deaths per Game"
 - No hover state — `cursor-default`, not interactive
+- Note: D-11 specifies label text "Coming in Phase 15" — UI-SPEC intentionally uses "Coming in a future update" instead. Phase numbers are an internal planning detail; user-facing copy should not expose them.
 
 ### TeamModeGate (new — team-only pages in solo mode)
 **Requirement:** D-02
@@ -196,6 +199,7 @@ Each interactive surface and its full state set.
 | Solo dashboard page title | "My Dashboard" |
 | Ranked badge: unranked | "Unranked" |
 | Ranked badge: loading label | (skeleton, no text) |
+| Ranked badge load error | "Could not load rank — refresh to try again." |
 | Ranked section heading | "Ranked Solo/Duo" |
 | Recent matches heading | "Recent Matches" |
 | Goals section heading | "Goals" |
