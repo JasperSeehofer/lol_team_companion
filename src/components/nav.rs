@@ -6,6 +6,87 @@ use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};
 use crate::pages::team::dashboard::handle_join_request;
 
+#[server]
+pub async fn set_user_mode(mode: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    db::set_user_mode(&db, &user.id, &mode)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+#[component]
+pub fn ModeToggle(mode: String) -> impl IntoView {
+    let current_mode = RwSignal::new(mode);
+
+    let on_click_solo = move |_| {
+        let m = current_mode.get_untracked();
+        if m == "solo" {
+            return;
+        }
+        current_mode.set("solo".to_string());
+        leptos::task::spawn_local(async move {
+            let _ = set_user_mode("solo".to_string()).await;
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().reload();
+            }
+        });
+    };
+
+    let on_click_team = move |_| {
+        let m = current_mode.get_untracked();
+        if m == "team" {
+            return;
+        }
+        current_mode.set("team".to_string());
+        leptos::task::spawn_local(async move {
+            let _ = set_user_mode("team".to_string()).await;
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().reload();
+            }
+        });
+    };
+
+    view! {
+        <div class="bg-elevated rounded-lg p-0.5 flex">
+            <button
+                class=move || {
+                    if current_mode.get() == "solo" {
+                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer"
+                    } else {
+                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer"
+                    }
+                }
+                on:click=on_click_solo
+            >
+                "Solo"
+            </button>
+            <button
+                class=move || {
+                    if current_mode.get() == "team" {
+                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer"
+                    } else {
+                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer"
+                    }
+                }
+                on:click=on_click_team
+            >
+                "Team"
+            </button>
+        </div>
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Notifications {
     pub pending_requests: Vec<JoinRequest>,
@@ -199,8 +280,20 @@ pub fn Nav() -> impl IntoView {
                         {nav_links("")}
                     </div>
 
-                    // Right side: theme + notifications + user menu
+                    // Right side: mode toggle + theme + notifications + user menu
                     <div class="flex items-center gap-2">
+                        // Mode toggle: only when authenticated
+                        <Suspense fallback=|| ()>
+                            {move || Suspend::new(async move {
+                                match user.await {
+                                    Ok(Some(u)) => view! {
+                                        <ModeToggle mode=u.mode />
+                                    }.into_any(),
+                                    _ => view! { <span></span> }.into_any(),
+                                }
+                            })}
+                        </Suspense>
+
                         <ThemeToggle />
 
                         // Notifications bell
