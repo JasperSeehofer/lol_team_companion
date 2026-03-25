@@ -11,8 +11,8 @@ Requirements for Solo Mode & Match Intelligence milestone. Each maps to roadmap 
 
 - [ ] **SOLO-01**: User can toggle between team mode and solo mode, persisted across sessions
 - [x] **SOLO-02**: User can sync solo queue match history without being on a team
-- [ ] **SOLO-03**: User can filter match history by queue type (solo queue, flex, all)
-- [ ] **SOLO-04**: User sees a personal solo dashboard with recent matches, ranked badge, learnings, and goal status
+- [x] **SOLO-03**: User can filter match history by queue type (solo queue, flex, all)
+- [x] **SOLO-04**: User sees a personal solo dashboard with recent matches, ranked badge, learnings, and goal status
 - [x] **SOLO-05**: User can select their region during Riot account linking (EUW, NA, KR, etc.)
 
 ### Ranked Tracking
@@ -88,8 +88,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | SOLO-01 | Phase 12 | Pending |
 | SOLO-02 | Phase 12 | Complete |
-| SOLO-03 | Phase 12 | Pending |
-| SOLO-04 | Phase 12 | Pending |
+| SOLO-03 | Phase 12 | Complete |
+| SOLO-04 | Phase 12 | Complete |
 | SOLO-05 | Phase 12 | Complete |
 | RANK-01 | Phase 12 | Complete |
 | RANK-03 | Phase 12 | Complete |

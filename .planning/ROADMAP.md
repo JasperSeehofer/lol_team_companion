@@ -40,7 +40,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 **Milestone Goal:** Open the app to individual players — solo queue tracking, personal goals, and learnings — plus richer match detail from the Riot API that connects back into champion pool and draft decisions.
 
-- [ ] **Phase 12: Solo Mode Infrastructure** - Mode toggle, region selector, solo sync, ranked display, solo dashboard shell
+- [x] **Phase 12: Solo Mode Infrastructure** - Mode toggle, region selector, solo sync, ranked display, solo dashboard shell (completed 2026-03-25)
 - [ ] **Phase 13: Match Detail View** - Full 10-player scoreboard, timeline events, performance breakdown, on-demand lazy fetch with DB cache
 - [ ] **Phase 14: Personal Learnings Journal** - Personal journal CRUD, one-click creation from match detail, champion/matchup/tag filtering
 - [ ] **Phase 15: Goals & LP History** - LP trend graph, rank goal setting, goal auto-tracking against match history, champion performance trends
@@ -62,7 +62,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 **Plans**: 3 plans
 Plans:
 - [x] 12-01-PLAN.md — Schema, models, riot.rs region parameterization, ranked data infrastructure
-- [ ] 12-02-PLAN.md — Mode toggle in nav, auth redirects, team-only page gates, region dropdown
+- [x] 12-02-PLAN.md — Mode toggle in nav, auth redirects, team-only page gates, region dropdown
 - [x] 12-03-PLAN.md — Solo dashboard page, ranked badge, queue filter, match sync, goal placeholders
 **UI hint**: yes
 
@@ -131,7 +131,7 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
-| 12. Solo Mode Infrastructure | v1.2 | 2/3 | In Progress|  |
+| 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
 | 13. Match Detail View | v1.2 | 0/? | Not started | - |
 | 14. Personal Learnings Journal | v1.2 | 0/? | Not started | - |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
