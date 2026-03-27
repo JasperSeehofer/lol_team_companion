@@ -309,6 +309,294 @@ pub async fn fetch_ranked_data(
         .collect())
 }
 
+use crate::models::match_data::{
+    EventCategory, MatchDetail, MatchParticipant, PerformanceStats, TimelineEvent,
+};
+
+pub struct FullMatchData {
+    pub match_id: String,
+    pub game_duration: i32,
+    pub game_mode: String,
+    pub participants: Vec<MatchParticipant>,
+    pub raw_timeline_events: Vec<TimelineEvent>,
+}
+
+pub async fn fetch_full_match_detail(
+    match_id: &str,
+    platform: PlatformRoute,
+) -> Result<FullMatchData, RiotError> {
+    let api = api();
+    let regional = platform.to_regional();
+
+    // Fetch match data (all 10 participants)
+    let m = api
+        .match_v5()
+        .get_match(regional, match_id)
+        .await?
+        .ok_or_else(|| RiotError::Api(format!("Match {match_id} not found")))?;
+
+    let game_duration = m.info.game_duration as i32;
+    let game_mode = format!("{:?}", m.info.game_mode);
+
+    let participants: Vec<MatchParticipant> = m
+        .info
+        .participants
+        .iter()
+        .map(|p| MatchParticipant {
+            participant_id: p.participant_id,
+            puuid: p.puuid.clone(),
+            summoner_name: p.summoner_name.clone(),
+            champion_name: p.champion_name.clone(),
+            team_id: u16::from(p.team_id) as i32,
+            team_position: p.team_position.clone(),
+            kills: p.kills,
+            deaths: p.deaths,
+            assists: p.assists,
+            cs: p.total_minions_killed + p.neutral_minions_killed,
+            vision_score: p.vision_score,
+            damage: p.total_damage_dealt_to_champions,
+            gold_earned: p.gold_earned,
+            items: [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5],
+            win: p.win,
+        })
+        .collect();
+
+    // Fetch timeline
+    let timeline_opt = api.match_v5().get_timeline(regional, match_id).await?;
+    let mut raw_events = Vec::new();
+
+    if let Some(timeline) = timeline_opt {
+        for frame in &timeline.info.frames {
+            for event in &frame.events {
+                let event_type = event.r#type.clone();
+                let category = classify_event(
+                    &event_type,
+                    event.monster_type.as_deref(),
+                    event.building_type.as_deref(),
+                );
+                let Some(category) = category else { continue };
+
+                let mut involved = Vec::new();
+                if let Some(kid) = event.killer_id {
+                    involved.push(kid);
+                }
+                if let Some(vid) = event.victim_id {
+                    involved.push(vid);
+                }
+                if let Some(ref assists) = event.assisting_participant_ids {
+                    involved.extend(assists.iter().copied());
+                }
+
+                raw_events.push(TimelineEvent {
+                    timestamp_ms: event.timestamp,
+                    event_type,
+                    category,
+                    team_id: event
+                        .team_id
+                        .map(|t| u16::from(t) as i32)
+                        .or_else(|| event.killer_team_id.map(|t| u16::from(t) as i32)),
+                    killer_participant_id: event.killer_id,
+                    victim_participant_id: event.victim_id,
+                    monster_type: event.monster_type.clone(),
+                    monster_sub_type: event.monster_sub_type.clone(),
+                    building_type: event.building_type.clone(),
+                    is_first_blood: false, // set below
+                    multi_kill_length: event.multi_kill_length,
+                    is_teamfight: false, // set below
+                    involved_participants: involved,
+                });
+            }
+        }
+    }
+
+    // Mark first blood
+    if let Some(first_kill) = raw_events
+        .iter_mut()
+        .find(|e| e.event_type == "CHAMPION_KILL")
+    {
+        first_kill.is_first_blood = true;
+    }
+
+    // Detect teamfights: sliding 10s window, 4+ unique participant IDs
+    let kill_events: Vec<(usize, i64, Vec<i32>)> = raw_events
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.event_type == "CHAMPION_KILL")
+        .map(|(i, e)| (i, e.timestamp_ms, e.involved_participants.clone()))
+        .collect();
+
+    let mut teamfight_indices: std::collections::HashSet<usize> =
+        std::collections::HashSet::new();
+    for (i, (idx, ts, _)) in kill_events.iter().enumerate() {
+        let mut unique_ids: std::collections::HashSet<i32> = std::collections::HashSet::new();
+        let mut window_indices = vec![*idx];
+        for (jdx, jts, jparticipants) in &kill_events[i..] {
+            if *jts - *ts > 10_000 {
+                break;
+            }
+            for pid in jparticipants {
+                unique_ids.insert(*pid);
+            }
+            window_indices.push(*jdx);
+        }
+        if unique_ids.len() >= 4 {
+            for idx in &window_indices {
+                teamfight_indices.insert(*idx);
+            }
+        }
+    }
+    for idx in &teamfight_indices {
+        if let Some(e) = raw_events.get_mut(*idx) {
+            e.is_teamfight = true;
+        }
+    }
+
+    // Group adjacent teamfight kills into clusters and create a single TEAMFIGHT event per cluster
+    let mut teamfight_clusters: Vec<Vec<usize>> = Vec::new();
+    let mut sorted_tf_indices: Vec<usize> = teamfight_indices.into_iter().collect();
+    sorted_tf_indices.sort();
+    let mut current_cluster: Vec<usize> = Vec::new();
+    for idx in sorted_tf_indices {
+        if let Some(last) = current_cluster.last() {
+            let last_ts = raw_events[*last].timestamp_ms;
+            let cur_ts = raw_events[idx].timestamp_ms;
+            if cur_ts - last_ts > 10_000 {
+                if !current_cluster.is_empty() {
+                    teamfight_clusters.push(current_cluster.clone());
+                }
+                current_cluster = vec![idx];
+            } else {
+                current_cluster.push(idx);
+            }
+        } else {
+            current_cluster.push(idx);
+        }
+    }
+    if !current_cluster.is_empty() {
+        teamfight_clusters.push(current_cluster);
+    }
+
+    for cluster in teamfight_clusters {
+        if cluster.is_empty() {
+            continue;
+        }
+        let center_ts = raw_events[cluster[cluster.len() / 2]].timestamp_ms;
+        let mut all_involved: Vec<i32> = cluster
+            .iter()
+            .flat_map(|i| raw_events[*i].involved_participants.clone())
+            .collect();
+        all_involved.sort();
+        all_involved.dedup();
+        raw_events.push(TimelineEvent {
+            timestamp_ms: center_ts,
+            event_type: "TEAMFIGHT".to_string(),
+            category: EventCategory::Teamfight,
+            team_id: None,
+            killer_participant_id: None,
+            victim_participant_id: None,
+            monster_type: None,
+            monster_sub_type: None,
+            building_type: None,
+            is_first_blood: false,
+            multi_kill_length: None,
+            is_teamfight: true,
+            involved_participants: all_involved,
+        });
+    }
+
+    raw_events.sort_by_key(|e| e.timestamp_ms);
+
+    Ok(FullMatchData {
+        match_id: match_id.to_string(),
+        game_duration,
+        game_mode,
+        participants,
+        raw_timeline_events: raw_events,
+    })
+}
+
+fn classify_event(
+    event_type: &str,
+    _monster_type: Option<&str>,
+    _building_type: Option<&str>,
+) -> Option<EventCategory> {
+    match event_type {
+        "ELITE_MONSTER_KILL" => Some(EventCategory::Objective),
+        "BUILDING_KILL" => Some(EventCategory::Tower),
+        "CHAMPION_KILL" => Some(EventCategory::Kill),
+        "WARD_PLACED" => Some(EventCategory::Ward),
+        "ITEM_UNDO" => Some(EventCategory::Recall), // Riot API uses ITEM_UNDO for recalls (per D-07)
+        _ => None, // skip GAME_END, ITEM_PURCHASED, etc.
+    }
+}
+
+pub fn compute_performance(
+    participants: &[MatchParticipant],
+    user_participant_id: i32,
+    game_duration_secs: i32,
+) -> PerformanceStats {
+    let user = participants
+        .iter()
+        .find(|p| p.participant_id == user_participant_id)
+        .expect("user participant must exist");
+    let total_damage: i32 = participants.iter().map(|p| p.damage).sum();
+    let damage_share_pct = if total_damage > 0 {
+        (user.damage as f32 / total_damage as f32) * 100.0
+    } else {
+        0.0
+    };
+    let game_min = game_duration_secs as f32 / 60.0;
+    let cs_per_min = if game_min > 0.0 {
+        user.cs as f32 / game_min
+    } else {
+        0.0
+    };
+    let avg_cs_per_min = if game_min > 0.0 {
+        participants.iter().map(|p| p.cs as f32).sum::<f32>() / 10.0 / game_min
+    } else {
+        0.0
+    };
+    let avg_vision = participants
+        .iter()
+        .map(|p| p.vision_score as f32)
+        .sum::<f32>()
+        / 10.0;
+    let avg_gold = participants
+        .iter()
+        .map(|p| p.gold_earned as f32)
+        .sum::<f32>()
+        / 10.0;
+
+    // Lane opponent: same position, opposite team
+    let lane_opponent = if !user.team_position.is_empty() {
+        participants.iter().find(|p| {
+            p.team_id != user.team_id && p.team_position == user.team_position
+        })
+    } else {
+        None
+    };
+
+    PerformanceStats {
+        damage_share_pct,
+        vision_score: user.vision_score,
+        vision_score_avg: avg_vision,
+        cs_per_min,
+        cs_per_min_avg: avg_cs_per_min,
+        gold_earned: user.gold_earned,
+        gold_earned_avg: avg_gold,
+        lane_opponent_damage: lane_opponent.map(|o| o.damage),
+        lane_opponent_vision: lane_opponent.map(|o| o.vision_score),
+        lane_opponent_cs_per_min: lane_opponent.map(|o| {
+            if game_min > 0.0 {
+                o.cs as f32 / game_min
+            } else {
+                0.0
+            }
+        }),
+        lane_opponent_gold: lane_opponent.map(|o| o.gold_earned),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

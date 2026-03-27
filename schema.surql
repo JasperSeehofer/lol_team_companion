@@ -256,3 +256,29 @@ DEFINE FIELD IF NOT EXISTS wins ON ranked_snapshot TYPE int;
 DEFINE FIELD IF NOT EXISTS losses ON ranked_snapshot TYPE int;
 DEFINE FIELD IF NOT EXISTS snapshotted_at ON ranked_snapshot TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS ranked_snapshot_user_queue ON ranked_snapshot FIELDS user, queue_type;
+
+-- Match detail cache (full 10-player scoreboard data)
+DEFINE TABLE IF NOT EXISTS match_detail SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS match_id ON match_detail TYPE string;
+DEFINE FIELD IF NOT EXISTS participants_json ON match_detail TYPE string;
+DEFINE FIELD IF NOT EXISTS game_duration ON match_detail TYPE int;
+DEFINE FIELD IF NOT EXISTS game_mode ON match_detail TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS fetched_at ON match_detail TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS match_detail_match_id ON match_detail FIELDS match_id UNIQUE;
+
+-- Match timeline events cache
+DEFINE TABLE IF NOT EXISTS match_timeline_event SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS match_id ON match_timeline_event TYPE string;
+DEFINE FIELD IF NOT EXISTS timestamp_ms ON match_timeline_event TYPE int;
+DEFINE FIELD IF NOT EXISTS event_type ON match_timeline_event TYPE string;
+DEFINE FIELD IF NOT EXISTS team_id ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS killer_participant_id ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS victim_participant_id ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS monster_type ON match_timeline_event TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS monster_sub_type ON match_timeline_event TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS building_type ON match_timeline_event TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS is_first_blood ON match_timeline_event TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS multi_kill_length ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS is_teamfight ON match_timeline_event TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS involved_participants ON match_timeline_event TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS timeline_match_id ON match_timeline_event FIELDS match_id;
