@@ -2,27 +2,27 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
-status: Ready to plan
-stopped_at: Phase 13 UI-SPEC approved
-last_updated: "2026-03-25T19:09:11.740Z"
+status: Ready to execute
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-03-27T12:06:55.864Z"
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
 ---
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
+Phase: 13 (match-detail-view) — EXECUTING
+Plan: 2 of 3
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 12 — solo-mode-infrastructure
+**Current focus:** Phase 13 — match-detail-view
 
 ## Decisions
 
@@ -34,6 +34,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 12]: EUW fallback for opponent Riot API calls: opponent players have no associated user region, hardcode EUW as safe fallback for get_puuid/fetch_player_intel/fetch_player_champions
 - [Phase 12]: store_matches_with_synced_by wrapper: preserved backward-compatible store_matches() API; solo sync calls store_matches_with_synced_by directly with user ID
 - [Phase 12]: PlayerMatchStats lacks queue_id/game_duration: match rows show champion+KDA+CS only; queue filter works via DB WHERE clause
+- [Phase 13-match-detail-view]: Store participants as single JSON string in match_detail table — avoids 10-row JOIN with no query benefits
 
 ## Blockers/Concerns
 
@@ -42,6 +43,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-03-25T19:09:11.738Z
-Stopped at: Phase 13 UI-SPEC approved
-Resume file: .planning/phases/13-match-detail-view/13-UI-SPEC.md
+Last session: 2026-03-27T12:06:55.863Z
+Stopped at: Completed 13-01-PLAN.md
+Resume file: None
