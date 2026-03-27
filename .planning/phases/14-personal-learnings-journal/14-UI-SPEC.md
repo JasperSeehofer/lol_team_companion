@@ -71,11 +71,11 @@ Exceptions:
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Page heading | 30px (text-3xl) | 700 (font-bold) | 1.2 |
-| Card title | 14px (text-sm) | 500 (font-medium) | 1.4 |
+| Card title | 14px (text-sm) | 700 (font-bold) | 1.4 |
 | Body / label | 14px (text-sm) | 400 (font-normal) | 1.5 |
 | Caption / meta | 12px (text-xs) | 400 (font-normal) | 1.4 |
 
-Source: Established in codebase — `stats.rs` uses `text-3xl font-bold` for page headings; `text-sm` at weight 400/500 for body and labels throughout; `text-xs` for badges, timestamps, and meta. Maximum 4 sizes, 2 weights (normal + medium/bold pairing per element role).
+Source: Established in codebase — `stats.rs` uses `text-3xl font-bold` for page headings; `text-sm` at weight 400 for body and labels throughout; `text-xs` for badges, timestamps, and meta. Maximum 4 sizes, 2 weights (normal 400 + bold 700).
 
 ---
 
@@ -98,7 +98,7 @@ Win/Loss badges use semantic status colors, not the accent:
 - Loss: `bg-red-500/10 text-red-400 border border-red-500/30`
 
 Type badges (General / Champion / Matchup) use overlay, not accent:
-- `bg-overlay text-muted text-xs font-medium rounded px-2 py-0.5`
+- `bg-overlay text-muted text-xs font-bold rounded px-2 py-0.5`
 
 ---
 
@@ -154,7 +154,7 @@ Reuse these existing components — do not rebuild:
 │  Step 3: Three required text areas                          │
 │  Step 4: Tag multi-select chips                             │
 │  Step 5: Title (auto-filled, editable)                      │
-│  [Save Learning]  [Cancel]                                  │
+│  [Save Learning]  [Discard Changes]                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -169,7 +169,7 @@ Each card in the grid:
 ```
 ┌──────────────────────────────────────────────────┐
 │  [Type badge]  [Win badge / Loss badge]  [date]  │
-│  Card title (font-medium text-primary, truncate) │
+│  Card title (font-bold text-primary, truncate)   │
 │  Champion icon 20px (if type=Champion/Matchup)   │
 │  Section preview: first 80 chars of "What        │
 │  happened", text-muted text-xs                   │
@@ -197,7 +197,7 @@ Horizontal row of `<select>` dropdowns:
 [Type: All ▾]  [Champion: All ▾]  [Tag: All ▾]  |  [Sort: Newest first ▾]
 ```
 
-- Dropdown style: `bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50` (matches stats.rs queue filter)
+- Dropdown style: `bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50` (matches stats.rs queue filter)
 - Filters apply instantly on change (no submit button) — client-side signal filtering
 - Sort control placed right-aligned in the same bar row
 - Sort by champion renders alpha-grouped list with sticky letter headers (`text-xs text-dimmed uppercase tracking-wider py-2`)
@@ -206,8 +206,8 @@ Horizontal row of `<select>` dropdowns:
 
 **Type selector (first decision, tab-style):**
 - Three buttons: General | Champion | Matchup
-- Active: `px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast`
-- Inactive: `px-4 py-2 rounded-lg text-sm font-medium bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors`
+- Active: `px-4 py-2 rounded-lg text-sm font-bold bg-accent text-accent-contrast`
+- Inactive: `px-4 py-2 rounded-lg text-sm font-normal bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors`
 
 **Conditional field visibility:**
 - General: no champion or opponent field shown
@@ -233,8 +233,8 @@ Predefined tags rendered as toggle chips:
 | Objective Control | Dragon kill, Baron kill, Tower kill |
 | Mental / Tilt | — |
 
-Selected chip: `rounded-full px-3 py-1 text-xs font-medium bg-accent text-accent-contrast cursor-pointer`
-Unselected chip: `rounded-full px-3 py-1 text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong hover:text-secondary transition-colors cursor-pointer`
+Selected chip: `rounded-full px-3 py-1 text-xs font-bold bg-accent text-accent-contrast cursor-pointer`
+Unselected chip: `rounded-full px-3 py-1 text-xs font-normal bg-overlay text-muted hover:bg-overlay-strong hover:text-secondary transition-colors cursor-pointer`
 
 **Title field:**
 - Auto-populated: "{Champion} vs {Opponent} — {Month Day}" for Matchup; "{Champion} — {Month Day}" for Champion; "General — {Month Day}" for General
@@ -250,19 +250,19 @@ Unselected chip: `rounded-full px-3 py-1 text-xs font-medium bg-overlay text-mut
 - Auto-suggested tag chip highlighted (pre-selected) based on event-type mapping above
 
 **Save / Cancel row:**
-- Save: `bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors` — label "Save Learning"
-- Cancel: `bg-elevated border border-divider text-secondary hover:text-primary px-5 py-2.5 rounded-lg text-sm transition-colors` — navigates back to `/personal-learnings`
+- Save: `bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-5 py-2 rounded-lg text-sm transition-colors` — label "Save Learning"
+- Cancel: `bg-elevated border border-divider text-secondary hover:text-primary px-5 py-2 rounded-lg text-sm transition-colors` — navigates back to `/personal-learnings`
 
 ### Match Detail Integration (D-12, D-13)
 
 **Scoreboard "Add Learning" button** (already stubbed at line ~505 of `match_detail.rs`):
 - Update existing link to include `?champion=&opponent=&match_id=&result=` query params
-- Button style: `bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2`
+- Button style: `bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2`
 - Label: "Add Learning"
 
 **Timeline event "Add Learning" (D-13):**
 - Small secondary button inside the event detail panel (visible when a marker is selected)
-- Style: `text-accent hover:text-accent-hover text-xs font-medium transition-colors flex items-center gap-1.5`
+- Style: `text-accent hover:text-accent-hover text-xs font-normal transition-colors flex items-center gap-1.5`
 - Label: "+ Add Learning from this event"
 - Links to `/personal-learnings/new` with all params from D-13 including `event_ts` and `event_name`
 
@@ -286,7 +286,8 @@ Unselected chip: `rounded-full px-3 py-1 text-xs font-medium bg-overlay text-mut
 | Error — required field | "This field is required to save." (inline, below empty field) |
 | Success — saved | "Learning saved." (toast, ToastKind::Success, 3 seconds) |
 | Success — deleted | "Learning deleted." (toast, ToastKind::Success, 3 seconds) |
-| Delete learning | No confirmation modal — immediate delete + toast (matches post_game.rs pattern). Button label: "Delete" |
+| Delete learning | No confirmation modal — immediate delete + toast (matches post_game.rs pattern). Button label: "Delete Learning" |
+| Cancel edit | "Discard Changes" — navigates back to `/personal-learnings` without saving |
 | Edit learning | "Edit Learning" (page heading when editing) |
 
 ---
