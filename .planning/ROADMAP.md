@@ -80,6 +80,7 @@ Plans:
 - [x] 13-01-PLAN.md — Schema, models, Riot API extraction, DB cache, server function, unit tests
 - [x] 13-02-PLAN.md — Match detail page UI (scoreboard, performance), route wiring, click-to-navigate
 - [x] 13-03-PLAN.md — Timeline visualization, filter bar, event markers, visual verification
+
 **UI hint**: yes
 
 ### Phase 14: Personal Learnings Journal
@@ -91,7 +92,11 @@ Plans:
   2. User can click a "Add Learning" button on a match detail view and land on the learnings form with champion and matchup pre-filled from that match
   3. User can browse all their personal learnings and filter the list by champion, matchup, or tag
   4. Personal learnings are stored separately from team post-game reviews and are only visible to the user who created them
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 14-01-PLAN.md — Schema, model, DB CRUD functions, e2e smoke test scaffolding
+- [ ] 14-02-PLAN.md — Browse page, form page, nav/routing wiring, filter/sort, visual verification
+- [ ] 14-03-PLAN.md — Match detail integration (scoreboard + timeline "Add Learning" CTAs)
 **UI hint**: yes
 
 ### Phase 15: Goals & LP History
@@ -137,6 +142,6 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
 | 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
 | 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
-| 14. Personal Learnings Journal | v1.2 | 0/? | Not started | - |
+| 14. Personal Learnings Journal | v1.2 | 0/3 | Not started | - |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
 | 16. Draft Integration | v1.2 | 0/? | Not started | - |
