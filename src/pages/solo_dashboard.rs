@@ -378,18 +378,21 @@ fn MatchListSection(
                                 "border-l-4 border-red-500/50"
                             };
                             let row_class = format!(
-                                "bg-surface {} rounded-lg p-3 flex items-center gap-3",
+                                "bg-surface {} rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-elevated/50 transition-colors",
                                 border_class
                             );
                             let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
                             let cs_str = format!("{} CS", m.cs);
+                            let match_href = format!("/match/{}", m.match_id);
 
                             view! {
-                                <div class=row_class>
-                                    <span class="text-sm font-medium text-primary flex-1">{m.champion}</span>
-                                    <span class="text-sm text-secondary">{kda}</span>
-                                    <span class="text-xs text-muted">{cs_str}</span>
-                                </div>
+                                <a href=match_href class="block cursor-pointer hover:bg-elevated/50 transition-colors">
+                                    <div class=row_class>
+                                        <span class="text-sm font-medium text-primary flex-1">{m.champion}</span>
+                                        <span class="text-sm text-secondary">{kda}</span>
+                                        <span class="text-xs text-muted">{cs_str}</span>
+                                    </div>
+                                </a>
                             }
                         }).collect_view()}
                     </div>

@@ -787,6 +787,14 @@ fn StatsContent(
                                                         <span class="text-dimmed text-xs">
                                                             {if is_expanded { "^" } else { "v" }}
                                                         </span>
+                                                        // Detail link
+                                                        <a
+                                                            href=format!("/match/{}", riot_id)
+                                                            class="text-accent text-xs hover:text-accent-hover cursor-pointer transition-colors"
+                                                            on:click=|ev: web_sys::MouseEvent| ev.stop_propagation()
+                                                        >
+                                                            "Details"
+                                                        </a>
                                                     </div>
                                                 </div>
                                             </div>
