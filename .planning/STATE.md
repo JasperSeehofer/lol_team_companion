@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
-status: Ready to execute
-stopped_at: Completed 14-03-PLAN.md
-last_updated: "2026-03-27T16:37:15.483Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-27T16:39:23.281Z"
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 ## Current Position
@@ -38,6 +38,8 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 13-match-detail-view]: Timeline event markers use index into full timeline_events vec as stable key to avoid index drift when filters toggle
 - [Phase 14-personal-learnings-journal]: personal_learning is user-scoped (not team-scoped) — matches D-01 design decision; created_at deserialized as Option<String> consistent with other models
 - [Phase 14]: Pre-clone Strings before view! macro when same String is moved into a closure AND also needed by a later component prop
+- [Phase 14]: Resource<Result<Vec<...>>> type used for LearningCard prop to match Leptos resource typing
+- [Phase 14]: current_date_short() returns static Today — auto-title is user-editable so approximate is acceptable
 
 ## Blockers/Concerns
 
@@ -46,6 +48,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-03-27T16:37:15.481Z
-Stopped at: Completed 14-03-PLAN.md
+Last session: 2026-03-27T16:39:23.280Z
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None

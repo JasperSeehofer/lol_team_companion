@@ -42,7 +42,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 - [x] **Phase 12: Solo Mode Infrastructure** - Mode toggle, region selector, solo sync, ranked display, solo dashboard shell (completed 2026-03-25)
 - [x] **Phase 13: Match Detail View** - Full 10-player scoreboard, timeline events, performance breakdown, on-demand lazy fetch with DB cache (completed 2026-03-27)
-- [ ] **Phase 14: Personal Learnings Journal** - Personal journal CRUD, one-click creation from match detail, champion/matchup/tag filtering
+- [x] **Phase 14: Personal Learnings Journal** - Personal journal CRUD, one-click creation from match detail, champion/matchup/tag filtering (completed 2026-03-27)
 - [ ] **Phase 15: Goals & LP History** - LP trend graph, rank goal setting, goal auto-tracking against match history, champion performance trends
 - [ ] **Phase 16: Draft Integration** - Personal matchup notes in draft Intel sidebar, champion win rate badges on pool cards
 
@@ -95,7 +95,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 14-01-PLAN.md — Schema, model, DB CRUD functions, e2e smoke test scaffolding
-- [ ] 14-02-PLAN.md — Browse page, form page, nav/routing wiring, filter/sort, visual verification
+- [x] 14-02-PLAN.md — Browse page, form page, nav/routing wiring, filter/sort, visual verification
 - [x] 14-03-PLAN.md — Match detail integration (scoreboard + timeline "Add Learning" CTAs)
 **UI hint**: yes
 
@@ -142,6 +142,6 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
 | 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
 | 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
-| 14. Personal Learnings Journal | v1.2 | 2/3 | In Progress|  |
+| 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
 | 16. Draft Integration | v1.2 | 0/? | Not started | - |
