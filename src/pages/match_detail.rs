@@ -393,6 +393,8 @@ fn PerformanceSection(
     set_comparison_mode: WriteSignal<ComparisonMode>,
     user_champion: String,
     opponent_champion: String,
+    match_id: String,
+    user_win: bool,
 ) -> impl IntoView {
     let has_lane_opponent = perf.lane_opponent_damage.is_some();
 
@@ -504,10 +506,16 @@ fn PerformanceSection(
 
             // Add Learning CTA
             <a
-                href=format!("/personal-learnings/new?champion={}&opponent={}", user_champion, opponent_champion)
-                class="mt-4 inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                href={
+                    let result_str = if user_win { "win" } else { "loss" };
+                    format!(
+                        "/personal-learnings/new?champion={}&opponent={}&match_id={}&result={}",
+                        user_champion, opponent_champion, match_id, result_str
+                    )
+                }
+                class="mt-4 inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-3 py-2 rounded-lg text-sm transition-colors"
             >
-                "Add Learning ->"
+                "Add Learning"
             </a>
         </div>
     }
@@ -645,6 +653,12 @@ pub fn MatchDetailPage() -> impl IntoView {
                                 let perf = d_stored.with_value(|d| d.performance.clone());
                                 let game_duration = d.game_duration;
                                 let user_pid = d.user_participant_id;
+
+                                // Pre-clone for PerformanceSection (user_champion/opponent_champion
+                                // are moved into the event detail closure below)
+                                let user_champion_for_perf = user_champion.clone();
+                                let opponent_champion_for_perf = opponent_champion.clone();
+                                let match_id_for_perf = d_stored.with_value(|d| d.match_id.clone());
 
                                 view! {
                                     <div class="flex flex-col gap-6">
@@ -850,6 +864,25 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                     .collect();
                                                                 let has_involved = !involved_names.is_empty();
                                                                 let names_str = involved_names.join(", ");
+
+                                                                // Event-type to tag suggestion mapping (per D-13)
+                                                                let tag_hint = match event.event_type.as_str() {
+                                                                    "ELITE_MONSTER_KILL" | "BUILDING_KILL" => "Objective+Control",
+                                                                    "CHAMPION_KILL" => "Teamfighting",
+                                                                    _ => "",
+                                                                };
+
+                                                                let event_learning_url = {
+                                                                    let mid = d_stored.with_value(|d| d.match_id.clone());
+                                                                    let result_str = if user_win { "win" } else { "loss" };
+                                                                    let evt_name = detail_text.replace(' ', "+");
+                                                                    format!(
+                                                                        "/personal-learnings/new?champion={}&opponent={}&match_id={}&result={}&event_ts={}&event_name={}&tag_hint={}",
+                                                                        user_champion, opponent_champion, mid, result_str,
+                                                                        event.timestamp_ms, evt_name, tag_hint
+                                                                    )
+                                                                };
+
                                                                 return view! {
                                                                     <div class="bg-surface border border-divider rounded-lg p-4 mt-3">
                                                                         <p class="text-sm text-secondary">{detail_text}</p>
@@ -862,6 +895,12 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                         } else {
                                                                             view! { <span /> }.into_any()
                                                                         }}
+                                                                        <a
+                                                                            href=event_learning_url
+                                                                            class="text-accent hover:text-accent-hover text-xs font-normal transition-colors flex items-center gap-1.5 mt-2"
+                                                                        >
+                                                                            "+ Add Learning from this event"
+                                                                        </a>
                                                                     </div>
                                                                 }.into_any();
                                                             }
@@ -878,8 +917,10 @@ pub fn MatchDetailPage() -> impl IntoView {
                                             _game_duration_secs=game_duration
                                             comparison_mode=comparison_mode
                                             set_comparison_mode=set_comparison_mode
-                                            user_champion=user_champion
-                                            opponent_champion=opponent_champion
+                                            user_champion=user_champion_for_perf
+                                            opponent_champion=opponent_champion_for_perf
+                                            match_id=match_id_for_perf
+                                            user_win=user_win
                                         />
                                     </div>
                                 }.into_any()
