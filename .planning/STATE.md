@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
 status: Ready to execute
-stopped_at: Completed 13-01-PLAN.md
-last_updated: "2026-03-27T12:06:55.864Z"
+stopped_at: "Completed 13-03-PLAN.md (checkpoint:human-verify pending)"
+last_updated: "2026-03-27T12:24:58.851Z"
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 6
 ---
 
 ## Current Position
 
 Phase: 13 (match-detail-view) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Project Reference
 
@@ -35,6 +35,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 12]: store_matches_with_synced_by wrapper: preserved backward-compatible store_matches() API; solo sync calls store_matches_with_synced_by directly with user ID
 - [Phase 12]: PlayerMatchStats lacks queue_id/game_duration: match rows show champion+KDA+CS only; queue filter works via DB WHERE clause
 - [Phase 13-match-detail-view]: Store participants as single JSON string in match_detail table — avoids 10-row JOIN with no query benefits
+- [Phase 13-match-detail-view]: Timeline event markers use index into full timeline_events vec as stable key to avoid index drift when filters toggle
 
 ## Blockers/Concerns
 
@@ -43,6 +44,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-03-27T12:06:55.863Z
-Stopped at: Completed 13-01-PLAN.md
+Last session: 2026-03-27T12:24:58.850Z
+Stopped at: Completed 13-03-PLAN.md (checkpoint:human-verify pending)
 Resume file: None
