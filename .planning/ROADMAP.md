@@ -136,7 +136,7 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
 | 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
-| 13. Match Detail View | v1.2 | 3/3 | Complete   | 2026-03-27 |
+| 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
 | 14. Personal Learnings Journal | v1.2 | 0/? | Not started | - |
 | 15. Goals & LP History | v1.2 | 0/? | Not started | - |
 | 16. Draft Integration | v1.2 | 0/? | Not started | - |
