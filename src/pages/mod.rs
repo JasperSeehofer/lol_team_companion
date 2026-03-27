@@ -5,6 +5,7 @@ pub mod champion_pool;
 pub mod draft;
 pub mod game_plan;
 pub mod home;
+pub mod match_detail;
 pub mod opponents;
 pub mod post_game;
 pub mod profile;

@@ -310,7 +310,7 @@ pub async fn fetch_ranked_data(
 }
 
 use crate::models::match_data::{
-    EventCategory, MatchDetail, MatchParticipant, PerformanceStats, TimelineEvent,
+    EventCategory, MatchParticipant, PerformanceStats, TimelineEvent,
 };
 
 pub struct FullMatchData {
@@ -665,5 +665,91 @@ mod tests {
             RegionalRoute::EUROPE
         );
         assert_eq!(account_region_for(PlatformRoute::RU), RegionalRoute::EUROPE);
+    }
+
+    #[test]
+    fn test_classify_event_types() {
+        assert!(matches!(
+            classify_event("ELITE_MONSTER_KILL", Some("BARON_NASHOR"), None),
+            Some(EventCategory::Objective)
+        ));
+        assert!(matches!(
+            classify_event("BUILDING_KILL", None, Some("TOWER_BUILDING")),
+            Some(EventCategory::Tower)
+        ));
+        assert!(matches!(
+            classify_event("CHAMPION_KILL", None, None),
+            Some(EventCategory::Kill)
+        ));
+        assert!(matches!(
+            classify_event("WARD_PLACED", None, None),
+            Some(EventCategory::Ward)
+        ));
+        assert!(matches!(
+            classify_event("ITEM_UNDO", None, None),
+            Some(EventCategory::Recall)
+        ));
+        assert!(classify_event("ITEM_PURCHASED", None, None).is_none());
+        assert!(classify_event("GAME_END", None, None).is_none());
+    }
+
+    #[test]
+    fn test_compute_performance_stats() {
+        use crate::models::match_data::MatchParticipant;
+
+        let user = MatchParticipant {
+            participant_id: 1,
+            puuid: "user1".into(),
+            summoner_name: "User".into(),
+            champion_name: "Ahri".into(),
+            team_id: 100,
+            team_position: "MIDDLE".into(),
+            kills: 10,
+            deaths: 2,
+            assists: 5,
+            cs: 200,
+            vision_score: 30,
+            damage: 20000,
+            gold_earned: 12000,
+            items: [3157, 3089, 3135, 0, 0, 0],
+            win: true,
+        };
+
+        let mut all_participants = vec![user];
+        for i in 2..=10 {
+            all_participants.push(MatchParticipant {
+                participant_id: i,
+                puuid: format!("player{i}"),
+                summoner_name: format!("Player{i}"),
+                champion_name: "Garen".into(),
+                team_id: if i <= 5 { 100 } else { 200 },
+                team_position: match i {
+                    2 | 7 => "TOP",
+                    3 | 8 => "JUNGLE",
+                    4 | 9 => "BOTTOM",
+                    5 | 10 => "UTILITY",
+                    _ => "MIDDLE",
+                }
+                .into(),
+                kills: 5,
+                deaths: 5,
+                assists: 5,
+                cs: 150,
+                vision_score: 20,
+                damage: 15000,
+                gold_earned: 10000,
+                items: [0; 6],
+                win: i <= 5,
+            });
+        }
+
+        let perf = compute_performance(&all_participants, 1, 1800); // 30 min game
+        // User did 20000 damage out of total (20000 + 9*15000 = 155000)
+        let expected_share = 20000.0_f32 / 155000.0 * 100.0;
+        assert!((perf.damage_share_pct - expected_share).abs() < 0.1);
+        assert!((perf.cs_per_min - (200.0_f32 / 30.0)).abs() < 0.1);
+        assert_eq!(perf.vision_score, 30);
+        // Lane opponent is participant with team_position="MIDDLE" on team 200
+        assert!(perf.lane_opponent_damage.is_some());
     }
 }

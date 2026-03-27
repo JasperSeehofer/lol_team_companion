@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use surrealdb::{
@@ -4622,6 +4623,161 @@ pub async fn get_solo_matches(
     };
 
     Ok(rows)
+}
+
+// ---- Match detail cache ----
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbMatchDetail {
+    pub match_id: String,
+    pub participants_json: String,
+    pub game_duration: i32,
+    pub game_mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbTimelineEvent {
+    pub match_id: String,
+    pub timestamp_ms: i64,
+    pub event_type: String,
+    pub team_id: Option<i32>,
+    pub killer_participant_id: Option<i32>,
+    pub victim_participant_id: Option<i32>,
+    pub monster_type: Option<String>,
+    pub monster_sub_type: Option<String>,
+    pub building_type: Option<String>,
+    pub is_first_blood: bool,
+    pub multi_kill_length: Option<i32>,
+    pub is_teamfight: bool,
+    pub involved_participants: Option<String>,
+}
+
+fn classify_db_event(
+    event_type: &str,
+    is_teamfight: bool,
+) -> crate::models::match_data::EventCategory {
+    use crate::models::match_data::EventCategory;
+    if is_teamfight || event_type == "TEAMFIGHT" {
+        return EventCategory::Teamfight;
+    }
+    match event_type {
+        "ELITE_MONSTER_KILL" => EventCategory::Objective,
+        "BUILDING_KILL" => EventCategory::Tower,
+        "CHAMPION_KILL" => EventCategory::Kill,
+        "WARD_PLACED" => EventCategory::Ward,
+        "ITEM_UNDO" => EventCategory::Recall,
+        _ => EventCategory::Kill,
+    }
+}
+
+pub async fn get_cached_match_detail(
+    db: &Surreal<Db>,
+    match_id: &str,
+) -> Result<
+    Option<(
+        Vec<crate::models::match_data::MatchParticipant>,
+        Vec<crate::models::match_data::TimelineEvent>,
+        i32,
+        String,
+    )>,
+    DbError,
+> {
+    let mut result = db
+        .query("SELECT * FROM match_detail WHERE match_id = $match_id LIMIT 1")
+        .bind(("match_id", match_id.to_string()))
+        .await?;
+
+    let detail: Option<DbMatchDetail> = result.take(0)?;
+    let Some(detail) = detail else { return Ok(None) };
+
+    let participants: Vec<crate::models::match_data::MatchParticipant> =
+        serde_json::from_str(&detail.participants_json)
+            .map_err(|e| DbError::Other(e.to_string()))?;
+
+    // Fetch timeline events
+    let mut tl_result = db
+        .query("SELECT * FROM match_timeline_event WHERE match_id = $match_id")
+        .bind(("match_id", match_id.to_string()))
+        .await?;
+
+    let tl_rows: Vec<DbTimelineEvent> = tl_result.take(0).unwrap_or_default();
+    let timeline_events: Vec<crate::models::match_data::TimelineEvent> = tl_rows
+        .into_iter()
+        .map(|r| {
+            let involved: Vec<i32> = r
+                .involved_participants
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+            crate::models::match_data::TimelineEvent {
+                timestamp_ms: r.timestamp_ms,
+                event_type: r.event_type.clone(),
+                category: classify_db_event(&r.event_type, r.is_teamfight),
+                team_id: r.team_id,
+                killer_participant_id: r.killer_participant_id,
+                victim_participant_id: r.victim_participant_id,
+                monster_type: r.monster_type,
+                monster_sub_type: r.monster_sub_type,
+                building_type: r.building_type,
+                is_first_blood: r.is_first_blood,
+                multi_kill_length: r.multi_kill_length,
+                is_teamfight: r.is_teamfight,
+                involved_participants: involved,
+            }
+        })
+        .collect();
+
+    Ok(Some((
+        participants,
+        timeline_events,
+        detail.game_duration,
+        detail.game_mode.unwrap_or_default(),
+    )))
+}
+
+pub async fn store_match_detail(
+    db: &Surreal<Db>,
+    match_id: &str,
+    participants: &[crate::models::match_data::MatchParticipant],
+    timeline_events: &[crate::models::match_data::TimelineEvent],
+    game_duration: i32,
+    game_mode: &str,
+) -> Result<(), DbError> {
+    let participants_json =
+        serde_json::to_string(participants).map_err(|e| DbError::Other(e.to_string()))?;
+
+    // Store match_detail record
+    db.query("CREATE match_detail SET match_id = $match_id, participants_json = $pjson, game_duration = $dur, game_mode = $mode")
+        .bind(("match_id", match_id.to_string()))
+        .bind(("pjson", participants_json))
+        .bind(("dur", game_duration))
+        .bind(("mode", game_mode.to_string()))
+        .await?
+        .check()?;
+
+    // Store timeline events individually
+    for event in timeline_events {
+        let involved_json = serde_json::to_string(&event.involved_participants)
+            .unwrap_or_else(|_| "[]".to_string());
+        db.query("CREATE match_timeline_event SET match_id = $mid, timestamp_ms = $ts, event_type = $etype, team_id = $tid, killer_participant_id = $kid, victim_participant_id = $vid, monster_type = $mtype, monster_sub_type = $mstype, building_type = $btype, is_first_blood = $fb, multi_kill_length = $mkl, is_teamfight = $tf, involved_participants = $involved")
+            .bind(("mid", match_id.to_string()))
+            .bind(("ts", event.timestamp_ms))
+            .bind(("etype", event.event_type.clone()))
+            .bind(("tid", event.team_id))
+            .bind(("kid", event.killer_participant_id))
+            .bind(("vid", event.victim_participant_id))
+            .bind(("mtype", event.monster_type.clone()))
+            .bind(("mstype", event.monster_sub_type.clone()))
+            .bind(("btype", event.building_type.clone()))
+            .bind(("fb", event.is_first_blood))
+            .bind(("mkl", event.multi_kill_length))
+            .bind(("tf", event.is_teamfight))
+            .bind(("involved", involved_json))
+            .await?
+            .check()?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
