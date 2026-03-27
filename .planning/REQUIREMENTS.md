@@ -31,7 +31,7 @@ Requirements for Solo Mode & Match Intelligence milestone. Each maps to roadmap 
 ### Personal Improvement
 
 - [x] **LEARN-01**: User can write personal learnings tagged by champion and matchup
-- [ ] **LEARN-02**: User can create a learning from match detail with one click (pre-fills champion/matchup)
+- [x] **LEARN-02**: User can create a learning from match detail with one click (pre-fills champion/matchup)
 - [ ] **LEARN-03**: User can browse and filter learnings by champion, matchup, or tag
 - [ ] **LEARN-04**: User can set goals (rank target, CS/min threshold, death limit)
 - [ ] **LEARN-05**: User can see goal progress auto-tracked from match history
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MATCH-03 | Phase 13 | Complete |
 | MATCH-04 | Phase 13 | Complete |
 | LEARN-01 | Phase 14 | Complete |
-| LEARN-02 | Phase 14 | Pending |
+| LEARN-02 | Phase 14 | Complete |
 | LEARN-03 | Phase 14 | Pending |
 | RANK-02 | Phase 15 | Pending |
 | LEARN-04 | Phase 15 | Pending |

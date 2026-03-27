@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
 status: Ready to execute
-stopped_at: Completed 14-01-PLAN.md
-last_updated: "2026-03-27T16:32:19.994Z"
+stopped_at: Completed 14-03-PLAN.md
+last_updated: "2026-03-27T16:37:15.483Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 ## Current Position
 
 Phase: 14 (personal-learnings-journal) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Project Reference
 
@@ -37,6 +37,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 13-match-detail-view]: Store participants as single JSON string in match_detail table — avoids 10-row JOIN with no query benefits
 - [Phase 13-match-detail-view]: Timeline event markers use index into full timeline_events vec as stable key to avoid index drift when filters toggle
 - [Phase 14-personal-learnings-journal]: personal_learning is user-scoped (not team-scoped) — matches D-01 design decision; created_at deserialized as Option<String> consistent with other models
+- [Phase 14]: Pre-clone Strings before view! macro when same String is moved into a closure AND also needed by a later component prop
 
 ## Blockers/Concerns
 
@@ -45,6 +46,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-03-27T16:32:19.993Z
-Stopped at: Completed 14-01-PLAN.md
+Last session: 2026-03-27T16:37:15.481Z
+Stopped at: Completed 14-03-PLAN.md
 Resume file: None
