@@ -20,6 +20,7 @@ use crate::models::{
     },
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
+    personal_learning::PersonalLearning,
     series::Series,
     team::Team,
     team_note::TeamNote,
@@ -4777,6 +4778,164 @@ pub async fn store_match_detail(
             .check()?;
     }
 
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Personal Learnings (Phase 14)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbPersonalLearning {
+    id: RecordId,
+    user: RecordId,
+    title: String,
+    learning_type: String,
+    champion: Option<String>,
+    opponent: Option<String>,
+    what_happened: String,
+    what_i_learned: String,
+    next_time: String,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    win_loss: Option<String>,
+    #[serde(default)]
+    match_riot_id: Option<String>,
+    #[serde(default)]
+    game_timestamp_ms: Option<i64>,
+    #[serde(default)]
+    event_name: Option<String>,
+    created_at: Option<String>,
+}
+
+impl From<DbPersonalLearning> for PersonalLearning {
+    fn from(d: DbPersonalLearning) -> Self {
+        PersonalLearning {
+            id: Some(d.id.to_sql()),
+            user_id: d.user.to_sql(),
+            title: d.title,
+            learning_type: d.learning_type,
+            champion: d.champion,
+            opponent: d.opponent,
+            what_happened: d.what_happened,
+            what_i_learned: d.what_i_learned,
+            next_time: d.next_time,
+            tags: d.tags,
+            win_loss: d.win_loss,
+            match_riot_id: d.match_riot_id,
+            game_timestamp_ms: d.game_timestamp_ms,
+            event_name: d.event_name,
+            created_at: d.created_at,
+        }
+    }
+}
+
+pub async fn create_personal_learning(
+    db: &Surreal<Db>,
+    learning: PersonalLearning,
+) -> DbResult<String> {
+    let user_key = learning
+        .user_id
+        .strip_prefix("user:")
+        .unwrap_or(&learning.user_id)
+        .to_string();
+    let mut response = db
+        .query("CREATE personal_learning SET user = type::record('user', $user_key), title = $title, learning_type = $learning_type, champion = $champion, opponent = $opponent, what_happened = $what_happened, what_i_learned = $what_i_learned, next_time = $next_time, tags = $tags, win_loss = $win_loss, match_riot_id = $match_riot_id, game_timestamp_ms = $game_timestamp_ms, event_name = $event_name")
+        .bind(("user_key", user_key))
+        .bind(("title", learning.title))
+        .bind(("learning_type", learning.learning_type))
+        .bind(("champion", learning.champion))
+        .bind(("opponent", learning.opponent))
+        .bind(("what_happened", learning.what_happened))
+        .bind(("what_i_learned", learning.what_i_learned))
+        .bind(("next_time", learning.next_time))
+        .bind(("tags", learning.tags))
+        .bind(("win_loss", learning.win_loss))
+        .bind(("match_riot_id", learning.match_riot_id))
+        .bind(("game_timestamp_ms", learning.game_timestamp_ms))
+        .bind(("event_name", learning.event_name))
+        .await?
+        .check()?;
+    let row: Option<IdRecord> = response.take(0)?;
+    match row {
+        Some(r) => Ok(r.id.to_sql()),
+        None => Err(DbError::Other("Failed to create personal learning".into())),
+    }
+}
+
+pub async fn get_personal_learning(
+    db: &Surreal<Db>,
+    id: &str,
+) -> DbResult<Option<PersonalLearning>> {
+    let key = id
+        .strip_prefix("personal_learning:")
+        .unwrap_or(id)
+        .to_string();
+    let mut r = db
+        .query("SELECT * FROM type::record('personal_learning', $key)")
+        .bind(("key", key))
+        .await?;
+    let row: Option<DbPersonalLearning> = r.take(0)?;
+    Ok(row.map(PersonalLearning::from))
+}
+
+pub async fn list_personal_learnings(
+    db: &Surreal<Db>,
+    user_id: &str,
+) -> DbResult<Vec<PersonalLearning>> {
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+    let mut r = db
+        .query("SELECT * FROM personal_learning WHERE user = type::record('user', $user_key) ORDER BY created_at DESC")
+        .bind(("user_key", user_key))
+        .await?;
+    let rows: Vec<DbPersonalLearning> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(PersonalLearning::from).collect())
+}
+
+pub async fn update_personal_learning(
+    db: &Surreal<Db>,
+    learning: PersonalLearning,
+) -> DbResult<()> {
+    let id = learning
+        .id
+        .as_deref()
+        .ok_or(DbError::Other("No learning ID".into()))?;
+    let key = id
+        .strip_prefix("personal_learning:")
+        .unwrap_or(id)
+        .to_string();
+    db.query("UPDATE type::record('personal_learning', $key) SET title = $title, learning_type = $learning_type, champion = $champion, opponent = $opponent, what_happened = $what_happened, what_i_learned = $what_i_learned, next_time = $next_time, tags = $tags, win_loss = $win_loss, match_riot_id = $match_riot_id, game_timestamp_ms = $game_timestamp_ms, event_name = $event_name")
+        .bind(("key", key))
+        .bind(("title", learning.title))
+        .bind(("learning_type", learning.learning_type))
+        .bind(("champion", learning.champion))
+        .bind(("opponent", learning.opponent))
+        .bind(("what_happened", learning.what_happened))
+        .bind(("what_i_learned", learning.what_i_learned))
+        .bind(("next_time", learning.next_time))
+        .bind(("tags", learning.tags))
+        .bind(("win_loss", learning.win_loss))
+        .bind(("match_riot_id", learning.match_riot_id))
+        .bind(("game_timestamp_ms", learning.game_timestamp_ms))
+        .bind(("event_name", learning.event_name))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+pub async fn delete_personal_learning(db: &Surreal<Db>, id: &str) -> DbResult<()> {
+    let key = id
+        .strip_prefix("personal_learning:")
+        .unwrap_or(id)
+        .to_string();
+    db.query("DELETE type::record('personal_learning', $key)")
+        .bind(("key", key))
+        .await?
+        .check()?;
     Ok(())
 }
 

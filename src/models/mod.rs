@@ -4,6 +4,7 @@ pub mod draft;
 pub mod game_plan;
 pub mod match_data;
 pub mod opponent;
+pub mod personal_learning;
 pub mod series;
 pub mod team;
 pub mod team_note;

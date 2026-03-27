@@ -282,3 +282,21 @@ DEFINE FIELD IF NOT EXISTS multi_kill_length ON match_timeline_event TYPE option
 DEFINE FIELD IF NOT EXISTS is_teamfight ON match_timeline_event TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS involved_participants ON match_timeline_event TYPE option<string>;
 DEFINE INDEX IF NOT EXISTS timeline_match_id ON match_timeline_event FIELDS match_id;
+
+-- Personal Learnings (Phase 14) — user-scoped, NOT team-scoped
+DEFINE TABLE IF NOT EXISTS personal_learning SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON personal_learning TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS title ON personal_learning TYPE string;
+DEFINE FIELD IF NOT EXISTS learning_type ON personal_learning TYPE string;
+DEFINE FIELD IF NOT EXISTS champion ON personal_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS opponent ON personal_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS what_happened ON personal_learning TYPE string;
+DEFINE FIELD IF NOT EXISTS what_i_learned ON personal_learning TYPE string;
+DEFINE FIELD IF NOT EXISTS next_time ON personal_learning TYPE string;
+DEFINE FIELD IF NOT EXISTS tags ON personal_learning TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS win_loss ON personal_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS match_riot_id ON personal_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_timestamp_ms ON personal_learning TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS event_name ON personal_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON personal_learning TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS personal_learning_user ON personal_learning FIELDS user;
