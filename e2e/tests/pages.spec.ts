@@ -18,6 +18,8 @@ const AUTHED_PAGES = [
   { path: "/post-game", content: /post|game|review/i },
   { path: "/analytics", content: /analytics|strategy|effectiveness/i },
   { path: "/solo", content: /dashboard|matches|ranked|solo/i },
+  { path: "/personal-learnings", content: /learnings|personal|reflections/i },
+  { path: "/personal-learnings/new", content: /learning|new|happened|learned/i },
 ];
 
 for (const { path, content } of AUTHED_PAGES) {
