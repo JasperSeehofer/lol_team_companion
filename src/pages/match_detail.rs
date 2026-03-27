@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use crate::models::match_data::{ComparisonMode, MatchParticipant, PerformanceStats};
+use crate::models::match_data::{ComparisonMode, EventCategory, MatchParticipant, PerformanceStats, TimelineEvent};
 
 #[server]
 pub async fn fetch_match_detail(
@@ -118,6 +118,63 @@ fn format_duration(secs: i32) -> String {
     let m = secs / 60;
     let s = secs % 60;
     format!("{m}:{s:02}")
+}
+
+fn timeline_pct(event_timestamp_ms: i64, game_duration_secs: i32) -> f64 {
+    let game_ms = game_duration_secs as f64 * 1000.0;
+    if game_ms <= 0.0 {
+        return 0.0;
+    }
+    ((event_timestamp_ms as f64 / game_ms) * 100.0).clamp(0.0, 100.0)
+}
+
+fn event_tooltip(event: &TimelineEvent, participants: &[MatchParticipant]) -> String {
+    let time_min = event.timestamp_ms / 60_000;
+    let time_sec = (event.timestamp_ms % 60_000) / 1000;
+    let time_str = format!("{time_min}:{time_sec:02}");
+    match event.event_type.as_str() {
+        "ELITE_MONSTER_KILL" => {
+            let monster = event.monster_type.as_deref().unwrap_or("Monster");
+            let sub = event
+                .monster_sub_type
+                .as_deref()
+                .map(|s| format!(" ({s})"))
+                .unwrap_or_default();
+            format!("{time_str} - {monster}{sub} killed")
+        }
+        "BUILDING_KILL" => {
+            let building = event.building_type.as_deref().unwrap_or("Building");
+            format!("{time_str} - {building} destroyed")
+        }
+        "CHAMPION_KILL" => {
+            let killer = event
+                .killer_participant_id
+                .and_then(|id| participants.iter().find(|p| p.participant_id == id))
+                .map(|p| p.summoner_name.as_str())
+                .unwrap_or("Unknown");
+            let victim = event
+                .victim_participant_id
+                .and_then(|id| participants.iter().find(|p| p.participant_id == id))
+                .map(|p| p.summoner_name.as_str())
+                .unwrap_or("Unknown");
+            let mut text = format!("{time_str} - {killer} killed {victim}");
+            if event.is_first_blood {
+                text.push_str(" (First Blood)");
+            }
+            if let Some(mk) = event.multi_kill_length {
+                if mk >= 2 {
+                    text.push_str(&format!(" ({mk}x kill)"));
+                }
+            }
+            text
+        }
+        "WARD_PLACED" => format!("{time_str} - Ward placed"),
+        "TEAMFIGHT" => format!(
+            "{time_str} - Teamfight ({} players)",
+            event.involved_participants.len()
+        ),
+        _ => format!("{time_str} - {}", event.event_type),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +542,15 @@ pub fn MatchDetailPage() -> impl IntoView {
     let (comparison_mode, set_comparison_mode) = signal(ComparisonMode::GameAverage);
     let (retry_count, set_retry_count) = signal(0u32);
 
+    // Timeline filter signals
+    let (show_objectives, set_show_objectives) = signal(true);
+    let (show_towers, set_show_towers) = signal(true);
+    let (show_kills, set_show_kills) = signal(true);
+    let (show_wards, set_show_wards) = signal(true);
+    let (show_teamfights, set_show_teamfights) = signal(true);
+    let (show_recalls, set_show_recalls) = signal(true);
+    let (selected_event, set_selected_event) = signal(Option::<usize>::None);
+
     view! {
         <div class="max-w-6xl mx-auto px-6 py-6">
             // Back link
@@ -617,6 +683,194 @@ pub fn MatchDetailPage() -> impl IntoView {
                                             user_participant_id=user_pid
                                             team_color="red"
                                         />
+
+                                        // Timeline section
+                                        {
+                                            let timeline_events = d_stored.with_value(|d| d.timeline_events.clone());
+                                            let participants_for_timeline = d_stored.with_value(|d| d.participants.clone());
+                                            let participants_for_detail = participants_for_timeline.clone();
+
+                                            view! {
+                                                <div class="bg-surface border border-divider rounded-xl p-4">
+                                                    <h2 class="text-xl font-semibold text-primary mb-3">"Timeline"</h2>
+
+                                                    // Filter toggles row
+                                                    <div class="flex gap-2 flex-wrap mb-3">
+                                                        <button
+                                                            class=move || if show_objectives.get() {
+                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                                                            } else {
+                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                                                            }
+                                                            on:click=move |_| set_show_objectives.set(!show_objectives.get_untracked())
+                                                        >"Objectives"</button>
+                                                        <button
+                                                            class=move || if show_towers.get() {
+                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                                                            } else {
+                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                                                            }
+                                                            on:click=move |_| set_show_towers.set(!show_towers.get_untracked())
+                                                        >"Towers"</button>
+                                                        <button
+                                                            class=move || if show_kills.get() {
+                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                                                            } else {
+                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                                                            }
+                                                            on:click=move |_| set_show_kills.set(!show_kills.get_untracked())
+                                                        >"Kills"</button>
+                                                        <button
+                                                            class=move || if show_wards.get() {
+                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                                                            } else {
+                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                                                            }
+                                                            on:click=move |_| set_show_wards.set(!show_wards.get_untracked())
+                                                        >"Wards"</button>
+                                                        <button
+                                                            class=move || if show_recalls.get() {
+                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                                                            } else {
+                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                                                            }
+                                                            on:click=move |_| set_show_recalls.set(!show_recalls.get_untracked())
+                                                        >"Recalls"</button>
+                                                        <button
+                                                            class=move || if show_teamfights.get() {
+                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                                                            } else {
+                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                                                            }
+                                                            on:click=move |_| set_show_teamfights.set(!show_teamfights.get_untracked())
+                                                        >"Teamfights"</button>
+                                                    </div>
+
+                                                    // Timeline bar track
+                                                    <div class="relative w-full h-10 bg-elevated border border-divider rounded-lg">
+                                                        {move || {
+                                                            let events = timeline_events.clone();
+                                                            let participants_ref = participants_for_timeline.clone();
+                                                            let visible: Vec<(usize, crate::models::match_data::TimelineEvent)> = events
+                                                                .iter()
+                                                                .enumerate()
+                                                                .filter(|(_, e)| match e.category {
+                                                                    EventCategory::Objective => show_objectives.get(),
+                                                                    EventCategory::Tower => show_towers.get(),
+                                                                    EventCategory::Kill => show_kills.get(),
+                                                                    EventCategory::Ward => show_wards.get(),
+                                                                    EventCategory::Teamfight => show_teamfights.get(),
+                                                                    EventCategory::Recall => show_recalls.get(),
+                                                                })
+                                                                .map(|(idx, e)| (idx, e.clone()))
+                                                                .collect();
+
+                                                            if visible.is_empty() {
+                                                                return view! {
+                                                                    <p class="text-sm text-muted text-center py-4 absolute inset-0 flex items-center justify-center">
+                                                                        "No events match the current filters."
+                                                                    </p>
+                                                                }.into_any();
+                                                            }
+
+                                                            visible.into_iter().map(|(idx, event)| {
+                                                                let left_pct = timeline_pct(event.timestamp_ms, game_duration);
+                                                                let tooltip = event_tooltip(&event, &participants_ref);
+
+                                                                let (size_class, shape_class) = match event.category {
+                                                                    EventCategory::Objective => {
+                                                                        match event.monster_type.as_deref() {
+                                                                            Some(m) if m.contains("BARON") || m.contains("HORDE") =>
+                                                                                ("w-4 h-4", "rounded-full border-2"),
+                                                                            _ => ("w-3 h-3", "rounded-full"),
+                                                                        }
+                                                                    }
+                                                                    EventCategory::Tower => ("w-2 h-2", "rounded-sm"),
+                                                                    EventCategory::Kill => ("w-2 h-2", "rounded-full"),
+                                                                    EventCategory::Ward => ("w-2 h-2", "rounded-full"),
+                                                                    EventCategory::Recall => ("w-2 h-2", "rounded-full"),
+                                                                    EventCategory::Teamfight => ("w-4 h-4", "rounded-full"),
+                                                                };
+
+                                                                let team_color = match event.team_id {
+                                                                    Some(100) => "bg-blue-400 border-blue-500",
+                                                                    Some(200) => "bg-red-400 border-red-500",
+                                                                    _ => "bg-muted border-muted",
+                                                                };
+
+                                                                let is_user_event = event.killer_participant_id == Some(user_pid)
+                                                                    || event.involved_participants.contains(&user_pid);
+                                                                let user_ring = if is_user_event {
+                                                                    " ring-2 ring-accent ring-offset-1 ring-offset-base"
+                                                                } else {
+                                                                    ""
+                                                                };
+
+                                                                let btn_class = format!(
+                                                                    "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 {size_class} {shape_class} {team_color}{user_ring} cursor-pointer transition-transform z-10"
+                                                                );
+                                                                let btn_class_selected = format!(
+                                                                    "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 {size_class} {shape_class} {team_color}{user_ring} cursor-pointer transition-transform scale-150 z-20"
+                                                                );
+
+                                                                view! {
+                                                                    <button
+                                                                        class=move || if selected_event.get() == Some(idx) {
+                                                                            btn_class_selected.clone()
+                                                                        } else {
+                                                                            btn_class.clone()
+                                                                        }
+                                                                        style=format!("left: {left_pct:.2}%")
+                                                                        title=tooltip
+                                                                        on:click=move |ev| {
+                                                                            ev.stop_propagation();
+                                                                            let current = selected_event.get_untracked();
+                                                                            if current == Some(idx) {
+                                                                                set_selected_event.set(None);
+                                                                            } else {
+                                                                                set_selected_event.set(Some(idx));
+                                                                            }
+                                                                        }
+                                                                    />
+                                                                }
+                                                            }).collect_view().into_any()
+                                                        }}
+                                                    </div>
+
+                                                    // Event detail panel
+                                                    {move || {
+                                                        let events = d_stored.with_value(|d| d.timeline_events.clone());
+                                                        let participants_ref = participants_for_detail.clone();
+                                                        if let Some(idx) = selected_event.get() {
+                                                            if let Some(event) = events.get(idx) {
+                                                                let detail_text = event_tooltip(event, &participants_ref);
+                                                                let involved_names: Vec<String> = event.involved_participants.iter()
+                                                                    .filter_map(|id| participants_ref.iter().find(|p| p.participant_id == *id))
+                                                                    .map(|p| p.summoner_name.clone())
+                                                                    .collect();
+                                                                let has_involved = !involved_names.is_empty();
+                                                                let names_str = involved_names.join(", ");
+                                                                return view! {
+                                                                    <div class="bg-surface border border-divider rounded-lg p-4 mt-3">
+                                                                        <p class="text-sm text-secondary">{detail_text}</p>
+                                                                        {if has_involved {
+                                                                            view! {
+                                                                                <p class="text-xs text-muted mt-2">
+                                                                                    "Involved: " {names_str}
+                                                                                </p>
+                                                                            }.into_any()
+                                                                        } else {
+                                                                            view! { <span /> }.into_any()
+                                                                        }}
+                                                                    </div>
+                                                                }.into_any();
+                                                            }
+                                                        }
+                                                        view! { <span /> }.into_any()
+                                                    }}
+                                                </div>
+                                            }
+                                        }
 
                                         // Performance section
                                         <PerformanceSection
