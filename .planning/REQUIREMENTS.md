@@ -23,10 +23,10 @@ Requirements for Solo Mode & Match Intelligence milestone. Each maps to roadmap 
 
 ### Match Detail
 
-- [ ] **MATCH-01**: User can view all 10 participants in a match (KDA, items, damage, gold, vision)
-- [ ] **MATCH-02**: User can view match timeline events (dragons, barons, towers, kills)
-- [ ] **MATCH-03**: User can see personal performance breakdown (damage share, vision score, CS vs game average)
-- [ ] **MATCH-04**: Match detail loads on-demand (not during sync) and caches in DB after first fetch
+- [x] **MATCH-01**: User can view all 10 participants in a match (KDA, items, damage, gold, vision)
+- [x] **MATCH-02**: User can view match timeline events (dragons, barons, towers, kills)
+- [x] **MATCH-03**: User can see personal performance breakdown (damage share, vision score, CS vs game average)
+- [x] **MATCH-04**: Match detail loads on-demand (not during sync) and caches in DB after first fetch
 
 ### Personal Improvement
 
@@ -93,10 +93,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SOLO-05 | Phase 12 | Complete |
 | RANK-01 | Phase 12 | Complete |
 | RANK-03 | Phase 12 | Complete |
-| MATCH-01 | Phase 13 | Pending |
-| MATCH-02 | Phase 13 | Pending |
-| MATCH-03 | Phase 13 | Pending |
-| MATCH-04 | Phase 13 | Pending |
+| MATCH-01 | Phase 13 | Complete |
+| MATCH-02 | Phase 13 | Complete |
+| MATCH-03 | Phase 13 | Complete |
+| MATCH-04 | Phase 13 | Complete |
 | LEARN-01 | Phase 14 | Pending |
 | LEARN-02 | Phase 14 | Pending |
 | LEARN-03 | Phase 14 | Pending |
