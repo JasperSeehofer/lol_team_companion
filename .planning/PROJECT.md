@@ -52,9 +52,9 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - [ ] Solo queue goal setting (rank targets, CS/min, death count)
 - [ ] Ranked climb tracker (LP gains/losses, streaks, rank history)
 - [ ] Personal learnings journal (post-game reflections, tagged by champion/matchup)
-- [ ] Match detail view — full participant data (10 players), items, damage, gold
-- [ ] Match timeline — objectives (dragons, baron, towers), key events
-- [ ] Personal performance breakdown (damage share, vision score, CS graphs)
+- [x] Match detail view — full participant data (10 players), items, damage, gold (Phase 13)
+- [x] Match timeline — objectives (dragons, baron, towers), key events (Phase 13)
+- [x] Personal performance breakdown (damage share, vision score, CS graphs) (Phase 13)
 - [ ] Match → learning one-click flow
 - [ ] Champion performance trends over time (win rate, KDA, CS/min per champion)
 - [ ] Personal matchup notes (surfaced when picking that champion in draft)
@@ -82,6 +82,7 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 
 ## Context
 
+Phase 12 added solo mode infrastructure; Phase 13 added match detail view with 10-player scoreboard, timeline visualization, and performance breakdown.
 Shipped v1.1 with 26,686 lines of Rust across 15 route components + server/DB layer.
 Tech stack: Rust nightly / Leptos 0.8 / Axum 0.8 / SurrealDB 3.x / Tailwind CSS v4.
 Features are deeply connected end-to-end: draft → game plan → post-game → analytics → action items.
