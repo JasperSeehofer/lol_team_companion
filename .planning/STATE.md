@@ -2,27 +2,27 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
-status: Ready to plan
-stopped_at: Phase 14 context gathered
-last_updated: "2026-03-27T15:49:42.257Z"
+status: Ready to execute
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-03-27T16:32:19.994Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
 ---
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
+Phase: 14 (personal-learnings-journal) — EXECUTING
+Plan: 2 of 3
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 13 — match-detail-view
+**Current focus:** Phase 14 — personal-learnings-journal
 
 ## Decisions
 
@@ -36,6 +36,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 12]: PlayerMatchStats lacks queue_id/game_duration: match rows show champion+KDA+CS only; queue filter works via DB WHERE clause
 - [Phase 13-match-detail-view]: Store participants as single JSON string in match_detail table — avoids 10-row JOIN with no query benefits
 - [Phase 13-match-detail-view]: Timeline event markers use index into full timeline_events vec as stable key to avoid index drift when filters toggle
+- [Phase 14-personal-learnings-journal]: personal_learning is user-scoped (not team-scoped) — matches D-01 design decision; created_at deserialized as Option<String> consistent with other models
 
 ## Blockers/Concerns
 
@@ -44,6 +45,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-03-27T15:49:42.248Z
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-personal-learnings-journal/14-CONTEXT.md
+Last session: 2026-03-27T16:32:19.993Z
+Stopped at: Completed 14-01-PLAN.md
+Resume file: None
