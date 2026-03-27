@@ -7,6 +7,7 @@ pub mod game_plan;
 pub mod home;
 pub mod match_detail;
 pub mod opponents;
+pub mod personal_learnings;
 pub mod post_game;
 pub mod profile;
 pub mod solo_dashboard;
