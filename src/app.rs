@@ -16,6 +16,7 @@ use crate::pages::{
     draft::DraftPage,
     game_plan::GamePlanPage,
     home::HomePage,
+    match_detail::MatchDetailPage,
     opponents::OpponentsPage,
     post_game::PostGamePage,
     profile::ProfilePage,
@@ -75,6 +76,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/action-items") view=ActionItemsPage />
                         <Route path=path!("/analytics") view=AnalyticsPage />
                         <Route path=path!("/solo") view=SoloDashboardPage />
+                        <Route path=path!("/match/:id") view=MatchDetailPage />
                     </Routes>
                 </main>
             </ToastProvider>
