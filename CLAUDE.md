@@ -476,6 +476,17 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 - **Context7** — up-to-date library docs; add "use context7" to prompts for live documentation lookup
 - **GitHub MCP** — rich GitHub integration (PRs, issues, code search) via `GITHUB_TOKEN` env var
 
+## Design System
+
+Design tokens, color, typography, spacing, and accessibility standards are inherited from the Manyfold wiki:
+- Token catalog + Tailwind `@theme` block: `../professional-vault/wiki/concepts/design-system.md`
+- Component rules: `../professional-vault/wiki/concepts/ui-guidelines.md`
+- Accessibility: `../professional-vault/wiki/concepts/accessibility-standards.md`
+
+This project uses **standard** density. Semantic tokens (`bg-base`, `bg-surface`, `text-primary`, etc.) are defined in `input.css` `@theme` block — use these, not hardcoded colors.
+
+**UI-SPEC.md scope (`/gsd-ui-phase`):** Cover project-specific decisions only — page/route inventory, draft board layout, tree graph interactions, auth flows, champion picker UX. Do not re-specify tokens, colors, typography, or accessibility rules already in the wiki.
+
 ## Code Style
 
 - **Errors:** `thiserror` for custom error types, map to `ServerFnError` via `.map_err(|e| ServerFnError::new(e.to_string()))`
