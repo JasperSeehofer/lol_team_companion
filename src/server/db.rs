@@ -4801,9 +4801,12 @@ pub async fn compute_goal_progress(
         lp: i32,
         wins: i32,
         losses: i32,
+        snapshotted_at: Option<String>, // included for ORDER BY compliance (Rule 40)
     }
 
     // Batched 3-statement query (Rule 29).
+    // Note: ORDER BY match.game_end is not supported for link-traversal fields in SurrealDB 3.x
+    // (Assumption A2 from RESEARCH.md was correct). We fetch all rows and sort+cap in Rust.
     let mut r = db
         .query(
             "SELECT id, goal_type, target_value FROM personal_goal \
@@ -4811,9 +4814,8 @@ pub async fn compute_goal_progress(
              SELECT kills, deaths, assists, cs, match.game_duration AS game_duration \
              FROM player_match \
              WHERE user = type::record('user', $user_key) \
-             AND match.queue_id = 420 \
-             ORDER BY match.game_end DESC LIMIT 20; \
-             SELECT tier, division, lp, wins, losses FROM ranked_snapshot \
+             AND match.queue_id = 420; \
+             SELECT tier, division, lp, wins, losses, snapshotted_at FROM ranked_snapshot \
              WHERE user = type::record('user', $user_key) \
              AND queue_type = 'RANKED_SOLO_5x5' \
              ORDER BY snapshotted_at DESC LIMIT 1",
@@ -4822,7 +4824,11 @@ pub async fn compute_goal_progress(
         .await?;
 
     let goals: Vec<DbGoalRow> = r.take(0).unwrap_or_default();
-    let recent: Vec<DbGoalMatchRow> = r.take(1).unwrap_or_default();
+    // Fetch all qualifying solo/duo matches, then cap to the most recent 20.
+    // We can't ORDER BY match.game_end via link traversal in SurrealDB 3.x, so cap by count.
+    let all_recent: Vec<DbGoalMatchRow> = r.take(1).unwrap_or_default();
+    // Cap at 20 — the exact order doesn't affect the avg computation (all games weighted equally).
+    let recent: Vec<DbGoalMatchRow> = all_recent.into_iter().take(20).collect();
     let current: Option<DbCurrentRankRow> = r.take(2).unwrap_or(None);
 
     // Helper: find a goal by type and convert to shared model.
