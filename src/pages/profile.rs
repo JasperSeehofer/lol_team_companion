@@ -2,7 +2,6 @@ use crate::components::ui::{EmptyState, SkeletonCard, SkeletonGrid, ToastContext
 use crate::models::champion::ChampionPoolEntry;
 use crate::models::user::PublicUser;
 use leptos::prelude::*;
-use leptos::web_sys;
 
 #[server]
 pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {

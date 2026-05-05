@@ -561,7 +561,9 @@ fn LpGraphSvg(
         d
     } else { String::new() };
 
+    #[allow(unused_variables)]
     let snaps_for_hover = snapshots.clone();
+    #[allow(unused_variables)]
     let points_for_hover = points.clone();
 
     let tier_labels = {

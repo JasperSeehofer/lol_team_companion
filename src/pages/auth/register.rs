@@ -1,5 +1,4 @@
 use leptos::prelude::*;
-use leptos::web_sys;
 use leptos_router::components::A;
 
 #[server]

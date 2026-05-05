@@ -114,8 +114,8 @@ Plans:
 - [x] 15-01-PLAN.md — Schema, models, rank_score helper, 5 db functions, Wave 0 integration tests
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 15-02-PLAN.md — LP graph + goal cards on solo dashboard (server fns, LpHistoryGraph SVG, GoalCards with inline edit)
-- [ ] 15-03-PLAN.md — Champion Trends section on stats page (sortable table, time-window toggle, min-games filter)
+- [x] 15-02-PLAN.md — LP graph + goal cards on solo dashboard (server fns, LpHistoryGraph SVG, GoalCards with inline edit)
+- [x] 15-03-PLAN.md — Champion Trends section on stats page (sortable table, time-window toggle, min-games filter)
 **UI hint**: yes
 
 ### Phase 16: Draft Integration
