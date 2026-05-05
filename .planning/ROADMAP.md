@@ -108,7 +108,11 @@ Plans:
   2. User can set goals including a rank target tier, CS/min threshold, and per-game death limit
   3. User can see goal progress on the solo dashboard — each goal shows current average vs. the target derived from recent match history
   4. User can view champion performance trends showing win rate, KDA, and CS/min per champion over a selectable time window
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 15-01-PLAN.md — Schema, models, rank_score helper, 5 db functions, Wave 0 integration tests
+- [ ] 15-02-PLAN.md — LP graph + goal cards on solo dashboard (server fns, LpHistoryGraph SVG, GoalCards with inline edit)
+- [ ] 15-03-PLAN.md — Champion Trends section on stats page (sortable table, time-window toggle, min-games filter)
 **UI hint**: yes
 
 ### Phase 16: Draft Integration
@@ -143,5 +147,5 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
 | 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
-| 15. Goals & LP History | v1.2 | 0/? | Not started | - |
+| 15. Goals & LP History | v1.2 | 0/3 | Planned     | - |
 | 16. Draft Integration | v1.2 | 0/? | Not started | - |
