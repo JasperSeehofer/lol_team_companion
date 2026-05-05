@@ -4626,6 +4626,405 @@ pub async fn get_solo_matches(
     Ok(rows)
 }
 
+// ===========================================================================
+// Phase 15: Goals & LP History
+// ===========================================================================
+
+pub async fn get_lp_history(
+    db: &Surreal<Db>,
+    user_id: &str,
+    cutoff: Option<String>, // ISO datetime string (UTC); None = all-time
+) -> DbResult<Vec<crate::models::match_data::RankedSnapshot>> {
+    use crate::models::match_data::rank_score;
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbLpRow {
+        tier: String,
+        division: String,
+        lp: i32,
+        snapshotted_at: String,
+    }
+
+    // Note: snapshotted_at MUST be in SELECT list for ORDER BY to work (Rule 40).
+    // <string>snapshotted_at AS snapshotted_at casts the SurrealDB datetime to string.
+    let rows: Vec<DbLpRow> = if let Some(cutoff_val) = cutoff {
+        let mut r = db
+            .query(
+                "SELECT tier, division, lp, <string>snapshotted_at AS snapshotted_at \
+                 FROM ranked_snapshot \
+                 WHERE user = type::record('user', $user_key) \
+                 AND queue_type = 'RANKED_SOLO_5x5' \
+                 AND snapshotted_at >= $cutoff \
+                 ORDER BY snapshotted_at ASC",
+            )
+            .bind(("user_key", user_key))
+            .bind(("cutoff", cutoff_val))
+            .await?;
+        r.take(0).unwrap_or_default()
+    } else {
+        let mut r = db
+            .query(
+                "SELECT tier, division, lp, <string>snapshotted_at AS snapshotted_at \
+                 FROM ranked_snapshot \
+                 WHERE user = type::record('user', $user_key) \
+                 AND queue_type = 'RANKED_SOLO_5x5' \
+                 ORDER BY snapshotted_at ASC",
+            )
+            .bind(("user_key", user_key))
+            .await?;
+        r.take(0).unwrap_or_default()
+    };
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let score = rank_score(&r.tier, &r.division, r.lp);
+            crate::models::match_data::RankedSnapshot {
+                id: None,
+                tier: r.tier,
+                division: r.division,
+                lp: r.lp,
+                snapshotted_at: r.snapshotted_at,
+                rank_score: score,
+            }
+        })
+        .collect())
+}
+
+pub async fn get_personal_goals(
+    db: &Surreal<Db>,
+    user_id: &str,
+) -> DbResult<Vec<crate::models::match_data::PersonalGoal>> {
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbPersonalGoal {
+        id: RecordId,
+        goal_type: String,
+        target_value: String,
+    }
+
+    let mut r = db
+        .query(
+            "SELECT id, goal_type, target_value FROM personal_goal \
+             WHERE user = type::record('user', $user_key)",
+        )
+        .bind(("user_key", user_key))
+        .await?;
+    let rows: Vec<DbPersonalGoal> = r.take(0).unwrap_or_default();
+    Ok(rows
+        .into_iter()
+        .map(|g| crate::models::match_data::PersonalGoal {
+            id: Some(g.id.to_sql()),
+            goal_type: g.goal_type,
+            target_value: g.target_value,
+        })
+        .collect())
+}
+
+/// Upsert a personal goal for the user (one active goal per type, D-07).
+/// Validates goal_type server-side as defense in depth (T-15-01).
+pub async fn upsert_personal_goal(
+    db: &Surreal<Db>,
+    user_id: &str,
+    goal_type: &str,
+    target_value: &str,
+) -> DbResult<()> {
+    // Validate goal_type — defence in depth; server fn validates first (T-15-01).
+    if !matches!(goal_type, "rank_target" | "cs_per_min" | "deaths_per_game") {
+        return Err(DbError::Other(format!(
+            "invalid goal_type: {goal_type}"
+        )));
+    }
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+    // DELETE + CREATE in a transaction ensures upsert semantics atomically (set_ban_priorities pattern).
+    db.query(
+        "BEGIN TRANSACTION; \
+         DELETE personal_goal WHERE user = type::record('user', $user_key) \
+           AND goal_type = $goal_type; \
+         CREATE personal_goal SET \
+           user = type::record('user', $user_key), \
+           goal_type = $goal_type, \
+           target_value = $target_value, \
+           created_at = time::now(), \
+           updated_at = time::now(); \
+         COMMIT TRANSACTION;",
+    )
+    .bind(("user_key", user_key))
+    .bind(("goal_type", goal_type.to_string()))
+    .bind(("target_value", target_value.to_string()))
+    .await?
+    .check()?;
+    Ok(())
+}
+
+/// Compute goal progress for the user from the last 20 solo/duo player_match rows (D-12, D-13).
+/// Returns `current_value: None` when fewer than 5 qualifying games exist (D-15).
+pub async fn compute_goal_progress(
+    db: &Surreal<Db>,
+    user_id: &str,
+) -> DbResult<crate::models::match_data::GoalProgressPayload> {
+    use crate::models::match_data::{rank_score, GoalProgress, GoalProgressPayload, PersonalGoal};
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbGoalRow {
+        id: RecordId,
+        goal_type: String,
+        target_value: String,
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbGoalMatchRow {
+        kills: i64,
+        deaths: i64,
+        assists: i64,
+        cs: i64,
+        game_duration: i64, // seconds — Pitfall 1: divide by 60 for cs/min
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbCurrentRankRow {
+        tier: String,
+        division: String,
+        lp: i32,
+        wins: i32,
+        losses: i32,
+    }
+
+    // Batched 3-statement query (Rule 29).
+    let mut r = db
+        .query(
+            "SELECT id, goal_type, target_value FROM personal_goal \
+             WHERE user = type::record('user', $user_key); \
+             SELECT kills, deaths, assists, cs, match.game_duration AS game_duration \
+             FROM player_match \
+             WHERE user = type::record('user', $user_key) \
+             AND match.queue_id = 420 \
+             ORDER BY match.game_end DESC LIMIT 20; \
+             SELECT tier, division, lp, wins, losses FROM ranked_snapshot \
+             WHERE user = type::record('user', $user_key) \
+             AND queue_type = 'RANKED_SOLO_5x5' \
+             ORDER BY snapshotted_at DESC LIMIT 1",
+        )
+        .bind(("user_key", user_key))
+        .await?;
+
+    let goals: Vec<DbGoalRow> = r.take(0).unwrap_or_default();
+    let recent: Vec<DbGoalMatchRow> = r.take(1).unwrap_or_default();
+    let current: Option<DbCurrentRankRow> = r.take(2).unwrap_or(None);
+
+    // Helper: find a goal by type and convert to shared model.
+    let find_goal = |kind: &str| -> Option<PersonalGoal> {
+        goals
+            .iter()
+            .find(|g| g.goal_type == kind)
+            .map(|g| PersonalGoal {
+                id: Some(g.id.to_sql()),
+                goal_type: g.goal_type.clone(),
+                target_value: g.target_value.clone(),
+            })
+    };
+
+    let game_count = recent.len() as i32;
+    let sufficient = game_count >= 5; // D-15: insufficient threshold
+
+    // CS/min progress: total_cs / (total_game_duration_sec / 60.0) — Pitfall 1.
+    let cs_progress: Option<GoalProgress> = find_goal("cs_per_min").map(|goal| {
+        if !sufficient {
+            return GoalProgress {
+                goal: goal.clone(),
+                current_value: None,
+                game_count,
+                achieved: false,
+            };
+        }
+        let total_cs: f32 = recent.iter().map(|r| r.cs as f32).sum();
+        let total_minutes: f32 = recent.iter().map(|r| r.game_duration as f32 / 60.0).sum();
+        let avg = if total_minutes > 0.0 {
+            total_cs / total_minutes
+        } else {
+            0.0
+        };
+        let target = goal.target_value.parse::<f32>().unwrap_or(0.0);
+        GoalProgress {
+            goal,
+            current_value: Some((avg * 10.0).round() / 10.0),
+            game_count,
+            achieved: avg >= target,
+        }
+    });
+
+    // Deaths/game progress: avg deaths per game; lower is better (D-14).
+    let deaths_progress: Option<GoalProgress> = find_goal("deaths_per_game").map(|goal| {
+        if !sufficient {
+            return GoalProgress {
+                goal: goal.clone(),
+                current_value: None,
+                game_count,
+                achieved: false,
+            };
+        }
+        let avg = recent.iter().map(|r| r.deaths as f32).sum::<f32>() / game_count as f32;
+        let target = goal.target_value.parse::<f32>().unwrap_or(0.0);
+        GoalProgress {
+            goal,
+            current_value: Some((avg * 10.0).round() / 10.0),
+            game_count,
+            achieved: avg <= target,
+        }
+    });
+
+    // Rank progress: compares current rank_score to target's rank_score.
+    // No game-count threshold for rank — it reads from ranked_snapshot, not match aggregates.
+    let rank_progress: Option<GoalProgress> = find_goal("rank_target").map(|goal| {
+        let current_score: Option<i32> = current
+            .as_ref()
+            .map(|c| rank_score(&c.tier, &c.division, c.lp));
+        // target_value format "TIER:DIVISION" (D-09); division empty for Master+.
+        let parts: Vec<&str> = goal.target_value.splitn(2, ':').collect();
+        let target_tier = parts.first().copied().unwrap_or("");
+        let target_div = parts.get(1).copied().unwrap_or("");
+        let target_score = rank_score(target_tier, target_div, 0);
+        GoalProgress {
+            goal,
+            current_value: current_score.map(|s| s as f32),
+            game_count: current.as_ref().map(|_| 1).unwrap_or(0),
+            achieved: current_score.map(|s| s >= target_score).unwrap_or(false),
+        }
+    });
+
+    let current_rank = current.map(|c| crate::models::user::RankedInfo {
+        queue_type: "RANKED_SOLO_5x5".to_string(),
+        tier: c.tier,
+        division: c.division,
+        lp: c.lp,
+        wins: c.wins,
+        losses: c.losses,
+    });
+
+    Ok(GoalProgressPayload {
+        rank: rank_progress,
+        cs: cs_progress,
+        deaths: deaths_progress,
+        current_rank,
+    })
+}
+
+/// Aggregate champion performance trends for the user (D-16, D-19).
+/// Includes solo/duo (queue_id=420) + flex (queue_id=440) — excludes ARAM, normals.
+/// Aggregates in Rust after filtered DB fetch (matching get_champion_stats_for_user pattern).
+pub async fn get_champion_trends(
+    db: &Surreal<Db>,
+    user_id: &str,
+    cutoff: Option<String>, // ISO datetime string (UTC); None = all-time
+) -> DbResult<Vec<crate::models::match_data::ChampionTrend>> {
+    use std::collections::HashMap;
+    let user_key = user_id
+        .strip_prefix("user:")
+        .unwrap_or(user_id)
+        .to_string();
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbTrendRow {
+        champion: String,
+        kills: i64,
+        deaths: i64,
+        assists: i64,
+        cs: i64,
+        damage: i64,
+        win: bool,
+        game_duration: i64, // seconds from match.game_duration — Pitfall 1
+    }
+
+    // Pitfall 4: match.game_end is option<datetime>. For time-windowed queries we
+    // legitimately exclude null-dated matches. For all-time we include them all.
+    let rows: Vec<DbTrendRow> = if let Some(cutoff_val) = cutoff {
+        let mut r = db
+            .query(
+                "SELECT champion, kills, deaths, assists, cs, damage, win, \
+                        match.game_duration AS game_duration \
+                 FROM player_match \
+                 WHERE user = type::record('user', $user_key) \
+                 AND (match.queue_id = 420 OR match.queue_id = 440) \
+                 AND match.game_end >= $cutoff",
+            )
+            .bind(("user_key", user_key))
+            .bind(("cutoff", cutoff_val))
+            .await?;
+        r.take(0).unwrap_or_default()
+    } else {
+        let mut r = db
+            .query(
+                "SELECT champion, kills, deaths, assists, cs, damage, win, \
+                        match.game_duration AS game_duration \
+                 FROM player_match \
+                 WHERE user = type::record('user', $user_key) \
+                 AND (match.queue_id = 420 OR match.queue_id = 440)",
+            )
+            .bind(("user_key", user_key))
+            .await?;
+        r.take(0).unwrap_or_default()
+    };
+
+    let mut by_champ: HashMap<String, Vec<DbTrendRow>> = HashMap::new();
+    for row in rows {
+        by_champ.entry(row.champion.clone()).or_default().push(row);
+    }
+
+    let mut trends: Vec<crate::models::match_data::ChampionTrend> = by_champ
+        .into_iter()
+        .map(|(champion, games)| {
+            let n = games.len() as i32;
+            let wins = games.iter().filter(|g| g.win).count() as i32;
+            // Per-game KDA averaged: (K+A)/max(D,1) — handles zero-deaths (D-discretion).
+            let kda_sum: f32 = games
+                .iter()
+                .map(|g| {
+                    (g.kills as f32 + g.assists as f32) / (g.deaths as f32).max(1.0)
+                })
+                .sum();
+            let avg_kda = if n > 0 { kda_sum / n as f32 } else { 0.0 };
+            // CS/min: total_cs / (total_duration_sec / 60.0) — seconds-based (Pitfall 1).
+            let total_cs: f32 = games.iter().map(|g| g.cs as f32).sum();
+            let total_minutes: f32 =
+                games.iter().map(|g| g.game_duration as f32 / 60.0).sum();
+            let cs_per_min = if total_minutes > 0.0 {
+                total_cs / total_minutes
+            } else {
+                0.0
+            };
+            let total_damage: i64 = games.iter().map(|g| g.damage).sum();
+            let avg_damage = if n > 0 {
+                (total_damage / n as i64) as i32
+            } else {
+                0
+            };
+            crate::models::match_data::ChampionTrend {
+                champion,
+                games: n,
+                wins,
+                avg_kda: (avg_kda * 10.0).round() / 10.0,
+                cs_per_min: (cs_per_min * 10.0).round() / 10.0,
+                avg_damage,
+            }
+        })
+        .collect();
+    trends.sort_by(|a, b| b.games.cmp(&a.games));
+    Ok(trends)
+}
+
 // ---- Match detail cache ----
 
 #[derive(Debug, Deserialize, SurrealValue)]
