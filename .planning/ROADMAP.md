@@ -111,7 +111,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 **Wave 1**
-- [ ] 15-01-PLAN.md — Schema, models, rank_score helper, 5 db functions, Wave 0 integration tests
+- [x] 15-01-PLAN.md — Schema, models, rank_score helper, 5 db functions, Wave 0 integration tests
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 15-02-PLAN.md — LP graph + goal cards on solo dashboard (server fns, LpHistoryGraph SVG, GoalCards with inline edit)
@@ -150,5 +150,5 @@ Phases execute in numeric order: 12 → 13 → 14 → 15 → 16
 | 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
 | 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
-| 15. Goals & LP History | v1.2 | 0/3 | Planned     | - |
+| 15. Goals & LP History | v1.2 | 1/3 | In Progress|  |
 | 16. Draft Integration | v1.2 | 0/? | Not started | - |

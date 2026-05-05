@@ -4,7 +4,7 @@ milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
 status: Phase complete — ready for verification
 stopped_at: Phase 15 UI-SPEC approved
-last_updated: "2026-05-05T14:08:13.481Z"
+last_updated: "2026-05-05T14:09:34.320Z"
 progress:
   total_phases: 5
   completed_phases: 3
@@ -15,15 +15,15 @@ progress:
 
 ## Current Position
 
-Phase: 14 (personal-learnings-journal) — EXECUTING
-Plan: 3 of 3
+Phase: 15 (goals-lp-history) — EXECUTING
+Plan: 1 of 3
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 14 — personal-learnings-journal
+**Current focus:** Phase 15 — goals-lp-history
 
 ## Decisions
 
