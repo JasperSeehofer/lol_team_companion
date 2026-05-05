@@ -31,7 +31,7 @@ created: 2026-05-05
 
 ## Spacing Scale
 
-Source: established in Phases 12–14, carried forward unchanged.
+Source: established in Phases 12–14, carried forward unchanged. Two additional named tokens added to cover inherited values from Phase 12 GoalPlaceholders and Phase 13 scoreboard.
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -42,15 +42,15 @@ Source: established in Phases 12–14, carried forward unchanged.
 | xl | 32px | Layout gap between major stacked sections on solo dashboard |
 | 2xl | 48px | Major section breaks, page top/bottom padding |
 | 3xl | 64px | Page-level spacing (not used in dense data views) |
+| card-grid-gap | 12px (`gap-3`) | Goal card grid (3-up); matches Phase 12 GoalPlaceholders + StatCard grid |
+| table-row-md | 44px (`h-11`) | Champion trends table row height; matches Phase 13 scoreboard row height |
 
 Exceptions:
 - LP graph SVG height: 160px — fixed height regardless of viewport width; full container width (`w-full`)
 - LP graph y-axis label column: 48px wide, right-aligned text-xs
 - LP graph x-axis label row: 24px tall below the SVG plot area
-- Goal card grid gap: `gap-3` (12px) between the three cards — matches existing GoalPlaceholders grid and Phase 12 StatCard grid
 - Goal card inner padding: `p-4` (16px) — matches existing GoalPlaceholders anatomy
 - Goal edit form inside card: `pt-3 mt-3 border-t border-divider` to separate edit fields from card header without a modal
-- Champion trends table row height: 44px (desktop) — matches scoreboard row height from Phase 13
 - Time-window toggle button: minimum 32px tall — desktop-first; pill-style
 - Progress bar height: `h-2` (8px) — slender, subordinate to the value readout
 
@@ -103,10 +103,11 @@ Source: `input.css` semantic tokens. All classes listed here, never raw hex or o
 1. LP graph line stroke — `stroke-accent` (the primary data series line; makes it immediately identifiable on the dark card surface)
 2. Time-window toggle active state — `bg-accent text-accent-contrast` (active pill)
 3. "Set Goal" CTA button on unset goal cards — `bg-accent hover:bg-accent-hover text-accent-contrast font-semibold` (primary action)
-4. "Save" button in goal inline edit form — same accent CTA style
-5. Goal achieved / on-track status badge fill — NOT accent; use `bg-emerald-500/20 text-emerald-400 border border-emerald-500/30` (matches win badge pattern from Phases 13–14)
+4. "Save Goal" button in goal inline edit form — same accent CTA style
+5. Inline edit text links (Edit Goal button on each goal card) — `text-accent`
+6. Filter toggle text links (champion trends min-games toggle) — `text-accent`
 
-**NOT accent:** LP graph axis grid lines, goal "behind" progress bars (use `bg-accent/30` dimmed), champion trends sort arrow indicators, "Show all" toggle.
+**NOT accent:** Goal achieved / on-track status badge fill — use `bg-emerald-500/20 text-emerald-400 border border-emerald-500/30` (matches win badge pattern from Phases 13–14). LP graph axis grid lines, goal "behind" progress bars (use `bg-accent/30` dimmed), champion trends sort arrow indicators, "Show all" toggle.
 
 Additional semantic colors:
 - LP graph axis grid lines: `stroke-border-divider opacity-50` (subtle horizontal grid lines)
@@ -217,7 +218,7 @@ Additional semantic colors:
 │  Gold II 47 LP       ← current  │  text-xl font-semibold text-primary
 │  653 LP to go                    │  text-xs text-muted
 │  ████████░░░░░░░░░░  52%        │  progress bar (see bar spec below) + text-xs text-muted
-│                      [Edit]      │  Edit: text-accent text-xs hover:text-accent-hover
+│                    [Edit Goal]   │  Edit Goal: text-accent text-xs hover:text-accent-hover
 └──────────────────────────────────┘
 ```
 
@@ -239,7 +240,7 @@ Additional semantic colors:
 - Deaths on-track: "On track" (same badge style)
 - In-progress: no badge — progress bar communicates state visually
 
-**Edit button:** `text-accent hover:text-accent-hover text-xs transition-colors` — text link style, bottom-right of card
+**Edit Goal button:** `text-accent hover:text-accent-hover text-xs transition-colors` — text link style, bottom-right of card
 
 **Edit state (inline, no modal):**
 
@@ -250,8 +251,8 @@ Additional semantic colors:
 │  Tier:  [Gold        ▾]          │  <select> styled with existing dropdown classes
 │  Div:   [II          ▾]          │  (hidden for Master+)
 │                                  │
-│  [Save]   [Cancel]               │  Save: bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg
-└──────────────────────────────────┘     Cancel: text-muted hover:text-secondary text-xs
+│  [Save Goal]   [Discard]         │  Save Goal: bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg
+└──────────────────────────────────┘     Discard: text-muted hover:text-secondary text-xs
 ```
 
 **Edit form details:**
@@ -261,7 +262,7 @@ Additional semantic colors:
 - Input style: `bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors w-full` — matches existing form input pattern (from Phase 14)
 - Form labels: `text-xs text-muted uppercase tracking-wider mb-1`
 - Edit state stored in `RwSignal<bool>` per card (`editing_rank`, `editing_cs`, `editing_deaths`)
-- Save calls `upsert_personal_goal` server fn; `StatusMessage` shown inline below Save/Cancel row on error; card collapses back to active state on success and `goal_progress_resource.refetch()` is called
+- Save Goal calls `upsert_personal_goal` server fn; `StatusMessage` shown inline below Save Goal/Discard row on error; card collapses back to active state on success and `goal_progress_resource.refetch()` is called
 
 **Goal card component extraction:** If any single goal card exceeds 100 LOC in the view macro, extract to a named sub-component (`RankTargetCard`, `CsGoalCard`, `DeathsGoalCard`) within `solo_dashboard.rs`. Do not create separate files.
 
@@ -315,7 +316,7 @@ Champion Trends                   [7d]  [30d]  [90d]  [All-time]
 
 **Table row style:**
 - Default: `border-t border-divider/30 hover:bg-elevated/30 transition-colors`
-- Row height: 44px — `h-11` on the `<tr>` or `py-2.5` on `<td>`
+- Row height: 44px (`table-row-md`) — `h-11` on the `<tr>` or `py-2.5` on `<td>`
 
 **Champion icon:** `<img src="{ddragon_url}" class="w-5 h-5 rounded object-contain" />` — 20×20px, matches scoreboard item icon size hierarchy. Fallback: `<div class="w-5 h-5 rounded bg-elevated border border-divider/30" />` on image error.
 
@@ -399,7 +400,7 @@ Champion Trends section card: `bg-surface border border-divider rounded-xl p-6` 
 | LP History (single point) | — | — | Single centered dot, no line | — |
 | Goal card (unset) | `SkeletonGrid cols=3 rows=1 h-28` | "Set goal" CTA button (this IS the empty state) | Active card with progress | — |
 | Goal card (insufficient data) | — | "Need N more games" message in card body | — | — |
-| Goal card (edit form) | — | — | Inline form replaces card body below divider | `StatusMessage` error below Save/Cancel |
+| Goal card (edit form) | — | — | Inline form replaces card body below divider | `StatusMessage` error below Save Goal/Discard |
 | Champion Trends table | `SkeletonCard h-48` | EmptyState (window-specific or global) | Sortable table with filter toggle | `ErrorBanner` inline inside card |
 | Champion Trends (filter active, all hidden) | — | "No champions match filter. {Show all link}" | — | — |
 
@@ -417,14 +418,14 @@ Champion Trends section card: `bg-surface border border-divider rounded-xl p-6` 
 
 ### Goal card edit flow
 
-1. User clicks "Edit" text link
+1. User clicks "Edit Goal" text link
 2. `editing_{type}: RwSignal<bool>` → `true`; card body swaps to inline edit form via `{move || if editing.get() { ... } else { ... }}` with `.into_any()` on each branch (leptos-patterns rule 19)
-3. User modifies fields; client-side validation on "Save" click:
+3. User modifies fields; client-side validation on "Save Goal" click:
    - CS/min: reject if parsed value outside 0.0–15.0; show `StatusMessage` error inline
    - Deaths: reject if parsed value outside 0–20; show `StatusMessage` error inline
    - Rank Target: always valid (controlled select values)
 4. On valid save: `spawn_local` calls `upsert_personal_goal` server fn; on success, `editing.set(false)` and `goal_progress_resource.refetch()`
-5. Cancel: `editing.set(false)` with no save — input values discarded (signals reset to current goal value on next render)
+5. Discard: `editing.set(false)` with no save — input values discarded (signals reset to current goal value on next render)
 
 ### Champion trends sort
 
@@ -466,9 +467,9 @@ Champion Trends section card: `bg-surface border border-divider rounded-xl p-6` 
 | Goal insufficient data | "Need {N} more solo/duo games to track progress" |
 | Goal achieved badge | "Achieved" |
 | Goal on-track badge | "On track" |
-| Goal edit button | "Edit" |
-| Goal edit save button | "Save" |
-| Goal edit cancel | "Cancel" |
+| Goal edit button | "Edit Goal" |
+| Goal edit save button | "Save Goal" |
+| Goal edit cancel | "Discard" |
 | Goal rank detail: LP remaining | "{N} LP to go" (e.g. "653 LP to go") |
 | Goal rank detail: current rank | e.g. "Gold II — 47 LP" |
 | Goal rank detail: current rank Master+ | e.g. "Master — 347 LP" |
@@ -489,7 +490,7 @@ Champion Trends section card: `bg-surface border border-divider rounded-xl p-6` 
 | Trends error | "Could not load champion trends. Refresh to try again." |
 | Trends empty after filter | "All champions hidden by min-games filter." with "Show all" inline link |
 
-No destructive actions in this phase (goals are overwritten, not deleted via a destructive flow — the Edit form replaces the target value, no explicit delete).
+No destructive actions in this phase (goals are overwritten, not deleted via a destructive flow — the Edit Goal form replaces the target value, no explicit delete).
 
 ---
 
@@ -518,7 +519,7 @@ No external component registries. All components are hand-crafted Rust/Leptos vi
 
 6. **`Ok(Vec::new())` for empty trends:** When the user has no ranked games in the selected window, `get_champion_trends` returns `Ok(Vec::new())`. The empty state renders from the empty vec — do NOT return `Err` for absence of data (leptos-patterns rule 44).
 
-7. **Goal edit input reset:** When the user clicks Cancel, the input value must revert. Store edit state in local `RwSignal<String>` initialised from the current goal target on card mount; Cancel discards the signal change by re-initialising from the resource value on next render (resource refetch is NOT needed — the goal value on the server did not change).
+7. **Goal edit input reset:** When the user clicks Discard, the input value must revert. Store edit state in local `RwSignal<String>` initialised from the current goal target on card mount; Discard discards the signal change by re-initialising from the resource value on next render (resource refetch is NOT needed — the goal value on the server did not change).
 
 8. **Champion icon fallback:** Use `on:error` on the `<img>` element to swap src to a placeholder. Leptos: `on:error=move |ev| { /* set signal to fallback */ }`. Fallback: `<div class="w-5 h-5 rounded bg-elevated border border-divider/30" />`. Use `into_any()` for the conditional render.
 
