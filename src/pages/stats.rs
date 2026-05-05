@@ -1,5 +1,6 @@
 use crate::components::stat_card::StatCard;
 use crate::components::ui::{EmptyState, ErrorBanner, NoTeamState, SkeletonCard};
+use crate::models::match_data::ChampionTrend;
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -156,6 +157,38 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
         msg.push_str(&format!(" Errors: {}", errors.join("; ")));
     }
     Ok(msg)
+}
+
+#[server]
+pub async fn get_champion_trends(window: String) -> Result<Vec<ChampionTrend>, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let cutoff = trends_window_to_cutoff(&window);
+    db::get_champion_trends(&surreal, &user.id, cutoff)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+#[allow(dead_code)]
+fn trends_window_to_cutoff(window: &str) -> Option<String> {
+    use chrono::{Duration, Utc};
+    let days: i64 = match window {
+        "7d" => 7,
+        "30d" => 30,
+        "90d" => 90,
+        _ => return None,
+    };
+    Some((Utc::now() - Duration::days(days)).to_rfc3339())
 }
 
 /// A grouped view of a single match with all participating roster members
@@ -467,6 +500,9 @@ pub fn StatsPage() -> impl IntoView {
                     }
                 })}
             </Suspense>
+
+            // Champion Trends (below match history)
+            <ChampionTrendsSection />
         </div>
     }
 }
@@ -872,5 +908,227 @@ fn StatsContent(
                 </div>
             </div>
         </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Champion Trends section (Phase 15 / LEARN-06)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum TrendSortColumn {
+    Champion,
+    Games,
+    WinPct,
+    Kda,
+    CsPerMin,
+    AvgDamage,
+}
+
+#[component]
+fn ChampionTrendsSection() -> impl IntoView {
+    let trends_window: RwSignal<&'static str> = RwSignal::new("30d");
+    let trends_resource = Resource::new(
+        move || trends_window.get(),
+        |w| async move { get_champion_trends(w.to_string()).await },
+    );
+
+    let sort_col: RwSignal<TrendSortColumn> = RwSignal::new(TrendSortColumn::Games);
+    let sort_dir_desc: RwSignal<bool> = RwSignal::new(true);
+    let show_all: RwSignal<bool> = RwSignal::new(false);
+
+    let sorted_trends = Memo::new(move |_| -> Vec<ChampionTrend> {
+        let data = match trends_resource.get() {
+            Some(Ok(d)) => d,
+            _ => return Vec::new(),
+        };
+        let min_games = if show_all.get() { 0 } else { 3 };
+        let mut filtered: Vec<ChampionTrend> =
+            data.into_iter().filter(|t| t.games >= min_games).collect();
+        let col = sort_col.get();
+        let desc = sort_dir_desc.get();
+        filtered.sort_by(|a, b| {
+            let ord = match col {
+                TrendSortColumn::Champion => a.champion.cmp(&b.champion),
+                TrendSortColumn::Games => a.games.cmp(&b.games),
+                TrendSortColumn::WinPct => {
+                    let aw = a.wins as f32 / a.games.max(1) as f32;
+                    let bw = b.wins as f32 / b.games.max(1) as f32;
+                    aw.partial_cmp(&bw).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                TrendSortColumn::Kda => a
+                    .avg_kda
+                    .partial_cmp(&b.avg_kda)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                TrendSortColumn::CsPerMin => a
+                    .cs_per_min
+                    .partial_cmp(&b.cs_per_min)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                TrendSortColumn::AvgDamage => a.avg_damage.cmp(&b.avg_damage),
+            };
+            if desc {
+                ord.reverse()
+            } else {
+                ord
+            }
+        });
+        filtered
+    });
+
+    let on_header_click = move |target: TrendSortColumn| {
+        if sort_col.get() == target {
+            sort_dir_desc.update(|d| *d = !*d);
+        } else {
+            sort_col.set(target);
+            sort_dir_desc.set(true);
+        }
+    };
+
+    let render_pill = move |w: &'static str| {
+        let active = move || trends_window.get() == w;
+        view! {
+            <button
+                class=move || if active() {
+                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                } else {
+                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                }
+                on:click=move |_| trends_window.set(w)
+            >{w}</button>
+        }
+    };
+
+    let header_cell = move |label: &'static str, target: TrendSortColumn| {
+        let is_active = move || sort_col.get() == target;
+        let arrow = move || {
+            if is_active() {
+                if sort_dir_desc.get() { " ▾" } else { " ▴" }
+            } else {
+                " ▾"
+            }
+        };
+        view! {
+            <th
+                class=move || format!(
+                    "px-3 py-2 text-left text-xs font-normal uppercase tracking-wider cursor-pointer select-none transition-colors {}",
+                    if is_active() { "text-secondary" } else { "text-muted hover:text-secondary opacity-70" }
+                )
+                on:click=move |_| on_header_click(target)
+            >
+                <span>{label}</span><span class=move || if is_active() { "" } else { " opacity-30" }>{arrow}</span>
+            </th>
+        }
+    };
+
+    view! {
+        <div class="bg-surface border border-divider rounded-xl p-6 flex flex-col gap-4 mt-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xl font-semibold text-primary">"Champion Trends"</h2>
+                <div class="flex items-center gap-2">
+                    {render_pill("7d")}
+                    {render_pill("30d")}
+                    {render_pill("90d")}
+                    {render_pill("All-time")}
+                </div>
+            </div>
+
+            <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
+                {move || trends_resource.get().map(|result| match result {
+                    Err(_) => view! {
+                        <ErrorBanner message="Could not load champion trends. Refresh to try again.".to_string() />
+                    }.into_any(),
+                    Ok(rows) if rows.is_empty() => view! {
+                        <EmptyState message="Sync your match history to see champion trends." />
+                    }.into_any(),
+                    Ok(_) => view! {
+                        <div class="flex flex-col gap-2">
+                            <div class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead class="bg-elevated/50">
+                                        <tr>
+                                            {header_cell("Champion", TrendSortColumn::Champion)}
+                                            {header_cell("Games", TrendSortColumn::Games)}
+                                            {header_cell("Win %", TrendSortColumn::WinPct)}
+                                            {header_cell("KDA", TrendSortColumn::Kda)}
+                                            {header_cell("CS/min", TrendSortColumn::CsPerMin)}
+                                            {header_cell("Avg Damage", TrendSortColumn::AvgDamage)}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {move || {
+                                            let visible = sorted_trends.get();
+                                            if visible.is_empty() {
+                                                view! {
+                                                    <tr>
+                                                        <td colspan="6" class="py-6 text-center text-muted text-sm">
+                                                            "All champions hidden by min-games filter. "
+                                                            <button class="text-accent hover:text-accent-hover text-sm cursor-pointer"
+                                                                    on:click=move |_| show_all.set(true)>
+                                                                "Show all"
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <For
+                                                        each=move || sorted_trends.get()
+                                                        key=|t: &ChampionTrend| t.champion.clone()
+                                                        children=move |t: ChampionTrend| view! {
+                                                            <ChampionTrendRow trend=t />
+                                                        }
+                                                    />
+                                                }.into_any()
+                                            }
+                                        }}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="flex justify-end">
+                                <button class="text-accent hover:text-accent-hover text-xs font-normal transition-colors cursor-pointer"
+                                        on:click=move |_| show_all.update(|v| *v = !*v)>
+                                    {move || if show_all.get() {
+                                        "Hide low sample (< 3 games)"
+                                    } else {
+                                        "Show all champions"
+                                    }}
+                                </button>
+                            </div>
+                        </div>
+                    }.into_any(),
+                })}
+            </Suspense>
+        </div>
+    }
+}
+
+#[component]
+fn ChampionTrendRow(trend: ChampionTrend) -> impl IntoView {
+    let icon_errored = RwSignal::new(false);
+    let win_pct = (trend.wins as f32 / trend.games.max(1) as f32 * 100.0).round();
+    let champion_for_icon = trend.champion.clone();
+    let champion_for_label = trend.champion.clone();
+    view! {
+        <tr class="border-t border-divider/30 hover:bg-elevated/30 transition-colors h-11">
+            <td class="px-3 py-2.5 text-sm font-semibold text-primary">
+                <div class="flex items-center gap-2">
+                    {move || if icon_errored.get() {
+                        view! { <div class="w-5 h-5 rounded bg-elevated border border-divider/30" /> }.into_any()
+                    } else {
+                        let icon_src = champion_icon_url(&champion_for_icon);
+                        view! {
+                            <img src=icon_src class="w-5 h-5 rounded object-contain"
+                                 on:error=move |_| icon_errored.set(true) />
+                        }.into_any()
+                    }}
+                    <span>{champion_for_label}</span>
+                </div>
+            </td>
+            <td class="px-3 py-2.5 text-center text-sm text-secondary">{trend.games}</td>
+            <td class="px-3 py-2.5 text-center text-sm text-secondary">{format!("{:.1}%", win_pct)}</td>
+            <td class="px-3 py-2.5 text-center text-sm font-semibold text-primary">{format!("{:.1}", trend.avg_kda)}</td>
+            <td class="px-3 py-2.5 text-center text-sm text-secondary">{format!("{:.1}", trend.cs_per_min)}</td>
+            <td class="px-3 py-2.5 pr-3 text-right text-sm text-secondary">{format_damage(trend.avg_damage)}</td>
+        </tr>
     }
 }
