@@ -300,3 +300,12 @@ DEFINE FIELD IF NOT EXISTS game_timestamp_ms ON personal_learning TYPE option<in
 DEFINE FIELD IF NOT EXISTS event_name ON personal_learning TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON personal_learning TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS personal_learning_user ON personal_learning FIELDS user;
+
+-- Personal Goals (Phase 15) — one active goal per type per user (D-08).
+DEFINE TABLE IF NOT EXISTS personal_goal SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON personal_goal TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS goal_type ON personal_goal TYPE string;
+DEFINE FIELD IF NOT EXISTS target_value ON personal_goal TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON personal_goal TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON personal_goal TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS personal_goal_user_type ON personal_goal FIELDS user, goal_type UNIQUE;
