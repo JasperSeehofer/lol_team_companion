@@ -110,7 +110,10 @@ Plans:
   4. User can view champion performance trends showing win rate, KDA, and CS/min per champion over a selectable time window
 **Plans**: 3 plans
 Plans:
+**Wave 1**
 - [ ] 15-01-PLAN.md — Schema, models, rank_score helper, 5 db functions, Wave 0 integration tests
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 15-02-PLAN.md — LP graph + goal cards on solo dashboard (server fns, LpHistoryGraph SVG, GoalCards with inline edit)
 - [ ] 15-03-PLAN.md — Champion Trends section on stats page (sortable table, time-window toggle, min-games filter)
 **UI hint**: yes
