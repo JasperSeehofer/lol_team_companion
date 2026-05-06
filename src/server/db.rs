@@ -4579,7 +4579,7 @@ pub async fn get_latest_ranked_snapshot(
     }
 
     let mut result = db
-        .query("SELECT queue_type, tier, division, lp, wins, losses, snapshotted_at FROM ranked_snapshot WHERE user = type::record('user', $user_key) AND queue_type = $queue_type ORDER BY snapshotted_at DESC LIMIT 1")
+        .query("SELECT queue_type, tier, division, lp, wins, losses, <string>snapshotted_at AS snapshotted_at FROM ranked_snapshot WHERE user = type::record('user', $user_key) AND queue_type = $queue_type ORDER BY snapshotted_at DESC LIMIT 1")
         .bind(("user_key", user_key))
         .bind(("queue_type", queue_type.to_string()))
         .await?;
@@ -4816,7 +4816,7 @@ pub async fn compute_goal_progress(
              FROM player_match \
              WHERE user = type::record('user', $user_key) \
              AND match.queue_id = 420; \
-             SELECT tier, division, lp, wins, losses, snapshotted_at FROM ranked_snapshot \
+             SELECT tier, division, lp, wins, losses, <string>snapshotted_at AS snapshotted_at FROM ranked_snapshot \
              WHERE user = type::record('user', $user_key) \
              AND queue_type = 'RANKED_SOLO_5x5' \
              ORDER BY snapshotted_at DESC LIMIT 1",

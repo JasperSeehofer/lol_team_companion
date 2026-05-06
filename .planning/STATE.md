@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Solo Mode & Match Intelligence
-status: Phase complete — ready for code review + verification
-stopped_at: Phase 15 all 3 plans executed; warnings suppressed; tracking updated
-last_updated: "2026-05-05T20:30:00.000Z"
+status: Phase 15 verified — ready for Phase 16
+stopped_at: Phase 15 UAT complete (11/11 passed); snapshotted_at datetime cast fix applied; ROADMAP updated
+last_updated: "2026-05-06T00:00:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
   completed_plans: 12
   percent: 100
@@ -15,15 +15,17 @@ progress:
 
 ## Current Position
 
-Phase: 15 (goals-lp-history) — COMPLETE (pre-review)
+Phase: 15 (goals-lp-history) — VERIFIED
 Plan: 3 of 3
+
+Next: Phase 16 (Draft Integration)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 15 — goals-lp-history
+**Current focus:** Phase 16 — Draft Integration
 
 ## Decisions
 
@@ -49,6 +51,6 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-05-05T20:30:00.000Z
-Stopped at: Phase 15 all plans done; warnings suppressed; ready for /gsd-code-review 15
+Last session: 2026-05-06T00:00:00.000Z
+Stopped at: Phase 15 verified (11/11 UAT passed); Phase 16 is next
 Resume file: none
