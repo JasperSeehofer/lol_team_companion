@@ -1,31 +1,38 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Solo Mode & Match Intelligence
-status: Phase 15 verified — ready for Phase 16
-stopped_at: Phase 15 UAT complete (11/11 passed); snapshotted_at datetime cast fix applied; ROADMAP updated
+milestone: v1.3
+milestone_name: Launch Readiness
+status: Pivoted from v1.2 → v1.3 on 2026-05-06; entering Phase 16 (Phase 15 close-out)
+stopped_at: Pivot committed; awaiting /gsd-discuss-phase 16 (or /gsd-spec-phase 16) to start the close-out
 last_updated: "2026-05-06T00:00:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 8
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+prior_milestone:
+  milestone: v1.2
+  milestone_name: Solo Mode & Match Intelligence
+  status: Closing — Phase 15 functionally delivered (UAT 11/11), close-out moved to Phase 16 in v1.3
+  deferred_to_v1_4:
+    - "Phase 16 (old): Draft Integration → re-numbered Phase 24 in v1.4"
 ---
 
 ## Current Position
 
-Phase: 15 (goals-lp-history) — VERIFIED
-Plan: 3 of 3
+Milestone: v1.3 Launch Readiness
+Phase: 16 (Phase 15 Close-out) — NOT STARTED
 
-Next: Phase 16 (Draft Integration)
+Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), then plan/execute the close-out
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 16 — Draft Integration
+**Current focus:** Phase 16 — Phase 15 Close-out (v1.3 Launch Readiness)
+**v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions
 
@@ -52,5 +59,32 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Session Continuity
 
 Last session: 2026-05-06T00:00:00.000Z
-Stopped at: Phase 15 verified (11/11 UAT passed); Phase 16 is next
-Resume file: none
+Stopped at: Pivot to v1.3 Launch Readiness committed. Phases 16-23 seeded with SPEC.md scaffolds. Old Phase 16 (Draft Integration) deferred to v1.4 as Phase 24.
+Resume file: `/home/jasper/.claude/plans/i-want-to-pause-groovy-widget.md` (the approved pivot plan)
+Next command: `/gsd-spec-phase 16` or `/gsd-discuss-phase 16` to start the Phase 15 close-out.
+
+## v1.3 Decisions (baked in pivot 2026-05-06)
+
+- Phase 15 critical bugs (CR-01 WASM hover, CR-02 Rule 40) → Phase 16 close-out, not pre-pivot inline fix
+- Hetzner: reuse feynman-lookup's CAX11; new domain (e.g. `lol-companion.gg` placeholder); Caddy stanza → port 3001
+- Bug-report widget captures: page URL + semantic element label + free text + bug/wishlist toggle (no screenshots, no CSS selectors)
+- Launch shape: closed beta via named-friends invite list (no public self-serve registration in v1.3)
+- Old Phase 16 (Draft Integration) → deferred to v1.4 Phase 24
+
+## Blind-spot Inventory (carried into Phase 21 / Phase 22)
+
+1. Riot Developer Portal application status
+2. G-13 Tier-A transparency section missing in vault `[[lol-team-companion]]`
+3. Impressum: §5 DDG (not §5 TMG); no Steuernummer
+4. DSE 4-section structure (logfiles, registration, hosting, betroffenenrechte)
+5. Riot puuid → US processor — needs DSE Tier-A entry
+6. G-01 sweep — no Google Fonts CDN in deployed HTML
+7. G-12 sweep — no `outline:none` without ring replacement
+8. Post-deploy WASM-200 check (per feynman 2026-04-16 incident)
+9. Post-deploy server-fn check (catches binary-arch mismatch)
+10. Caddy CSP + Leptos 0.8 nonces — `'unsafe-inline'` with TODO for nonce middleware
+11. Cross-compile glibc pin: `--target aarch64-unknown-linux-gnu.2.36`
+12. `cargo-leptos` `_bg.wasm` rename in deploy recipe
+13. Two-layer firewall (Hetzner Cloud + on-host ufw)
+14. Vault staleness: `[[lol-team-companion]]`, `[[product-portfolio]]`, `[[self-employment-action-plan]]`
+15. Backup: feynman has none — Phase 19 SurrealKV snapshot must work standalone
