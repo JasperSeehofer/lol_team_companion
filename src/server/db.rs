@@ -4696,40 +4696,6 @@ pub async fn get_lp_history(
         .collect())
 }
 
-pub async fn get_personal_goals(
-    db: &Surreal<Db>,
-    user_id: &str,
-) -> DbResult<Vec<crate::models::match_data::PersonalGoal>> {
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
-
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct DbPersonalGoal {
-        id: RecordId,
-        goal_type: String,
-        target_value: String,
-    }
-
-    let mut r = db
-        .query(
-            "SELECT id, goal_type, target_value FROM personal_goal \
-             WHERE user = type::record('user', $user_key)",
-        )
-        .bind(("user_key", user_key))
-        .await?;
-    let rows: Vec<DbPersonalGoal> = r.take(0).unwrap_or_default();
-    Ok(rows
-        .into_iter()
-        .map(|g| crate::models::match_data::PersonalGoal {
-            id: Some(g.id.to_sql()),
-            goal_type: g.goal_type,
-            target_value: g.target_value,
-        })
-        .collect())
-}
-
 /// Upsert a personal goal for the user (one active goal per type, D-07).
 /// Validates goal_type server-side as defense in depth (T-15-01).
 pub async fn upsert_personal_goal(
