@@ -498,7 +498,7 @@ Source: `screens/history.jsx`.
 └─────────────────────────┴──────────────────────────────┘
 ```
 
-Match row: `grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-3.5 items-center py-4` — result bar (4px tall, `bg-success` or `bg-danger`), ChampTile 48px, name+details, KDA string, duration, expand indicator.
+Match row: `grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-4 items-center py-4` — result bar (4px tall, `bg-success` or `bg-danger`), ChampTile 48px, name+details, KDA string, duration, expand indicator.
 
 Active row background: `bg-accent-soft` (`accent-soft: rgba(accent, 0.12)`).
 
