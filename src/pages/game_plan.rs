@@ -1,5 +1,6 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
+use crate::components::ornaments::HeraldicDivider;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -507,11 +508,11 @@ const STRATEGY_TAGS: &[&str] = &[
 const ROLES: [&str; 5] = ["Top", "Jungle", "Mid", "Bot", "Support"];
 
 fn textarea_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
 }
 
 fn input_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,13 +1013,17 @@ pub fn GamePlanPage() -> impl IntoView {
     // our_champ_signals/enemy_champ_signals used last for role-specific section
 
     view! {
-        <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
-            <div>
-                <h1 class="text-3xl font-bold text-primary">"Game Plans"</h1>
-                <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups"</p>
-            </div>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
+                // Page header per UI-SPEC §"Game Plan Page Layout"
+                <div>
+                    <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - game plan"</p>
+                    <h1 class="font-display italic text-4xl text-primary mt-1">"Strategy plans for the field."</h1>
+                    <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups."</p>
+                </div>
+                <div class="flex justify-center"><HeraldicDivider width=240 /></div>
 
-            <div class="flex gap-6 min-h-[36rem]">
+                <div class="flex gap-6 min-h-[36rem]">
                 // Left: plan list
                 <div class="w-72 flex-shrink-0 flex flex-col gap-3">
                     <button
@@ -1088,7 +1093,7 @@ pub fn GamePlanPage() -> impl IntoView {
                 // Right: editor
                 <div class="flex-1 flex flex-col gap-5">
                     // Plan name + draft link
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-4">
                         // Back-reference badge: shown when a draft is linked
                         {move || {
                             let did = draft_id.get();
@@ -1183,7 +1188,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Matchup: Your 5 vs Enemy 5
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="text-primary font-semibold text-sm">"Champion Matchup"</h3>
                             <button
@@ -1280,7 +1285,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Strategy Tag
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-3">
                         <h3 class="text-primary font-semibold text-sm">"Strategy Tag"</h3>
                         <div class="flex flex-wrap gap-2">
                             {STRATEGY_TAGS.iter().map(|&tag| {
@@ -1344,7 +1349,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Win Condition Tracker panel
-                    <div class="bg-surface border border-divider rounded-lg">
+                    <div class="bg-elevated border border-outline rounded-xl">
                         // Panel header with collapse toggle and tab switcher
                         <div class="flex items-center justify-between px-4 py-3 border-b border-divider/50">
                             <button
@@ -1489,7 +1494,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Macro strategy
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-4">
                         <h3 class="text-primary font-semibold text-sm">"Macro Strategy"</h3>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
@@ -1528,7 +1533,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Role-specific strategy
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-3">
                         <h3 class="text-primary font-semibold text-sm">"Role-Specific Strategy"</h3>
                         <div class="grid grid-cols-1 gap-3">
                             {ROLES.iter().enumerate().map(|(i, &role)| {
@@ -1578,7 +1583,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Notes
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6">
                         <label class="block text-muted text-xs font-medium mb-1">"Additional Notes"</label>
                         <textarea rows="3" class=textarea_class()
                             placeholder="Anything else the team should know..."
@@ -1598,7 +1603,7 @@ pub fn GamePlanPage() -> impl IntoView {
                             let plan_id_clone = plan_id.clone();
                             let draft_for_review = if did.is_empty() { None } else { Some(did.clone()) };
                             view! {
-                                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center justify-between">
+                                <div class="bg-elevated border border-outline rounded-xl p-6 flex items-center justify-between">
                                     <div>
                                         <h3 class="text-primary font-semibold text-sm">"Game Complete?"</h3>
                                         <p class="text-muted text-xs mt-0.5">"Start a post-game review with this plan pre-linked"</p>
@@ -1657,6 +1662,7 @@ pub fn GamePlanPage() -> impl IntoView {
                         }}
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     }
@@ -1784,9 +1790,9 @@ fn ChecklistSection(
     };
 
     view! {
-        <div class="bg-elevated/50 border border-divider/50 rounded-xl">
+        <div class="bg-elevated border border-outline rounded-xl">
             <button
-                class="w-full text-left p-4 flex items-center justify-between"
+                class="w-full text-left p-6 flex items-center justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 rounded-xl"
                 on:click=move |_| set_checklist_open.update(|v| *v = !*v)
             >
                 <div class="flex items-center gap-2">
@@ -1817,7 +1823,7 @@ fn ChecklistSection(
                 let done = checked.iter().filter(|c| **c).count();
 
                 view! {
-                    <div class="px-4 pb-4 flex flex-col gap-3">
+                    <div class="px-6 pb-6 flex flex-col gap-3">
                         // Progress bar
                         {(total > 0).then(|| {
                             let pct = if total > 0 { (done * 100) / total } else { 0 };
