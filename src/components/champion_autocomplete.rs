@@ -58,7 +58,9 @@ pub fn ChampionAutocomplete(
         <div class="relative">
             <input
                 type="text"
-                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                // Phase 17 restyle: semantic tokens, G-12 focus ring,
+                // signature-preserving (placeholder + value still threaded through).
+                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                 placeholder=placeholder
                 prop:value=move || filter_text.get()
                 on:input=move |ev| {
@@ -97,21 +99,27 @@ pub fn ChampionAutocomplete(
                     return view! { <div></div> }.into_any();
                 }
                 view! {
-                    <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                    // Phase 17 restyle: bg-surface (was bg-elevated) per UI-SPEC §
+                    // "Champion Picker UX > Autocomplete dropdown".
+                    <div class="absolute z-50 mt-1 w-full bg-surface border border-divider rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
                         {items.into_iter().map(|c| {
                             let name = c.name.clone();
                             let img = c.image_full.clone();
                             let c_for_click = c.clone();
                             view! {
                                 <button
-                                    class="w-full flex items-center gap-2 px-3 py-2 hover:bg-overlay transition-colors text-left cursor-pointer"
+                                    type="button"
+                                    // Phase 17: text-secondary default, hover -> bg-elevated text-primary,
+                                    // focus-visible ring for keyboard parity (G-12).
+                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-secondary text-left cursor-pointer transition-colors hover:bg-elevated hover:text-primary focus-visible:bg-elevated focus-visible:text-primary focus-visible:outline-none"
                                     on:mousedown=move |ev| {
                                         ev.prevent_default();
                                         select_champion(c_for_click.clone());
                                     }
                                 >
-                                    <img src=img alt=name.clone() class="w-6 h-6 rounded object-cover" />
-                                    <span class="text-primary text-sm">{name}</span>
+                                    // 24x24 ChampTile per UI-SPEC autocomplete dropdown spec.
+                                    <img src=img alt=name.clone() class="w-6 h-6 rounded object-cover flex-shrink-0" />
+                                    <span class="truncate">{name}</span>
                                 </button>
                             }
                         }).collect_view()}
