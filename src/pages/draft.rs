@@ -1,5 +1,6 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
+use crate::components::ornaments::{CompanionSigil, HeraldicDivider};
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
@@ -1493,32 +1494,52 @@ pub fn DraftPage() -> impl IntoView {
     };
 
     view! {
-        <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
-            <div class="flex items-start justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-primary">"Draft Planner"</h1>
-                    <p class="text-accent font-medium mt-1">{phase_label}</p>
-                    {move || loaded_draft_id.get().map(|_| {
-                        let status = auto_save_status.get();
-                        let (cls, text) = match status {
-                            "saved" => ("text-green-400 text-sm mt-0.5", "✓ Saved"),
-                            "unsaved" => ("text-amber-400 text-sm mt-0.5", "● Unsaved changes"),
-                            _ => ("text-muted text-sm mt-0.5", "Editing saved draft"),
-                        };
-                        view! { <p class=cls>{text}</p> }
-                    })}
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
+            // War Table header strip — sigil, phase badge, opponent name, intel toggle
+            <div class="bg-surface/80 backdrop-blur border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap">
+                <CompanionSigil />
+                <div class="h-6 w-px bg-divider" aria-hidden="true"></div>
+                <span class="bg-accent text-accent-contrast font-imperial uppercase tracking-[0.18em] text-[10px] px-3 py-1 rounded">
+                    {phase_label}
+                </span>
+                <span class="font-display italic text-secondary text-sm">
+                    {move || {
+                        let opp_text = opp_filter_text.get();
+                        if opp_text.is_empty() {
+                            "Draft planner".to_string()
+                        } else {
+                            format!("vs {opp_text}")
+                        }
+                    }}
+                </span>
+                {move || loaded_draft_id.get().map(|_| {
+                    let status = auto_save_status.get();
+                    let (cls, text) = match status {
+                        "saved" => ("font-mono text-success text-xs px-2 py-1 border border-divider rounded-md", "Saved"),
+                        "unsaved" => ("font-mono text-warning text-xs px-2 py-1 border border-divider rounded-md", "Unsaved"),
+                        _ => ("font-mono text-muted text-xs px-2 py-1 border border-divider rounded-md", "Editing"),
+                    };
+                    view! { <span class=cls>{text}</span> }
+                })}
+                <div class="ml-auto flex items-center gap-3">
+                    <button
+                        class=move || if intel_open.get() {
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        } else {
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        }
+                        on:click=move |_| set_intel_open.update(|v| *v = !*v)
+                    >
+                        <span class="font-imperial uppercase tracking-[0.14em] text-xs">"Intel"</span>
+                        <span>{move || if intel_open.get() { "▼" } else { "▶" }}</span>
+                    </button>
                 </div>
-                <button
-                    class=move || if intel_open.get() {
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
-                    } else {
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer"
-                    }
-                    on:click=move |_| set_intel_open.update(|v| *v = !*v)
-                >
-                    <span>"Intel"</span>
-                    <span>{move || if intel_open.get() { "▼" } else { "▶" }}</span>
-                </button>
+            </div>
+
+            // Hero divider
+            <div class="flex justify-center -mt-2">
+                <HeraldicDivider width=480 />
             </div>
 
             // Header form
@@ -3683,6 +3704,7 @@ pub fn DraftPage() -> impl IntoView {
                         </div>
                     }
                 })}
+            </div>
             </div>
         </div>
     }

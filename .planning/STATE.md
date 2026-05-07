@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: Launch Readiness
 status: ready_to_plan
 stopped_at: Phase 17 UI-SPEC approved
-last_updated: "2026-05-07T13:11:27.864Z"
+last_updated: "2026-05-07T13:18:37.326Z"
 progress:
   total_phases: 12
   completed_phases: 5
@@ -16,8 +16,8 @@ progress:
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 17
-Plan: Not started
+Phase: 17 (ui-consolidation) — EXECUTING
+Plan: 1 of 10
 
 Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), then plan/execute the close-out
 
@@ -26,7 +26,7 @@ Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), the
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 16 — phase15-closeout
+**Current focus:** Phase 17 — ui-consolidation
 **v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions
