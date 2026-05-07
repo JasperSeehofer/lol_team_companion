@@ -313,3 +313,10 @@
 [data-theme="demacia"] .closed-beta-bg-pandemonium { display: none; }
 [data-theme="pandemonium"] .closed-beta-bg-demacia { display: none; }
 [data-theme="pandemonium"] .closed-beta-bg-pandemonium { display: block; }
+
+/* Auth pages: the optional FLUX background is Demacia-only.
+   Pandemonium auth surfaces fall back to canvas-grain over
+   bg-base (UI-SPEC §"Asset versioning"). */
+:root .auth-bg-demacia,
+[data-theme="demacia"] .auth-bg-demacia { display: block; opacity: 0.55; }
+[data-theme="pandemonium"] .auth-bg-demacia { display: none; }

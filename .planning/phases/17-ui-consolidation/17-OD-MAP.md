@@ -34,8 +34,8 @@ Leptos, set `Status = ported`.
 
 | Surface | Route | Plan | OD UUID | OD HTML path | Status |
 |---------|-------|------|---------|--------------|--------|
-| Login | `/auth/login` | 06 | TBD | TBD | pending |
-| Register (invited) | `/auth/register?invite=...` | 06 | TBD | TBD | pending |
+| Login | `/auth/login` | 06 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/auth-login.html` | ported |
+| Register (invited) | `/auth/register?invite=...` | 06 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/auth-register.html` | ported |
 | Team roster | `/team/roster` | 05 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/team-roster.html` | ported |
 | Team builder | `/team-builder` | 05 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/team-builder.html` | ported |
 | Opponents | `/opponents` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/opponents.html` | ported |
