@@ -191,3 +191,53 @@ let current: Option<DbCurrentRankRow> = r.take(2).ok().flatten();
 _Reviewed: 2026-05-05_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+---
+
+## Second Pass (Phase 16 close-out)
+
+**Reviewed:** 2026-05-07
+**Diff scope:** Phase 16 commits 16-01 (b5930bc) and 16-02 (c1b6753, ba98015)
+**Findings:** Critical: 0, HIGH: 0, Warning: 0, Info: 0
+
+### Scope
+
+Second-pass review covering the Phase 16 close-out commits against the Phase 15 codebase. Files reviewed: `src/pages/solo_dashboard.rs` (WR-01 hoist), `src/server/db.rs` (WR-02 removal), `tests/db_personal_goal.rs` (deleted). Bonus fixes also reviewed: `get_solo_matches` RecordId alias fix (922e0f8, 4c9431f, 293e43a).
+
+### Findings
+
+**No new findings introduced by Phase 16 commits.**
+
+Both compile targets pass clean after Phase 16 commits:
+- `cargo check --features ssr` — 0 errors, 0 new warnings
+- `cargo check --features hydrate --target wasm32-unknown-unknown` — 0 errors; 1 warning (`window_to_cutoff` dead_code) is the pre-existing IN-03 finding from the Phase 15 first-pass review, not introduced by Phase 16
+
+### Commit-by-commit analysis
+
+**b5930bc — WR-01 hoist lp_window + lp_history_resource into SoloDashboardPage**
+- `lp_window: RwSignal<&'static str>` and `lp_history_resource` correctly hoisted to `SoloDashboardPage` alongside `dashboard_resource` and `goal_progress_resource`
+- `LpHistoryGraph` prop signature updated to accept both; internal `Resource::new` and `RwSignal::new("30d")` removed from child — correct ownership transfer
+- Both sync paths (auto-sync Effect + `do_sync` handler) now call `.refetch()` on all three resources — matches D-04 design decision
+- No reactive loop risk: `auto_synced` one-shot guard already in place (line 229)
+- No Leptos Rule 23 violations; `.refetch()` called directly on the resource handles, not from within reactive closures
+
+**c1b6753 — WR-02 remove dead get_personal_goals**
+- `pub async fn get_personal_goals` and inner `DbPersonalGoal` struct deleted cleanly (34 lines removed)
+- `compute_goal_progress`, `upsert_personal_goal`, `delete_personal_goal` untouched — correct scope
+- `schema.surql` `personal_goal` table intact — correct (D-08)
+
+**ba98015 — WR-02 delete tests/db_personal_goal.rs**
+- 83-line test file deleted; 5 tests all asserted via the removed function
+- `tests/db_goal_progress.rs` (168 lines) absorbs all coverage per D-06
+- `cargo test --features ssr --lib` passes (102 tests)
+
+**922e0f8, 4c9431f, 293e43a — get_solo_matches RecordId alias fix (bonus)**
+- `SELECT *` replaced with explicit column aliases; `DbSoloMatch` intermediate struct introduced following the project Db* → model conversion pattern
+- Rule 40 compliance: `<string>match.game_end AS game_end` added to SELECT; `ORDER BY game_end` references the alias not the traversal idiom
+- Closes a silent deserialization regression present since Phase 12
+
+### Verdict
+
+**PASS — 0 Critical, 0 HIGH, 0 Warning, 0 Info attributable to Phase 16 commits.**
+
+Pre-existing IN-03 finding (`window_to_cutoff` dead_code warning) is unchanged — correctly deferred per D-15.
