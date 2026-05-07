@@ -5,6 +5,7 @@ use leptos_router::{
     path,
 };
 
+use crate::components::bug_report_widget::BugReportWidget;
 use crate::components::nav::Nav;
 use crate::components::ui::ToastProvider;
 use crate::error_template::ErrorTemplate;
@@ -114,6 +115,11 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
                     </Routes>
                 </main>
+                // Floating bug-report widget (Phase 17 visual stub;
+                // Phase 18 wires submit-to-DB). Self-gates on auth +
+                // pathname so it never shows on /, /auth/*,
+                // /closed-beta, /legal/* per UI-SPEC line 590.
+                <BugReportWidget />
             </ToastProvider>
         </Router>
     }

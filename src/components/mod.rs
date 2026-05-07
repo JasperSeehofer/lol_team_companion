@@ -1,3 +1,4 @@
+pub mod bug_report_widget;
 pub mod champion_autocomplete;
 pub mod champion_picker;
 pub mod draft_board;
