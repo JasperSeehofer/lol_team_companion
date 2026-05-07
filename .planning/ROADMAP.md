@@ -202,7 +202,7 @@ Plans:
 - [x] 17-05-PLAN.md — Profile hub: /profile (Captain's Folio), /team/dashboard (Strategy Room), /team/roster (utility), /team-builder (utility), /solo-dashboard (SoloConstellation), /home (auth-aware redirect to /closed-beta)
 
 **Wave 3** *(depends on Wave 2)*
-- [ ] 17-06-PLAN.md — Closed-beta + auth + admin + legal + bug-widget: FLUX images + AI-IMAGES.md, /closed-beta hero, /auth/login + /auth/register (invite-token URL), /admin/invites stub, /legal/impressum + /legal/datenschutz stubs, bug_report_widget visual stub
+- [x] 17-06-PLAN.md — Closed-beta + auth + admin + legal + bug-widget: FLUX images + AI-IMAGES.md, /closed-beta hero, /auth/login + /auth/register (invite-token URL), /admin/invites stub, /legal/impressum + /legal/datenschutz stubs, bug_report_widget visual stub
 
 **Wave 4** *(depends on Wave 3)*
 - [ ] 17-07-PLAN.md — Final audit: visual-regression baselines, /gsd-ui-review 17 6-pillar audit, G-01/G-12/raw-hex grep sweeps, 17-UI-REVIEW.md, full-suite test pass, STATE/ROADMAP update
@@ -376,7 +376,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 19.1 → 20 �
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
-| 17. UI Consolidation | v1.3 | 8/10 | In Progress|  |
+| 17. UI Consolidation | v1.3 | 9/10 | In Progress|  |
 | 18. Bug-Report Widget | v1.3 | 0/? | Not started | - |
 | 19. Production Hardening | v1.3 | 0/? | Not started | - |
 | 19.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (INSERTED 2026-05-07) | - |
