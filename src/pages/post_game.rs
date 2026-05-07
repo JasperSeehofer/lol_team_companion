@@ -308,11 +308,11 @@ pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, Ser
 // ---------------------------------------------------------------------------
 
 fn textarea_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
 }
 
 fn input_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
 }
 
 /// Basic pattern analysis: find recurring themes across reviews
@@ -555,11 +555,14 @@ pub fn PostGamePage() -> impl IntoView {
     };
 
     view! {
-        <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
-            <div>
-                <h1 class="text-3xl font-bold text-primary">"Post-Game Review"</h1>
-                <p class="text-muted text-sm mt-1">"Analyze games, track patterns, and improve together"</p>
-            </div>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
+                // Page header per UI-SPEC §"Post-Game Page Layout" (visual layer only)
+                <div>
+                    <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - post-game"</p>
+                    <h1 class="font-display italic text-4xl text-primary mt-1">"What we learned in the field."</h1>
+                    <p class="text-muted text-sm mt-1">"Analyze games, track patterns, and improve together."</p>
+                </div>
 
             {move || action_item_count.get().map(|n| {
                 let label = if n == 1 {
@@ -633,7 +636,7 @@ pub fn PostGamePage() -> impl IntoView {
 
                                     // Pattern analysis
                                     {has_patterns.then(|| view! {
-                                        <div class="mt-4 bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
+                                        <div class="mt-4 bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-3">
                                             <h4 class="text-primary font-semibold text-xs uppercase tracking-wider">"Recurring Patterns"</h4>
                                             {(!good_patterns.is_empty()).then(|| {
                                                 let patterns = good_patterns.clone();
@@ -716,7 +719,7 @@ pub fn PostGamePage() -> impl IntoView {
                         }
                     }}
                     // Linking: match, game plan, draft
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6">
                         <h3 class="text-primary font-semibold text-sm mb-3">"Link to..."</h3>
                         <div class="grid grid-cols-3 gap-4">
                             // Match
@@ -802,7 +805,7 @@ pub fn PostGamePage() -> impl IntoView {
                     }}
 
                     // Game Outcome and Plan Rating
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-4">
                         // Win/Loss selector
                         <div class="flex flex-col gap-2">
                             <span class="text-sm font-semibold text-primary">"Game Outcome"</span>
@@ -971,7 +974,7 @@ pub fn PostGamePage() -> impl IntoView {
                     </div>
 
                     // Open notes
-                    <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
+                    <div class="bg-elevated border border-outline rounded-xl p-6">
                         <label class="block text-muted text-xs font-medium mb-1">"Open Notes"</label>
                         <textarea rows="4" class=textarea_class()
                             placeholder="Any additional thoughts, observations, or context..."
@@ -994,6 +997,7 @@ pub fn PostGamePage() -> impl IntoView {
                         >"Clear"</button>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     }
