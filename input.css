@@ -1,8 +1,153 @@
 @import "tailwindcss";
 
-/* ============================================
+/* ============================================================
+   Self-hosted fonts (G-01: NO Google Fonts CDN).
+   19 woff2 files in public/fonts/ — see plan 17-01 task 1.
+   ============================================================ */
+
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cinzel/cinzel-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/cinzel/cinzel-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/cinzel/cinzel-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/cinzel/cinzel-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond/cormorant-garamond-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond/cormorant-garamond-400i.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond/cormorant-garamond-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond/cormorant-garamond-500i.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond/cormorant-garamond-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond/cormorant-garamond-600i.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/inter/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/inter/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/inter/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/inter/inter-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono/jetbrains-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono/jetbrains-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono/jetbrains-mono-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono/jetbrains-mono-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/vt323/vt323-400.woff2") format("woff2");
+}
+
+/* ============================================================
    Theme system: semantic color tokens
-   ============================================ */
+   Tailwind v4 @theme block — generates utility classes from
+   --color-*, --font-* custom properties.
+   ============================================================ */
 
 @theme {
   /* Backgrounds */
@@ -26,68 +171,133 @@
   --color-accent: var(--t-accent);
   --color-accent-hover: var(--t-accent-hover);
   --color-accent-contrast: var(--t-accent-contrast);
+  --color-accent-soft: var(--t-accent-soft);
+
+  /* Status */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  /* Fonts */
+  --font-display: "Cormorant Garamond", "Cinzel", serif;
+  --font-imperial: "Cinzel", "Trajan Pro", serif;
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-glitch: "VT323", "JetBrains Mono", monospace;
 }
 
-/* ── Dark theme (default) ── */
-:root {
-  --t-base: oklch(0.13 0.004 264.665);          /* gray-950 */
-  --t-surface: oklch(0.21 0.006 264.665);        /* gray-900 */
-  --t-elevated: oklch(0.278 0.013 260.031);      /* gray-800 */
-  --t-overlay: oklch(0.373 0.016 260.733);       /* gray-700 */
-  --t-overlay-strong: oklch(0.446 0.018 264.281); /* gray-600 */
+/* ============================================================
+   DEMACIA (default) — heraldic, illuminated manuscript
+   ============================================================ */
+:root, [data-theme="demacia"] {
+  --t-base: #0d0f1a;
+  --t-surface: #14182a;
+  --t-elevated: #1c2238;
+  --t-overlay: rgba(20, 24, 42, 0.85);
+  --t-overlay-strong: rgba(13, 15, 26, 0.95);
 
-  --t-primary: #fff;
-  --t-secondary: oklch(0.872 0.01 258.338);      /* gray-300 */
-  --t-muted: oklch(0.707 0.015 264.117);         /* gray-400 */
-  --t-dimmed: oklch(0.551 0.018 264.364);        /* gray-500 */
+  --t-primary: #f6efd9;
+  --t-secondary: #e0d4b2;
+  --t-muted: #a89773;
+  --t-dimmed: #6e6446;
 
-  --t-divider: oklch(0.373 0.016 260.733);       /* gray-700 */
-  --t-outline: oklch(0.446 0.018 264.281);       /* gray-600 */
+  --t-divider: rgba(212, 175, 90, 0.14);
+  --t-outline: rgba(212, 175, 90, 0.32);
 
-  --t-accent: oklch(0.852 0.199 91.936);         /* yellow-400 */
-  --t-accent-hover: oklch(0.905 0.182 95.816);   /* yellow-300 */
-  --t-accent-contrast: oklch(0.21 0.006 264.665); /* gray-900 */
+  --t-accent: #d4af5a;
+  --t-accent-hover: #f1d985;
+  --t-accent-contrast: #0d0f1a;
+  --t-accent-soft: rgba(212, 175, 90, 0.12);
+
+  /* Demacia-only extended tokens */
+  --gold-1: #f1d985;
+  --gold-2: #d4af5a;
+  --gold-3: #9b7c34;
+  --gold-deep: #6b531e;
+  --lapis-1: #3a5fa8;
+  --lapis-2: #2a4d8c;
+  --lapis-3: #16315e;
+  --ivory: #f6efd9;
+  --ink: #2b1c14;
+  --ornament: rgba(212, 175, 90, 0.55);
+
+  /* Status */
+  --success: #7ba35e;
+  --warning: #d4974a;
+  --danger: #a84436;
+  --info: #6b8eb8;
 }
 
-/* ── Light theme ── */
-[data-theme="light"] {
-  --t-base: oklch(0.985 0.002 247.858);          /* gray-50 */
-  --t-surface: #fff;
-  --t-elevated: oklch(0.967 0.003 264.542);      /* gray-100 */
-  --t-overlay: oklch(0.928 0.006 264.531);       /* gray-200 */
-  --t-overlay-strong: oklch(0.872 0.01 258.338); /* gray-300 */
+/* ============================================================
+   PANDEMONIUM — fractured, kinetic, oil-on-obsidian
+   ============================================================ */
+[data-theme="pandemonium"] {
+  --t-base: #06070b;
+  --t-surface: #0e1018;
+  --t-elevated: #14171f;
+  --t-overlay: rgba(14, 16, 24, 0.85);
+  --t-overlay-strong: rgba(6, 7, 11, 0.95);
 
-  --t-primary: oklch(0.21 0.006 264.665);        /* gray-900 */
-  --t-secondary: oklch(0.446 0.018 264.281);     /* gray-600 */
-  --t-muted: oklch(0.551 0.018 264.364);         /* gray-500 */
-  --t-dimmed: oklch(0.707 0.015 264.117);        /* gray-400 */
+  --t-primary: #f3f0e8;
+  --t-secondary: #c8c4ba;
+  --t-muted: #7c7870;
+  --t-dimmed: #4d4a44;
 
-  --t-divider: oklch(0.928 0.006 264.531);       /* gray-200 */
-  --t-outline: oklch(0.872 0.01 258.338);        /* gray-300 */
+  --t-divider: rgba(255, 255, 255, 0.08);
+  --t-outline: rgba(120, 220, 240, 0.32);
 
-  --t-accent: oklch(0.795 0.184 86.047);         /* yellow-500 */
-  --t-accent-hover: oklch(0.852 0.199 91.936);   /* yellow-400 */
-  --t-accent-contrast: oklch(0.21 0.006 264.665); /* gray-900 */
+  --t-accent: #f73c8c;
+  --t-accent-hover: #ff7ab8;
+  --t-accent-contrast: #06070b;
+  --t-accent-soft: rgba(247, 60, 140, 0.14);
+
+  /* Pandemonium decorative-only tokens — never CTAs/focus */
+  --accent-2: #6cf0e2;
+  --accent-3: #fff157;
+  --ornament: rgba(247, 60, 140, 0.55);
+
+  /* Status */
+  --success: #6cf0a0;
+  --warning: #fff157;
+  --danger: #ff5560;
+  --info: #6cf0e2;
 }
 
-/* ── Accent color overrides ── */
-[data-accent="blue"] {
-  --t-accent: oklch(0.707 0.165 254.624);
-  --t-accent-hover: oklch(0.623 0.214 259.815);
-  --t-accent-contrast: #fff;
+/* ============================================================
+   Painterly canvas — vignette + grain
+   Ported from themes.css; demacia/pandemonium variants tinted.
+   ============================================================ */
+.canvas-grain { position: relative; }
+.canvas-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 30% 10%, rgba(255, 220, 160, 0.06), transparent 60%),
+    radial-gradient(ellipse at 70% 90%, rgba(0, 0, 0, 0.25), transparent 50%);
+  mix-blend-mode: overlay;
+  z-index: 0;
 }
-[data-accent="purple"] {
-  --t-accent: oklch(0.714 0.203 305.504);
-  --t-accent-hover: oklch(0.638 0.238 302.896);
-  --t-accent-contrast: #fff;
+.canvas-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+  z-index: 0;
 }
-[data-accent="emerald"] {
-  --t-accent: oklch(0.765 0.177 163.223);
-  --t-accent-hover: oklch(0.696 0.17 162.48);
-  --t-accent-contrast: #fff;
+.canvas-grain > * { position: relative; z-index: 1; }
+
+[data-theme="demacia"].canvas-grain::after {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' seed='7'/><feColorMatrix values='0 0 0 0 0.85  0 0 0 0 0.7  0 0 0 0 0.4  0 0 0 0.13 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: soft-light;
 }
-[data-accent="rose"] {
-  --t-accent: oklch(0.712 0.194 13.428);
-  --t-accent-hover: oklch(0.645 0.246 16.439);
-  --t-accent-contrast: #fff;
+[data-theme="pandemonium"].canvas-grain::before {
+  background:
+    radial-gradient(ellipse at 25% 15%, rgba(247, 60, 140, 0.18), transparent 55%),
+    radial-gradient(ellipse at 75% 85%, rgba(108, 240, 226, 0.14), transparent 55%);
 }
