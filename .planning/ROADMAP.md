@@ -190,8 +190,8 @@ Plans:
 **Plans**: 10 plans (Phase 17 plan 03 split into 03a/03b/03c/03d for context bounding)
 Plans:
 **Wave 1** *(parallel — no inter-dependency)*
-- [ ] 17-01-PLAN.md — Foundations: theme port (demacia/pandemonium), font self-hosting (G-01), DB theme field, theme_toggle 2-state, app.rs SSR data-theme, nav.rs 4-hub IA, ornaments.rs + icon.rs, Wave 0 e2e specs, CI sweep job
-- [ ] 17-02-PLAN.md — Open-Design seeding: lol-companion DESIGN.md + tokens.css + 17-OD-MAP.md tracking table
+- [x] 17-01-PLAN.md — Foundations: theme port (demacia/pandemonium), font self-hosting (G-01), DB theme field, theme_toggle 2-state, app.rs SSR data-theme, nav.rs 4-hub IA, ornaments.rs + icon.rs, Wave 0 e2e specs, CI sweep job
+- [x] 17-02-PLAN.md — Open-Design seeding: lol-companion DESIGN.md + tokens.css + 17-OD-MAP.md tracking table
 
 **Wave 2** *(parallel — all depend on Wave 1)*
 - [ ] 17-03a-PLAN.md — Strategy hub draft: /draft + draft_board.rs + champion_picker.rs (heaviest single artifact)
@@ -376,7 +376,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 19.1 → 20 �
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
-| 17. UI Consolidation | v1.3 | 0/10 | In progress (planned 2026-05-07) | - |
+| 17. UI Consolidation | v1.3 | 2/10 | In Progress|  |
 | 18. Bug-Report Widget | v1.3 | 0/? | Not started | - |
 | 19. Production Hardening | v1.3 | 0/? | Not started | - |
 | 19.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (INSERTED 2026-05-07) | - |
