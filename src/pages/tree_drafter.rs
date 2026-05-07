@@ -277,6 +277,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let (adding_branch_to, set_adding_branch_to) = signal(Option::<String>::None);
     let (new_branch_label, set_new_branch_label) = signal(String::new());
 
+    // Phase 17: inline delete-tree confirmation (replaces immediate-action button per
+    // UI-SPEC §"Tree Graph Interactions" — confirmations are inline, never modal).
+    let (confirm_delete_tree, set_confirm_delete_tree) = signal(false);
+
     // Expanded nodes in tree view
     let (expanded_nodes, set_expanded_nodes) = signal(std::collections::HashSet::<String>::new());
 
@@ -693,27 +697,33 @@ pub fn TreeDrafterPage() -> impl IntoView {
     });
 
     view! {
-        <div class="max-w-[90rem] mx-auto py-8 px-6 flex flex-col gap-6">
-            // Header
+        // Phase 17: canvas-grain wrapper + bg-base. Outer min-h-screen ensures the
+        // grain extends past short pages; inner max-width container preserves the
+        // 90rem cap from the previous layout.
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="max-w-[90rem] mx-auto flex flex-col gap-6">
+            // Header — imperial wordmark, ghost-pair toggle.
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold text-primary">"Tree Drafter"</h1>
+                    <h1 class="text-3xl font-display italic text-primary">"Tree Drafter"</h1>
                     <p class="text-muted text-sm mt-1">"Plan branching draft strategies for every scenario"</p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-px rounded-lg overflow-hidden border border-divider/50">
                     <button
+                        type="button"
                         class=move || if mode.get() == "edit" {
-                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-accent text-accent-contrast cursor-pointer"
+                            "px-4 py-2 text-sm font-medium bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         } else {
-                            "px-4 py-2 rounded-l-lg text-sm font-medium bg-overlay text-secondary hover:bg-overlay-strong transition-colors cursor-pointer"
+                            "px-4 py-2 text-sm font-medium bg-elevated/50 text-secondary hover:bg-elevated hover:text-primary transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         }
                         on:click=move |_| set_mode.set("edit".to_string())
                     >"Edit"</button>
                     <button
+                        type="button"
                         class=move || if mode.get() == "live" {
-                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-emerald-500 text-white cursor-pointer"
+                            "px-4 py-2 text-sm font-medium bg-success text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         } else {
-                            "px-4 py-2 rounded-r-lg text-sm font-medium bg-overlay text-secondary hover:bg-overlay-strong transition-colors cursor-pointer"
+                            "px-4 py-2 text-sm font-medium bg-elevated/50 text-secondary hover:bg-elevated hover:text-primary transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         }
                         on:click=move |_| {
                             if selected_tree_id.get_untracked().is_none() {
@@ -742,7 +752,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             on:keydown=move |ev: web_sys::KeyboardEvent| {
                                 if ev.key() == "Enter" { do_create_tree.run(()); }
                             }
-                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                         />
                         <input
                             type="text"
@@ -752,10 +762,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             on:keydown=move |ev: web_sys::KeyboardEvent| {
                                 if ev.key() == "Enter" { do_create_tree.run(()); }
                             }
-                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                         />
                         <button
-                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                            type="button"
+                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             on:click=move |_| do_create_tree.run(())
                         >"Create Tree"</button>
                     </div>
@@ -783,17 +794,19 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                             let opp = t.opponent.clone();
                                             view! {
                                                 <button
+                                                    type="button"
                                                     class=move || {
                                                         let sel = selected_tree_id.get();
                                                         if sel.as_deref() == Some(&id) {
-                                                            "w-full text-left bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all"
+                                                            "w-full text-left bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         } else {
-                                                            "w-full text-left bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all"
+                                                            "w-full text-left bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         }
                                                     }
                                                     on:click=move |_| {
                                                         clear_editor();
                                                         suppress_autosave.set(true);
+                                                        set_confirm_delete_tree.set(false);
                                                         set_selected_tree_id.set(Some(id_for_click.clone()));
                                                         set_nav_path.set(Vec::new());
                                                         // Re-enable after microtask
@@ -824,18 +837,48 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                     </div>
                                 }.into_any(),
                                 Err(e) => view! {
-                                    <p class="text-red-400 text-sm">{e.to_string()}</p>
+                                    <p class="text-danger text-sm">{e.to_string()}</p>
                                 }.into_any(),
                             })}
                         </Suspense>
                     </div>
 
-                    // Delete tree button
-                    {move || selected_tree_id.get().map(|_| view! {
-                        <button
-                            class="text-red-400 hover:text-red-300 text-sm transition-colors border border-red-400/20 hover:border-red-400/40 rounded-lg px-3 py-1.5"
-                            on:click=do_delete_tree
-                        >"Delete Tree"</button>
+                    // Delete tree button — inline confirmation (UI-SPEC: never modal).
+                    // First click reveals "Remove this tree and all branches?" with
+                    // [Remove] / [Cancel]; second click on Remove fires do_delete_tree.
+                    {move || selected_tree_id.get().map(|_| {
+                        if confirm_delete_tree.get() {
+                            view! {
+                                <div class="bg-elevated/60 border border-danger/30 rounded-lg p-3 flex flex-col gap-2">
+                                    <p class="text-secondary text-xs">
+                                        "Remove this tree and all its branches?"
+                                    </p>
+                                    <div class="flex gap-2">
+                                        <button
+                                            type="button"
+                                            class="flex-1 bg-danger/20 hover:bg-danger/30 text-danger text-xs font-medium rounded px-2 py-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none border border-danger/40"
+                                            on:click=move |ev| {
+                                                set_confirm_delete_tree.set(false);
+                                                do_delete_tree(ev);
+                                            }
+                                        >"Remove"</button>
+                                        <button
+                                            type="button"
+                                            class="flex-1 bg-elevated/50 hover:bg-elevated text-secondary text-xs rounded px-2 py-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                            on:click=move |_| set_confirm_delete_tree.set(false)
+                                        >"Cancel"</button>
+                                    </div>
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <button
+                                    type="button"
+                                    class="text-danger hover:bg-danger/10 text-sm transition-colors border border-danger/30 hover:border-danger/50 rounded-lg px-3 py-1.5 focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
+                                    on:click=move |_| set_confirm_delete_tree.set(true)
+                                >"Delete Tree"</button>
+                            }.into_any()
+                        }
                     })}
                 </div>
 
@@ -883,11 +926,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                             <h3 class="text-primary font-semibold text-sm">"Tree Structure"</h3>
                                             <div class="flex items-center gap-1 bg-overlay/50 rounded-lg p-0.5">
                                                 <button
+                                                    type="button"
                                                     class=move || {
                                                         if tree_view_mode.get() == "list" {
-                                                            "px-2 py-0.5 text-xs rounded-md bg-accent text-accent-contrast font-medium transition-colors cursor-pointer"
+                                                            "px-2 py-0.5 text-xs rounded-md bg-accent text-accent-contrast font-medium transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         } else {
-                                                            "px-2 py-0.5 text-xs rounded-md text-secondary hover:text-primary transition-colors cursor-pointer"
+                                                            "px-2 py-0.5 text-xs rounded-md text-secondary hover:text-primary transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         }
                                                     }
                                                     on:click=move |_| set_tree_view_mode.set("list".to_string())
@@ -897,11 +941,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     "\u{2261}"
                                                 </button>
                                                 <button
+                                                    type="button"
                                                     class=move || {
                                                         if tree_view_mode.get() == "graph" {
-                                                            "px-2 py-0.5 text-xs rounded-md bg-accent text-accent-contrast font-medium transition-colors cursor-pointer"
+                                                            "px-2 py-0.5 text-xs rounded-md bg-accent text-accent-contrast font-medium transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         } else {
-                                                            "px-2 py-0.5 text-xs rounded-md text-secondary hover:text-primary transition-colors cursor-pointer"
+                                                            "px-2 py-0.5 text-xs rounded-md text-secondary hover:text-primary transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         }
                                                     }
                                                     on:click=move |_| set_tree_view_mode.set("graph".to_string())
@@ -975,7 +1020,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     }
                                                 },
                                                 Err(e) => view! {
-                                                    <p class="text-red-400 text-sm">{e.to_string()}</p>
+                                                    <p class="text-danger text-sm">{e.to_string()}</p>
                                                 }.into_any(),
                                             })}
                                         </Suspense>
@@ -989,15 +1034,17 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     placeholder="e.g. If they ban Jinx..."
                                                     prop:value=move || new_branch_label.get()
                                                     on:input=move |ev| set_new_branch_label.set(event_target_value(&ev))
-                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                                                 />
                                                 <div class="flex gap-2">
                                                     <button
-                                                        class="flex-1 bg-accent hover:bg-accent-hover text-accent-contrast text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
+                                                        type="button"
+                                                        class="flex-1 bg-accent hover:bg-accent-hover text-accent-contrast text-sm font-medium rounded-lg px-3 py-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         on:click=do_add_branch
                                                     >"Add"</button>
                                                     <button
-                                                        class="flex-1 bg-overlay hover:bg-overlay-strong text-secondary text-sm rounded-lg px-3 py-1.5 transition-colors"
+                                                        type="button"
+                                                        class="flex-1 bg-overlay hover:bg-overlay-strong text-secondary text-sm rounded-lg px-3 py-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         on:click=move |_| set_adding_branch_to.set(None)
                                                     >"Cancel"</button>
                                                 </div>
@@ -1048,6 +1095,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     }}
                 </div>
             </div>
+        </div>
         </div>
     }
 }
@@ -1131,9 +1179,9 @@ fn TreeNodeView(
                 >
                     // Icon
                     {if is_improvised {
-                        view! { <span class="text-amber-400 text-xs flex-shrink-0" title="Improvised">"\u{26A1}"</span> }.into_any()
+                        view! { <span class="text-warning text-xs flex-shrink-0" title="Improvised">"\u{26A1}"</span> }.into_any()
                     } else if is_root {
-                        view! { <span class="text-emerald-400 text-xs flex-shrink-0">"\u{25C9}"</span> }.into_any()
+                        view! { <span class="text-success text-xs flex-shrink-0">"\u{25C9}"</span> }.into_any()
                     } else {
                         view! { <span class="text-dimmed text-xs flex-shrink-0">"\u{251C}"</span> }.into_any()
                     }}
@@ -1149,7 +1197,7 @@ fn TreeNodeView(
                 // Action buttons (visible on hover)
                 <div class="hidden group-hover:flex items-center gap-1 flex-shrink-0">
                     <button
-                        class="text-muted hover:text-accent hover:bg-overlay/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
+                        class="text-muted hover:text-accent hover:bg-overlay/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         title="Add branch"
                         on:click={
                             let nid = node_id_for_add.clone();
@@ -1163,7 +1211,7 @@ fn TreeNodeView(
                         let nid = node_id_for_delete.clone();
                         view! {
                             <button
-                                class="text-muted hover:text-red-400 hover:bg-overlay/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer"
+                                class="text-muted hover:text-danger hover:bg-overlay/50 text-sm p-1.5 rounded w-7 h-7 flex items-center justify-center transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                 title="Delete node"
                                 on:click=move |ev: web_sys::MouseEvent| {
                                     ev.stop_propagation();
@@ -1243,7 +1291,7 @@ fn NodeEditor(
                             type="text"
                             prop:value=move || node_label.get()
                             on:input=move |ev| set_node_label.set(event_target_value(&ev))
-                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors"
+                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                         />
                     </div>
                     <div class="flex items-center gap-2 pt-5">
@@ -1257,7 +1305,7 @@ fn NodeEditor(
                                     set_node_improvised.set(checked);
                                 }
                             />
-                            <div class="w-9 h-5 bg-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
+                            <div class="w-9 h-5 bg-overlay peer-focus-visible:ring-2 peer-focus-visible:ring-warning/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-secondary after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-warning peer-checked:after:bg-base"></div>
                         </label>
                         <span class="text-secondary text-xs">"Improvised"</span>
                     </div>
@@ -1269,7 +1317,7 @@ fn NodeEditor(
                         prop:value=move || node_notes.get()
                         on:input=move |ev| set_node_notes.set(event_target_value(&ev))
                         placeholder="Strategy notes for this branch..."
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
+                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed resize-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                     />
                 </div>
             </div>
@@ -1309,7 +1357,8 @@ fn NodeEditor(
                     view! {
                         <div class="flex items-center gap-3 px-1">
                             <button
-                                class="bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                type="button"
+                                class="bg-accent-soft hover:bg-accent/20 text-accent text-sm font-medium px-4 py-1.5 rounded-lg border border-accent/40 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 on:click=move |_| on_branch_from.run(slot_idx)
                             >
                                 "Branch from here"
@@ -1343,11 +1392,13 @@ fn NodeEditor(
             // Save + clear
             <div class="flex gap-3 items-center">
                 <button
-                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
+                    type="button"
+                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:click=move |ev| on_save.run(ev)
                 >"Save Node"</button>
                 <button
-                    class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
+                    type="button"
+                    class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:click=move |_| {
                         set_draft_slots.set(vec![None; 20]);
                         set_active_slot.set(Some(0));
@@ -1356,8 +1407,8 @@ fn NodeEditor(
                 {move || {
                     let status = node_save_status.get();
                     match status {
-                        "saved" => view! { <span class="text-green-400 text-xs">"✓ Saved"</span> }.into_any(),
-                        "unsaved" => view! { <span class="text-amber-400 text-xs">"● Unsaved"</span> }.into_any(),
+                        "saved" => view! { <span class="text-success text-xs">"✓ Saved"</span> }.into_any(),
+                        "unsaved" => view! { <span class="text-warning text-xs">"● Unsaved"</span> }.into_any(),
                         _ => view! { <span></span> }.into_any(),
                     }
                 }}
@@ -1405,7 +1456,8 @@ fn LiveNavigator(
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-muted text-xs font-semibold uppercase tracking-wider">"Path:"</span>
                     <button
-                        class="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors"
+                        type="button"
+                        class="text-success hover:text-success/80 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-success/50 focus-visible:outline-none rounded"
                         on:click=move |_| set_nav_path.set(Vec::new())
                     >"Root"</button>
                     {move || {
@@ -1430,7 +1482,8 @@ fn LiveNavigator(
                                     view! {
                                         <span class="text-overlay-strong">"\u{203A}"</span>
                                         <button
-                                            class="text-accent hover:text-accent-hover text-sm font-medium transition-colors"
+                                            type="button"
+                                            class="text-accent hover:text-accent-hover text-sm font-medium transition-colors rounded focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             on:click=move |_| {
                                                 set_nav_path.set(truncated_path.clone());
                                             }
@@ -1470,7 +1523,7 @@ fn LiveNavigator(
                                         <div class="flex items-center gap-3">
                                             <h2 class="text-primary text-xl font-bold">{node_label}</h2>
                                             {node_improvised.then(|| view! {
-                                                <span class="bg-amber-500/20 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded-full">
+                                                <span class="bg-warning/20 text-warning text-xs font-semibold px-2 py-0.5 rounded-full">
                                                     "\u{26A1} Improvised"
                                                 </span>
                                             })}
@@ -1518,7 +1571,8 @@ fn LiveNavigator(
                                             <h3 class="text-primary font-semibold">"Choose Path"</h3>
                                             // Improvise button
                                             <button
-                                                class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium px-3 py-1.5 rounded-lg border border-amber-500/30 transition-colors"
+                                                type="button"
+                                                class="bg-warning/20 hover:bg-warning/30 text-warning text-sm font-medium px-3 py-1.5 rounded-lg border border-warning/30 transition-colors focus-visible:ring-2 focus-visible:ring-warning/50 focus-visible:outline-none"
                                                 on:click={
                                                     let nid = node_id.clone();
                                                     let tree_id = selected_tree_id.get_untracked();
@@ -1555,7 +1609,8 @@ fn LiveNavigator(
                                                         let child_action_count = child.actions.len();
                                                         view! {
                                                             <button
-                                                                class="text-left bg-overlay/50 hover:bg-overlay border border-outline/50 hover:border-accent/30 rounded-lg p-3 transition-all group"
+                                                                type="button"
+                                                                class="text-left bg-overlay/50 hover:bg-overlay border border-outline/50 hover:border-accent/30 rounded-lg p-3 transition-all group focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                 on:click=move |_| {
                                                                     set_nav_path.update(|p| p.push(child_id.clone()));
                                                                 }
@@ -1563,7 +1618,7 @@ fn LiveNavigator(
                                                                 <div class="flex items-center gap-2">
                                                                     <span class="text-primary text-sm font-medium group-hover:text-accent transition-colors">{child_label}</span>
                                                                     {child_improvised.then(|| view! {
-                                                                        <span class="text-amber-400 text-xs">"\u{26A1}"</span>
+                                                                        <span class="text-warning text-xs">"\u{26A1}"</span>
                                                                     })}
                                                                 </div>
                                                                 {child_notes.map(|n| view! {
@@ -1592,7 +1647,8 @@ fn LiveNavigator(
                                         }
                                         view! {
                                             <button
-                                                class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors self-start"
+                                                type="button"
+                                                class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors self-start focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 on:click=move |_| {
                                                     set_nav_path.update(|p| { p.pop(); });
                                                 }
