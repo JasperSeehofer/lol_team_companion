@@ -38,8 +38,8 @@ Leptos, set `Status = ported`.
 | Register (invited) | `/auth/register?invite=...` | 06 | TBD | TBD | pending |
 | Team roster | `/team/roster` | 05 | TBD | TBD | pending |
 | Team builder | `/team-builder` | 05 | TBD | TBD | pending |
-| Opponents | `/opponents` | 03 | TBD | TBD | pending |
-| Action items | `/action-items` | 03 | TBD | TBD | pending |
+| Opponents | `/opponents` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/opponents.html` | ported |
+| Action items | `/action-items` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/action-items.html` | ported |
 | Personal learnings | `/personal-learnings` | 04 | TBD | TBD | pending |
 | Analytics | `/analytics` | 04 | TBD | TBD | pending |
 | Admin invites | `/admin/invites` | 06 | TBD | TBD | pending |
