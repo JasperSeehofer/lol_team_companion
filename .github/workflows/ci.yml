@@ -27,3 +27,69 @@ jobs:
 
       - name: Format check
         run: cargo fmt --check
+
+  style_guardrails:
+    name: Style Guardrails (G-01 / G-12 / raw-hex)
+    runs-on: ubuntu-latest
+    # Plan 17-01 task 12: Wave 0 enforcement. G-01 and raw-hex are HARD
+    # gates from day one (Phase 17 brought the codebase into compliance).
+    # G-12 is enforced in scope: only files touched by Phase 17 plans
+    # (nav.rs, theme_toggle.rs, ornaments.rs, icon.rs) must be clean.
+    # Pre-existing form inputs across the codebase use the legacy
+    # `focus:outline-none focus:border-accent` pattern; their migration
+    # is tracked in deferred-items.md and lands in the hub plans (02-04).
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: G-01 — No Google Fonts CDN
+        run: |
+          # Self-hosted fonts only; reject any Google Fonts CDN reference
+          # in production CSS, Rust source, or HTML. .claude/skills/ are
+          # excluded because they are vendored Claude Code skill HTML
+          # templates, not production app code.
+          if grep -rE "fonts\.googleapis\.com|fonts\.gstatic\.com" \
+            --include="*.css" --include="*.rs" --include="*.html" \
+            --exclude-dir=target --exclude-dir=node_modules \
+            --exclude-dir=.claude .; then
+            echo "::error::G-01 violation — Google Fonts CDN reference detected"
+            exit 1
+          fi
+
+      - name: G-12 — No outline:none without ring replacement (Phase 17 scope)
+        run: |
+          # Phase 17 in-scope files only. Pre-existing violations in form
+          # inputs are tracked in deferred-items.md and migrated by hub plans.
+          PHASE_17_FILES="src/components/nav.rs src/components/theme_toggle.rs src/components/ornaments.rs src/components/icon.rs"
+          set +e
+          HITS=$(grep -nE "outline\s*:\s*none|outline-none" $PHASE_17_FILES 2>/dev/null)
+          set -e
+          if [ -n "$HITS" ]; then
+            echo "$HITS" | while IFS= read -r line; do
+              file=$(echo "$line" | cut -d: -f1)
+              lineno=$(echo "$line" | cut -d: -f2)
+              start=$((lineno > 2 ? lineno - 1 : 1))
+              end=$((lineno + 3))
+              context=$(sed -n "${start},${end}p" "$file")
+              if ! echo "$context" | grep -qE "focus-visible:ring|focus-visible:outline"; then
+                echo "::error file=$file,line=$lineno::G-12 violation — outline:none without focus-visible:ring"
+                exit 1
+              fi
+            done
+          fi
+
+      - name: Raw-hex in Phase 17 components (excluding theme blocks)
+        run: |
+          # Theme blocks in input.css are ALLOWED to have raw hex (canonical
+          # token source). The Phase 17 ornament components reference
+          # var(--color-*) only. Pre-existing components migrate in hub plans.
+          PHASE_17_FILES="src/components/nav.rs src/components/theme_toggle.rs src/components/ornaments.rs src/components/icon.rs src/pages/closed_beta.rs src/pages/admin/invites.rs src/pages/legal/impressum.rs src/pages/legal/datenschutz.rs"
+          set +e
+          HITS=$(grep -nE "#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b" $PHASE_17_FILES 2>/dev/null \
+            | grep -v "^[^:]*://" \
+            | grep -v ":\s*//")
+          set -e
+          if [ -n "$HITS" ]; then
+            echo "::error::Raw hex found in Phase 17 components — use semantic tokens"
+            echo "$HITS"
+            exit 1
+          fi

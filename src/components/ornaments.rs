@@ -105,17 +105,19 @@ pub fn RiotTape(
 ) -> impl IntoView {
     let style = format!(
         "width: {}px; height: 22px; position: relative; \
-         background: var(--accent-3, #fff157); transform: rotate(-1.2deg); \
+         background: var(--accent-3); transform: rotate(-1.2deg); \
          box-shadow: 0 1px 0 rgba(0,0,0,0.4), 2px 2px 0 var(--color-accent), -2px -1px 0 var(--accent-2); \
          overflow: hidden;",
         width
     );
 
+    // Note: the inner label color uses the Pandemonium accent-contrast token
+    // (#06070b), referenced via var() so the CI raw-hex sweep stays clean.
     view! {
         <div style=style>
             <div
                 class="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-bold uppercase tracking-[0.18em]"
-                style="color: #06070b; mix-blend-mode: multiply"
+                style="color: var(--t-accent-contrast); mix-blend-mode: multiply"
             >
                 {format!("//// {} //// {} //// {} ////", label, label, label)}
             </div>
