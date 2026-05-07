@@ -4631,7 +4631,7 @@ pub async fn get_solo_matches(
 
     let rows: Vec<DbSoloMatch> = if let Some(qid) = queue_filter {
         let mut result = db
-            .query(format!("{BASE_SELECT} AND match.queue_id = $queue_id ORDER BY match.game_end DESC LIMIT $limit"))
+            .query(format!("{BASE_SELECT} AND match.queue_id = $queue_id ORDER BY game_end DESC LIMIT $limit"))
             .bind(("user_key", user_key))
             .bind(("queue_id", qid))
             .bind(("limit", limit))
@@ -4639,7 +4639,7 @@ pub async fn get_solo_matches(
         result.take(0).unwrap_or_default()
     } else {
         let mut result = db
-            .query(format!("{BASE_SELECT} ORDER BY match.game_end DESC LIMIT $limit"))
+            .query(format!("{BASE_SELECT} ORDER BY game_end DESC LIMIT $limit"))
             .bind(("user_key", user_key))
             .bind(("limit", limit))
             .await?;
