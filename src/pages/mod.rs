@@ -1,10 +1,13 @@
 pub mod action_items;
+pub mod admin;
 pub mod analytics;
 pub mod auth;
 pub mod champion_pool;
+pub mod closed_beta;
 pub mod draft;
 pub mod game_plan;
 pub mod home;
+pub mod legal;
 pub mod match_detail;
 pub mod opponents;
 pub mod personal_learnings;

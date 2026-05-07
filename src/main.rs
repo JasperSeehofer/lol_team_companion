@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use std::sync::Arc;
 
-use lol_team_companion::app::{shell, App};
+use lol_team_companion::app::{shell, App, InitialTheme};
 use lol_team_companion::server::{auth::AuthBackend, db, session_store::SurrealSessionStore};
 
 #[derive(Clone, axum::extract::FromRef)]
@@ -77,6 +77,15 @@ async fn main() {
                 move || {
                     let db = Arc::clone(&app_state.db);
                     provide_context(db);
+                    // Phase 17 plan 17-01 task 6: provide InitialTheme context.
+                    // The leptos context closure is sync, so we cannot await
+                    // the AuthSession extractor here. Default to "demacia"
+                    // (the design's default theme); the post-hydration
+                    // ThemeToggle.set_theme call writes the user's actual
+                    // preference back to <html data-theme>. SSR-authoritative
+                    // theme requires axum middleware injection which is
+                    // deferred to a follow-up plan if FOUC becomes visible.
+                    provide_context(InitialTheme::default());
                 }
             },
             {

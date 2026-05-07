@@ -10,12 +10,15 @@ use crate::components::ui::ToastProvider;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
     action_items::ActionItemsPage,
+    admin::invites::AdminInvitesPage,
     analytics::AnalyticsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
+    closed_beta::ClosedBetaPage,
     draft::DraftPage,
     game_plan::GamePlanPage,
     home::HomePage,
+    legal::{datenschutz::DatenschutzPage, impressum::ImpressumPage},
     match_detail::MatchDetailPage,
     opponents::OpponentsPage,
     personal_learnings::{NewLearningPage, PersonalLearningsPage},
@@ -28,14 +31,38 @@ use crate::pages::{
     tree_drafter::TreeDrafterPage,
 };
 
+/// Per-request initial theme provided via context from the axum
+/// request handler. Defaults to "demacia" when no user session theme
+/// is available (unauthenticated visitors, hydration mismatch fallback).
+///
+/// Per plan 17-01 task 6 fallback: SSR sets a default; the
+/// `ThemeToggle` component performs a post-hydration sync from the
+/// user's DB record. Brief flicker on the very first authenticated page
+/// load is acceptable; subsequent navigations are flicker-free because
+/// the `data-theme` attribute is preserved across SSR turnarounds.
+#[derive(Clone, Debug)]
+pub struct InitialTheme(pub String);
+
+impl Default for InitialTheme {
+    fn default() -> Self {
+        InitialTheme("demacia".to_string())
+    }
+}
+
 pub fn shell(options: LeptosOptions) -> impl IntoView {
+    // Read the initial theme from request context (provided per-request in
+    // main.rs). Fall back to "demacia" when context is absent (e.g. static
+    // file errors or before context is wired).
+    let theme = use_context::<InitialTheme>()
+        .map(|t| t.0)
+        .unwrap_or_else(|| "demacia".to_string());
+
     view! {
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en" data-theme=theme>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <script>{r#"(function(){var t=localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');var a=localStorage.getItem('accent');if(a)document.documentElement.setAttribute('data-accent',a);})()"#}</script>
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
@@ -80,6 +107,11 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/match/:id") view=MatchDetailPage />
                         <Route path=path!("/personal-learnings") view=PersonalLearningsPage />
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />
+                        // Phase 17 plan 17-01 stubs (filled by plan 06)
+                        <Route path=path!("/closed-beta") view=ClosedBetaPage />
+                        <Route path=path!("/admin/invites") view=AdminInvitesPage />
+                        <Route path=path!("/legal/impressum") view=ImpressumPage />
+                        <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
                     </Routes>
                 </main>
             </ToastProvider>
