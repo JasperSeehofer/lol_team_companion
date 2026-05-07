@@ -194,10 +194,10 @@ Plans:
 - [x] 17-02-PLAN.md — Open-Design seeding: lol-companion DESIGN.md + tokens.css + 17-OD-MAP.md tracking table
 
 **Wave 2** *(parallel — all depend on Wave 1)*
-- [ ] 17-03a-PLAN.md — Strategy hub draft: /draft + draft_board.rs + champion_picker.rs (heaviest single artifact)
-- [ ] 17-03b-PLAN.md — Strategy hub tree: /tree-drafter + tree_graph.rs + champion_autocomplete.rs
-- [ ] 17-03c-PLAN.md — Strategy hub strategy pages: /champion-pool + /game-plan + /post-game
-- [ ] 17-03d-PLAN.md — Strategy hub utility: /opponents + /action-items (Open-Design ports) + ui.rs + stat_card.rs
+- [x] 17-03a-PLAN.md — Strategy hub draft: /draft + draft_board.rs + champion_picker.rs (heaviest single artifact)
+- [x] 17-03b-PLAN.md — Strategy hub tree: /tree-drafter + tree_graph.rs + champion_autocomplete.rs
+- [x] 17-03c-PLAN.md — Strategy hub strategy pages: /champion-pool + /game-plan + /post-game
+- [x] 17-03d-PLAN.md — Strategy hub utility: /opponents + /action-items (Open-Design ports) + ui.rs + stat_card.rs
 - [ ] 17-04-PLAN.md — History hub: /stats, /match-detail, /personal-learnings (utility), /analytics (utility)
 - [ ] 17-05-PLAN.md — Profile hub: /profile (Captain's Folio), /team/dashboard (Strategy Room), /team/roster (utility), /team-builder (utility), /solo-dashboard (SoloConstellation), /home (auth-aware redirect to /closed-beta)
 
@@ -376,7 +376,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 19.1 → 20 �
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
-| 17. UI Consolidation | v1.3 | 2/10 | In Progress|  |
+| 17. UI Consolidation | v1.3 | 6/10 | In Progress|  |
 | 18. Bug-Report Widget | v1.3 | 0/? | Not started | - |
 | 19. Production Hardening | v1.3 | 0/? | Not started | - |
 | 19.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (INSERTED 2026-05-07) | - |
