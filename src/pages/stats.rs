@@ -1,3 +1,4 @@
+use crate::components::ornaments::HeraldicDivider;
 use crate::components::stat_card::StatCard;
 use crate::components::ui::{EmptyState, ErrorBanner, NoTeamState, SkeletonCard};
 use crate::models::match_data::ChampionTrend;
@@ -290,7 +291,13 @@ pub fn StatsPage() -> impl IntoView {
 
     let has_team = Resource::new(
         || (),
-        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+        |_| async {
+            crate::pages::team::dashboard::get_team_dashboard()
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        },
     );
     let api_key = Resource::new(|| (), |_| check_api_key());
     let stats = Resource::new(|| (), |_| get_team_stats());
@@ -321,189 +328,233 @@ pub fn StatsPage() -> impl IntoView {
     };
 
     view! {
-        <div class="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
-            // Header
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-primary">"Team Stats"</h1>
-                    <p class="text-muted text-sm mt-1">"Match history synced from the Riot API"</p>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-7xl mx-auto px-8 lg:px-16 py-11 flex flex-col gap-6">
+                // Imperial header
+                <div class="flex items-end justify-between gap-6 flex-wrap">
+                    <div class="flex flex-col gap-2">
+                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                            "Chapter VII · Battle log"
+                        </span>
+                        <BattleLogHeadline stats=stats />
+                        <p class="font-display italic text-secondary text-base mt-1 max-w-[640px]">
+                            "Each match is a chapter. Click a row to read the recap; the day's lesson sits in the right margin."
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        // Queue type selector for sync
+                        <select
+                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                            on:change=move |ev| {
+                                let v = event_target_value(&ev);
+                                let q = match v.as_str() {
+                                    "420" => Some(420),
+                                    "440" => Some(440),
+                                    _ => None,
+                                };
+                                set_sync_queue.set(q);
+                            }
+                        >
+                            <option value="440" selected>"Flex (440)"</option>
+                            <option value="420">"Solo/Duo (420)"</option>
+                            <option value="0">"All Queues"</option>
+                        </select>
+                        <button
+                            class=move || if syncing.get() {
+                                "bg-overlay-strong text-muted font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            } else {
+                                "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-5 py-2.5 text-sm transition-colors flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            }
+                            on:click=do_sync
+                            disabled=move || syncing.get()
+                        >
+                            {move || if syncing.get() {
+                                view! {
+                                    <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    <span>"Syncing..."</span>
+                                }.into_any()
+                            } else {
+                                view! { <span>"Sync Matches"</span> }.into_any()
+                            }}
+                        </button>
+                    </div>
                 </div>
-                <div class="flex items-center gap-3">
-                    // Queue type selector for sync
-                    <select
-                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2.5 text-primary text-sm focus:outline-none focus:border-accent/50"
-                        on:change=move |ev| {
-                            let v = event_target_value(&ev);
-                            let q = match v.as_str() {
-                                "420" => Some(420),
-                                "440" => Some(440),
-                                _ => None,
-                            };
-                            set_sync_queue.set(q);
-                        }
-                    >
-                        <option value="440" selected>"Flex (440)"</option>
-                        <option value="420">"Solo/Duo (420)"</option>
-                        <option value="0">"All Queues"</option>
-                    </select>
-                    <button
-                        class=move || if syncing.get() {
-                            "bg-overlay-strong text-muted font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed flex items-center gap-2"
-                        } else {
-                            "bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg px-5 py-2.5 text-sm transition-colors flex items-center gap-2"
-                        }
-                        on:click=do_sync
-                        disabled=move || syncing.get()
-                    >
-                        {move || if syncing.get() {
+
+                <HeraldicDivider />
+
+                // API key warning
+                <Suspense fallback=|| ()>
+                    {move || api_key.get().map(|result| {
+                        if let Ok(false) = result {
                             view! {
-                                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                </svg>
-                                <span>"Syncing..."</span>
+                                <div class="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-start gap-3" role="alert">
+                                    <span class="text-warning text-lg flex-shrink-0" aria-hidden="true">"!"</span>
+                                    <div>
+                                        <p class="text-warning font-medium text-sm">"RIOT_API_KEY not configured"</p>
+                                        <p class="text-warning/70 text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
+                                    </div>
+                                </div>
                             }.into_any()
                         } else {
-                            view! { <span>"Sync Matches"</span> }.into_any()
-                        }}
-                    </button>
-                </div>
-            </div>
-
-            // API key warning
-            <Suspense fallback=|| ()>
-                {move || api_key.get().map(|result| {
-                    if let Ok(false) = result {
-                        view! {
-                            <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
-                                <span class="text-amber-400 text-lg flex-shrink-0">"!"</span>
-                                <div>
-                                    <p class="text-amber-400 font-medium text-sm">"RIOT_API_KEY not configured"</p>
-                                    <p class="text-amber-400/70 text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
-                                </div>
-                            </div>
-                        }.into_any()
-                    } else {
-                        view! { <div></div> }.into_any()
-                    }
-                })}
-            </Suspense>
-
-            // Sync progress banner
-            {move || if syncing.get() {
-                view! {
-                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3">
-                        <svg class="animate-spin h-4 w-4 text-blue-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                        </svg>
-                        <span class="text-blue-400 text-sm">"Syncing matches from Riot API... This may take a moment."</span>
-                    </div>
-                }.into_any()
-            } else {
-                view! { <div></div> }.into_any()
-            }}
-
-            // Sync result
-            {move || sync_result.get().map(|r| match r {
-                Ok(msg) => view! {
-                    <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-emerald-400 text-sm">{msg}</div>
-                }.into_any(),
-                Err(msg) => view! {
-                    <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm">{msg}</div>
-                }.into_any(),
-            })}
-
-            // All / Team toggle (always visible)
-            <div class="flex items-center gap-3">
-                <div class="flex rounded-lg overflow-hidden border border-outline/50">
-                    <button
-                        class=move || if show_all.get() {
-                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
-                        } else {
-                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
+                            view! { <div></div> }.into_any()
                         }
-                        on:click=move |_| set_show_all.set(true)
-                    >"All Matches"</button>
-                    <button
-                        class=move || if !show_all.get() {
-                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast"
-                        } else {
-                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors"
-                        }
-                        on:click=move |_| set_show_all.set(false)
-                    >"Team Games"</button>
-                </div>
-                <span class="text-dimmed text-xs">
-                    {move || if show_all.get() {
-                        "Showing all matches including solo queue"
-                    } else {
-                        "Showing games with 2+ team members"
-                    }}
-                </span>
-            </div>
+                    })}
+                </Suspense>
 
-            // Stats content
-            <Suspense fallback=|| view! {
-                <div class="flex flex-col gap-2">
-                    <SkeletonCard height="h-14" />
-                    <SkeletonCard height="h-14" />
-                    <SkeletonCard height="h-14" />
-                    <SkeletonCard height="h-14" />
-                    <SkeletonCard height="h-14" />
-                </div>
-            }>
-                {move || stats.get().map(|result| match result {
-                    Err(e) => view! {
-                        <ErrorBanner message=format!("Failed to load stats: {e}") />
+                // Sync progress banner
+                {move || if syncing.get() {
+                    view! {
+                        <div class="bg-info/10 border border-info/30 rounded-xl p-3 flex items-center gap-3" role="status" aria-live="polite">
+                            <svg class="animate-spin h-4 w-4 text-info flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            <span class="text-info text-sm">"Syncing matches from Riot API... This may take a moment."</span>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+
+                // Sync result
+                {move || sync_result.get().map(|r| match r {
+                    Ok(msg) => view! {
+                        <div class="bg-success/10 border border-success/30 rounded-xl p-3 text-success text-sm" role="status">{msg}</div>
                     }.into_any(),
-                    Ok(rows) if rows.is_empty() => {
-                        let user_has_team = has_team.get().unwrap_or(false);
-                        if user_has_team {
+                    Err(msg) => view! {
+                        <div class="bg-danger/10 border border-danger/30 rounded-xl p-3 text-danger text-sm" role="alert">{msg}</div>
+                    }.into_any(),
+                })}
+
+                // All / Team toggle (always visible)
+                <div class="flex items-center gap-3">
+                    <div class="flex rounded-lg overflow-hidden border border-outline/50">
+                        <button
+                            class=move || if show_all.get() {
+                                "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            } else {
+                                "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            }
+                            on:click=move |_| set_show_all.set(true)
+                        >"All Matches"</button>
+                        <button
+                            class=move || if !show_all.get() {
+                                "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            } else {
+                                "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            }
+                            on:click=move |_| set_show_all.set(false)
+                        >"Team Games"</button>
+                    </div>
+                    <span class="text-dimmed text-xs">
+                        {move || if show_all.get() {
+                            "Showing all matches including solo queue"
+                        } else {
+                            "Showing games with 2+ team members"
+                        }}
+                    </span>
+                </div>
+
+                // Stats content
+                <Suspense fallback=|| view! {
+                    <div class="flex flex-col gap-2">
+                        <SkeletonCard height="h-14" />
+                        <SkeletonCard height="h-14" />
+                        <SkeletonCard height="h-14" />
+                        <SkeletonCard height="h-14" />
+                        <SkeletonCard height="h-14" />
+                    </div>
+                }>
+                    {move || stats.get().map(|result| match result {
+                        Err(e) => view! {
+                            <ErrorBanner message=format!("Failed to load stats: {e}") />
+                        }.into_any(),
+                        Ok(rows) if rows.is_empty() => {
+                            let user_has_team = has_team.get().unwrap_or(false);
+                            if user_has_team {
+                                view! {
+                                    <EmptyState
+                                        icon="\u{2756}"
+                                        message="No match stats yet — link your Riot account and play some games to see stats here"
+                                        cta_label="Link Riot Account"
+                                        cta_href="/profile"
+                                    />
+                                }.into_any()
+                            } else {
+                                view! { <NoTeamState /> }.into_any()
+                            }
+                        },
+                        Ok(rows) => {
+                            let all_matches = group_matches(&rows);
+                            let unique_players: Vec<String> = {
+                                let mut seen = HashSet::new();
+                                rows.iter()
+                                    .filter(|r| seen.insert(r.username.clone()))
+                                    .map(|r| r.username.clone())
+                                    .collect()
+                            };
+                            let roster_size = unique_players.len();
+
                             view! {
-                                <EmptyState
-                                    icon="📊"
-                                    message="No match stats yet — link your Riot account and play some games to see stats here"
-                                    cta_label="Link Riot Account"
-                                    cta_href="/profile"
+                                <StatsContent
+                                    all_matches=all_matches
+                                    unique_players=unique_players
+                                    roster_size=roster_size
+                                    min_players=min_players
+                                    set_min_players=set_min_players
+                                    filter_player=filter_player
+                                    set_filter_player=set_filter_player
+                                    filter_queue=filter_queue
+                                    set_filter_queue=set_filter_queue
+                                    show_all=show_all
                                 />
                             }.into_any()
-                        } else {
-                            view! { <NoTeamState /> }.into_any()
                         }
-                    },
-                    Ok(rows) => {
-                        let all_matches = group_matches(&rows);
-                        let unique_players: Vec<String> = {
-                            let mut seen = HashSet::new();
-                            rows.iter()
-                                .filter(|r| seen.insert(r.username.clone()))
-                                .map(|r| r.username.clone())
-                                .collect()
-                        };
-                        let roster_size = unique_players.len();
+                    })}
+                </Suspense>
 
-                        view! {
-                            <StatsContent
-                                all_matches=all_matches
-                                unique_players=unique_players
-                                roster_size=roster_size
-                                min_players=min_players
-                                set_min_players=set_min_players
-                                filter_player=filter_player
-                                set_filter_player=set_filter_player
-                                filter_queue=filter_queue
-                                set_filter_queue=set_filter_queue
-                                show_all=show_all
-                            />
-                        }.into_any()
-                    }
-                })}
-            </Suspense>
-
-            // Champion Trends (below match history)
-            <ChampionTrendsSection />
+                // Champion Trends (below match history)
+                <ChampionTrendsSection />
+            </div>
         </div>
+    }
+}
+
+/// Imperial display headline: "A week of {wins} victories and {losses} defeats."
+#[component]
+fn BattleLogHeadline(
+    stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <Suspense fallback=move || view! {
+            <h1 class="font-display italic text-primary text-[40px] sm:text-[56px] leading-tight">
+                "Battle log"
+            </h1>
+        }>
+            {move || {
+                let (wins, losses) = match stats.get() {
+                    Some(Ok(rows)) => {
+                        let groups = group_matches(&rows);
+                        let w = groups.iter().filter(|g| g.win).count();
+                        let l = groups.len() - w;
+                        (w, l)
+                    }
+                    _ => (0_usize, 0_usize),
+                };
+                view! {
+                    <h1 class="font-display italic text-primary text-[40px] sm:text-[56px] leading-tight">
+                        "A week of "
+                        <span class="text-success">{format!("{wins} victories")}</span>
+                        " and "
+                        <span class="text-danger">{format!("{losses} defeats")}</span>
+                        "."
+                    </h1>
+                }.into_any()
+            }}
+        </Suspense>
     }
 }
 
@@ -523,8 +574,8 @@ fn StatsContent(
     let all_matches = StoredValue::new(all_matches);
     let unique_players_for_filter = unique_players.clone();
 
-    // Expanded match detail (Task 3)
-    let expanded_match: RwSignal<Option<String>> = RwSignal::new(None);
+    // Selected match for the right-rail folio recap.
+    let selected_match: RwSignal<Option<String>> = RwSignal::new(None);
 
     let filtered = move || {
         let min = min_players.get();
@@ -593,17 +644,30 @@ fn StatsContent(
         (total_games.to_string(), wr, avg_kda, avg_duration)
     };
 
+    // Auto-select the first match for folio recap when filtered results change.
+    Effect::new(move |_| {
+        let matches = filtered();
+        let current = selected_match.get_untracked();
+        let still_visible = current
+            .as_ref()
+            .map(|id| matches.iter().any(|m| &m.riot_match_id == id))
+            .unwrap_or(false);
+        if !still_visible {
+            selected_match.set(matches.first().map(|m| m.riot_match_id.clone()));
+        }
+    });
+
     view! {
         <div class="flex flex-col gap-6">
             // Filters
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
-                <span class="text-muted text-sm font-medium">"Filters:"</span>
+                <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filters"</span>
 
                 // Queue type filter
                 <div class="flex items-center gap-2">
                     <span class="text-secondary text-sm">"Queue:"</span>
                     <select
-                        class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
+                        class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                         on:change=move |ev| {
                             let v: i32 = event_target_value(&ev).parse().unwrap_or(0);
                             set_filter_queue.set(v);
@@ -619,11 +683,11 @@ fn StatsContent(
                 // Min players dropdown (hidden when showing all matches)
                 {move || if !show_all.get() {
                     view! {
-                        <span class="text-overlay-strong">"|"</span>
+                        <span class="text-overlay-strong" aria-hidden="true">"|"</span>
                         <div class="flex items-center gap-2">
                             <span class="text-secondary text-sm">"Min. players:"</span>
                             <select
-                                class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
+                                class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 on:change=move |ev| {
                                     let v: usize = event_target_value(&ev).parse().unwrap_or(2);
                                     set_min_players.set(v);
@@ -644,11 +708,11 @@ fn StatsContent(
                     view! { <div></div> }.into_any()
                 }}
 
-                <span class="text-overlay-strong">"|"</span>
+                <span class="text-overlay-strong" aria-hidden="true">"|"</span>
 
                 // Player filter
                 <select
-                    class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus:outline-none focus:border-accent/50"
+                    class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                     on:change=move |ev| set_filter_player.set(event_target_value(&ev))
                 >
                     <option value="">"All Players"</option>
@@ -658,7 +722,7 @@ fn StatsContent(
                     }).collect_view()}
                 </select>
 
-                <span class="text-dimmed text-xs ml-auto">
+                <span class="text-dimmed text-xs ml-auto tabular-nums">
                     {move || {
                         let (total, _, _, _) = computed_stats();
                         format!("{total} matches")
@@ -670,7 +734,7 @@ fn StatsContent(
             {move || {
                 let (total, wr, kda, duration) = computed_stats();
                 view! {
-                    <div class="grid grid-cols-4 gap-4">
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <StatCard label="Games".to_string() value=total />
                         <StatCard label="Win Rate".to_string() value=wr />
                         <StatCard label="Avg KDA".to_string() value=kda />
@@ -679,234 +743,340 @@ fn StatsContent(
                 }
             }}
 
-            // Match list (Task 2: OP.GG-style layout)
-            <div>
-                <h2 class="text-primary font-semibold text-lg mb-3">"Match History"</h2>
-                <div class="flex flex-col gap-1.5">
-                    {move || {
-                        let matches = filtered();
-                        if matches.is_empty() {
-                            return view! {
-                                <p class="text-dimmed text-sm py-4 text-center">"No matches match current filters."</p>
-                            }.into_any();
-                        }
-                        let expanded = expanded_match.get();
-                        view! {
-                            <div class="flex flex-col gap-1.5">
-                                {matches.into_iter().map(|m| {
-                                    let riot_id = m.riot_match_id.clone();
-                                    let riot_id_click = riot_id.clone();
-                                    let riot_id_expand = riot_id.clone();
-                                    let is_expanded = expanded.as_ref() == Some(&riot_id);
-                                    let win = m.win;
-                                    let date = format_date(&m.game_end);
-                                    let duration = format_duration(m.game_duration);
-                                    let player_count = m.players.len();
-                                    let q_label = queue_label(m.queue_id);
+            // Two-column layout: 1.4fr battle log + 1fr folio recap
+            <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8 items-start">
+                // Battle log column
+                <div class="bg-elevated border border-divider rounded-xl p-6">
+                    <div class="flex items-baseline justify-between mb-4">
+                        <span class="font-imperial uppercase tracking-wider text-xs text-muted">
+                            "Battle log"
+                        </span>
+                        <span class="font-mono text-xs text-dimmed tabular-nums">
+                            {move || {
+                                let (total, wr, _, _) = computed_stats();
+                                format!("{total} matches · {wr}")
+                            }}
+                        </span>
+                    </div>
+                    <div class="flex flex-col">
+                        {move || {
+                            let matches = filtered();
+                            if matches.is_empty() {
+                                return view! {
+                                    <p class="text-dimmed text-sm py-8 text-center">"No matches match current filters."</p>
+                                }.into_any();
+                            }
+                            let active = selected_match.get();
+                            view! {
+                                <div class="flex flex-col">
+                                    {matches.into_iter().enumerate().map(|(idx, m)| {
+                                        let riot_id = m.riot_match_id.clone();
+                                        let riot_id_click = riot_id.clone();
+                                        let is_active = active.as_ref() == Some(&riot_id);
+                                        let win = m.win;
+                                        let date = format_date(&m.game_end);
+                                        let duration = format_duration(m.game_duration);
+                                        let player_count = m.players.len();
+                                        let q_label = queue_label(m.queue_id);
 
-                                    // For the summary row, show the "primary" player
-                                    // (first player alphabetically, or just the first)
-                                    let first_player = m.players.first().cloned();
-                                    let players_for_detail = m.players.clone();
+                                        // Use the primary (first) player for the row summary
+                                        let first_player = m.players.first().cloned();
 
-                                    // Aggregate team KDA for the match
-                                    let total_kills: i32 = m.players.iter().map(|p| p.kills).sum();
-                                    let total_deaths: i32 = m.players.iter().map(|p| p.deaths).sum();
-                                    let total_assists: i32 = m.players.iter().map(|p| p.assists).sum();
+                                        // Aggregate team KDA
+                                        let total_kills: i32 = m.players.iter().map(|p| p.kills).sum();
+                                        let total_deaths: i32 = m.players.iter().map(|p| p.deaths).sum();
+                                        let total_assists: i32 = m.players.iter().map(|p| p.assists).sum();
 
-                                    // Background tint based on win/loss
-                                    let row_bg = if win {
-                                        "bg-blue-900/20 border border-blue-500/20 hover:bg-blue-900/30"
-                                    } else {
-                                        "bg-red-900/20 border border-red-500/20 hover:bg-red-900/30"
-                                    };
+                                        // 6-cell grid: 8px result bar | 56px champ tile | 1fr meta | 130px KDA | 80px dur | 24px chevron
+                                        let row_class = if is_active {
+                                            "grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-4 items-center py-4 px-3 -mx-3 border-b border-divider/30 last:border-b-0 bg-accent-soft cursor-pointer transition-all duration-200 text-left rounded-md focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        } else {
+                                            "grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-4 items-center py-4 px-3 -mx-3 border-b border-divider/30 last:border-b-0 hover:bg-overlay/30 cursor-pointer transition-all duration-200 text-left focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        };
+                                        let bar_class = if win { "bg-success self-stretch rounded-sm" } else { "bg-danger self-stretch rounded-sm" };
+                                        let result_word = if win { "Victory" } else { "Defeat" };
+                                        let result_color = if win { "text-success" } else { "text-danger" };
+                                        let chevron = if is_active { "\u{25BC}" } else { "\u{25B6}" };
+                                        let _ = idx;
 
-                                    let result_badge_cls = if win {
-                                        "bg-blue-500/20 text-blue-400 text-xs font-bold px-2 py-0.5 rounded"
-                                    } else {
-                                        "bg-red-500/20 text-red-400 text-xs font-bold px-2 py-0.5 rounded"
-                                    };
-                                    let result_text = if win { "WIN" } else { "LOSS" };
-
-                                    view! {
-                                        <div>
-                                            // Match summary row
-                                            <div
-                                                class=format!("{row_bg} rounded-lg px-4 py-3 cursor-pointer transition-colors")
+                                        view! {
+                                            <button
+                                                type="button"
+                                                class=row_class
                                                 on:click=move |_| {
-                                                    let current = expanded_match.get_untracked();
-                                                    if current.as_ref() == Some(&riot_id_click) {
-                                                        expanded_match.set(None);
-                                                    } else {
-                                                        expanded_match.set(Some(riot_id_click.clone()));
+                                                    let cur = selected_match.get_untracked();
+                                                    if cur.as_ref() == Some(&riot_id_click) {
+                                                        // Re-clicking the active row keeps it open (toggle off would hide the recap)
+                                                        return;
                                                     }
+                                                    selected_match.set(Some(riot_id_click.clone()));
                                                 }
                                             >
-                                                <div class="flex items-center gap-4">
-                                                    // Left: Champion icon + name (from first player)
-                                                    {first_player.map(|fp| {
-                                                        let icon_url = champion_icon_url(&fp.champion);
-                                                        let champ_name = fp.champion.clone();
-                                                        let kda_str = format!("{}/{}/{}", fp.kills, fp.deaths, fp.assists);
-                                                        let kda_ratio = if fp.deaths == 0 {
-                                                            "Perfect".to_string()
-                                                        } else {
-                                                            format!("{:.2}", (fp.kills + fp.assists) as f64 / fp.deaths as f64)
-                                                        };
-                                                        view! {
-                                                            <div class="flex items-center gap-3 min-w-[200px]">
-                                                                <img
-                                                                    src=icon_url
-                                                                    alt=champ_name.clone()
-                                                                    class="w-10 h-10 rounded-lg"
-                                                                />
-                                                                <div>
-                                                                    <div class="text-primary text-sm font-medium">{champ_name}</div>
-                                                                    <div class="text-secondary text-xs">{fp.username}</div>
-                                                                </div>
-                                                            </div>
+                                                // Cell 1: result bar
+                                                <div class=bar_class aria-hidden="true"></div>
 
-                                                            // KDA
-                                                            <div class="min-w-[100px] text-center">
-                                                                <div class="text-primary text-sm font-semibold">{kda_str}</div>
-                                                                <div class="text-muted text-xs">{format!("{kda_ratio} KDA")}</div>
-                                                            </div>
+                                                // Cell 2: champion tile (56px)
+                                                {first_player.as_ref().map(|fp| {
+                                                    let icon_url = champion_icon_url(&fp.champion);
+                                                    let champ = fp.champion.clone();
+                                                    view! {
+                                                        <img
+                                                            src=icon_url
+                                                            alt=champ
+                                                            class="w-12 h-12 rounded-lg border border-divider/50 object-cover"
+                                                        />
+                                                    }
+                                                })}
 
-                                                            // CS + Vision
-                                                            <div class="min-w-[80px] text-center">
-                                                                <div class="text-secondary text-sm">{format!("{} CS", fp.cs)}</div>
-                                                                <div class="text-dimmed text-xs">{format!("{} vis", fp.vision_score)}</div>
-                                                            </div>
-
-                                                            // Damage
-                                                            <div class="min-w-[70px] text-center">
-                                                                <div class="text-secondary text-sm">{format_damage(fp.damage)}</div>
-                                                                <div class="text-dimmed text-xs">"dmg"</div>
-                                                            </div>
-                                                        }
-                                                    })}
-
-                                                    // Team KDA (if multiple players)
-                                                    {if player_count > 1 {
-                                                        view! {
-                                                            <div class="min-w-[80px] text-center border-l border-divider/30 pl-4">
-                                                                <div class="text-secondary text-xs">"Team"</div>
-                                                                <div class="text-primary text-sm font-medium">{format!("{total_kills}/{total_deaths}/{total_assists}")}</div>
-                                                            </div>
-                                                        }.into_any()
-                                                    } else {
-                                                        view! { <div></div> }.into_any()
-                                                    }}
-
-                                                    // Right: Win/Loss badge, duration, date, queue
-                                                    <div class="ml-auto flex items-center gap-3 text-right">
-                                                        <div>
-                                                            <span class=result_badge_cls>{result_text}</span>
-                                                        </div>
-                                                        <div class="min-w-[60px]">
-                                                            <div class="text-secondary text-sm">{duration}</div>
-                                                            <div class="text-dimmed text-xs">{date}</div>
-                                                        </div>
-                                                        <div class="min-w-[60px]">
-                                                            <div class="text-muted text-xs">{q_label}</div>
-                                                            <div class={
-                                                                if player_count >= 5 {
-                                                                    "text-emerald-400/70 text-xs font-medium"
+                                                // Cell 3: meta (champion name + queue + duration + result word)
+                                                {first_player.as_ref().map(|fp| {
+                                                    let champ = fp.champion.clone();
+                                                    let username = fp.username.clone();
+                                                    view! {
+                                                        <div class="min-w-0">
+                                                            <div class="flex items-baseline gap-2 flex-wrap">
+                                                                <span class=format!("font-imperial uppercase tracking-wider text-[10px] {result_color}")>{result_word}</span>
+                                                                <span class="font-mono text-[11px] text-dimmed tabular-nums">{duration.clone()}</span>
+                                                                <span class="font-mono text-[11px] text-dimmed">"·"</span>
+                                                                <span class="font-mono text-[11px] text-dimmed">{q_label}</span>
+                                                                {if player_count > 1 {
+                                                                    view! {
+                                                                        <span class="font-mono text-[11px] text-dimmed">
+                                                                            {format!("· {player_count}p")}
+                                                                        </span>
+                                                                    }.into_any()
                                                                 } else {
-                                                                    "text-dimmed text-xs"
-                                                                }
-                                                            }>
-                                                                {format!("{player_count}p")}
+                                                                    view! { <span></span> }.into_any()
+                                                                }}
+                                                            </div>
+                                                            <div class="font-display italic text-secondary text-sm mt-1 truncate">
+                                                                {format!("\"{champ} · {username}\"")}
                                                             </div>
                                                         </div>
-                                                        // Expand indicator
-                                                        <span class="text-dimmed text-xs">
-                                                            {if is_expanded { "^" } else { "v" }}
-                                                        </span>
-                                                        // Detail link
-                                                        <a
-                                                            href=format!("/match/{}", riot_id)
-                                                            class="text-accent text-xs hover:text-accent-hover cursor-pointer transition-colors"
-                                                            on:click=|ev: web_sys::MouseEvent| ev.stop_propagation()
-                                                        >
-                                                            "Details"
-                                                        </a>
+                                                    }
+                                                })}
+
+                                                // Cell 4: KDA (130px)
+                                                {first_player.as_ref().map(|fp| {
+                                                    let kda_str = format!("{}/{}/{}", fp.kills, fp.deaths, fp.assists);
+                                                    let team_str = if player_count > 1 {
+                                                        Some(format!("team {total_kills}/{total_deaths}/{total_assists}"))
+                                                    } else {
+                                                        None
+                                                    };
+                                                    view! {
+                                                        <div class="text-right">
+                                                            <div class="font-mono text-sm text-primary tabular-nums">{kda_str}</div>
+                                                            <div class="font-imperial uppercase tracking-wider text-[9px] text-muted mt-0.5">"K/D/A"</div>
+                                                            {team_str.map(|s| view! {
+                                                                <div class="font-mono text-[10px] text-dimmed mt-0.5 tabular-nums">{s}</div>
+                                                            })}
+                                                        </div>
+                                                    }
+                                                })}
+
+                                                // Cell 5: damage (80px)
+                                                {first_player.as_ref().map(|fp| {
+                                                    let dmg = format_damage(fp.damage);
+                                                    view! {
+                                                        <div class="text-right">
+                                                            <div class="font-mono text-sm text-secondary tabular-nums">{dmg}</div>
+                                                            <div class="text-dimmed text-[10px] mt-0.5">"dmg · " {date.clone()}</div>
+                                                        </div>
+                                                    }
+                                                })}
+
+                                                // Cell 6: chevron (24px)
+                                                <span class=move || if is_active {
+                                                    "text-accent text-xs text-center"
+                                                } else {
+                                                    "text-dimmed text-xs text-center"
+                                                } aria-hidden="true">{chevron}</span>
+                                            </button>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            }.into_any()
+                        }}
+                    </div>
+                </div>
+
+                // Folio recap column (right rail, sticky)
+                <div class="lg:sticky lg:top-24 self-start flex flex-col gap-4">
+                    {move || {
+                        let matches = filtered();
+                        let active_id = selected_match.get();
+                        let active_match = active_id
+                            .as_ref()
+                            .and_then(|id| matches.iter().find(|m| &m.riot_match_id == id).cloned());
+
+                        match active_match {
+                            None => view! {
+                                <div class="bg-elevated border border-divider rounded-xl p-6 text-center">
+                                    <span class="font-imperial uppercase tracking-wider text-[10px] text-muted">"Folio recap"</span>
+                                    <p class="text-dimmed text-sm mt-3">"Select a match to read the recap."</p>
+                                </div>
+                            }.into_any(),
+                            Some(m) => {
+                                let win = m.win;
+                                let result_word = if win { "Victory" } else { "Defeat" };
+                                let result_color = if win { "text-success" } else { "text-danger" };
+                                let primary = m.players.first().cloned();
+                                let players_for_detail = m.players.clone();
+                                let q_label = queue_label(m.queue_id);
+                                let duration = format_duration(m.game_duration);
+                                let date = format_date(&m.game_end);
+                                let player_count = m.players.len();
+                                let total_kills: i32 = m.players.iter().map(|p| p.kills).sum();
+                                let total_deaths: i32 = m.players.iter().map(|p| p.deaths).sum();
+                                let total_assists: i32 = m.players.iter().map(|p| p.assists).sum();
+                                let detail_href = format!("/match/{}", m.riot_match_id);
+
+                                view! {
+                                    <div class="bg-elevated border border-divider rounded-xl p-6 transition-all duration-200">
+                                        <div class="flex items-baseline justify-between mb-4">
+                                            <span class=format!("font-imperial uppercase tracking-wider text-[10px] {result_color}")>
+                                                {format!("{result_word} · folio")}
+                                            </span>
+                                            <span class="font-mono text-[11px] text-dimmed truncate max-w-[140px]">
+                                                {format!("match {}", m.riot_match_id)}
+                                            </span>
+                                        </div>
+
+                                        // Hero: champ tile + name + meta
+                                        {primary.as_ref().map(|fp| {
+                                            let icon_url = champion_icon_url(&fp.champion);
+                                            let champ = fp.champion.clone();
+                                            let username = fp.username.clone();
+                                            view! {
+                                                <div class="flex items-center gap-4 mb-4">
+                                                    <img src=icon_url alt=champ.clone() class="w-16 h-16 rounded-lg border border-outline/50 object-cover" />
+                                                    <div class="min-w-0">
+                                                        <div class="font-display italic text-primary text-2xl leading-tight truncate">
+                                                            {champ}
+                                                        </div>
+                                                        <div class="font-mono text-xs text-secondary mt-1 truncate">
+                                                            {format!("{username} · {q_label} · {duration}")}
+                                                        </div>
+                                                        <div class="font-mono text-[11px] text-dimmed mt-0.5">{date.clone()}</div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            }
+                                        })}
 
-                                            // Task 3: Expandable match detail panel
-                                            {if is_expanded {
-                                                let detail_bg = if win {
-                                                    "bg-blue-950/30 border border-blue-500/10"
-                                                } else {
-                                                    "bg-red-950/30 border border-red-500/10"
-                                                };
-                                                view! {
-                                                    <div class=format!("{detail_bg} rounded-b-lg px-4 py-3 -mt-0.5")>
-                                                        <div class="text-muted text-xs font-medium mb-2 flex items-center justify-between">
-                                                            <span>{format!("Match ID: {}", riot_id_expand)}</span>
-                                                            <span>{format!("{player_count} team members in this game")}</span>
-                                                        </div>
-                                                        // Scoreboard table
-                                                        <table class="w-full text-sm">
-                                                            <thead>
-                                                                <tr class="text-muted text-xs border-b border-divider/30">
-                                                                    <th class="text-left py-1.5 font-medium">"Player"</th>
-                                                                    <th class="text-left py-1.5 font-medium">"Champion"</th>
-                                                                    <th class="text-center py-1.5 font-medium">"KDA"</th>
-                                                                    <th class="text-center py-1.5 font-medium">"CS"</th>
-                                                                    <th class="text-center py-1.5 font-medium">"Vision"</th>
-                                                                    <th class="text-center py-1.5 font-medium">"Damage"</th>
-                                                                    <th class="text-center py-1.5 font-medium">"Result"</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {players_for_detail.into_iter().map(|p| {
-                                                                    let icon_url = champion_icon_url(&p.champion);
-                                                                    let kda_str = format!("{}/{}/{}", p.kills, p.deaths, p.assists);
-                                                                    let kda_ratio = if p.deaths == 0 {
-                                                                        "Perfect".to_string()
-                                                                    } else {
-                                                                        format!("{:.2}", (p.kills + p.assists) as f64 / p.deaths as f64)
-                                                                    };
-                                                                    let p_result_cls = if p.win { "text-blue-400" } else { "text-red-400" };
-                                                                    let p_result = if p.win { "Win" } else { "Loss" };
-                                                                    view! {
-                                                                        <tr class="border-b border-divider/20 last:border-0">
-                                                                            <td class="py-2 text-primary font-medium">{p.username}</td>
-                                                                            <td class="py-2">
-                                                                                <div class="flex items-center gap-2">
-                                                                                    <img src=icon_url alt=p.champion.clone() class="w-6 h-6 rounded" />
-                                                                                    <span class="text-primary">{p.champion}</span>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td class="py-2 text-center">
-                                                                                <div class="text-primary">{kda_str}</div>
-                                                                                <div class="text-dimmed text-xs">{format!("{kda_ratio} KDA")}</div>
-                                                                            </td>
-                                                                            <td class="py-2 text-center text-secondary">{p.cs}</td>
-                                                                            <td class="py-2 text-center text-secondary">{p.vision_score}</td>
-                                                                            <td class="py-2 text-center text-secondary">{format_damage(p.damage)}</td>
-                                                                            <td class=format!("py-2 text-center font-medium {p_result_cls}")>{p_result}</td>
-                                                                        </tr>
-                                                                    }
-                                                                }).collect_view()}
-                                                            </tbody>
-                                                        </table>
+                                        // Folio stats
+                                        {primary.as_ref().map(|fp| {
+                                            let kda_str = format!("{}/{}/{}", fp.kills, fp.deaths, fp.assists);
+                                            let cs_str = fp.cs.to_string();
+                                            let dmg_str = format_damage(fp.damage);
+                                            let vis_str = fp.vision_score.to_string();
+                                            view! {
+                                                <div class="grid grid-cols-3 gap-2 mb-4">
+                                                    <FolioStat label="K/D/A".to_string() value=kda_str />
+                                                    <FolioStat label="CS".to_string() value=cs_str />
+                                                    <FolioStat label="Damage".to_string() value=dmg_str />
+                                                    <FolioStat label="Vision".to_string() value=vis_str />
+                                                    <FolioStat label="Players".to_string() value=player_count.to_string() />
+                                                    <FolioStatTone
+                                                        label="Result".to_string()
+                                                        value={if win { "Won".to_string() } else { "Lost".to_string() }}
+                                                        tone={if win { "text-success" } else { "text-danger" }}
+                                                    />
+                                                </div>
+                                            }
+                                        })}
+
+                                        // Team note when multiple roster members played
+                                        {if player_count > 1 {
+                                            view! {
+                                                <div class="bg-accent-soft border-l-[3px] border-accent rounded-r p-3 mb-4">
+                                                    <span class="font-imperial uppercase tracking-wider text-[9px] text-accent">"Team line"</span>
+                                                    <div class="font-display italic text-primary text-sm mt-1">
+                                                        {format!("{player_count} roster members · combined {total_kills}/{total_deaths}/{total_assists}")}
                                                     </div>
-                                                }.into_any()
-                                            } else {
-                                                view! { <div></div> }.into_any()
-                                            }}
-                                        </div>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        }.into_any()
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }}
+
+                                        // CTA
+                                        <a
+                                            href=detail_href
+                                            class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        >
+                                            "Open match detail"
+                                        </a>
+                                    </div>
+
+                                    // Companion card: full team scoreboard for this match
+                                    {if player_count > 1 {
+                                        view! {
+                                            <div class="bg-elevated border border-divider rounded-xl p-6">
+                                                <span class="font-imperial uppercase tracking-wider text-[10px] text-muted">"Roster line"</span>
+                                                <table class="w-full mt-3 text-sm">
+                                                    <thead>
+                                                        <tr class="border-b border-divider/30 text-muted text-[10px] uppercase tracking-wider">
+                                                            <th class="text-left py-1.5 font-normal">"Player"</th>
+                                                            <th class="text-left py-1.5 font-normal">"Champion"</th>
+                                                            <th class="text-right py-1.5 font-normal">"K/D/A"</th>
+                                                            <th class="text-right py-1.5 font-normal">"Result"</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {players_for_detail.into_iter().map(|p| {
+                                                            let icon_url = champion_icon_url(&p.champion);
+                                                            let kda_str = format!("{}/{}/{}", p.kills, p.deaths, p.assists);
+                                                            let p_result_cls = if p.win { "text-success" } else { "text-danger" };
+                                                            let p_result = if p.win { "Won" } else { "Lost" };
+                                                            view! {
+                                                                <tr class="border-b border-divider/20 last:border-0">
+                                                                    <td class="py-2 text-primary text-sm">{p.username}</td>
+                                                                    <td class="py-2">
+                                                                        <div class="flex items-center gap-2">
+                                                                            <img src=icon_url alt=p.champion.clone() class="w-6 h-6 rounded" />
+                                                                            <span class="text-secondary text-sm">{p.champion}</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td class="py-2 text-right font-mono text-sm text-primary tabular-nums">{kda_str}</td>
+                                                                    <td class=format!("py-2 text-right font-imperial uppercase tracking-wider text-[10px] {p_result_cls}")>{p_result}</td>
+                                                                </tr>
+                                                            }
+                                                        }).collect_view()}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span></span> }.into_any()
+                                    }}
+                                }.into_any()
+                            }
+                        }
                     }}
                 </div>
             </div>
+        </div>
+    }
+}
+
+#[component]
+fn FolioStat(label: String, value: String) -> impl IntoView {
+    view! {
+        <div class="bg-surface border border-outline/50 rounded-md px-3 py-2.5">
+            <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">{label}</span>
+            <div class="font-mono text-base text-primary mt-1 tabular-nums">{value}</div>
+        </div>
+    }
+}
+
+#[component]
+fn FolioStatTone(label: String, value: String, tone: &'static str) -> impl IntoView {
+    let value_class = format!("font-mono text-base mt-1 tabular-nums {tone}");
+    view! {
+        <div class="bg-surface border border-outline/50 rounded-md px-3 py-2.5">
+            <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">{label}</span>
+            <div class=value_class>{value}</div>
         </div>
     }
 }
@@ -989,9 +1159,9 @@ fn ChampionTrendsSection() -> impl IntoView {
         view! {
             <button
                 class=move || if active() {
-                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 } else {
-                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 }
                 on:click=move |_| trends_window.set(w)
             >{w}</button>
@@ -1002,15 +1172,15 @@ fn ChampionTrendsSection() -> impl IntoView {
         let is_active = move || sort_col.get() == target;
         let arrow = move || {
             if is_active() {
-                if sort_dir_desc.get() { " ▾" } else { " ▴" }
+                if sort_dir_desc.get() { " \u{25BE}" } else { " \u{25B4}" }
             } else {
-                " ▾"
+                " \u{25BE}"
             }
         };
         view! {
             <th
                 class=move || format!(
-                    "px-3 py-2 text-left text-xs font-normal uppercase tracking-wider cursor-pointer select-none transition-colors {}",
+                    "px-3 py-2 text-left text-xs font-normal uppercase tracking-wider cursor-pointer select-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none {}",
                     if is_active() { "text-secondary" } else { "text-muted hover:text-secondary opacity-70" }
                 )
                 on:click=move |_| on_header_click(target)
@@ -1021,9 +1191,12 @@ fn ChampionTrendsSection() -> impl IntoView {
     };
 
     view! {
-        <div class="bg-surface border border-divider rounded-xl p-6 flex flex-col gap-4 mt-6">
+        <div class="bg-surface border border-divider rounded-xl p-6 flex flex-col gap-4 mt-2">
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-primary">"Champion Trends"</h2>
+                <div class="flex flex-col gap-1">
+                    <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Champion trends"</span>
+                    <h2 class="font-display italic text-primary text-2xl">"The week's pattern"</h2>
+                </div>
                 <div class="flex items-center gap-2">
                     {render_pill("7d")}
                     {render_pill("30d")}
@@ -1062,7 +1235,7 @@ fn ChampionTrendsSection() -> impl IntoView {
                                                     <tr>
                                                         <td colspan="6" class="py-6 text-center text-muted text-sm">
                                                             "All champions hidden by min-games filter. "
-                                                            <button class="text-accent hover:text-accent-hover text-sm cursor-pointer"
+                                                            <button class="text-accent hover:text-accent-hover text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
                                                                     on:click=move |_| show_all.set(true)>
                                                                 "Show all"
                                                             </button>
@@ -1085,7 +1258,7 @@ fn ChampionTrendsSection() -> impl IntoView {
                                 </table>
                             </div>
                             <div class="flex justify-end">
-                                <button class="text-accent hover:text-accent-hover text-xs font-normal transition-colors cursor-pointer"
+                                <button class="text-accent hover:text-accent-hover text-xs font-normal transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
                                         on:click=move |_| show_all.update(|v| *v = !*v)>
                                     {move || if show_all.get() {
                                         "Hide low sample (< 3 games)"
@@ -1124,11 +1297,11 @@ fn ChampionTrendRow(trend: ChampionTrend) -> impl IntoView {
                     <span>{champion_for_label}</span>
                 </div>
             </td>
-            <td class="px-3 py-2.5 text-center text-sm text-secondary">{trend.games}</td>
-            <td class="px-3 py-2.5 text-center text-sm text-secondary">{format!("{:.1}%", win_pct)}</td>
-            <td class="px-3 py-2.5 text-center text-sm font-semibold text-primary">{format!("{:.1}", trend.avg_kda)}</td>
-            <td class="px-3 py-2.5 text-center text-sm text-secondary">{format!("{:.1}", trend.cs_per_min)}</td>
-            <td class="px-3 py-2.5 pr-3 text-right text-sm text-secondary">{format_damage(trend.avg_damage)}</td>
+            <td class="px-3 py-2.5 text-center text-sm text-secondary tabular-nums">{trend.games}</td>
+            <td class="px-3 py-2.5 text-center text-sm text-secondary tabular-nums">{format!("{:.1}%", win_pct)}</td>
+            <td class="px-3 py-2.5 text-center text-sm font-semibold text-primary tabular-nums">{format!("{:.1}", trend.avg_kda)}</td>
+            <td class="px-3 py-2.5 text-center text-sm text-secondary tabular-nums">{format!("{:.1}", trend.cs_per_min)}</td>
+            <td class="px-3 py-2.5 pr-3 text-right text-sm text-secondary tabular-nums">{format_damage(trend.avg_damage)}</td>
         </tr>
     }
 }
