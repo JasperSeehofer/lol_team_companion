@@ -44,7 +44,7 @@
 | `src/server/auth.rs` | model + service | CRUD | `DbUser`/`AppUser` at `src/server/auth.rs:17-53` (add `theme` field) | exact (additive) |
 | `src/app.rs` | router/shell | request-response | (self — existing `shell()` + `<Routes>`) | self-pattern |
 | `src/main.rs` | server bootstrap | request-response | (self — existing `leptos_routes_with_context` block) | self-pattern (additive: plumb `user.theme`) |
-| `src/components/nav.rs` (748 lines) | component | event-driven | (self — existing `Nav` component preserves notifications + ModeToggle) | self-pattern (heavy restructure) |
+| `src/components/nav.rs` (510 lines) | component | event-driven | (self — existing `Nav` component preserves notifications + ModeToggle) | self-pattern (heavy restructure) |
 | `src/components/theme_toggle.rs` | component | event-driven | (self — `set_user_mode` mirror at `src/components/nav.rs:10-24`) | exact |
 | `src/components/draft_board.rs` (562 lines) | component | event-driven | (self — preserve `slot_meta`, `on_slot_clear`, `highlighted_slot`) | self-pattern |
 | `src/components/tree_graph.rs` (709 lines) | component | event-driven | (self — preserve LayoutNode + DFS layout) | self-pattern (visual only) |
@@ -292,7 +292,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 
 ---
 
-### `src/components/nav.rs` (748 lines) — HEAVY RESTRUCTURE
+### `src/components/nav.rs` (510 lines) — HEAVY RESTRUCTURE
 
 **Analog:** self — preserve scaffold of `Nav` component at `src/components/nav.rs:148-`. Existing notifications + Escape-key handler + Suspense-wrapped auth links continue.
 

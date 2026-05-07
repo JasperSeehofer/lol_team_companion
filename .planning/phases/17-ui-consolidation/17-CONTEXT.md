@@ -183,7 +183,7 @@ Downstream agents MUST read `17-SPEC.md` before planning to understand the phase
 - **`src/components/champion_autocomplete.rs`** — Text input with champion dropdown. Used in game-plan, champion-pool. Restyle, keep API.
 - **`src/components/draft_board.rs`** (562 lines) — 20-slot draft board (picks + bans), already has highlight-first slot deletion + click-to-clear. Heavy restyle to match `draft-boards.jsx` design variants.
 - **`src/components/tree_graph.rs`** (709 lines) — SVG tree visualization with champion edge icons. Needs restyle to match `tree-drafter.jsx`; the children_of HashMap traversal stays.
-- **`src/components/nav.rs`** (748 lines) — Top nav, notifications, theme toggle. **Significant restructure for D-09 (4-hub nav)**. Will likely shrink as accent-color picker (D-04) and 19-route flat nav are removed.
+- **`src/components/nav.rs`** (510 lines) — Top nav, notifications, theme toggle. **Significant restructure for D-09 (4-hub nav)**. Will likely shrink as accent-color picker (D-04) and 19-route flat nav are removed.
 - **`src/components/theme_toggle.rs`** — Becomes a 2-theme (demacia/pandemonium) toggle per D-04. Existing accent-color logic is deleted.
 - **`src/components/ui.rs`** — `ErrorBanner`, `StatusMessage`. Keep, restyle.
 - **`src/components/stat_card.rs`** — Stat display card. Keep, restyle to match design's stat patterns.

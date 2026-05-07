@@ -104,7 +104,7 @@ These apply to every task in the phase regardless of which hub:
 
 Phase 17 is a **visual port + IA restructure**, not a feature build. The Claude Design handoff at `/tmp/lol-design-handoff/lol-team-companion-app/project/` (15 source files totalling ~880 KB of JSX) covers ~10 of the 14 existing routes plus the new closed-beta landing; the remaining 8 utility surfaces (auth, team/roster, team-builder, opponents, action-items, personal-learnings, analytics, admin/invites) have **no Claude Design coverage** and must be filled with Open-Design HTML prototypes per D-13. The handoff is a self-contained React/Babel prototype using `<script type="text/babel">` — no build step, just CSS-custom-property-driven theming via `[data-theme="demacia"]` and `[data-theme="pandemonium"]` on `<html>`. **Components in this prototype are inline-styled, not Tailwind**, so the port becomes a full re-translate from `var(--surface)` etc. → `bg-surface` etc.
 
-Three structural changes carry the most risk: (1) **theme port** — merging the design's `themes.css` into `input.css` `@theme` block, mapping `--accent`, `--surface`, `--line-soft` etc. onto the existing `--t-*` aliases, and dealing with the procedural `.canvas-grain` utility; (2) **font self-hosting** — five families, ~14 weight/style combinations, each requiring a `.woff2` file in `public/fonts/` (G-01 violation in the design CDN line MUST be fixed); (3) **4-hub IA restructure** — current `src/app.rs` has 19 flat routes and `src/components/nav.rs` is 748 lines built around them; UI-SPEC has already locked which routes belong to which hub but the planner must decide nested vs. flat URL paths.
+Three structural changes carry the most risk: (1) **theme port** — merging the design's `themes.css` into `input.css` `@theme` block, mapping `--accent`, `--surface`, `--line-soft` etc. onto the existing `--t-*` aliases, and dealing with the procedural `.canvas-grain` utility; (2) **font self-hosting** — five families, ~14 weight/style combinations, each requiring a `.woff2` file in `public/fonts/` (G-01 violation in the design CDN line MUST be fixed); (3) **4-hub IA restructure** — current `src/app.rs` has 19 flat routes and `src/components/nav.rs` is 510 lines built around them; UI-SPEC has already locked which routes belong to which hub but the planner must decide nested vs. flat URL paths.
 
 **Primary recommendation:** Sequence the work as **foundations-first → hubs in parallel → closed-beta last**:
 1. Plan A — Foundations + theme port + font self-host + nav restructure shell (blocks everything).
@@ -894,7 +894,7 @@ Concrete file list with role classification (port = new content from design / re
 | File | Role | Change |
 |------|------|--------|
 | `src/app.rs` | restyle | Replace localStorage script with SSR `data-theme={user.theme}`; route list unchanged (paths preserved per D-09); add `/closed-beta`, `/admin/invites`, `/legal/impressum`, `/legal/datenschutz` routes (visual stubs only) |
-| `src/components/nav.rs` (748 lines) | restyle (heavy) | Replace 19-route flat nav with 4-hub primary + sub-nav; add `current_hub()` derivation from `use_location()`; preserve notifications + ModeToggle; replace ThemeToggle invocation |
+| `src/components/nav.rs` (510 lines) | restyle (heavy) | Replace 19-route flat nav with 4-hub primary + sub-nav; add `current_hub()` derivation from `use_location()`; preserve notifications + ModeToggle; replace ThemeToggle invocation |
 | `src/components/theme_toggle.rs` (151 lines) | restyle (heavy) | Delete 5-accent picker; delete light/dark toggle; replace with 2-state demacia/pandemonium toggle; new `set_user_theme` server fn |
 | `src/components/ornaments.rs` | new | `<HeraldicDivider />`, `<GiltCorner />`, `<FleurDeLis />`, `<RiotTape />`, `<CompanionSigil />`, `<Crown />` — inline SVG components matching `components.jsx` paths |
 | `src/components/icon.rs` | new (recommended) | Shared `<Icon name="shield" size=18 />` component mirroring `components.jsx:108-145` icon path set; replaces ad-hoc SVG inline blocks |
@@ -1194,42 +1194,49 @@ Wave 4: [Plan G (review + audit)]   ← depends on everything above
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Per-page review gate cadence (D-10) — pause-per-page vs commit-per-page-batch-review?**
    - What we know: D-10 says "implement → screenshot → user approves → atomic commit → next."
    - What's unclear: Whether "user approves" must happen in real-time or whether the agent can commit per page (atomically) and the user batch-reviews later.
    - Recommendation: Surface to user during `/gsd-discuss-phase` re-pass. The "review queue" pattern (commit-per-page-with-`[REVIEW-PENDING]`-marker, batch-review later) preserves D-10's atomicity AND avoids agent stalls.
+   - **RESOLVED:** Per-page atomic commit immediately after user approval, no batching. D-10 stands as written: each page restyle is its own `checkpoint:human-verify` gate; the executor pauses for "approved" before committing the page and proceeding to the next.
 
 2. **Plan B (Strategy hub) split — single plan or B1+B2?**
    - What we know: Strategy hub has 7 routes, 8,278+ lines of page code across the heavy four (draft, tree-drafter, champion-pool, game-plan, post-game).
    - What's unclear: Whether one plan can stay coherent at 11 tasks or should split.
    - Recommendation: Default to single Plan B. If task estimation pushes >12, split.
+   - **RESOLVED:** Split — Plan 03 is split into 03a (draft + draft_board + champion_picker), 03b (tree_drafter + tree_graph + champion_autocomplete), 03c (champion_pool + game_plan + post_game), 03d (opponents + action_items + ui.rs + stat_card.rs). Each sub-plan is ≤4 tasks. Wave 2 now executes 03a/03b/03c/03d (and 04, 05) in parallel against the Wave 1 foundation.
 
 3. **`db_seed` mock data — replace with `data.jsx` content or keep current binary?**
    - What we know: CONTEXT.md "Claude's Discretion" leaves this open.
    - What's unclear: Whether the design's `data.jsx` (player names, team names, match data) better demos the new visual style than current seed.
    - Recommendation: Defer. The current seed works; switching mock data is orthogonal to visual port. Touch only if a per-page review surfaces "the mock data looks weird in the new style."
+   - **RESOLVED:** Defer; keep existing `db_seed` binary. The current seed is sufficient to exercise the new visual style. Re-evaluation will only happen if a per-page review surfaces a concrete "the mock data looks weird in the new style" complaint, in which case a follow-up (post-Phase-17) task will port `data.jsx`. No work in this phase.
 
 4. **FLUX runtime — fal.ai vs replicate vs self-host?**
    - What we know: D-17 leaves it open; CONTEXT.md "Claude's Discretion" defers to plan.
    - What's unclear: Cost vs latency vs sovereignty preference for ~10 images.
    - Recommendation: **fal.ai** — `[CITED: teamday.ai]` cheapest at our scale, sub-second latency, EU-flagged in this domain (acknowledged not strictly EU-sovereign — Black Forest Labs is German but fal.ai infra is US). If full EU sovereignty matters, self-host on a Hetzner GPU instance (~€1-2/hr for 30 min total = €1).
+   - **RESOLVED:** Deferred to user decision in Plan 06 Task 1 (`checkpoint:decision`). The plan presents fal.ai (recommended), replicate.com (equivalent), and self-host on GPU rental as options; user selects at execution time. Default recommendation remains fal.ai. Total cost is ≤$0.30 for 2-3 images.
 
 5. **Open-Design DESIGN.md schema details**
    - What we know: D-21 mandates the seed; AGENTS.md exists at `/home/jasper/Repositories/open-design/AGENTS.md` (not yet read in this research session).
    - What's unclear: Exact field structure expected by Open-Design tooling.
    - Recommendation: Plan E task 1 reads AGENTS.md and any existing `design-systems/*/DESIGN.md` example before authoring.
+   - **RESOLVED:** Handed off to Plan 02 Task 1 (now Plan 02). The planner reads `/home/jasper/Repositories/open-design/AGENTS.md` first to discover schema conventions, then enumerates existing `design-systems/` for reference, then authors the seed in Task 2. No DESIGN.md schema is fixed at planning time — Task 1 discovers and Task 2 conforms.
 
 6. **The hidden upload image's role**
    - What we know: `uploads/draw-92acceeb-9fd2-499d-84e4-12ff75b7ab5d.png` is 2576×1479, likely hand-drawn (`draw-` prefix suggests user sketch).
    - What's unclear: Whether it's a composition reference, a usable splash, or a test image.
    - Recommendation: Inspect during Plan F task 1 (closed-beta landing implementation).
+   - **RESOLVED:** Handed off to Plan 06 Task 2 — inspect during FLUX prompt drafting. The executor opens the image, documents its role in `.planning/assets/AI-IMAGES.md` (composition reference / usable asset / disregard), and adjusts FLUX prompts accordingly. If usable as-is, it may displace one generation.
 
 7. **CI sweep ownership boundary — Phase 17 vs Phase 21**
    - What we know: Phase 21 owns the full G-01..G-13 sweep; Phase 17 must satisfy G-01 + G-12 + no-raw-hex.
    - What's unclear: Whether Phase 17 should already commit the CI workflow (subset) or merely make the codebase pass at phase end.
    - Recommendation: Add a minimal CI sweep (G-01 + G-12 + hex) in Plan G. Phase 21 extends.
+   - **RESOLVED:** Phase 17 ships a minimal G-01 + G-12 + raw-hex sweep in Plan 01 Task 9 (the `style_guardrails` job in `.github/workflows/ci.yml`). Phase 21 extends to the full G-01..G-13 set. The Phase 17 job runs on every PR and blocks if any of the three checks fail; Phase 21 adds the remaining ten guardrails alongside (does not replace) the Phase 17 subset.
 
 ---
 
