@@ -8,6 +8,10 @@ const PUBLIC_PAGES = [
   { path: "/", title: /LoL Team Companion/i },
   { path: "/auth/login", title: /LoL Team Companion/i },
   { path: "/auth/register", title: /LoL Team Companion/i },
+  // Phase 17 plan 17-01 stubs (public — filled by plan 06)
+  { path: "/closed-beta", title: /LoL Team Companion/i },
+  { path: "/legal/impressum", title: /LoL Team Companion/i },
+  { path: "/legal/datenschutz", title: /LoL Team Companion/i },
 ];
 
 for (const { path, title } of PUBLIC_PAGES) {
