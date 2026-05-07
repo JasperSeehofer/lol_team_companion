@@ -244,7 +244,7 @@ Source: `draft-boards.jsx` — three design variants. Implementation uses the **
 ### DraftHeader
 
 - Height: ~56px
-- Contents: logo sigil, phase badge (accent), opponent name in `font-display italic`, timer in `font-mono border border-outline rounded-md px-2.5`, "Save draft" outline btn, "To plan" primary btn
+- Contents: logo sigil, phase badge (accent), opponent name in `font-display italic`, timer in `font-mono border border-outline rounded-md px-2`, "Save draft" outline btn, "To plan" primary btn
 - Background: `bg-surface/80 backdrop-blur`
 - Border-bottom: `border-divider`
 
