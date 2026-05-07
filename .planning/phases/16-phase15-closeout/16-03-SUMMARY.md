@@ -44,7 +44,7 @@ decisions:
 metrics:
   duration_minutes: 4
   completed_date: "2026-05-07"
-  tasks_completed: 4
+  tasks_completed: 5
   tasks_total: 5
   files_modified: 3
   files_created: 1
@@ -53,12 +53,12 @@ commits:
   task_2: "13db1dd — docs(16-03): add 15-VERIFICATION.md — PASS for all Phase 15 ROADMAP success criteria"
   task_3: "57104ee — docs(16-03): annotate 15-REVIEW.md with Status: lines on all 7 CR/WR/IN findings"
   task_4: "ecd627d — docs(16-03): mark v1.2 shipped in STATE.md; prepend v1.2 entry to MILESTONES.md"
-checkpoint_status: "PENDING — Task 5 (human-verify) awaiting user approval"
+checkpoint_status: "APPROVED — Task 5 human-verify passed 2026-05-07"
 ---
 
 # Phase 16 Plan 03: Phase 15 Close-out Review & Documentation Summary
 
-Phase 15 close-out documentation complete pending human verification (Task 5). Second-pass /gsd-code-review 15 found 0 new HIGH/Critical; /gsd-verify-work 15 PASS for all four ROADMAP success criteria; 15-REVIEW.md reconciled with Status: lines on all 7 findings; STATE.md records v1.2 shipped; MILESTONES.md has v1.2 entry.
+Phase 15 close-out documentation complete — human verification approved 2026-05-07. Second-pass /gsd-code-review 15 found 0 new HIGH/Critical; /gsd-verify-work 15 PASS for all four ROADMAP success criteria; 15-REVIEW.md reconciled with Status: lines on all 7 findings; STATE.md records v1.2 shipped; MILESTONES.md has v1.2 entry.
 
 ## Commits
 
@@ -135,7 +135,7 @@ Verification: `grep -c "^Status: " 15-REVIEW.md` returns 7. No literal `<hash>` 
 
 ### Task 5: Human verification checkpoint
 
-PENDING. See checkpoint details below.
+APPROVED 2026-05-07. All four artifacts verified: 15-REVIEW.md (7 Status: lines + Second Pass section), 15-VERIFICATION.md (PASS ×4), STATE.md (v1.2 Shipped, milestone: v1.3), MILESTONES.md (v1.2 entry at top).
 
 ## Deviations from Plan
 
