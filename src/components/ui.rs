@@ -2,26 +2,31 @@ use leptos::prelude::*;
 use leptos::callback::Callback;
 
 /// A styled error banner for page-level and resource errors.
+///
+/// Uses semantic `bg-danger` token (theme-aware: Demacia heraldic crimson,
+/// Pandemonium electric coral). `role="alert"` per DESIGN.md §5.5.
 #[component]
 pub fn ErrorBanner(message: String) -> impl IntoView {
     view! {
-        <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <div role="alert" class="bg-danger/10 border border-danger/30 rounded-lg p-4 flex items-start gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-danger shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
-            <p class="text-red-400 text-sm">{message}</p>
+            <p class="text-danger text-sm">{message}</p>
         </div>
     }
 }
 
 /// A styled status message that shows success (green) or error (red) based on content.
+///
+/// Uses semantic `bg-success` / `bg-danger` tokens (theme-aware).
 #[component]
 pub fn StatusMessage(message: String) -> impl IntoView {
     let is_err = message.starts_with("Error");
     let cls = if is_err {
-        "bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm"
+        "bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-3 text-sm"
     } else {
-        "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl px-4 py-3 text-sm"
+        "bg-success/10 border border-success/30 text-success rounded-lg px-4 py-3 text-sm"
     };
     view! {
         <div class=cls>{message}</div>
@@ -115,18 +120,18 @@ fn ToastOverlay(
                 #[allow(unused_variables)]
                 let msg_for_copy = t.message.clone();
                 let base = if is_error {
-                    "pointer-events-auto flex items-start gap-3 bg-red-500/20 border border-red-500/40 text-red-300 rounded-xl px-4 py-3 text-sm shadow-lg min-w-64 max-w-sm"
+                    "pointer-events-auto flex items-start gap-3 bg-danger/20 border border-danger/40 text-danger rounded-lg px-4 py-3 text-sm shadow-lg min-w-64 max-w-sm"
                 } else {
-                    "pointer-events-auto flex items-center gap-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl px-4 py-3 text-sm shadow-lg min-w-64 max-w-sm"
+                    "pointer-events-auto flex items-center gap-3 bg-success/20 border border-success/40 text-success rounded-lg px-4 py-3 text-sm shadow-lg min-w-64 max-w-sm"
                 };
                 view! {
-                    <div class=base>
+                    <div role="status" aria-live=if is_error { "assertive" } else { "polite" } class=base>
                         <span class="flex-1">{msg}</span>
                         {if is_error {
                             view! {
                                 <div class="flex gap-1 shrink-0">
                                     <button
-                                        class="text-red-400/70 hover:text-red-300 text-xs px-1.5 py-0.5 rounded hover:bg-red-500/20 transition-colors"
+                                        class="text-danger/70 hover:text-danger text-xs px-1.5 py-0.5 rounded-md hover:bg-danger/20 transition-colors focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                         on:click=move |_| {
                                             #[cfg(feature = "hydrate")]
                                             {
@@ -138,7 +143,7 @@ fn ToastOverlay(
                                         }
                                     >"Copy"</button>
                                     <button
-                                        class="text-red-400/70 hover:text-red-300 text-xs px-1.5 py-0.5 rounded hover:bg-red-500/20 transition-colors"
+                                        class="text-danger/70 hover:text-danger text-xs px-1.5 py-0.5 rounded-md hover:bg-danger/20 transition-colors focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                         on:click=move |_| set_toasts.update(|v| v.retain(|t| t.id != id))
                                     >"×"</button>
                                 </div>
@@ -207,14 +212,14 @@ pub fn EmptyState(
     view! {
         <div class="text-center py-12 flex flex-col items-center gap-3">
             {match icon {
-                Some(i) => view! { <span class="text-4xl">{i}</span> }.into_any(),
+                Some(i) => view! { <span class="text-4xl" aria-hidden="true">{i}</span> }.into_any(),
                 None => view! { <span></span> }.into_any(),
             }}
             <p class="text-secondary text-sm max-w-xs">{message}</p>
             {match (cta_label, cta_href) {
                 (Some(label), Some(href)) => view! {
                     <a href=href
-                       class="mt-1 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors">
+                       class="mt-1 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
                         {label}
                     </a>
                 }.into_any(),
