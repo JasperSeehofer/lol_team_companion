@@ -225,6 +225,12 @@ pub fn SoloDashboardPage() -> impl IntoView {
 
     let goal_progress_resource = Resource::new(|| (), |_| async move { compute_goal_progress().await });
 
+    let lp_window: RwSignal<&'static str> = RwSignal::new("30d");
+    let lp_history_resource = Resource::new(
+        move || lp_window.get(),
+        |w| async move { get_lp_history(w.to_string()).await },
+    );
+
     let syncing: RwSignal<bool> = RwSignal::new(false);
     let auto_synced: RwSignal<bool> = RwSignal::new(false);
 
@@ -247,6 +253,8 @@ pub fn SoloDashboardPage() -> impl IntoView {
                                     .run((ToastKind::Success, "Already up to date".to_string()));
                             }
                             dashboard_resource.refetch();
+                            goal_progress_resource.refetch();
+                            lp_history_resource.refetch();
                         }
                         Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                     }
@@ -274,6 +282,8 @@ pub fn SoloDashboardPage() -> impl IntoView {
                             .run((ToastKind::Success, "Already up to date".to_string()));
                     }
                     dashboard_resource.refetch();
+                    goal_progress_resource.refetch();
+                    lp_history_resource.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
@@ -320,7 +330,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
                     Ok(data) => view! {
                         <div class="flex flex-col gap-8">
                             <RankedBadgeSection ranked=data.ranked />
-                            <LpHistoryGraph />
+                            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window />
                             <MatchListSection
                                 matches=data.matches
                                 queue_filter=queue_filter
@@ -471,12 +481,10 @@ fn MatchListSection(
 // ---------------------------------------------------------------------------
 
 #[component]
-fn LpHistoryGraph() -> impl IntoView {
-    let lp_window: RwSignal<&'static str> = RwSignal::new("30d");
-    let lp_history_resource = Resource::new(
-        move || lp_window.get(),
-        |w| async move { get_lp_history(w.to_string()).await },
-    );
+fn LpHistoryGraph(
+    lp_history_resource: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
+    lp_window: RwSignal<&'static str>,
+) -> impl IntoView {
     let tooltip: RwSignal<Option<(f64, f64, String, String)>> = RwSignal::new(None);
 
     let render_pill = move |w: &'static str| {
