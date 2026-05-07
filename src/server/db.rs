@@ -4610,6 +4610,7 @@ pub async fn get_solo_matches(
         id: RecordId,
         match_id: String,
         user_id: String,
+        game_end: String,
         champion: String,
         kills: i32,
         deaths: i32,
@@ -4621,9 +4622,10 @@ pub async fn get_solo_matches(
     }
 
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    // Alias RecordId fields to strings: match.match_id → match_id, <string>user → user_id
+    // Alias RecordId fields + include game_end for ORDER BY (Rule 40: ORDER BY field must be in SELECT)
     const BASE_SELECT: &str =
         "SELECT id, match.match_id AS match_id, <string>user AS user_id, \
+         <string>match.game_end AS game_end, \
          champion, kills, deaths, assists, cs, vision_score, damage, win \
          FROM player_match WHERE user = type::record('user', $user_key)";
 
