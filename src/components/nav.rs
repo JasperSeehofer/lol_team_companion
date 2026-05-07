@@ -1,6 +1,10 @@
 use leptos::prelude::*;
-use leptos_router::components::A;
+use leptos_router::{
+    components::A,
+    hooks::use_location,
+};
 
+use crate::components::ornaments::CompanionSigil;
 use crate::components::theme_toggle::ThemeToggle;
 use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};
@@ -62,9 +66,9 @@ pub fn ModeToggle(mode: String) -> impl IntoView {
             <button
                 class=move || {
                     if current_mode.get() == "solo" {
-                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer"
+                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     } else {
-                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer"
+                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     }
                 }
                 on:click=on_click_solo
@@ -74,9 +78,9 @@ pub fn ModeToggle(mode: String) -> impl IntoView {
             <button
                 class=move || {
                     if current_mode.get() == "team" {
-                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer"
+                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     } else {
-                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer"
+                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     }
                 }
                 on:click=on_click_team
@@ -145,12 +149,82 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// 4-Hub Information Architecture (D-09)
+// ---------------------------------------------------------------------------
+
+/// Hub-grouped sub-routes. Each hub maps to its sub-nav children.
+/// `live` hub omitted from sub-nav (single-page hub, deferred feature).
+const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
+    (
+        "strategy",
+        &[
+            ("/draft", "Draft"),
+            ("/tree-drafter", "Tree"),
+            ("/champion-pool", "Pool"),
+            ("/game-plan", "Game plan"),
+            ("/post-game", "Post-game"),
+            ("/opponents", "Opponents"),
+            ("/action-items", "Action items"),
+        ],
+    ),
+    (
+        "history",
+        &[
+            ("/stats", "Stats"),
+            ("/match", "Match"),
+            ("/personal-learnings", "Learnings"),
+            ("/analytics", "Analytics"),
+        ],
+    ),
+    (
+        "profile",
+        &[
+            ("/profile", "Profile"),
+            ("/team/dashboard", "Team"),
+            ("/team/roster", "Roster"),
+            ("/team-builder", "Team builder"),
+            ("/solo", "Solo"),
+        ],
+    ),
+];
+
+/// Map a URL path to its primary hub. Returns `""` for paths outside any hub
+/// (e.g. `/`, `/auth/*`, `/closed-beta`, `/legal/*`) so the sub-nav strip
+/// suppresses itself on those routes.
+fn hub_for_path(path: &str) -> &'static str {
+    if path.starts_with("/draft")
+        || path.starts_with("/tree-drafter")
+        || path.starts_with("/champion-pool")
+        || path.starts_with("/game-plan")
+        || path.starts_with("/post-game")
+        || path.starts_with("/opponents")
+        || path.starts_with("/action-items")
+    {
+        "strategy"
+    } else if path.starts_with("/stats")
+        || path.starts_with("/match")
+        || path.starts_with("/personal-learnings")
+        || path.starts_with("/analytics")
+    {
+        "history"
+    } else if path.starts_with("/profile")
+        || path.starts_with("/team")
+        || path.starts_with("/solo")
+    {
+        "profile"
+    } else if path.starts_with("/live") {
+        "live"
+    } else {
+        ""
+    }
+}
+
 #[component]
 pub fn Nav() -> impl IntoView {
     let logout_action = ServerAction::<Logout>::new();
     let menu_open = RwSignal::new(false);
     let notif_open = RwSignal::new(false);
-    let mobile_open = RwSignal::new(false);
 
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
@@ -159,7 +233,6 @@ pub fn Nav() -> impl IntoView {
     let close_all = move || {
         menu_open.set(false);
         notif_open.set(false);
-        mobile_open.set(false);
     };
 
     Effect::new(move || {
@@ -196,112 +269,79 @@ pub fn Nav() -> impl IntoView {
 
     let any_dropdown_open = move || menu_open.get() || notif_open.get();
 
-    let close_link = Callback::new(move |_: ()| close_all());
+    // Reactive hub derivation from current URL path.
+    let location = use_location();
+    let active_hub =
+        Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
 
-    let nav_links = move |extra_class: &'static str| {
-        let link_cls = format!("{extra_class} text-secondary hover:text-primary transition-colors");
-        // Wrap auth-gated links in Suspense so SSR renders the fallback (nothing)
-        // and WASM hydration renders the real links after the Resource resolves.
-        // This eliminates the SSR vs hydration mismatch (BUG-04).
-        let auth_link_cls = link_cls.clone();
-        view! {
-            <A href="/" attr:class=link_cls
-                on:click=move |_| close_link.run(())>
-                "Home"
-            </A>
-            <Suspense fallback=move || view! { <span></span> }>
-                {move || {
-                    let cls = auth_link_cls.clone();
-                    Suspend::new(async move {
-                        let authed = user.await.ok().flatten().is_some();
-                        if authed {
-                            let cls2 = cls.clone();
-                            let cls3 = cls.clone();
-                            let cls4 = cls.clone();
-                            let cls5 = cls.clone();
-                            let cls6 = cls.clone();
-                            let cls7 = cls.clone();
-                            let cls8 = cls.clone();
-                            let cls9 = cls.clone();
-                            let cls10 = cls.clone();
-                            view! {
-                                <A href="/team/dashboard" attr:class=cls2
-                                    on:click=move |_| close_link.run(())>
-                                    "Team"
-                                </A>
-                                <A href="/draft" attr:class=cls3
-                                    on:click=move |_| close_link.run(())>
-                                    "Draft"
-                                </A>
-                                <A href="/tree-drafter" attr:class=cls4
-                                    on:click=move |_| close_link.run(())>
-                                    "Tree Drafter"
-                                </A>
-                                <A href="/stats" attr:class=cls5
-                                    on:click=move |_| close_link.run(())>
-                                    "Stats"
-                                </A>
-                                <A href="/game-plan" attr:class=cls6
-                                    on:click=move |_| close_link.run(())>
-                                    "Game Plan"
-                                </A>
-                                <A href="/post-game" attr:class=cls7
-                                    on:click=move |_| close_link.run(())>
-                                    "Post Game"
-                                </A>
-                                <A href="/opponents" attr:class=cls8
-                                    on:click=move |_| close_link.run(())>
-                                    "Opponents"
-                                </A>
-                                <A href="/analytics" attr:class=cls9
-                                    on:click=move |_| close_link.run(())>
-                                    "Analytics"
-                                </A>
-                                <A href="/personal-learnings" attr:class=cls10
-                                    on:click=move |_| close_link.run(())>
-                                    "Learnings"
-                                </A>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }
-                    })
-                }}
-            </Suspense>
-        }
+    // 4-hub primary buttons. `Live` is visually disabled (deferred feature).
+    let hub_btn_class = move |hub_id: &'static str, disabled: bool| -> Memo<String> {
+        let active_hub = active_hub.clone();
+        Memo::new(move |_| {
+            let active = active_hub.get() == hub_id;
+            let base = "px-4 py-2 rounded-md font-imperial text-[10px] uppercase tracking-[0.18em] transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
+            if disabled {
+                format!("{base} text-dimmed pointer-events-none opacity-50")
+            } else if active {
+                format!("{base} bg-accent text-accent-contrast font-semibold cursor-pointer")
+            } else {
+                format!("{base} text-muted hover:text-secondary cursor-pointer")
+            }
+        })
     };
 
+    let strategy_btn_cls = hub_btn_class("strategy", false);
+    let live_btn_cls = hub_btn_class("live", true);
+    let history_btn_cls = hub_btn_class("history", false);
+    let profile_btn_cls = hub_btn_class("profile", false);
+
     view! {
-        <nav class="bg-surface/80 backdrop-blur-md border-b border-divider sticky top-0 z-50">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6">
-                <div class="flex items-center justify-between h-14">
-                    // Logo
-                    <A href="/" attr:class="flex items-center gap-2 shrink-0">
-                        <span class="text-accent font-bold text-lg tracking-wide">"LoL Team Companion"</span>
+        <header class="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-divider">
+            <div class="max-w-7xl mx-auto px-4 sm:px-8">
+                // ── Top row: Sigil · Hubs · Notifications · Theme · User ──
+                <div class="flex items-center gap-7 h-14">
+                    // Sigil → home
+                    <A href="/" attr:class="flex items-center shrink-0 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
+                        <CompanionSigil />
                     </A>
 
-                    // Desktop nav links
-                    <div class="hidden md:flex items-center gap-5 text-sm">
-                        {nav_links("")}
-                    </div>
+                    // 4 primary hubs
+                    <nav class="hidden md:flex items-center gap-1" aria-label="Primary">
+                        <A href="/draft" attr:class=move || strategy_btn_cls.get()>
+                            "Strategy"
+                        </A>
+                        // Live hub disabled (deferred feature)
+                        <span class=move || live_btn_cls.get() aria-disabled="true" title="Live coming soon">
+                            "Live"
+                        </span>
+                        <A href="/stats" attr:class=move || history_btn_cls.get()>
+                            "History"
+                        </A>
+                        <A href="/profile" attr:class=move || profile_btn_cls.get()>
+                            "Profile"
+                        </A>
+                    </nav>
 
-                    // Right side: mode toggle + theme + notifications + user menu
-                    <div class="flex items-center gap-2">
-                        // Mode toggle: only when authenticated
+                    <div class="flex-1" />
+
+                    // Right cluster: ModeToggle (auth-only) · ThemeToggle · Notifications · User menu
+                    <div class="flex items-center gap-3">
                         <Suspense fallback=|| ()>
                             {move || Suspend::new(async move {
                                 match user.await {
-                                    Ok(Some(u)) => view! {
-                                        <ModeToggle mode=u.mode />
-                                    }.into_any(),
-                                    _ => view! { <span></span> }.into_any(),
+                                    Ok(Some(u)) => {
+                                        let theme = u.theme.clone();
+                                        view! {
+                                            <ModeToggle mode=u.mode />
+                                            <ThemeToggle initial_theme=theme />
+                                        }.into_any()
+                                    },
+                                    _ => view! { <ThemeToggle /> }.into_any(),
                                 }
                             })}
                         </Suspense>
 
-                        <ThemeToggle />
-
-                        // Notifications bell
+                        // Notifications bell (unchanged from previous nav, focus-visible added)
                         <Suspense fallback=|| ()>
                             {move || {
                                 let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
@@ -317,10 +357,9 @@ pub fn Nav() -> impl IntoView {
                                                 notif_open.update(|v| *v = !*v);
                                                 menu_open.set(false);
                                             }
-                                            class="relative text-muted hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-elevated cursor-pointer"
+                                            class="relative text-muted hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-elevated cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             aria-label="Notifications"
                                         >
-                                            // Bell SVG
                                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                             </svg>
@@ -329,7 +368,6 @@ pub fn Nav() -> impl IntoView {
                                             </span>
                                         </button>
 
-                                        // Notifications dropdown
                                         <div
                                             class="absolute right-0 mt-2 w-80 bg-elevated border border-divider rounded-xl shadow-xl overflow-hidden z-[60]"
                                             style:display=move || if notif_open.get() { "block" } else { "none" }
@@ -352,7 +390,7 @@ pub fn Nav() -> impl IntoView {
                                                             </div>
                                                             <div class="flex gap-1.5 flex-shrink-0">
                                                                 <button
-                                                                    class="bg-green-700 hover:bg-green-600 text-white text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer"
+                                                                    class="bg-green-700 hover:bg-green-600 text-white text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     title="Accept"
                                                                     on:click=move |_| {
                                                                         let id = req_id_accept.clone();
@@ -368,7 +406,7 @@ pub fn Nav() -> impl IntoView {
                                                                     </svg>
                                                                 </button>
                                                                 <button
-                                                                    class="bg-overlay-strong hover:bg-red-700 text-secondary hover:text-primary text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer"
+                                                                    class="bg-overlay-strong hover:bg-red-700 text-secondary hover:text-primary text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     title="Decline"
                                                                     on:click=move |_| {
                                                                         let id = req_id_decline.clone();
@@ -401,7 +439,7 @@ pub fn Nav() -> impl IntoView {
                             }}
                         </Suspense>
 
-                        // User menu
+                        // User menu / sign-in
                         <div class="relative text-sm">
                             <Suspense fallback=move || view! {
                                 <span class="text-dimmed text-sm">"..."</span>
@@ -414,7 +452,7 @@ pub fn Nav() -> impl IntoView {
                                                     menu_open.update(|v| *v = !*v);
                                                     notif_open.set(false);
                                                 }
-                                                class="flex items-center gap-2 text-secondary hover:text-primary transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-elevated"
+                                                class="flex items-center gap-2 text-secondary hover:text-primary transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-elevated focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             >
                                                 <span class="bg-accent/20 text-accent rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold uppercase">
                                                     {u.username.chars().next().unwrap_or('?').to_string()}
@@ -446,7 +484,7 @@ pub fn Nav() -> impl IntoView {
                                                 <ActionForm action=logout_action>
                                                     <button
                                                         type="submit"
-                                                        class="block w-full text-left px-4 py-2.5 text-red-400 hover:bg-elevated hover:text-red-300 transition-colors cursor-pointer text-sm"
+                                                        class="block w-full text-left px-4 py-2.5 text-red-400 hover:bg-elevated hover:text-red-300 transition-colors cursor-pointer text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                     >
                                                         "Sign Out"
                                                     </button>
@@ -455,10 +493,10 @@ pub fn Nav() -> impl IntoView {
                                         }.into_any(),
                                         _ => view! {
                                             <div class="flex items-center gap-2 text-sm">
-                                                <A href="/auth/login" attr:class="text-secondary hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-elevated">
+                                                <A href="/auth/login" attr:class="text-secondary hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-elevated focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
                                                     "Sign In"
                                                 </A>
-                                                <A href="/auth/register" attr:class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                                                <A href="/auth/register" attr:class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-3 py-1.5 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
                                                     "Register"
                                                 </A>
                                             </div>
@@ -467,31 +505,48 @@ pub fn Nav() -> impl IntoView {
                                 })}
                             </Suspense>
                         </div>
-
-                        // Mobile menu button
-                        <button
-                            on:click=move |_| mobile_open.update(|v| *v = !*v)
-                            class="md:hidden text-muted hover:text-primary p-1.5 rounded-lg hover:bg-elevated transition-colors cursor-pointer"
-                            aria-label="Menu"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
                     </div>
                 </div>
-            </div>
 
-            // Mobile nav
-            <div
-                class="md:hidden border-t border-divider"
-                style:display=move || if mobile_open.get() { "block" } else { "none" }
-            >
-                <div class="px-4 py-3 flex flex-col gap-2 text-sm">
-                    {nav_links("block py-2 px-3 rounded-lg hover:bg-elevated")}
-                </div>
+                // ── Sub-nav strip — driven by use_location() ──
+                {move || {
+                    let hub = active_hub.get();
+                    if hub.is_empty() || hub == "live" {
+                        view! { <div class="hidden" /> }.into_any()
+                    } else {
+                        let routes: &[(&str, &str)] = HUB_ROUTES
+                            .iter()
+                            .find(|(h, _)| *h == hub)
+                            .map(|(_, r)| *r)
+                            .unwrap_or(&[]);
+                        view! {
+                            <nav class="flex gap-1 py-2 border-t border-divider/30 overflow-x-auto" aria-label="Sub-navigation">
+                                {routes.iter().map(|(path, label)| {
+                                    let path_owned = path.to_string();
+                                    let path_for_class = path_owned.clone();
+                                    let location = use_location();
+                                    let is_active = move || location.pathname.get().starts_with(&path_for_class);
+                                    view! {
+                                        <A
+                                            href=path_owned
+                                            attr:class=move || {
+                                                if is_active() {
+                                                    "px-3 py-1.5 rounded-md bg-accent-soft text-accent text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none whitespace-nowrap"
+                                                } else {
+                                                    "px-3 py-1.5 rounded-md text-dimmed hover:text-muted text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none whitespace-nowrap"
+                                                }
+                                            }
+                                        >
+                                            {*label}
+                                        </A>
+                                    }
+                                }).collect_view()}
+                            </nav>
+                        }.into_any()
+                    }
+                }}
             </div>
-        </nav>
+        </header>
 
         // Click-outside backdrop: covers full screen behind dropdowns
         {move || {

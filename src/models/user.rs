@@ -21,6 +21,7 @@ pub struct PublicUser {
     pub riot_summoner_name: Option<String>,
     pub mode: String,
     pub riot_region: Option<String>,
+    pub theme: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

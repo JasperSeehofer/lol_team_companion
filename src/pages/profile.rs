@@ -14,6 +14,7 @@ pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
         riot_summoner_name: u.riot_summoner_name,
         mode: u.mode,
         riot_region: u.riot_region,
+        theme: u.theme,
     }))
 }
 
