@@ -80,10 +80,18 @@ These replace the existing 5-accent palette (yellow/blue/purple/emerald/rose). S
 - `--warning: #d4974a` (demacia), `#fff157` (pandemonium)
 
 **Pandemonium-only tokens** (add to pandemonium block):
-- `--accent-2: #6cf0e2` — teal highlight
-- `--accent-3: #fff157` — riot tape yellow
+- `--accent-2: #6cf0e2` — teal; decorative only (highlight glints, shimmer effects). NOT for interactive elements, focus rings, or CTAs.
+- `--accent-3: #fff157` — riot tape yellow; decorative only (RiotTape divider ornament). NOT for CTAs, focus rings, or any interactive state.
 
 **Remove from `input.css`:** The existing `[data-accent="blue"]`, `[data-accent="purple"]`, `[data-accent="emerald"]`, `[data-accent="rose"]` blocks (D-04 — retired). The light theme block may be retired alongside them or kept for future use; decision deferred to executor.
+
+### 60/30/10 role mapping for extended tokens
+
+The vault's 60/30/10 split applies to the extended demacia/pandemonium tokens as follows:
+
+- **60% (primary surfaces — `bg-base`, `bg-surface`):** `--t-base`, `--t-surface`. The dominant canvas. Demacia: deep navy. Pandemonium: near-black.
+- **30% (secondary surfaces — cards, sidebar, elevated panels):** `--t-elevated`, `--gold-1` (Demacia gilt card backgrounds), `--lapis-1` (Demacia banner fields), `--ivory` (Demacia journal backgrounds). These appear on component surfaces, not on page backgrounds.
+- **10% (accent — sparingly, reserved for primary CTAs, on-deck draft halo, active nav state):** `--t-accent` (`gold-2` in Demacia, electric pink in Pandemonium). `--gold-3` and `--lapis-2` are ornamental sub-tones within this tier (engraved recesses, enamel), not interactive accents. `--accent-2` and `--accent-3` (Pandemonium) are decorative-only and do not count toward interactive accent budget.
 
 ### Theme application to `<html>`
 
@@ -143,7 +151,7 @@ Per D-09, restructure the existing 19-route flat nav into 4 hubs with sub-naviga
 - Container: `position: sticky; top: 0; z-index: 50` with `backdrop-filter: blur(14px) saturate(1.1)`
 - Demacia: `border-bottom: 1px solid var(--t-divider)` (gold-tinted line)
 - Pandemonium: `border-bottom: 1px solid var(--t-accent)` (electric pink line)
-- Padding: `16px 64px` (Demacia), `14px 48px` (Pandemonium)
+- Padding: `16px 64px` (Demacia), `16px 48px` (Pandemonium)
 - Grid: `grid-template-columns: auto 1fr auto auto; gap: 28px`
 
 ### CompanionSigil (logo mark)
@@ -156,7 +164,7 @@ Per D-09, restructure the existing 19-route flat nav into 4 hubs with sub-naviga
 - Active: `bg-accent-soft border border-outline text-accent` — solid accent tint background
 - Inactive: `text-muted hover:text-secondary` — no background
 - Secondary (draft/tree/pool): `text-dimmed hover:text-muted` — further reduced
-- Padding: `8px 12px` (Demacia), `8px 14px` (Pandemonium)
+- Padding: `8px 12px` (Demacia), `8px 16px` (Pandemonium)
 - Rounded: `rounded-md`
 - No `outline:none` — use `focus-visible:ring-2 focus-visible:ring-accent/50`
 
@@ -270,7 +278,7 @@ Existing `draft_board.rs` patterns preserved:
 Full-width grid below the draft board. Same component as `src/components/champion_picker.rs`, restyled:
 - Grid: `grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-2`
 - Each tile: 56×56px `ChampTile`, hover: `ring-1 ring-accent/40 cursor-pointer`
-- Search bar above grid: full-width `input` — `bg-surface/50 border border-outline/50 rounded-lg px-4 py-2.5 text-primary text-sm` + search icon left
+- Search bar above grid: full-width `input` — `bg-surface/50 border border-outline/50 rounded-lg px-4 py-3 text-primary text-sm` + search icon left
 - Filtered state: tiles not matching search are `opacity-30 pointer-events-none`
 - Side toggle (Blue/Red): pill buttons top-right of picker
 
@@ -354,10 +362,10 @@ Layout: single-column card, centered vertically, `max-w-sm mx-auto`.
 │  "Sign in to continue"           │  text-sm text-muted mt-1
 │  ────────────────────────────── │
 │  Summoner name / Email           │  label: text-xs text-muted uppercase tracking-wider
-│  [input field]                   │  bg-surface/50 border border-outline/50 rounded-lg px-3 py-2.5
+│  [input field]                   │  bg-surface/50 border border-outline/50 rounded-lg px-3 py-3
 │  Password                        │
 │  [input field]                   │
-│  [Sign in →]                     │  bg-accent text-accent-contrast font-semibold w-full py-2.5 rounded-lg
+│  [Sign in →]                     │  bg-accent text-accent-contrast font-semibold w-full py-3 rounded-lg
 │  "No account? Register with      │  text-sm text-muted, register link: text-accent hover:text-accent-hover
 │   an invite link"                │
 └──────────────────────────────────┘
@@ -419,7 +427,7 @@ Two variants in the codebase:
 Used in: `/draft` champion picker, `/champion-pool` tier editing.
 
 Restyled anatomy:
-- Search bar: full-width at top — `bg-surface/50 border border-outline/50 rounded-lg px-4 py-2.5` + `<Icon name="search" size=16 class="text-muted" />` left padding
+- Search bar: full-width at top — `bg-surface/50 border border-outline/50 rounded-lg px-4 py-3` + `<Icon name="search" size=16 class="text-muted" />` left padding
 - Grid: `grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-2 p-4 overflow-y-auto max-h-80`
 - ChampTile: 56×56px, `rounded-md overflow-hidden border border-transparent hover:border-accent/40 cursor-pointer transition-all`
 - Selected state: `ring-2 ring-accent border-accent`
@@ -490,7 +498,7 @@ Source: `screens/history.jsx`.
 └─────────────────────────┴──────────────────────────────┘
 ```
 
-Match row: `grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-3.5 items-center py-3.5` — result bar (4px tall, `bg-success` or `bg-danger`), ChampTile 48px, name+details, KDA string, duration, expand indicator.
+Match row: `grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-3.5 items-center py-4` — result bar (4px tall, `bg-success` or `bg-danger`), ChampTile 48px, name+details, KDA string, duration, expand indicator.
 
 Active row background: `bg-accent-soft` (`accent-soft: rgba(accent, 0.12)`).
 
