@@ -254,23 +254,52 @@ fn tier_label(tier: &str) -> &'static str {
     }
 }
 
-fn tier_color(tier: &str) -> &'static str {
+/// Imperial single-letter sigil per UI-SPEC Champion Pool §"Tier list layout".
+/// Maps the 5-tier production data model to the spec's S/A/B/C visual ladder
+/// (preserves data; visual layer only).
+fn tier_sigil(tier: &str) -> &'static str {
     match tier {
-        "comfort" => "border-accent/30 bg-accent/5",
-        "match_ready" => "border-green-400/30 bg-green-400/5",
-        "scrim_ready" => "border-blue-400/30 bg-blue-400/5",
-        "practicing" => "border-purple-400/30 bg-purple-400/5",
-        "to_practice" => "border-gray-400/30 bg-gray-400/5",
-        _ => "border-divider bg-elevated/50",
+        "comfort" => "S",
+        "match_ready" => "A",
+        "scrim_ready" => "B",
+        "practicing" => "C",
+        "to_practice" => "D",
+        _ => "?",
     }
 }
 
+/// Cinzel italic subtitle per UI-SPEC Champion Pool §"Tier list layout".
+fn tier_subtitle(tier: &str) -> &'static str {
+    match tier {
+        "comfort" => "Sword arm",
+        "match_ready" => "Standing",
+        "scrim_ready" => "Reserve",
+        "practicing" => "Forsaken",
+        "to_practice" => "Practice list",
+        _ => "",
+    }
+}
+
+/// CSS variable name (without `var()` wrapper) for the tier-color rail.
+/// Used both for left-border and the tier-band 135deg gradient.
+fn tier_token(tier: &str) -> &'static str {
+    match tier {
+        "comfort" => "--gold-2",
+        "match_ready" => "--color-accent",
+        "scrim_ready" => "--color-warning",
+        "practicing" => "--color-danger",
+        "to_practice" => "--color-divider",
+        _ => "--color-divider",
+    }
+}
+
+/// Tailwind class for the tier-letter color (also used on the subtitle).
 fn tier_label_color(tier: &str) -> &'static str {
     match tier {
-        "comfort" => "text-accent",
-        "match_ready" => "text-green-400",
-        "scrim_ready" => "text-blue-400",
-        "practicing" => "text-purple-400",
+        "comfort" => "text-[color:var(--gold-2)]",
+        "match_ready" => "text-accent",
+        "scrim_ready" => "text-warning",
+        "practicing" => "text-danger",
         "to_practice" => "text-muted",
         _ => "text-muted",
     }
@@ -278,9 +307,9 @@ fn tier_label_color(tier: &str) -> &'static str {
 
 fn meta_tag_class(tag: &str) -> &'static str {
     match tag {
-        "strong" => "bg-green-500/20 text-green-400 border-green-500/30",
-        "neutral" => "bg-blue-500/20 text-blue-400 border-blue-500/30",
-        "weak" => "bg-red-500/20 text-red-400 border-red-500/30",
+        "strong" => "bg-success/15 text-success border-success/30",
+        "neutral" => "bg-info/15 text-info border-info/30",
+        "weak" => "bg-danger/15 text-danger border-danger/30",
         _ => "bg-overlay text-muted border-divider",
     }
 }
@@ -464,37 +493,42 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let (notes_input, set_notes_input) = signal(String::new());
 
     view! {
-        <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 flex flex-col gap-6">
-            <div>
-                <h1 class="text-3xl font-bold text-primary">"Champion Pool"</h1>
-                <p class="text-muted text-sm mt-1">"Organize your champion pool by role and readiness tier"</p>
-            </div>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-7xl mx-auto py-8 px-6 flex flex-col gap-6">
+                // Page header per UI-SPEC §"Champion Pool Page Layout"
+                <div class="flex items-end justify-between gap-4 flex-wrap">
+                    <div>
+                        <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - champion pool"</p>
+                        <h1 class="font-display italic text-4xl text-primary mt-1">"Your champions, by station."</h1>
+                        <p class="text-muted text-sm mt-1">"Organize your roster by role and readiness tier."</p>
+                    </div>
+                </div>
 
-            // Role tabs — scrollable on mobile
-            <div class="flex gap-1 overflow-x-auto pb-1">
-                {POOL_ROLES.iter().map(|&role| {
-                    view! {
-                        <button
-                            class=move || if active_role.get() == role {
-                                "px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer whitespace-nowrap"
-                            } else {
-                                "px-4 py-2 rounded-lg text-sm font-medium bg-elevated text-secondary hover:bg-overlay transition-colors cursor-pointer whitespace-nowrap"
-                            }
-                            on:click=move |_| {
-                                set_active_role.set(role);
-                                set_selected_entry.set(None);
-                                set_detail_tab.set("overview");
-                            }
-                        >
-                            {role}
-                        </button>
-                    }
-                }).collect_view()}
-            </div>
+                // Role tabs — scrollable on mobile
+                <div class="flex gap-1 overflow-x-auto pb-1">
+                    {POOL_ROLES.iter().map(|&role| {
+                        view! {
+                            <button
+                                class=move || if active_role.get() == role {
+                                    "px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                } else {
+                                    "px-4 py-2 rounded-lg text-sm font-medium bg-elevated text-secondary hover:bg-overlay transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                }
+                                on:click=move |_| {
+                                    set_active_role.set(role);
+                                    set_selected_entry.set(None);
+                                    set_detail_tab.set("overview");
+                                }
+                            >
+                                {role}
+                            </button>
+                        }
+                    }).collect_view()}
+                </div>
 
-            <div class="flex flex-col lg:flex-row gap-6 min-h-[30rem]">
-                // Main content: tiers
-                <div class="flex-1 flex flex-col gap-4 min-w-0">
+                <div class="flex flex-col lg:flex-row gap-6 min-h-[30rem]">
+                    // Main content: tiers
+                    <div class="flex-1 flex flex-col gap-4 min-w-0">
                     // Add champion form
                     <div class="flex gap-2 items-end">
                         <div class="flex-1">
@@ -550,17 +584,22 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                             let tier_entries: Vec<&ChampionPoolEntry> = role_entries.iter()
                                                 .filter(|e| e.tier == tier)
                                                 .collect();
+                                            let band_token = tier_token(tier);
                                             view! {
                                                 <div
                                                     class=move || {
                                                         let is_drag_target = dragging_over_tier.get() == Some(tier);
-                                                        let base = format!("border rounded-xl p-4 {}", tier_color(tier));
+                                                        let base = "grid grid-cols-[100px_1fr] rounded-xl overflow-hidden border border-divider/30";
                                                         if is_drag_target {
-                                                            format!("{} border-accent/60 bg-accent/10", base)
+                                                            format!("{} ring-1 ring-accent/60", base)
                                                         } else {
-                                                            base
+                                                            base.to_string()
                                                         }
                                                     }
+                                                    style=format!(
+                                                        "background: linear-gradient(135deg, color-mix(in oklab, var({band}) 30%, var(--color-surface)), var(--color-surface));",
+                                                        band = band_token
+                                                    )
                                                     on:dragover=move |ev: web_sys::DragEvent| {
                                                         ev.prevent_default();
                                                         dragging_over_tier.set(Some(tier));
@@ -588,12 +627,29 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                         }
                                                     }
                                                 >
-                                                    <h3 class=format!("text-xs font-semibold uppercase tracking-wider mb-3 {}", tier_label_color(tier))>
-                                                        {tier_label(tier)}
-                                                        {(!tier_entries.is_empty()).then(|| view! {
-                                                            <span class="text-dimmed ml-1">{format!("({})", tier_entries.len())}</span>
-                                                        })}
-                                                    </h3>
+                                                    // Tier label column: 100px with right border in tier color
+                                                    <div
+                                                        class="flex flex-col items-center justify-center px-2 py-4 border-r-2"
+                                                        style=format!("border-right-color: var({band})", band = band_token)
+                                                    >
+                                                        <span class=format!("font-imperial font-bold leading-none text-[56px] {}", tier_label_color(tier))>
+                                                            {tier_sigil(tier)}
+                                                        </span>
+                                                        <span class="font-display italic text-[13px] text-secondary mt-2 text-center">
+                                                            {tier_subtitle(tier)}
+                                                        </span>
+                                                        <span class=format!(
+                                                            "mt-1 font-imperial uppercase tracking-[0.18em] text-[9px] {}",
+                                                            tier_label_color(tier)
+                                                        )>
+                                                            {tier_label(tier)}
+                                                            {(!tier_entries.is_empty()).then(|| view! {
+                                                                <span class="text-dimmed ml-1">{format!("({})", tier_entries.len())}</span>
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    // Tier content
+                                                    <div class="p-4">
                                                     {if tier_entries.is_empty() {
                                                         view! {
                                                             <p class="text-dimmed text-xs italic">"No champions yet"</p>
@@ -686,7 +742,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                             }}
                                                                             // Remove button — top-right corner, hover reveal
                                                                             <button
-                                                                                class="absolute top-1 right-1 w-5 h-5 bg-red-700 text-white text-xs rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+                                                                                class="absolute top-1 right-1 w-5 h-5 bg-danger text-white text-xs rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                                                                 title="Remove"
                                                                                 on:click=move |ev| {
                                                                                     ev.stop_propagation();
@@ -737,6 +793,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                             </div>
                                                         }.into_any()
                                                     }}
+                                                    </div>
                                                 </div>
                                             }
                                         }).collect_view()}
@@ -747,13 +804,13 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     </Suspense>
                 </div>
 
-                // Right panel: champion details (tabbed)
-                <div class="w-full lg:w-96 flex-shrink-0">
+                // Deep-dive panel (sticky 380px sidebar) per UI-SPEC §"Champion Pool Page Layout"
+                <div class="w-full lg:w-[380px] flex-shrink-0 self-start lg:sticky lg:top-24">
                     {move || {
                         let sel = selected_entry.get();
                         match sel {
                             None => view! {
-                                <div class="bg-elevated/30 border border-divider/30 rounded-xl p-6 flex items-center justify-center min-h-[200px]">
+                                <div class="bg-elevated border border-divider rounded-xl p-6 flex items-center justify-center min-h-[200px]">
                                     <p class="text-dimmed text-sm text-center">"Click a champion to view details, manage notes, and track matchups"</p>
                                 </div>
                             }.into_any(),
@@ -787,9 +844,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                 let role_for_meta = role.clone();
 
                                 view! {
-                                    <div class="bg-elevated/50 border border-divider/50 rounded-xl flex flex-col">
+                                    <div class="bg-elevated border border-divider rounded-xl flex flex-col">
                                         // Header
-                                        <div class="flex items-center gap-3 p-4 border-b border-divider/30">
+                                        <div class="flex items-center gap-3 p-4 border-b border-divider/50">
                                             {if !img_url.is_empty() {
                                                 view! { <img src=img_url alt=champ_display_name.clone() class="w-12 h-12 rounded-lg object-cover" /> }.into_any()
                                             } else {
@@ -1312,7 +1369,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                 view! {
                                                     <button
                                                         class="text-lg cursor-pointer transition-colors hover:scale-110"
-                                                        style=move || { if note_form_difficulty.get().unwrap_or(0) >= level { "color: #f87171" } else { "color: var(--color-muted)" } }
+                                                        style=move || { if note_form_difficulty.get().unwrap_or(0) >= level { "color: var(--color-danger)" } else { "color: var(--color-muted)" } }
                                                         on:click=move |_| {
                                                             if note_form_difficulty.get_untracked() == Some(level) {
                                                                 set_note_form_difficulty.set(None);
@@ -1350,6 +1407,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                         }
                     })}
                 </div>
+            </div>
             </div>
         </div>
     }
