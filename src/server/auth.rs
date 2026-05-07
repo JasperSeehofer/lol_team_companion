@@ -23,6 +23,7 @@ struct DbUser {
     riot_summoner_name: Option<String>,
     mode: Option<String>,
     riot_region: Option<String>,
+    theme: Option<String>,
 }
 
 impl From<DbUser> for AppUser {
@@ -36,6 +37,7 @@ impl From<DbUser> for AppUser {
             riot_summoner_name: u.riot_summoner_name,
             mode: u.mode.unwrap_or_else(|| "solo".to_string()),
             riot_region: u.riot_region,
+            theme: u.theme.unwrap_or_else(|| "demacia".to_string()),
         }
     }
 }
@@ -50,6 +52,7 @@ pub struct AppUser {
     pub riot_summoner_name: Option<String>,
     pub mode: String,
     pub riot_region: Option<String>,
+    pub theme: String,
 }
 
 impl AuthUser for AppUser {

@@ -4487,6 +4487,37 @@ pub async fn set_user_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbRes
     Ok(())
 }
 
+/// Read the user's theme preference. Returns 'demacia' if the field is not set
+/// (legacy users created before Phase 17, or when the row doesn't exist).
+pub async fn get_user_theme(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct ThemeRecord {
+        theme: Option<String>,
+    }
+    let mut result = db
+        .query("SELECT theme FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+    let row: Option<ThemeRecord> = result.take(0)?;
+    Ok(row
+        .and_then(|r| r.theme)
+        .unwrap_or_else(|| "demacia".to_string()))
+}
+
+/// Persist the user's theme preference. The SurrealDB schema enforces
+/// `ASSERT $value IN ['demacia', 'pandemonium']` — invalid values fail at
+/// the DB layer (defense-in-depth alongside the server-fn pre-validation).
+pub async fn set_user_theme(db: &Surreal<Db>, user_id: &str, theme: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET theme = $theme")
+        .bind(("user_key", user_key))
+        .bind(("theme", theme.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
 pub async fn set_user_region(db: &Surreal<Db>, user_id: &str, region: &str) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     db.query("UPDATE type::record('user', $user_key) SET riot_region = $region")

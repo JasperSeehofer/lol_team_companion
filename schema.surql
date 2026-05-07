@@ -10,6 +10,8 @@ DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
 DEFINE FIELD IF NOT EXISTS mode ON user TYPE string DEFAULT 'solo';
 DEFINE FIELD IF NOT EXISTS riot_region ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS theme ON user TYPE string DEFAULT 'demacia'
+  ASSERT $value IN ['demacia', 'pandemonium'];
 
 -- Teams
 DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;
