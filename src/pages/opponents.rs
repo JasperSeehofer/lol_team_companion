@@ -428,26 +428,28 @@ pub fn OpponentsPage() -> impl IntoView {
     let gate_view = move || {
         if is_solo_mode.get() {
             Some(view! {
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-                    <h1 class="text-2xl font-semibold text-primary mb-6">"Opponents"</h1>
-                    <div class="max-w-2xl py-8 text-center">
-                        <div class="bg-surface border border-outline rounded-xl p-6">
-                            <h2 class="text-xl font-semibold text-primary mb-2">"Team feature"</h2>
-                            <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
-                            <button
-                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer"
-                                on:click=move |_| {
-                                    leptos::task::spawn_local(async move {
-                                        let _ = crate::components::nav::set_user_mode("team".to_string()).await;
-                                        #[cfg(feature = "hydrate")]
-                                        if let Some(window) = web_sys::window() {
-                                            let _ = window.location().reload();
-                                        }
-                                    });
-                                }
-                            >
-                                "Switch to Team Mode"
-                            </button>
+                <div class="canvas-grain bg-base min-h-screen">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+                        <h1 class="font-display italic text-primary text-3xl mb-6">"Opponents"</h1>
+                        <div class="max-w-2xl py-8 text-center">
+                            <div class="bg-elevated border border-divider rounded-xl p-6">
+                                <h2 class="font-display italic text-primary text-xl mb-2">"Team feature"</h2>
+                                <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
+                                <button
+                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    on:click=move |_| {
+                                        leptos::task::spawn_local(async move {
+                                            let _ = crate::components::nav::set_user_mode("team".to_string()).await;
+                                            #[cfg(feature = "hydrate")]
+                                            if let Some(window) = web_sys::window() {
+                                                let _ = window.location().reload();
+                                            }
+                                        });
+                                    }
+                                >
+                                    "Switch to Team Mode"
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -459,7 +461,8 @@ pub fn OpponentsPage() -> impl IntoView {
 
     view! {
         {gate_view}
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8" style:display=move || if is_solo_mode.get() { "none" } else { "" }>
+        <div class="canvas-grain bg-base min-h-screen" style:display=move || if is_solo_mode.get() { "none" } else { "" }>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
             // Back to Draft link (when navigated from draft page via Add New Opponent)
             {move || {
@@ -471,7 +474,7 @@ pub fn OpponentsPage() -> impl IntoView {
                         format!("/draft?draft_id={}", draft_id)
                     };
                     view! {
-                        <a href=href class="flex items-center gap-1 text-sm text-accent hover:underline mb-4">
+                        <a href=href class="inline-flex items-center gap-1 text-sm text-accent hover:underline mb-4 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">
                             <span>"\u{2190} Back to Draft"</span>
                         </a>
                     }.into_any()
@@ -481,24 +484,24 @@ pub fn OpponentsPage() -> impl IntoView {
             }}
 
             <div class="flex items-center justify-between mb-6">
-                <h1 class="text-2xl font-semibold text-primary">"Opponents"</h1>
+                <h1 class="font-display italic text-primary text-3xl">"Opponents"</h1>
                 <button
                     on:click=move |_| {
                         selected_id.set(None);
                         creating.set(true);
                     }
-                    class="bg-accent text-accent-contrast hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
+                    class="bg-accent text-accent-contrast hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                 >
                     "+ New Opponent"
                 </button>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                // Left column: opponent list
+                // Left column: opponent list (Card.plain)
                 <div class="lg:col-span-1">
-                    <div class="bg-surface rounded-xl border border-divider overflow-hidden">
+                    <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
                         <div class="px-4 py-3 border-b border-divider">
-                            <h2 class="text-sm font-semibold text-secondary">"All Opponents"</h2>
+                            <h2 class="font-imperial uppercase tracking-wider text-xs text-muted">"All Opponents"</h2>
                         </div>
                         <Suspense fallback=move || view! { <div class="p-4 flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                             {move || Suspend::new(async move {
@@ -530,10 +533,10 @@ pub fn OpponentsPage() -> impl IntoView {
                                                             selected_id.set(Some(opp_id_click.clone()));
                                                         }
                                                         class=move || {
-                                                            let base = "w-full text-left px-4 py-3 border-b border-divider/50 hover:bg-elevated transition-colors cursor-pointer";
+                                                            let base = "w-full text-left px-4 py-3 border-b border-divider/60 hover:bg-surface transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
                                                             let is_sel = selected_id.get().as_deref() == Some(opp_id.as_str());
                                                             if is_sel {
-                                                                format!("{base} bg-elevated")
+                                                                format!("{base} bg-surface border-l-4 border-l-accent")
                                                             } else {
                                                                 base.to_string()
                                                             }
@@ -547,7 +550,7 @@ pub fn OpponentsPage() -> impl IntoView {
                                         }
                                     }
                                     Err(e) => view! {
-                                        <div class="p-4 text-red-400 text-sm">{e.to_string()}</div>
+                                        <div class="p-4 bg-danger/10 border border-danger/30 text-danger rounded-lg text-sm m-4">{e.to_string()}</div>
                                     }.into_any(),
                                 }
                             })}
@@ -591,13 +594,13 @@ pub fn OpponentsPage() -> impl IntoView {
                                             }
                                             Ok(None) => {
                                                 view! {
-                                                    <div class="bg-surface rounded-xl border border-divider p-8 text-center text-muted">
+                                                    <div class="bg-elevated border border-divider rounded-xl p-8 text-center text-muted">
                                                         "Select an opponent from the list or create a new one."
                                                     </div>
                                                 }.into_any()
                                             }
                                             Err(e) => view! {
-                                                <div class="text-red-400 text-sm">{e.to_string()}</div>
+                                                <div class="bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-3 text-sm">{e.to_string()}</div>
                                             }.into_any(),
                                         }
                                     })}
@@ -606,6 +609,7 @@ pub fn OpponentsPage() -> impl IntoView {
                         }
                     }}
                 </div>
+            </div>
             </div>
         </div>
     }
@@ -706,8 +710,8 @@ fn CreationForm(
     };
 
     view! {
-        <div class="bg-surface rounded-xl border border-divider p-6">
-            <h2 class="text-base font-semibold text-primary mb-4">"New Opponent Team"</h2>
+        <div class="bg-elevated border border-divider rounded-xl p-6">
+            <h2 class="font-imperial uppercase tracking-wider text-xs text-muted mb-4">"New Opponent Team"</h2>
 
             // Team name input
             <div class="mb-4">
@@ -716,11 +720,11 @@ fn CreationForm(
                     placeholder="Opponent team name..."
                     prop:value=move || team_name.get()
                     on:input=move |ev| team_name.set(event_target_value(&ev))
-                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 />
                 {move || {
                     if let Some(err) = name_error.get() {
-                        view! { <p class="text-xs text-red-400 mt-1">{err}</p> }.into_any()
+                        view! { <p class="text-xs text-danger mt-1">{err}</p> }.into_any()
                     } else {
                         view! { <span></span> }.into_any()
                     }
@@ -742,12 +746,12 @@ fn CreationForm(
                                     placeholder="Name#Tag (e.g. Faker#KR1)"
                                     prop:value=move || role_sig.get()
                                     on:input=move |ev| role_sig.set(event_target_value(&ev))
-                                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 />
                             </div>
                             {move || {
                                 if let Some(err) = err_sig.get() {
-                                    view! { <p class="text-xs text-red-400 ml-22 pl-2">{err}</p> }.into_any()
+                                    view! { <p class="text-xs text-danger ml-22 pl-2">{err}</p> }.into_any()
                                 } else {
                                     view! { <span></span> }.into_any()
                                 }
@@ -761,7 +765,7 @@ fn CreationForm(
             <div class="flex justify-end gap-3 mt-4">
                 <button
                     on:click=move |_| on_discard()
-                    class="bg-elevated border border-divider text-secondary text-sm px-4 py-2 rounded-lg hover:bg-overlay cursor-pointer"
+                    class="text-muted hover:text-secondary text-sm px-4 py-2 rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 >
                     "Discard Form"
                 </button>
@@ -769,7 +773,7 @@ fn CreationForm(
                     on:click=on_save_fetch
                     disabled=move || saving.get()
                     class=move || {
-                        let base = "bg-accent text-accent-contrast text-sm px-4 py-2 rounded-lg font-medium hover:bg-accent-hover cursor-pointer";
+                        let base = "bg-accent text-accent-contrast text-sm px-4 py-2 rounded-lg font-semibold hover:bg-accent-hover cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors";
                         if saving.get() {
                             format!("{base} opacity-50 cursor-not-allowed")
                         } else {
@@ -883,27 +887,27 @@ fn OpponentDetail(
     };
 
     view! {
-        <div class="bg-surface rounded-xl border border-divider">
+        <div class="bg-elevated border border-divider rounded-xl">
             // Header
-            <div class="px-6 py-4 border-b border-divider flex items-center justify-between gap-2">
+            <div class="px-6 py-4 border-b border-divider flex items-center justify-between gap-2 flex-wrap">
                 <input
                     type="text"
                     prop:value=move || name.get()
                     on:input=move |ev| name.set(event_target_value(&ev))
-                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                    class="flex-1 min-w-48 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     placeholder="Team name..."
                 />
                 <div class="flex gap-2 shrink-0">
                     <button
                         on:click=on_save
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
+                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     >
                         "Save"
                     </button>
                     <button
                         on:click=on_refresh_all
                         disabled=move || refreshing_all.get()
-                        class="bg-elevated border border-divider text-secondary text-sm px-3 py-2 rounded-lg hover:bg-overlay disabled:opacity-50 cursor-pointer"
+                        class="text-muted hover:text-secondary text-sm px-3 py-2 rounded-lg disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     >
                         {move || if refreshing_all.get() { "Refreshing..." } else { "Refresh All" }}
                     </button>
@@ -911,20 +915,20 @@ fn OpponentDetail(
                         let id = opp_id_delete.clone();
                         if confirm_delete.get() {
                             view! {
-                                <div class="flex gap-1">
+                                <div class="flex gap-1 items-center">
                                     <span class="text-sm text-secondary self-center">"Confirm delete?"</span>
                                     <button
                                         on:click=move |_| {
                                             on_delete.run(id.clone());
                                             confirm_delete.set(false);
                                         }
-                                        class="bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-2 rounded-lg transition-colors cursor-pointer"
+                                        class="bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 text-sm font-semibold px-3 py-2 rounded-lg transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                     >
                                         "Delete"
                                     </button>
                                     <button
                                         on:click=move |_| confirm_delete.set(false)
-                                        class="bg-elevated border border-divider text-secondary text-sm px-3 py-2 rounded-lg hover:bg-overlay cursor-pointer"
+                                        class="text-muted hover:text-secondary text-sm px-3 py-2 rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     >
                                         "Keep Opponent"
                                     </button>
@@ -934,7 +938,7 @@ fn OpponentDetail(
                             view! {
                                 <button
                                     on:click=move |_| confirm_delete.set(true)
-                                    class="text-red-400 text-sm hover:text-red-300 cursor-pointer"
+                                    class="text-danger text-sm hover:opacity-80 cursor-pointer px-2 py-1 rounded-md focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                 >
                                     "Delete"
                                 </button>
@@ -946,12 +950,12 @@ fn OpponentDetail(
 
             // Notes
             <div class="px-6 py-4 border-b border-divider">
-                <label class="block text-xs font-medium text-muted mb-1">"Notes"</label>
+                <label class="block font-imperial uppercase tracking-wider text-xs text-muted mb-2">"Notes"</label>
                 <textarea
                     prop:value=move || notes.get()
                     on:input=move |ev| notes.set(event_target_value(&ev))
                     rows="2"
-                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent resize-y"
+                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-y"
                     placeholder="General scouting notes..."
                 />
             </div>
@@ -1018,19 +1022,19 @@ fn EmptyRoleSlot(
     };
 
     view! {
-        <div class="bg-elevated rounded-lg border border-divider/50 p-4">
-            <div class="flex items-center gap-2">
+        <div class="bg-surface border border-outline/50 rounded-xl p-4">
+            <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-20 text-sm font-semibold text-secondary">{role_display}</span>
                 <input
                     type="text"
                     placeholder="Name#Tag (e.g. Faker#KR1)"
                     prop:value=move || riot_id_input.get()
                     on:input=move |ev| riot_id_input.set(event_target_value(&ev))
-                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                    class="flex-1 min-w-32 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 />
                 <button
                     on:click=on_add
-                    class="text-xs text-secondary hover:text-primary bg-surface hover:bg-overlay border border-divider px-3 py-2 rounded-lg cursor-pointer"
+                    class="text-xs text-secondary hover:text-primary bg-elevated border border-divider px-3 py-2 rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 >
                     "+ Add"
                 </button>
@@ -1142,7 +1146,7 @@ fn PlayerCard(
     };
 
     view! {
-        <div class="bg-elevated rounded-lg border border-divider/50 p-4">
+        <div class="bg-surface border border-outline/50 rounded-xl p-4">
             // Row 1: header
             <div class="flex items-center gap-2 mb-3 flex-wrap">
                 <span class="text-sm font-semibold text-secondary">{role_display}</span>
@@ -1151,7 +1155,7 @@ fn PlayerCard(
                 {otp_champion.as_ref().map(|champ| {
                     let champ = champ.clone();
                     view! {
-                        <span class="text-xs bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded px-2 py-0.5">
+                        <span class="text-xs bg-warning/15 text-warning border border-warning/30 rounded-md px-2 py-0.5">
                             "\u{26a0} OTP: "{champ}
                         </span>
                     }
@@ -1163,7 +1167,7 @@ fn PlayerCard(
                         <span class="text-xs text-dimmed">"Never fetched"</span>
                     }.into_any(),
                     Some((text, stale)) => view! {
-                        <span class=if stale { "text-xs text-orange-400" } else { "text-xs text-muted" }>
+                        <span class=if stale { "text-xs text-warning" } else { "text-xs text-muted" }>
                             "Last fetched: "{text}
                         </span>
                     }.into_any(),
@@ -1173,7 +1177,7 @@ fn PlayerCard(
                 <button
                     on:click=on_refresh
                     title="Refresh player data"
-                    class="ml-auto w-8 h-8 flex items-center justify-center rounded text-muted hover:text-secondary hover:bg-elevated transition-colors cursor-pointer"
+                    class="ml-auto w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-secondary hover:bg-elevated transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 >
                     {move || {
                         if fetch_state.get() == FetchState::Fetching {
@@ -1203,7 +1207,7 @@ fn PlayerCard(
                         placeholder="Name#Tag (e.g. Faker#KR1)"
                         prop:value=move || p_summoner.get()
                         on:input=move |ev| p_summoner.set(event_target_value(&ev))
-                        class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:border-accent"
+                        class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     />
                     // Fetch status icon
                     {move || match fetch_state.get() {
@@ -1215,17 +1219,17 @@ fn PlayerCard(
                             </svg>
                         }.into_any(),
                         FetchState::Success => view! {
-                            <span class="text-green-400 w-4 h-4 text-sm shrink-0">"✓"</span>
+                            <span class="text-success w-4 h-4 text-sm shrink-0">"✓"</span>
                         }.into_any(),
                         FetchState::Error(_) => view! {
-                            <span class="text-red-400 w-4 h-4 text-sm shrink-0">"✗"</span>
+                            <span class="text-danger w-4 h-4 text-sm shrink-0">"✗"</span>
                         }.into_any(),
                     }}
                 </div>
                 // Error message below input
                 {move || match fetch_state.get() {
                     FetchState::Error(msg) => view! {
-                        <p class="text-xs text-red-400 mt-1">{msg}</p>
+                        <p class="text-xs text-danger mt-1">{msg}</p>
                     }.into_any(),
                     _ => view! { <span></span> }.into_any(),
                 }}
@@ -1245,7 +1249,7 @@ fn PlayerCard(
                         None => name,
                     };
                     view! {
-                        <span class="text-xs bg-surface border border-divider/50 text-secondary rounded px-2 py-1">
+                        <span class="text-xs bg-elevated border border-divider text-secondary rounded-md px-2 py-1">
                             {display}
                         </span>
                     }
@@ -1261,7 +1265,7 @@ fn PlayerCard(
             <div>
                 <button
                     on:click=move |_| pool_expanded.update(|v| *v = !*v)
-                    class="text-xs text-muted hover:text-secondary cursor-pointer flex items-center gap-1"
+                    class="text-xs text-muted hover:text-secondary cursor-pointer flex items-center gap-1 rounded-md focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 >
                     {move || if pool_expanded.get() { "Pool Analysis \u{25be}" } else { "Pool Analysis \u{25b8}" }}
                 </button>
