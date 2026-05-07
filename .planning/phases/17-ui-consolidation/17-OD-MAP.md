@@ -40,8 +40,8 @@ Leptos, set `Status = ported`.
 | Team builder | `/team-builder` | 05 | TBD | TBD | pending |
 | Opponents | `/opponents` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/opponents.html` | ported |
 | Action items | `/action-items` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/action-items.html` | ported |
-| Personal learnings | `/personal-learnings` | 04 | TBD | TBD | pending |
-| Analytics | `/analytics` | 04 | TBD | TBD | pending |
+| Personal learnings | `/personal-learnings` | 04 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/personal-learnings.html` | ported |
+| Analytics | `/analytics` | 04 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/analytics.html` | ported |
 | Admin invites | `/admin/invites` | 06 | TBD | TBD | pending |
 | Bug-report widget | (floating, mounted in auth shell) | 06 | TBD | TBD | pending |
 | Closed-beta acceptance form | `/auth/register?invite=...` (sub-form) | 06 | TBD | TBD | pending |
