@@ -4605,11 +4605,31 @@ pub async fn get_solo_matches(
     queue_filter: Option<i32>,
     limit: i32,
 ) -> DbResult<Vec<crate::models::match_data::PlayerMatchStats>> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbSoloMatch {
+        id: RecordId,
+        match_id: String,
+        user_id: String,
+        champion: String,
+        kills: i32,
+        deaths: i32,
+        assists: i32,
+        cs: i32,
+        vision_score: i32,
+        damage: i32,
+        win: bool,
+    }
 
-    let rows: Vec<crate::models::match_data::PlayerMatchStats> = if let Some(qid) = queue_filter {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    // Alias RecordId fields to strings: match.match_id → match_id, <string>user → user_id
+    const BASE_SELECT: &str =
+        "SELECT id, match.match_id AS match_id, <string>user AS user_id, \
+         champion, kills, deaths, assists, cs, vision_score, damage, win \
+         FROM player_match WHERE user = type::record('user', $user_key)";
+
+    let rows: Vec<DbSoloMatch> = if let Some(qid) = queue_filter {
         let mut result = db
-            .query("SELECT * FROM player_match WHERE user = type::record('user', $user_key) AND match.queue_id = $queue_id LIMIT $limit")
+            .query(format!("{BASE_SELECT} AND match.queue_id = $queue_id ORDER BY match.game_end DESC LIMIT $limit"))
             .bind(("user_key", user_key))
             .bind(("queue_id", qid))
             .bind(("limit", limit))
@@ -4617,14 +4637,29 @@ pub async fn get_solo_matches(
         result.take(0).unwrap_or_default()
     } else {
         let mut result = db
-            .query("SELECT * FROM player_match WHERE user = type::record('user', $user_key) LIMIT $limit")
+            .query(format!("{BASE_SELECT} ORDER BY match.game_end DESC LIMIT $limit"))
             .bind(("user_key", user_key))
             .bind(("limit", limit))
             .await?;
         result.take(0).unwrap_or_default()
     };
 
-    Ok(rows)
+    Ok(rows
+        .into_iter()
+        .map(|r| crate::models::match_data::PlayerMatchStats {
+            id: Some(r.id.to_sql()),
+            match_id: r.match_id,
+            user_id: r.user_id,
+            champion: r.champion,
+            kills: r.kills,
+            deaths: r.deaths,
+            assists: r.assists,
+            cs: r.cs,
+            vision_score: r.vision_score,
+            damage: r.damage,
+            win: r.win,
+        })
+        .collect())
 }
 
 // ===========================================================================
