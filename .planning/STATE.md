@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Launch Readiness
-status: v1.2 Shipped 2026-05-07 (Phase 16 close-out complete); active milestone v1.3 Launch Readiness in progress
+status: ready_to_plan
 stopped_at: Phase 16 close-out complete; v1.2 shipped
 last_updated: "2026-05-07T10:08:57.000Z"
 progress:
   total_phases: 12
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 15
   completed_plans: 14
-  percent: 93
+  percent: 42
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 16 (phase15-closeout) — EXECUTING
-Plan: 1 of 3
+Phase: 17
+Plan: Not started
 
 Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), then plan/execute the close-out
 

@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Cross-Feature Intelligence** — Phases 1-5 (shipped 2026-03-18)
 - ✅ **v1.1 Polish, Draft & Opponents Rework** — Phases 6-11 (shipped 2026-03-24)
-- 🟢 **v1.2 Solo Mode & Match Intelligence** — Phases 12-15 (closing; old Phase 16 deferred to v1.4)
+- ✅ **v1.2 Solo Mode & Match Intelligence** — Phases 12-16 (shipped 2026-05-07)
 - 🚧 **v1.3 Launch Readiness** — Phases 16-23 (in progress, started 2026-05-06)
 - 🔜 **v1.4 Draft Integration & Post-Launch Backlog** — Phase 24+ (deferred Draft Integration + bug-report inbox graduates)
 
@@ -38,7 +38,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 </details>
 
-### 🟢 v1.2 Solo Mode & Match Intelligence (Closing)
+### ✅ v1.2 Solo Mode & Match Intelligence (Shipped: 2026-05-07)
 
 **Milestone Goal:** Open the app to individual players — solo queue tracking, personal goals, and learnings — plus richer match detail from the Riot API that connects back into champion pool and draft decisions.
 
@@ -63,6 +63,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - [ ] **Phase 17: UI Consolidation** - Run `/gsd-ui-phase` for UI-SPEC; Claude Design primary pass; Open-Design fills missing surfaces; retroactive `/gsd-ui-review` after implementation.
 - [ ] **Phase 18: Bug-Report Widget** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start.
 - [ ] **Phase 19: Production Hardening** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
+- [ ] **Phase 19.1: Closed-Beta Access Gate (INSERTED 2026-05-07)** - Gate registration behind an invite mechanism so the deployed binary is URL-reachable but only the named-friends list can sign up. Login + legal pages remain public.
 - [ ] **Phase 20: Deploy Infra (shared CAX11)** - Cross-compile via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36`; new systemd unit at port 3001; Caddyfile stanza; `just deploy` recipe; pre-deploy smoke + post-deploy WASM-200 + server-fn check (per feynman 2026-04-16 incident).
 - [ ] **Phase 21: Compliance & Transparency** - Pick + register TLD (flag values charter for non-EU); DSE + Impressum (§5 DDG, no Steuernummer); Tier-A transparency in `[[lol-team-companion]]` vault entity; G-01..G-13 CI sweep; Riot Developer Portal application.
 - [ ] **Phase 22: Pre-Launch Full Review** - `/gsd-audit-milestone v1.3` + full `/gsd-code-review` + `/gsd-secure-phase` + `/gsd-ui-review` + `/ultrareview` + `/consult security`; fix HIGH findings; produce `.planning/LAUNCH-GATE.md`.
@@ -229,9 +230,28 @@ Plans:
 **Plans**: TBD
 **UI hint**: no (backend-only)
 
+### Phase 19.1: Closed-Beta Access Gate (INSERTED 2026-05-07)
+**Goal**: Public registration is gated by an invite mechanism so that the deployed v1.3 binary is reachable by URL but only the named-friends list can complete account creation
+**Depends on**: Phase 19
+**Decisions to lock in plan-phase**:
+  - **Gate model**: choose one of (A) single shared `BETA_INVITE_CODE` env var, (B) per-user `invite_code` SurrealDB table minted by an admin, or (C) email allow-list. Leaning (B) because it gives per-friend revocation, tracks who consumed which code, and surfaces a real "X of N invites used" signal during the beta. Plan-phase locks the choice.
+  - **Gate location**: registration server fn only. Login still works for already-registered users; homepage and `/legal/impressum` + `/legal/datenschutz` (per Phase 21) stay reachable without a code so the legal pages can be cited externally.
+  - **Admin role**: a single admin user (first registered, or flagged via `ADMIN_USER_EMAIL` env) sees an admin-only "Mint invite" page listing issued codes and their consumed status. Non-admin users get a 404 on the route, not a 403, to avoid leaking the route's existence.
+  - **Removal path**: when the gate is dropped (likely v1.4 or post-beta), the `invite_code` table can stay (audit trail) but the registration fn check becomes feature-flag-controlled. No migrations needed to drop the gate.
+  - **No anti-bot beyond the code**: a 6-12 char alphanumeric code from a CSPRNG is sufficient for ≤ 30-account beta. No CAPTCHA, no rate-limiting work in this phase (Phase 19 already adds Riot-side timeouts; abuse handling for registration deferred to v1.4 if needed).
+**Success Criteria**:
+  1. Registration server fn rejects sign-ups without a valid, unconsumed invite code and returns a clean form-level error
+  2. Admin can mint invite codes via an admin-only route; on consumption each code is marked with the consuming `user_id` and timestamp
+  3. Login, homepage, and `/legal/*` routes remain reachable without an invite code
+  4. New `invite_code` table appears in `schema.surql` (or chosen alternative is documented) with appropriate field constraints
+  5. e2e smoke test covers: invalid code → reject; valid code → registration succeeds and code is marked consumed; reuse of consumed code → reject
+  6. Bug-report widget (Phase 18) still functions for invited users — no regression on already-shipped surfaces
+**Plans**: TBD
+**UI hint**: yes (registration form change + minimal admin-mint page)
+
 ### Phase 20: Deploy Infrastructure (Shared CAX11)
 **Goal**: Get the production binary running on feynman-lookup's existing Hetzner CAX11 alongside the existing service, served via Caddy at the new domain
-**Depends on**: Phase 19
+**Depends on**: Phase 19, Phase 19.1
 **Decisions baked in**:
   - Same CAX11, no new VPS provisioning (`cloud-init.yml` already applied)
   - Cross-compile locally via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36` (Debian 12 glibc pin per `[[cross-project-memory]]`)
@@ -317,7 +337,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 20 → 21 → 22 → 23. v1.4 starts at 24 post-launch.
+Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 22 → 23. v1.4 starts at 24 post-launch.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -337,10 +357,11 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 20 → 21 →
 | 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
-| 16. Phase 15 Close-out | v1.3 | 3/3 | Complete   | 2026-05-07 |
+| 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 0/? | Not started | - |
 | 18. Bug-Report Widget | v1.3 | 0/? | Not started | - |
 | 19. Production Hardening | v1.3 | 0/? | Not started | - |
+| 19.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (INSERTED 2026-05-07) | - |
 | 20. Deploy Infra (CAX11) | v1.3 | 0/? | Not started | - |
 | 21. Compliance & Transparency | v1.3 | 0/? | Not started | - |
 | 22. Pre-Launch Full Review | v1.3 | 0/? | Not started | - |
