@@ -2,21 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Launch Readiness
-status: Pivoted from v1.2 → v1.3 on 2026-05-06; entering Phase 16 (Phase 15 close-out)
-stopped_at: Phase 16 context gathered
-last_updated: "2026-05-06T16:22:10.360Z"
+status: v1.2 Shipped 2026-05-07 (Phase 16 close-out complete); active milestone v1.3 Launch Readiness in progress
+stopped_at: Phase 16 close-out complete; v1.2 shipped
+last_updated: "2026-05-07T10:08:57.000Z"
 progress:
   total_phases: 12
   completed_phases: 4
   total_plans: 15
-  completed_plans: 12
-  percent: 80
+  completed_plans: 14
+  percent: 93
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 16 (Phase 15 Close-out) — NOT STARTED
+Phase: 16 (phase15-closeout) — EXECUTING
+Plan: 1 of 3
 
 Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), then plan/execute the close-out
 
@@ -25,7 +26,7 @@ Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), the
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 16 — Phase 15 Close-out (v1.3 Launch Readiness)
+**Current focus:** Phase 16 — phase15-closeout
 **v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions
@@ -44,6 +45,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 14]: Pre-clone Strings before view! macro when same String is moved into a closure AND also needed by a later component prop
 - [Phase 14]: Resource<Result<Vec<...>>> type used for LearningCard prop to match Leptos resource typing
 - [Phase 14]: current_date_short() returns static Today — auto-title is user-editable so approximate is acceptable
+- [Phase 16]: v1.2 Solo Mode & Match Intelligence shipped 2026-05-07; close-out resolved WR-01 (refetch hoisting) and WR-02 (dead get_personal_goals removed); 15-REVIEW.md fully reconciled; second-pass review found 0 new HIGH/Critical
 
 ## Blockers/Concerns
 
