@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
+use crate::components::ornaments::{GiltCorner, HeraldicDivider};
 use crate::components::ui::ErrorBanner;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -148,75 +149,83 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
 pub fn HomePage() -> impl IntoView {
     let dashboard = Resource::new(|| (), |_| get_dashboard());
 
+    // D-14: Unauthenticated visitors are redirected to /closed-beta.
+    // Authenticated users with no team are redirected to /team/roster.
+    // Authenticated team members see the Strategy Room dashboard.
+    Effect::new(move || {
+        if let Some(Ok(data)) = dashboard.get() {
+            if !data.logged_in {
+                #[cfg(feature = "hydrate")]
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/closed-beta");
+                }
+            } else if !data.has_team {
+                #[cfg(feature = "hydrate")]
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/team/roster");
+                }
+            }
+        }
+    });
+
     view! {
-        <Suspense fallback=|| view! {
-            <div class="max-w-5xl mx-auto py-16 px-6">
-                <div class="animate-pulse flex flex-col gap-6">
-                    <div class="h-10 bg-elevated rounded w-64"></div>
-                    <div class="h-6 bg-elevated rounded w-96"></div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <div class="h-32 bg-elevated rounded-xl"></div>
-                        <div class="h-32 bg-elevated rounded-xl"></div>
-                        <div class="h-32 bg-elevated rounded-xl"></div>
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+            <Suspense fallback=|| view! {
+                <div class="max-w-5xl mx-auto py-12">
+                    <div class="animate-pulse flex flex-col gap-6">
+                        <div class="h-12 bg-elevated rounded w-72"></div>
+                        <div class="h-6 bg-elevated rounded w-96"></div>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="h-32 bg-elevated rounded-xl"></div>
+                            <div class="h-32 bg-elevated rounded-xl"></div>
+                            <div class="h-32 bg-elevated rounded-xl"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        }>
-            {move || dashboard.get().map(|result| match result {
-                Err(e) => view! {
-                    <div class="max-w-4xl mx-auto py-16 px-6">
-                        <ErrorBanner message=format!("Failed to load dashboard: {e}") />
-                    </div>
-                }.into_any(),
-                Ok(data) if !data.logged_in => view! {
-                    <LandingPage />
-                }.into_any(),
-                Ok(data) => view! {
-                    <Dashboard data=data />
-                }.into_any(),
-            })}
-        </Suspense>
+            }>
+                {move || dashboard.get().map(|result| match result {
+                    Err(e) => view! {
+                        <div class="max-w-4xl mx-auto py-16">
+                            <ErrorBanner message=format!("Failed to load dashboard: {e}") />
+                        </div>
+                    }.into_any(),
+                    Ok(data) if !data.logged_in => view! {
+                        // Brief blank state while the redirect Effect fires.
+                        // Plan 06 will style /closed-beta as the public landing.
+                        <div class="max-w-4xl mx-auto py-16 text-center">
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-muted">"Redirecting"</div>
+                            <p class="text-muted text-sm mt-2">"Taking you to the closed beta page..."</p>
+                        </div>
+                    }.into_any(),
+                    Ok(data) if !data.has_team => view! {
+                        // Brief blank state while the redirect Effect fires.
+                        <div class="max-w-4xl mx-auto py-16 text-center">
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-muted">"Redirecting"</div>
+                            <p class="text-muted text-sm mt-2">"Taking you to team setup..."</p>
+                        </div>
+                    }.into_any(),
+                    Ok(data) => view! {
+                        <Dashboard data=data />
+                    }.into_any(),
+                })}
+            </Suspense>
+        </div>
     }
 }
 
+/// Card.gilt panel — Demacia-tier folio panel with 4 corner ornaments.
 #[component]
-fn LandingPage() -> impl IntoView {
+fn GiltCard(children: Children) -> impl IntoView {
     view! {
-        <div class="max-w-4xl mx-auto py-20 px-6 text-center">
-            <h1 class="text-5xl font-bold text-primary mb-4 tracking-tight">
-                "LoL Team Companion"
-            </h1>
-            <p class="text-muted text-lg mb-10 max-w-2xl mx-auto">
-                "Draft planning, team stats, and strategic tools for competitive League of Legends teams."
-            </p>
-            <div class="flex gap-4 justify-center mb-16">
-                <A href="/auth/register">
-                    <div class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-8 py-3 transition-colors">
-                        "Get Started"
-                    </div>
-                </A>
-                <A href="/auth/login">
-                    <div class="bg-elevated hover:bg-overlay text-primary font-medium rounded-lg px-8 py-3 border border-divider transition-colors">
-                        "Sign In"
-                    </div>
-                </A>
+        <section class="bg-elevated border border-outline rounded-xl p-6 relative">
+            <div class="absolute top-2 left-2 pointer-events-none"><GiltCorner corner="tl" size=18 /></div>
+            <div class="absolute top-2 right-2 pointer-events-none"><GiltCorner corner="tr" size=18 /></div>
+            <div class="absolute bottom-2 left-2 pointer-events-none"><GiltCorner corner="bl" size=18 /></div>
+            <div class="absolute bottom-2 right-2 pointer-events-none"><GiltCorner corner="br" size=18 /></div>
+            <div class="relative">
+                {children()}
             </div>
-
-            <div class="grid grid-cols-3 gap-6 text-left">
-                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-6">
-                    <div class="text-accent font-bold text-lg mb-2">"Draft Trees"</div>
-                    <p class="text-muted text-sm">"Plan branching draft strategies. Navigate decisions in real-time during live games."</p>
-                </div>
-                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-6">
-                    <div class="text-accent font-bold text-lg mb-2">"Team Stats"</div>
-                    <p class="text-muted text-sm">"Sync match history from the Riot API. Filter by roster, date, and more."</p>
-                </div>
-                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-6">
-                    <div class="text-accent font-bold text-lg mb-2">"Game Plans"</div>
-                    <p class="text-muted text-sm">"Create matchup strategies with macro and role-specific sections."</p>
-                </div>
-            </div>
-        </div>
+        </section>
     }
 }
 
@@ -233,92 +242,107 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
     };
 
     view! {
-        <div class="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-8">
-            // Welcome
-            <div>
-                <h1 class="text-3xl font-bold text-primary">
+        <div class="max-w-5xl mx-auto py-6 flex flex-col gap-8">
+            // Strategy Room hero header
+            <header>
+                <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
+                    "The Strategy Room"
+                </div>
+                <h1 class="font-display italic text-[44px] leading-tight text-primary mt-1">
                     "Welcome back, " <span class="text-accent">{data.username.clone()}</span>
                 </h1>
                 {data.team_name.clone().map(|name| view! {
-                    <p class="text-muted text-sm mt-1">"Team: " <span class="text-primary font-medium">{name}</span></p>
+                    <p class="text-muted text-sm mt-2 font-mono">
+                        "Team \u{2014} " <span class="text-secondary font-medium">{name}</span>
+                    </p>
                 })}
-            </div>
+                <div class="mt-3"><HeraldicDivider width=320 /></div>
+            </header>
 
-            // Alerts
+            // Alerts (gilt cards)
             {(data.pending_requests > 0).then(|| view! {
-                <A href="/team/dashboard">
-                    <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3 hover:bg-amber-500/15 transition-colors cursor-pointer">
-                        <span class="bg-amber-500 text-primary text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                <A href="/team/dashboard" attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
+                    <div class="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-center gap-3 hover:bg-warning/15 transition-colors cursor-pointer">
+                        <span class="bg-warning text-base text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center tabular-nums" aria-hidden="true">
                             {data.pending_requests}
                         </span>
-                        <span class="text-amber-400 text-sm font-medium">
+                        <span class="text-warning text-sm font-medium">
                             {format!("Pending join request{}", if data.pending_requests == 1 { "" } else { "s" })}
                         </span>
                     </div>
                 </A>
             })}
 
-            {(!data.has_team).then(|| view! {
-                <A href="/team/roster">
-                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 flex items-center gap-3 hover:bg-blue-500/15 transition-colors cursor-pointer">
-                        <span class="text-blue-400 text-sm font-medium">"You're not in a team yet. Create or join one to get started."</span>
-                    </div>
-                </A>
-            })}
-
             {(!data.has_riot_key).then(|| view! {
-                <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4">
-                    <p class="text-muted text-sm">"RIOT_API_KEY not set — stats syncing is disabled. Add it to .env."</p>
+                <div class="bg-elevated border border-outline/50 rounded-xl p-4">
+                    <p class="text-muted text-sm">
+                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-warning mr-2">"Notice"</span>
+                        "RIOT_API_KEY not set \u{2014} stats syncing is disabled. Add it to .env."
+                    </p>
                 </div>
             })}
 
             // Stats overview
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <StatBox label="Roster" value=format!("{} members", data.roster_count) href="/team/dashboard" />
-                <StatBox label="Drafts" value=format!("{}", data.draft_count + data.tree_count) href="/draft" />
-                <StatBox label="Game Plans" value=format!("{}", data.plan_count) href="/game-plan" />
-                <StatBox label="Recent Games" value=recent_games_display href="/stats" />
-            </div>
+            <section>
+                <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-3">"At a glance"</div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <StatBox label="Roster" value=format!("{} members", data.roster_count) href="/team/dashboard" />
+                    <StatBox label="Drafts" value=format!("{}", data.draft_count + data.tree_count) href="/draft" />
+                    <StatBox label="Game Plans" value=format!("{}", data.plan_count) href="/game-plan" />
+                    <StatBox label="Recent Games" value=recent_games_display href="/stats" />
+                </div>
+            </section>
 
-            // Quick nav
-            <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                <NavCard
-                    href="/team/dashboard"
-                    title="Team"
-                    desc="Manage roster and team settings"
-                    accent="border-l-blue-500"
-                />
-                <NavCard
-                    href="/draft"
-                    title="Draft Planner"
-                    desc="Plan pick/ban phases"
-                    accent="border-l-purple-500"
-                />
-                <NavCard
-                    href="/tree-drafter"
-                    title="Tree Drafter"
-                    desc="Branching draft strategies"
-                    accent="border-l-emerald-500"
-                />
-                <NavCard
-                    href="/stats"
-                    title="Stats"
-                    desc="Match history and performance"
-                    accent="border-l-cyan-500"
-                />
-                <NavCard
-                    href="/game-plan"
-                    title="Game Plans"
-                    desc="Matchup strategy and tactics"
-                    accent="border-l-yellow-500"
-                />
-                <NavCard
-                    href="/post-game"
-                    title="Post-Game"
-                    desc="Reviews and pattern analysis"
-                    accent="border-l-red-500"
-                />
-            </div>
+            // Quick nav (gilt card per major hub)
+            <section>
+                <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-3">"The folio"</div>
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    <NavCard
+                        href="/team/dashboard"
+                        title="Team"
+                        desc="Manage roster and team settings"
+                    />
+                    <NavCard
+                        href="/draft"
+                        title="Draft Planner"
+                        desc="Plan pick/ban phases"
+                    />
+                    <NavCard
+                        href="/tree-drafter"
+                        title="Tree Drafter"
+                        desc="Branching draft strategies"
+                    />
+                    <NavCard
+                        href="/stats"
+                        title="Stats"
+                        desc="Match history and performance"
+                    />
+                    <NavCard
+                        href="/game-plan"
+                        title="Game Plans"
+                        desc="Matchup strategy and tactics"
+                    />
+                    <NavCard
+                        href="/post-game"
+                        title="Post-Game"
+                        desc="Reviews and pattern analysis"
+                    />
+                </div>
+            </section>
+
+            // Recent activity gilt panel (placeholder — derived from existing counters)
+            <GiltCard>
+                <div class="flex items-baseline justify-between mb-4">
+                    <h2 class="font-display italic text-[22px] text-primary">"Recent activity"</h2>
+                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Folio"</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <ActivityTile label="Drafts saved" value=format!("{}", data.draft_count) />
+                    <ActivityTile label="Trees saved" value=format!("{}", data.tree_count) />
+                    <ActivityTile label="Plans" value=format!("{}", data.plan_count) />
+                    <ActivityTile label="Reviews" value=format!("{}", data.review_count) />
+                </div>
+            </GiltCard>
         </div>
     }
 }
@@ -326,10 +350,10 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
 #[component]
 fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoView {
     view! {
-        <A href=href>
-            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 hover:bg-elevated transition-colors cursor-pointer">
-                <div class="text-muted text-xs uppercase tracking-wider mb-1">{label}</div>
-                <div class="text-primary text-xl font-bold">{value}</div>
+        <A href=href attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
+            <div class="bg-elevated border border-outline/50 rounded-xl p-4 hover:bg-surface transition-colors cursor-pointer">
+                <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">{label}</div>
+                <div class="font-display italic text-primary text-2xl tabular-nums">{value}</div>
             </div>
         </A>
     }
@@ -340,14 +364,23 @@ fn NavCard(
     href: &'static str,
     title: &'static str,
     desc: &'static str,
-    accent: &'static str,
 ) -> impl IntoView {
     view! {
-        <A href=href>
-            <div class=format!("bg-elevated/50 border border-divider/50 border-l-4 {accent} rounded-xl p-5 hover:bg-elevated transition-colors cursor-pointer h-full")>
-                <div class="text-primary text-lg font-semibold mb-1">{title}</div>
+        <A href=href attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
+            <div class="bg-elevated border border-outline/50 border-l-4 border-l-accent rounded-xl p-5 hover:bg-surface transition-colors cursor-pointer h-full">
+                <div class="font-display italic text-primary text-xl mb-1">{title}</div>
                 <div class="text-muted text-sm">{desc}</div>
             </div>
         </A>
+    }
+}
+
+#[component]
+fn ActivityTile(label: &'static str, value: String) -> impl IntoView {
+    view! {
+        <div class="bg-surface border border-outline/50 rounded-lg px-3 py-2 flex flex-col gap-1">
+            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">{label}</span>
+            <span class="font-display italic text-primary text-2xl tabular-nums">{value}</span>
+        </div>
     }
 }
