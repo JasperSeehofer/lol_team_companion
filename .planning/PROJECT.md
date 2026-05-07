@@ -43,22 +43,23 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 
 ### Active
 
-## Current Milestone: v1.2 Solo Mode & Match Intelligence
+## Shipped: v1.2 Solo Mode & Match Intelligence (2026-05-07)
 
-**Goal:** Open the app to individual players with solo queue tracking, personal goals, and learnings — plus richer match detail from the Riot API that connects back into champion pool and draft decisions.
+**Phases:** 12–16 | **Plans:** 15 plans
 
-**Target features:**
-- [ ] Solo/team toggle with personal dashboard
-- [ ] Solo queue goal setting (rank targets, CS/min, death count)
-- [ ] Ranked climb tracker (LP gains/losses, streaks, rank history)
-- [ ] Personal learnings journal (post-game reflections, tagged by champion/matchup)
-- [x] Match detail view — full participant data (10 players), items, damage, gold (Phase 13)
-- [x] Match timeline — objectives (dragons, baron, towers), key events (Phase 13)
-- [x] Personal performance breakdown (damage share, vision score, CS graphs) (Phase 13)
-- [ ] Match → learning one-click flow
-- [ ] Champion performance trends over time (win rate, KDA, CS/min per champion)
-- [ ] Personal matchup notes (surfaced when picking that champion in draft)
-- [ ] Practice list with auto-tracked progress from match history
+- ✓ Solo/team toggle with personal dashboard (Phase 12)
+- ✓ Solo queue match sync with ranked badge (Phase 12)
+- ✓ Match detail view — 10-player scoreboard, items, damage, gold (Phase 13)
+- ✓ Match timeline — objectives, key events (Phase 13)
+- ✓ Personal performance breakdown (Phase 13)
+- ✓ Personal learnings journal with champion/matchup/tag filtering (Phase 14)
+- ✓ Match → learning one-click flow (Phase 14)
+- ✓ LP history graph from ranked snapshots (Phase 15)
+- ✓ Rank/CS/deaths goal setting with auto-tracked progress (Phase 15)
+- ✓ Champion performance trends table with time-window toggle (Phase 15)
+- ✓ Phase 15 close-out: WR-01 refetch hoist, WR-02 dead code removal, 15-REVIEW.md reconciled (Phase 16)
+
+## Current Milestone: v1.3 Launch Readiness
 
 **Future (deferred beyond v1.2):**
 - [ ] Match as launchpad: create draft → game plan → review chain
@@ -142,4 +143,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after v1.2 milestone started*
+*Last updated: 2026-05-07 after Phase 16 — v1.2 shipped, active milestone v1.3 Launch Readiness*
