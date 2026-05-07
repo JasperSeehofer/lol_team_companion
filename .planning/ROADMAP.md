@@ -59,7 +59,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - Bug-report widget captures page URL + semantic element label + free text + bug/wishlist toggle (no screenshots, no CSS selectors — selectors don't survive recompile).
 - Launch shape: closed beta via named-friends invite list (no public self-serve registration in v1.3).
 
-- [ ] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81` (15-REVIEW.md was not updated). Remaining: clear WR-01 (refetch lp_history + goal_progress resources after sync) + WR-02 (orphan get_personal_goals — wire or remove); secondary code review + verification; mark v1.2 fully closed.
+- [x] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81` (15-REVIEW.md was not updated). Remaining: clear WR-01 (refetch lp_history + goal_progress resources after sync) + WR-02 (orphan get_personal_goals — wire or remove); secondary code review + verification; mark v1.2 fully closed. (completed 2026-05-07)
 - [ ] **Phase 17: UI Consolidation** - Run `/gsd-ui-phase` for UI-SPEC; Claude Design primary pass; Open-Design fills missing surfaces; retroactive `/gsd-ui-review` after implementation.
 - [ ] **Phase 18: Bug-Report Widget** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start.
 - [ ] **Phase 19: Production Hardening** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
@@ -171,11 +171,11 @@ Plans:
 **Plans**: 3 plans
 Plans:
 **Wave 1**
-- [ ] 16-01-PLAN.md — WR-01 hoist fix: hoist `lp_window` + `lp_history_resource` into `SoloDashboardPage`; add `goal_progress_resource.refetch()` and `lp_history_resource.refetch()` to both sync paths
-- [ ] 16-02-PLAN.md — WR-02 removal: delete dead `pub async fn get_personal_goals` from `src/server/db.rs`; delete `tests/db_personal_goal.rs`
+- [x] 16-01-PLAN.md — WR-01 hoist fix: hoist `lp_window` + `lp_history_resource` into `SoloDashboardPage`; add `goal_progress_resource.refetch()` and `lp_history_resource.refetch()` to both sync paths
+- [x] 16-02-PLAN.md — WR-02 removal: delete dead `pub async fn get_personal_goals` from `src/server/db.rs`; delete `tests/db_personal_goal.rs`
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 16-03-PLAN.md — Run `/gsd-code-review 15` second pass + `/gsd-verify-work 15`; annotate `15-REVIEW.md` with Status: lines on all 7 findings; update `STATE.md` + `MILESTONES.md` to mark v1.2 shipped
+- [x] 16-03-PLAN.md — Run `/gsd-code-review 15` second pass + `/gsd-verify-work 15`; annotate `15-REVIEW.md` with Status: lines on all 7 findings; update `STATE.md` + `MILESTONES.md` to mark v1.2 shipped
 **UI hint**: minimal
 
 ### Phase 17: UI Consolidation
@@ -337,7 +337,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 20 → 21 →
 | 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
 | 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
-| 16. Phase 15 Close-out | v1.3 | 0/3 | Not started | - |
+| 16. Phase 15 Close-out | v1.3 | 3/3 | Complete   | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 0/? | Not started | - |
 | 18. Bug-Report Widget | v1.3 | 0/? | Not started | - |
 | 19. Production Hardening | v1.3 | 0/? | Not started | - |
