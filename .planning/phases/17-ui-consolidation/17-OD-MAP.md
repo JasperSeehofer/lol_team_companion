@@ -36,8 +36,8 @@ Leptos, set `Status = ported`.
 |---------|-------|------|---------|--------------|--------|
 | Login | `/auth/login` | 06 | TBD | TBD | pending |
 | Register (invited) | `/auth/register?invite=...` | 06 | TBD | TBD | pending |
-| Team roster | `/team/roster` | 05 | TBD | TBD | pending |
-| Team builder | `/team-builder` | 05 | TBD | TBD | pending |
+| Team roster | `/team/roster` | 05 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/team-roster.html` | ported |
+| Team builder | `/team-builder` | 05 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/team-builder.html` | ported |
 | Opponents | `/opponents` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/opponents.html` | ported |
 | Action items | `/action-items` | 03d | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/action-items.html` | ported |
 | Personal learnings | `/personal-learnings` | 04 | 7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e | `.od/projects/7e1c0a92-1b3d-47fe-b5c8-2f3a4b5c6d7e/personal-learnings.html` | ported |

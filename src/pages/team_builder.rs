@@ -261,11 +261,11 @@ fn tier_label(tier: &str) -> &'static str {
 fn tier_badge_class(tier: &str) -> &'static str {
     match tier {
         "comfort" => "bg-accent/20 text-accent border-accent/30",
-        "match_ready" => "bg-green-400/20 text-green-400 border-green-400/30",
-        "scrim_ready" => "bg-blue-400/20 text-blue-400 border-blue-400/30",
-        "practicing" => "bg-purple-400/20 text-purple-400 border-purple-400/30",
-        "to_practice" => "bg-gray-400/20 text-muted border-gray-400/30",
-        _ => "bg-gray-400/20 text-muted border-gray-400/30",
+        "match_ready" => "bg-success/20 text-success border-success/30",
+        "scrim_ready" => "bg-info/20 text-info border-info/30",
+        "practicing" => "bg-warning/20 text-warning border-warning/30",
+        "to_practice" => "bg-surface text-muted border-outline/50",
+        _ => "bg-surface text-muted border-outline/50",
     }
 }
 
@@ -400,15 +400,18 @@ fn compute_comp_tags(
 }
 
 fn comp_tag_class(tag: &str) -> &'static str {
+    // Maps composition identity tags to semantic theme tokens. Per plan 04 §key-decisions
+    // (analytics tag-color mapping), per-tag uniqueness is not a UX requirement; the
+    // editorial distinction is cool/aggressive vs warm/risky.
     match tag {
-        "teamfight" => "bg-red-500/20 text-red-400 border-red-500/30",
-        "split-push" => "bg-orange-500/20 text-orange-400 border-orange-500/30",
-        "poke" => "bg-blue-500/20 text-blue-400 border-blue-500/30",
-        "pick" => "bg-purple-500/20 text-purple-400 border-purple-500/30",
-        "scaling" => "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-        "early-game" => "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-        "protect-the-carry" => "bg-pink-500/20 text-pink-400 border-pink-500/30",
-        _ => "bg-gray-500/20 text-gray-400 border-gray-500/30",
+        "teamfight" => "bg-danger/20 text-danger border-danger/30",
+        "split-push" => "bg-warning/20 text-warning border-warning/30",
+        "poke" => "bg-info/20 text-info border-info/30",
+        "pick" => "bg-accent/20 text-accent border-accent/30",
+        "scaling" => "bg-info/20 text-info border-info/30",
+        "early-game" => "bg-warning/20 text-warning border-warning/30",
+        "protect-the-carry" => "bg-success/20 text-success border-success/30",
+        _ => "bg-surface text-muted border-outline/50",
     }
 }
 
@@ -471,14 +474,16 @@ pub fn TeamBuilderPage() -> impl IntoView {
     let comp_name: RwSignal<String> = RwSignal::new(String::new());
 
     view! {
-        <div class="max-w-6xl mx-auto py-8 px-6">
-            // Header
-            <div class="mb-8">
-                <h1 class="text-3xl font-bold text-primary mb-2">"Team Builder"</h1>
-                <p class="text-muted">"Explore team compositions from your champion pools"</p>
-            </div>
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+            <div class="max-w-6xl mx-auto">
+                // Header
+                <header class="mb-8">
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"The drafting tower"</div>
+                    <h1 class="font-display italic text-[40px] leading-tight text-primary mt-1">"Team Builder"</h1>
+                    <p class="text-muted text-sm mt-2">"Explore team compositions from your champion pools"</p>
+                </header>
 
-            <Suspense fallback=move || view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
+                <Suspense fallback=move || view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
                 {move || {
                     let roster_data = roster.get().unwrap_or(Ok(Vec::new())).unwrap_or_default();
                     let stats_data = team_stats.get().unwrap_or(Ok(Vec::new())).unwrap_or_default();
@@ -535,7 +540,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                 let stats_for_badge = stats_for_role.clone();
 
                                 view! {
-                                    <div class="bg-elevated rounded-lg border border-divider p-4 flex flex-col gap-3">
+                                    <div class="bg-elevated rounded-xl border border-outline/50 p-4 flex flex-col gap-3">
                                         // Role header
                                         <div class="flex items-center gap-2">
                                             {if !icon_url.is_empty() {
@@ -549,7 +554,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                             } else {
                                                 view! { <span></span> }.into_any()
                                             }}
-                                            <span class="text-sm font-semibold text-primary">{role_display_name}</span>
+                                            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-accent">{role_display_name}</span>
                                         </div>
 
                                         // Player name
@@ -565,7 +570,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                                         // Champion select dropdown grouped by tier
                                         <select
-                                            class="w-full bg-surface/50 border border-outline/50 rounded px-2 py-1.5 text-sm text-primary focus:outline-none focus:border-accent"
+                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-2 py-1.5 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             prop:value=move || signal.get()
                                             on:change=move |ev| {
                                                 signal.set(event_target_value(&ev));
@@ -622,9 +627,9 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                     let wr = if s.games > 0 {
                                                         (s.wins as f64 / s.games as f64 * 100.0).round() as i32
                                                     } else { 0 };
-                                                    let wr_color = if wr >= 60 { "text-green-400" }
+                                                    let wr_color = if wr >= 60 { "text-success" }
                                                         else if wr >= 50 { "text-secondary" }
-                                                        else { "text-red-400" };
+                                                        else { "text-danger" };
                                                     view! {
                                                         <div class="flex items-center gap-2 text-xs">
                                                             <span class=format!("font-semibold {wr_color}")>
@@ -676,7 +681,8 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                         // Composition tags
                         <div class="mb-8">
-                            <h2 class="text-lg font-semibold text-primary mb-3">"Composition Identity"</h2>
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Read"</div>
+                            <h2 class="font-display italic text-2xl text-primary mb-3">"Composition Identity"</h2>
                             {move || {
                                 let selected: Vec<(String, String)> = ROLES.iter().enumerate().map(|(i, &role)| {
                                     (role.to_string(), selected_signals[i].get())
@@ -711,25 +717,28 @@ pub fn TeamBuilderPage() -> impl IntoView {
                         </div>
 
                         // Opponent section (collapsible)
-                        <div class="mb-8 bg-elevated rounded-lg border border-divider">
+                        <div class="mb-8 bg-elevated rounded-xl border border-outline/50">
                             <button
-                                class="w-full flex items-center justify-between p-4 text-left hover:bg-surface/30 transition-colors rounded-lg"
+                                class="w-full flex items-center justify-between p-4 text-left hover:bg-surface/30 transition-colors rounded-xl focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 on:click=move |_| opponent_expanded.set(!opponent_expanded.get_untracked())
                             >
                                 <div class="flex items-center gap-2">
-                                    <span class="text-lg font-semibold text-primary">"Opponent Intel"</span>
+                                    <div>
+                                        <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Reconnaissance"</div>
+                                        <span class="font-display italic text-2xl text-primary">"Opponent Intel"</span>
+                                    </div>
                                     {move || {
                                         let id = selected_opponent_id.get();
                                         if id.is_some() {
                                             view! {
-                                                <span class="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">"Selected"</span>
+                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">"Selected"</span>
                                             }.into_any()
                                         } else {
                                             view! { <span></span> }.into_any()
                                         }
                                     }}
                                 </div>
-                                <span class="text-muted">
+                                <span class="text-muted" aria-hidden="true">
                                     {move || if opponent_expanded.get() { "\u{25B2}" } else { "\u{25BC}" }}
                                 </span>
                             </button>
@@ -746,7 +755,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                     <div class="p-4 pt-0 space-y-4">
                                         // Opponent selector
                                         <select
-                                            class="w-full md:w-64 bg-surface/50 border border-outline/50 rounded px-3 py-2 text-sm text-primary focus:outline-none focus:border-accent"
+                                            class="w-full md:w-64 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             on:change=move |ev| {
                                                 let val = event_target_value(&ev);
                                                 if val.is_empty() {
@@ -785,7 +794,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                         let player_name = player.name.clone();
                                                         let recent = player.recent_champions.clone();
                                                         view! {
-                                                            <div class="bg-surface/30 rounded-lg border border-outline/30 p-3">
+                                                            <div class="bg-surface border border-outline/50 rounded-lg p-3">
                                                                 <div class="flex items-center gap-2 mb-2">
                                                                     {if !role_icon.is_empty() {
                                                                         view! {
@@ -793,6 +802,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                                                 src=role_icon
                                                                                 alt=player.role.clone()
                                                                                 class="w-4 h-4 brightness-75"
+                                                                                aria-hidden="true"
                                                                             />
                                                                         }.into_any()
                                                                     } else {
@@ -834,21 +844,22 @@ pub fn TeamBuilderPage() -> impl IntoView {
                         </div>
 
                         // Save as Draft section
-                        <div class="bg-elevated rounded-lg border border-divider p-6">
-                            <h2 class="text-lg font-semibold text-primary mb-4">"Save as Draft"</h2>
+                        <div class="bg-elevated rounded-xl border border-outline/50 p-6">
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Inscribe"</div>
+                            <h2 class="font-display italic text-2xl text-primary mb-4">"Save as Draft"</h2>
                             <div class="flex flex-col md:flex-row gap-4 items-end">
                                 <div class="flex-1">
-                                    <label class="block text-sm text-secondary mb-1">"Composition Name"</label>
+                                    <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Composition Name"</label>
                                     <input
                                         type="text"
                                         placeholder="e.g. Teamfight Comp v1"
-                                        class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-sm text-primary focus:outline-none focus:border-accent"
+                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                         prop:value=move || comp_name.get()
                                         on:input=move |ev| comp_name.set(event_target_value(&ev))
                                     />
                                 </div>
                                 <button
-                                    class="px-6 py-2 bg-accent text-accent-contrast rounded font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                                    class="px-6 py-2 bg-accent text-accent-contrast rounded-lg font-semibold text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     on:click=move |_| {
                                         let name = comp_name.get_untracked();
                                         if name.trim().is_empty() {
@@ -897,7 +908,8 @@ pub fn TeamBuilderPage() -> impl IntoView {
                         </div>
                     }.into_any()
                 }}
-            </Suspense>
+                </Suspense>
+            </div>
         </div>
     }
 }

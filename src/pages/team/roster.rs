@@ -136,186 +136,198 @@ pub fn RosterPage() -> impl IntoView {
     });
 
     view! {
-        <div class="max-w-2xl mx-auto py-8 px-6">
-            <h1 class="text-3xl font-bold text-primary mb-6">"Team Roster"</h1>
-            // Mode gate: show CTA for solo-mode users instead of team content
-            {move || if is_solo_mode.get() {
-                view! {
-                    <div class="py-8 text-center">
-                        <div class="bg-surface border border-outline rounded-xl p-6">
-                            <h2 class="text-xl font-semibold text-primary mb-2">"Team feature"</h2>
-                            <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
-                            <button
-                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer"
-                                on:click=move |_| {
-                                    leptos::task::spawn_local(async move {
-                                        let _ = crate::components::nav::set_user_mode("team".to_string()).await;
-                                        #[cfg(feature = "hydrate")]
-                                        if let Some(window) = web_sys::window() {
-                                            let _ = window.location().reload();
-                                        }
-                                    });
-                                }
-                            >
-                                "Switch to Team Mode"
-                            </button>
-                        </div>
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+            <div class="max-w-3xl mx-auto">
+                <header class="mb-6">
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
+                        "Founding the banner"
                     </div>
-                }.into_any()
-            } else {
-                view! {
-        <div class="flex flex-col gap-8">
-            // No-team context message
-            <EmptyState
-                icon="👥"
-                message="You're not part of a team yet — create a new team or join an existing one"
-            />
-
-            // Create Team
-            <section>
-                <h2 class="text-2xl font-bold text-primary mb-4">"Create a New Team"</h2>
-                <ActionForm action=create_team_action>
-                    <div class="flex flex-col gap-4">
-                        {move || create_team_action.value().get().and_then(|r| r.err()).map(|e| view! {
-                            <div class="bg-red-900 border border-red-700 text-red-200 rounded px-4 py-3 text-sm">
-                                {e.to_string()}
+                    <h1 class="font-display italic text-[40px] leading-tight text-primary mt-1">
+                        "Team Roster"
+                    </h1>
+                </header>
+                // Mode gate: show CTA for solo-mode users instead of team content
+                {move || if is_solo_mode.get() {
+                    view! {
+                        <div class="py-8 text-center">
+                            <div class="bg-elevated border border-outline rounded-xl p-6">
+                                <h2 class="font-display italic text-2xl text-primary mb-2">"Team feature"</h2>
+                                <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
+                                <button
+                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    on:click=move |_| {
+                                        leptos::task::spawn_local(async move {
+                                            let _ = crate::components::nav::set_user_mode("team".to_string()).await;
+                                            #[cfg(feature = "hydrate")]
+                                            if let Some(window) = web_sys::window() {
+                                                let _ = window.location().reload();
+                                            }
+                                        });
+                                    }
+                                >
+                                    "Switch to Team Mode"
+                                </button>
                             </div>
-                        })}
-                        <div>
-                            <label class="block text-secondary text-sm mb-1">"Team Name"</label>
-                            <input
-                                type="text"
-                                name="name"
-                                required
-                                class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
-                            />
                         </div>
-                        <div>
-                            <label class="block text-secondary text-sm mb-1">"Region"</label>
-                            <select
-                                name="region"
-                                class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
-                            >
-                                <option value="EUW">"EUW"</option>
-                                <option value="EUNE">"EUNE"</option>
-                                <option value="NA">"NA"</option>
-                                <option value="KR">"KR"</option>
-                                <option value="BR">"BR"</option>
-                            </select>
-                        </div>
-                        <button
-                            type="submit"
-                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 transition-colors"
-                        >
-                            "Create Team"
-                        </button>
-                    </div>
-                </ActionForm>
-            </section>
-
-            // Join Existing Team
-            <section>
-                <h2 class="text-2xl font-bold text-primary mb-1">"Join an Existing Team"</h2>
-                <p class="text-muted text-sm mb-4">"Search for a team by name and request to join."</p>
-
-                <input
-                    type="text"
-                    placeholder="Search teams by name..."
-                    prop:value=move || search_query.get()
-                    on:input=move |ev| set_search_query.set(event_target_value(&ev))
-                    class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent mb-4"
+                    }.into_any()
+                } else {
+                    view! {
+            <div class="flex flex-col gap-8">
+                // No-team context message
+                <EmptyState
+                    icon="👥"
+                    message="You're not part of a team yet — create a new team or join an existing one"
                 />
 
-                <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
-                    {move || teams_resource.get().map(|result| match result {
-                        Ok(teams) => {
-                            let search_val = search_query.get();
-                            if search_val.is_empty() {
-                                view! {
-                                    <p class="text-muted text-sm">"Type to search for teams..."</p>
-                                }.into_any()
-                            } else {
-                                let filtered: Vec<_> = teams.into_iter()
-                                    .filter(|t| t.name.to_lowercase().contains(&search_val.to_lowercase()))
-                                    .collect();
-                                if filtered.is_empty() {
+                // Create Team — Card.plain
+                <section class="bg-elevated border border-divider rounded-xl p-6">
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Found"</div>
+                    <h2 class="font-display italic text-2xl text-primary mb-4">"Create a New Team"</h2>
+                    <ActionForm action=create_team_action>
+                        <div class="flex flex-col gap-4">
+                            {move || create_team_action.value().get().and_then(|r| r.err()).map(|e| view! {
+                                <div class="bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-3 text-sm" role="alert">
+                                    {e.to_string()}
+                                </div>
+                            })}
+                            <div>
+                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Team Name"</label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    required
+                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Region"</label>
+                                <select
+                                    name="region"
+                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                >
+                                    <option value="EUW">"EUW"</option>
+                                    <option value="EUNE">"EUNE"</option>
+                                    <option value="NA">"NA"</option>
+                                    <option value="KR">"KR"</option>
+                                    <option value="BR">"BR"</option>
+                                </select>
+                            </div>
+                            <button
+                                type="submit"
+                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            >
+                                "Create Team"
+                            </button>
+                        </div>
+                    </ActionForm>
+                </section>
+
+                // Join Existing Team — Card.plain
+                <section class="bg-elevated border border-divider rounded-xl p-6">
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Enlist"</div>
+                    <h2 class="font-display italic text-2xl text-primary mb-1">"Join an Existing Team"</h2>
+                    <p class="text-muted text-sm mb-4">"Search for a team by name and request to join."</p>
+
+                    <input
+                        type="text"
+                        placeholder="Search teams by name..."
+                        prop:value=move || search_query.get()
+                        on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none mb-4"
+                    />
+
+                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
+                        {move || teams_resource.get().map(|result| match result {
+                            Ok(teams) => {
+                                let search_val = search_query.get();
+                                if search_val.is_empty() {
                                     view! {
-                                        <p class="text-dimmed text-sm">"No teams match your search."</p>
+                                        <p class="text-muted text-sm">"Type to search for teams..."</p>
                                     }.into_any()
                                 } else {
-                                    view! {
-                                        <div class="flex flex-col gap-2">
-                                            {filtered.into_iter().map(|team| {
-                                                let team_id = team.id.clone().unwrap_or_default();
-                                                let team_name = team.name.clone();
-                                                let region = team.region.clone();
-                                                let member_count = team.member_count.unwrap_or(0);
-                                                view! {
-                                                    <div class="bg-elevated border border-divider rounded-lg px-4 py-3 flex items-center justify-between">
-                                                        <div class="flex items-center gap-3">
-                                                            <span class="text-primary font-bold">{team_name.clone()}</span>
-                                                            <span class="text-muted text-sm">{region}</span>
-                                                            <span class="text-muted text-sm">{member_count} " members"</span>
+                                    let filtered: Vec<_> = teams.into_iter()
+                                        .filter(|t| t.name.to_lowercase().contains(&search_val.to_lowercase()))
+                                        .collect();
+                                    if filtered.is_empty() {
+                                        view! {
+                                            <p class="text-dimmed text-sm">"No teams match your search."</p>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="flex flex-col gap-2">
+                                                {filtered.into_iter().map(|team| {
+                                                    let team_id = team.id.clone().unwrap_or_default();
+                                                    let team_name = team.name.clone();
+                                                    let region = team.region.clone();
+                                                    let member_count = team.member_count.unwrap_or(0);
+                                                    view! {
+                                                        <div class="bg-surface border border-outline/50 rounded-lg px-4 py-3 flex items-center justify-between">
+                                                            <div class="flex items-center gap-3">
+                                                                <span class="font-display italic text-primary text-base">{team_name.clone()}</span>
+                                                                <span class="font-mono text-muted text-sm">{region}</span>
+                                                                <span class="text-muted text-sm tabular-nums">{member_count} " members"</span>
+                                                            </div>
+                                                            <button
+                                                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                on:click=move |_| {
+                                                                    let id = team_id.clone();
+                                                                    let tname = team_name.clone();
+                                                                    leptos::task::spawn_local(async move {
+                                                                        match request_to_join(id).await {
+                                                                            Ok(_) => toast.show.run((ToastKind::Success, format!("Join request sent to {}!", tname))),
+                                                                            Err(e) => toast.show.run((ToastKind::Error, e.to_string())),
+                                                                        }
+                                                                    });
+                                                                }
+                                                            >
+                                                                "Request to Join"
+                                                            </button>
                                                         </div>
-                                                        <button
-                                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-sm transition-colors"
-                                                            on:click=move |_| {
-                                                                let id = team_id.clone();
-                                                                let tname = team_name.clone();
-                                                                leptos::task::spawn_local(async move {
-                                                                    match request_to_join(id).await {
-                                                                        Ok(_) => toast.show.run((ToastKind::Success, format!("Join request sent to {}!", tname))),
-                                                                        Err(e) => toast.show.run((ToastKind::Error, e.to_string())),
-                                                                    }
-                                                                });
-                                                            }
-                                                        >
-                                                            "Request to Join"
-                                                        </button>
-                                                    </div>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                    }.into_any()
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    }
                                 }
-                            }
-                        },
-                        Err(e) => view! {
-                            <p class="text-red-400 text-sm">{e.to_string()}</p>
-                        }.into_any(),
-                    })}
-                </Suspense>
-            </section>
+                            },
+                            Err(e) => view! {
+                                <p class="text-danger text-sm" role="alert">{e.to_string()}</p>
+                            }.into_any(),
+                        })}
+                    </Suspense>
+                </section>
 
-            // Link Riot Account
-            <section>
-                <h2 class="text-2xl font-bold text-primary mb-4">"Link Riot Account"</h2>
-                <ActionForm action=link_riot>
-                    <div class="flex flex-col gap-4">
-                        <div>
-                            <label class="block text-secondary text-sm mb-1">
-                                "Riot ID (e.g. PlayerName#EUW)"
-                            </label>
-                            <input
-                                type="text"
-                                name="riot_id"
-                                placeholder="GameName#TAG"
-                                required
-                                class="w-full bg-elevated border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
-                            />
+                // Link Riot Account — Card.plain
+                <section class="bg-elevated border border-divider rounded-xl p-6">
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Linked seal"</div>
+                    <h2 class="font-display italic text-2xl text-primary mb-4">"Link Riot Account"</h2>
+                    <ActionForm action=link_riot>
+                        <div class="flex flex-col gap-4">
+                            <div>
+                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">
+                                    "Riot ID (e.g. PlayerName#EUW)"
+                                </label>
+                                <input
+                                    type="text"
+                                    name="riot_id"
+                                    placeholder="GameName#TAG"
+                                    required
+                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            >
+                                "Link Account"
+                            </button>
                         </div>
-                        <button
-                            type="submit"
-                            class="bg-blue-500 hover:bg-blue-400 text-white font-bold rounded px-4 py-2 transition-colors"
-                        >
-                            "Link Account"
-                        </button>
-                    </div>
-                </ActionForm>
-            </section>
-        </div>
-                }.into_any()
-            }}
+                    </ActionForm>
+                </section>
+            </div>
+                    }.into_any()
+                }}
+            </div>
         </div>
     }
 }

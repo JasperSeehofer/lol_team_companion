@@ -1,3 +1,4 @@
+use crate::components::ornaments::HeraldicDivider;
 use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
@@ -597,18 +598,27 @@ pub fn TeamDashboard() -> impl IntoView {
     let pool_gap_panel = Resource::new(|| (), |_| get_pool_gap_panel());
 
     view! {
-        <div class="max-w-4xl mx-auto py-8 px-6">
-            <h1 class="text-3xl font-bold text-primary mb-6">"Team Dashboard"</h1>
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+            <div class="max-w-5xl mx-auto">
+                <header class="mb-6">
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
+                        "The Strategy Room"
+                    </div>
+                    <h1 class="font-display italic text-[44px] leading-tight text-primary mt-1">
+                        "Team Dashboard"
+                    </h1>
+                    <div class="mt-3"><HeraldicDivider width=320 /></div>
+                </header>
             <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                 {move || {
                     if is_solo_mode.get() {
                         return Some(view! {
                             <div class="max-w-2xl py-8 text-center">
-                                <div class="bg-surface border border-outline rounded-xl p-6">
-                                    <h2 class="text-xl font-semibold text-primary mb-2">"Team feature"</h2>
+                                <div class="bg-elevated border border-outline rounded-xl p-6">
+                                    <h2 class="font-display italic text-2xl text-primary mb-2">"Team feature"</h2>
                                     <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
                                     <button
-                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer"
+                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                         on:click=move |_| {
                                             leptos::task::spawn_local(async move {
                                                 let _ = crate::components::nav::set_user_mode("team".to_string()).await;
@@ -673,20 +683,22 @@ pub fn TeamDashboard() -> impl IntoView {
                         view! {
                             <div class="flex flex-col gap-6">
                                 // Team info card
-                                <div class="bg-elevated border border-divider rounded-lg p-6">
+                                <div class="bg-elevated border border-outline rounded-xl p-6">
                                     <div class="flex items-start justify-between gap-4">
                                         <div>
+                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Roster sigil"</div>
                                             <div class="flex items-center gap-2">
-                                                <h2 class="text-xl font-bold text-accent">{team.name.clone()}</h2>
+                                                <h2 class="font-display italic text-[28px] text-accent">{team.name.clone()}</h2>
                                                 {if is_leader {
                                                     view! {
                                                         <button
-                                                            class="text-muted hover:text-accent transition-colors cursor-pointer p-1 rounded hover:bg-overlay"
+                                                            class="text-muted hover:text-accent transition-colors cursor-pointer p-1 rounded-md hover:bg-overlay focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                             title="Edit team details"
+                                                            aria-label="Edit team details"
                                                             on:click=move |_| set_show_edit_modal.set(true)
                                                         >
                                                             // Pencil SVG icon
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                             </svg>
                                                         </button>
@@ -695,9 +707,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     view! { <span></span> }.into_any()
                                                 }}
                                             </div>
-                                            <p class="text-muted text-sm mt-1">"Region: " {team.region.clone()}</p>
+                                            <p class="text-muted text-sm mt-1">"Region: " <span class="font-mono text-secondary">{team.region.clone()}</span></p>
                                             {if is_leader {
-                                                view! { <span class="inline-block mt-1 text-xs text-accent font-medium bg-accent/10 rounded px-1.5 py-0.5">"Team Leader"</span> }.into_any()
+                                                view! { <span class="inline-block mt-1 font-imperial uppercase tracking-[0.18em] text-[10px] text-accent bg-accent/10 rounded-md px-2 py-0.5">"Team Leader"</span> }.into_any()
                                             } else {
                                                 view! { <span></span> }.into_any()
                                             }}
@@ -710,7 +722,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                             <div class="mt-4 pt-4 border-t border-divider">
                                                 <p class="text-muted text-sm">
                                                     "Riot account not linked \u{2014} "
-                                                    <A href="/profile" attr:class="text-accent hover:underline">"link it in your profile"</A>
+                                                    <A href="/profile" attr:class="text-accent hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"link it in your profile"</A>
                                                 </p>
                                             </div>
                                         }.into_any()
@@ -724,31 +736,31 @@ pub fn TeamDashboard() -> impl IntoView {
                                     view! {
                                         // Backdrop
                                         <div
-                                            class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center"
+                                            class="fixed inset-0 bg-overlay-strong z-50 flex items-center justify-center"
                                             on:click=move |_| set_show_edit_modal.set(false)
                                         >
                                             // Modal content — stop click propagation
                                             <div
-                                                class="bg-elevated border border-divider rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
+                                                class="bg-elevated border border-outline rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
                                                 on:click=move |ev| ev.stop_propagation()
                                             >
-                                                <h3 class="text-primary text-lg font-semibold mb-4">"Edit Team"</h3>
+                                                <h3 class="font-display italic text-primary text-xl mb-4">"Edit Team"</h3>
                                                 <div class="flex flex-col gap-4">
                                                     <div>
-                                                        <label class="block text-muted text-xs mb-1">"Team Name"</label>
+                                                        <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Team Name"</label>
                                                         <input
                                                             type="text"
                                                             prop:value=move || edit_name.get()
                                                             on:input=move |ev| set_edit_name.set(event_target_value(&ev))
-                                                            class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label class="block text-muted text-xs mb-1">"Region"</label>
+                                                        <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Region"</label>
                                                         <select
                                                             prop:value=move || edit_region.get()
                                                             on:change=move |ev| set_edit_region.set(event_target_value(&ev))
-                                                            class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         >
                                                             {["EUW","EUNE","NA","KR","BR"].iter().map(|&r| view! {
                                                                 <option value=r>{r}</option>
@@ -757,7 +769,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     </div>
                                                     <div class="flex justify-end gap-3 pt-2">
                                                         <button
-                                                            class="text-secondary hover:text-primary text-sm px-4 py-2 rounded transition-colors cursor-pointer hover:bg-overlay"
+                                                            class="text-secondary hover:text-primary text-sm px-4 py-2 rounded-lg transition-colors cursor-pointer hover:bg-overlay focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                             on:click=move |_| {
                                                                 set_show_edit_modal.set(false);
                                                             }
@@ -765,7 +777,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             "Cancel"
                                                         </button>
                                                         <button
-                                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer"
+                                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                             on:click=move |_| {
                                                                 let name = edit_name.get_untracked();
                                                                 let region = edit_region.get_untracked();
@@ -816,10 +828,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         view! { <span></span> }.into_any()
                                                     } else {
                                                         view! {
-                                                            <div class="bg-elevated border border-accent/30 rounded-lg p-5">
-                                                                <h3 class="text-accent font-semibold mb-3 flex items-center gap-2">
+                                                            <div class="bg-elevated border border-accent/30 rounded-xl p-5">
+                                                                <h3 class="font-display italic text-accent text-xl mb-3 flex items-center gap-2">
                                                                     "Join Requests"
-                                                                    <span class="bg-accent text-accent-contrast text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                                                    <span class="bg-accent text-accent-contrast text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center tabular-nums">
                                                                         {reqs.len()}
                                                                     </span>
                                                                 </h3>
@@ -830,16 +842,16 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                         let (req_error, set_req_error) = signal(Option::<String>::None);
                                                                         view! {
                                                                             <div class="flex flex-col gap-1">
-                                                                                <div class="flex items-center justify-between bg-overlay rounded px-4 py-3">
+                                                                                <div class="flex items-center justify-between bg-surface border border-outline/50 rounded-lg px-4 py-3">
                                                                                 <div>
                                                                                     <span class="text-primary font-medium">{req.username}</span>
                                                                                     {req.riot_summoner_name.map(|n| view! {
-                                                                                        <span class="text-muted text-sm ml-2">{n}</span>
+                                                                                        <span class="text-muted text-sm ml-2 font-mono">{n}</span>
                                                                                     })}
                                                                                 </div>
                                                                                 <div class="flex gap-2">
                                                                                     <button
-                                                                                        class="bg-green-700 hover:bg-green-600 text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                                                        class="bg-success/15 text-success border border-success/30 hover:bg-success/25 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-success/50 focus-visible:outline-none"
                                                                                         on:click=move |_| {
                                                                                             let id = req_id_accept.clone();
                                                                                             leptos::task::spawn_local(async move {
@@ -855,7 +867,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                         }
                                                                                     >"Accept"</button>
                                                                                     <button
-                                                                                        class="bg-overlay-strong hover:bg-red-700 text-secondary hover:text-primary text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                                                        class="bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                                                                         on:click=move |_| {
                                                                                             let id = req_id_decline.clone();
                                                                                             leptos::task::spawn_local(async move {
@@ -867,7 +879,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                                 </div>
                                                                             </div>
                                                                             {move || req_error.get().map(|e| view! {
-                                                                                <p class="text-red-400 text-xs px-1">{e}</p>
+                                                                                <p class="text-danger text-xs px-1" role="alert">{e}</p>
                                                                             })}
                                                                             </div>
                                                                         }
@@ -886,7 +898,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Starting roster — 5 role slots
                                 <div>
-                                    <h3 class="text-lg font-semibold text-primary mb-3">"Starting Roster"</h3>
+                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Order of battle"</div>
+                                    <h3 class="font-display italic text-2xl text-primary mb-3">"Starting Roster"</h3>
                                     <div class="grid grid-cols-5 gap-3">
                                         {STARTER_ROLES.iter().map(|&role| {
                                             let assigned = starters.iter().find(|m| m.role == role).cloned();
@@ -898,8 +911,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                             view! {
                                                 <div
                                                     class=move || format!(
-                                                        "relative overflow-hidden bg-elevated border rounded-lg p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
-                                                        if drag_over.get() { "border-accent bg-overlay" } else { "border-divider" }
+                                                        "relative overflow-hidden bg-elevated border rounded-xl p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
+                                                        if drag_over.get() { "border-accent bg-overlay" } else { "border-outline/50" }
                                                     )
                                                     on:dragover=move |ev| {
                                                         ev.prevent_default();
@@ -958,8 +971,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 {if is_leader {
                                                                     view! {
                                                                         <button
-                                                                            class="text-overlay-strong hover:text-red-400 text-xs transition-colors cursor-pointer"
+                                                                            class="text-muted hover:text-danger text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
                                                                             title="Remove from slot"
+                                                                            aria-label="Remove from slot"
                                                                             on:click=move |_| {
                                                                                 let uid = uid_for_unassign.clone();
                                                                                 leptos::task::spawn_local(async move {
@@ -977,7 +991,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     } else {
                                                         view! {
                                                             <div class="flex-1 flex items-center justify-center">
-                                                                <span class="text-overlay-strong text-xs">"Empty"</span>
+                                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-dimmed">"Empty"</span>
                                                             </div>
                                                         }.into_any()
                                                     }}
@@ -994,7 +1008,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Coaches section
                                 <div>
-                                    <h3 class="text-lg font-semibold text-primary mb-3">"Coaches"</h3>
+                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Council"</div>
+                                    <h3 class="font-display italic text-2xl text-primary mb-3">"Coaches"</h3>
                                     {if coaches.is_empty() {
                                         view! { <p class="text-dimmed text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
                                     } else {
@@ -1003,7 +1018,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 {coaches.into_iter().map(|m| {
                                                     let is_member_leader = m.user_id == created_by_for_coaches;
                                                     view! {
-                                                        <div class="relative overflow-hidden bg-elevated border border-divider rounded-lg p-3 flex items-center gap-3">
+                                                        <div class="relative overflow-hidden bg-elevated border border-outline/50 rounded-xl p-3 flex items-center gap-3">
                                                             // Watermark clipboard icon for coach
                                                             <div class="absolute inset-0 overflow-hidden pointer-events-none">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"
@@ -1012,17 +1027,17 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
                                                                 </svg>
                                                             </div>
-                                                            <span class="bg-blue-500/20 text-blue-400 rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
+                                                            <span class="bg-info/20 text-info rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
                                                                 {m.username.chars().next().unwrap_or('?').to_string()}
                                                             </span>
                                                             <div>
                                                                 <div class="flex items-center gap-1">
                                                                     <span class="text-primary text-sm font-medium">{m.username}</span>
                                                                     {is_member_leader.then(|| view! {
-                                                                        <span class="text-accent text-xs" title="Team Leader">"★"</span>
+                                                                        <span class="text-accent text-xs" title="Team Leader" aria-hidden="true">"★"</span>
                                                                     })}
                                                                 </div>
-                                                                <span class="text-blue-400 text-xs">"Coach"</span>
+                                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-info">"Coach"</span>
                                                             </div>
                                                         </div>
                                                     }
@@ -1034,7 +1049,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Substitute bench
                                 <div>
-                                    <h3 class="text-lg font-semibold text-primary mb-3">"Bench / Substitutes"</h3>
+                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Reserves"</div>
+                                    <h3 class="font-display italic text-2xl text-primary mb-3">"Bench / Substitutes"</h3>
                                     {if subs.is_empty() {
                                         view! { <p class="text-dimmed text-sm">"No players on the bench."</p> }.into_any()
                                     } else {
@@ -1052,7 +1068,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                                     view! {
                                                         <div
-                                                            class="relative bg-elevated border border-divider rounded px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
+                                                            class="relative bg-elevated border border-outline/50 rounded-xl px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
                                                             draggable="true"
                                                             on:dragstart=move |ev| {
                                                                 if let Some(dt) = ev.data_transfer() {
@@ -1085,7 +1101,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     <span class="text-dimmed text-sm truncate">{n}</span>
                                                                 })}
                                                                 {move || role_msg.get().map(|msg| view! {
-                                                                    <span class="text-xs text-green-400">{msg}</span>
+                                                                    <span class="text-xs text-success">{msg}</span>
                                                                 })}
                                                             </div>
                                                             <div class="flex items-center gap-2 flex-shrink-0">
@@ -1093,7 +1109,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     let mid = m.user_id.clone();
                                                                     view! {
                                                                         <select
-                                                                            class="bg-overlay border border-outline rounded px-2 py-1 text-gray-200 text-sm focus:outline-none focus:border-accent"
+                                                                            class="bg-surface/50 border border-outline/50 rounded-lg px-2 py-1 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                             on:change=move |ev| {
                                                                                 let role = event_target_value(&ev);
                                                                                 let uid = mid.clone();
@@ -1125,8 +1141,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 {if is_leader && !is_self {
                                                                     view! {
                                                                         <button
-                                                                            class="text-overlay-strong hover:text-red-400 text-sm transition-colors cursor-pointer"
+                                                                            class="text-muted hover:text-danger text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
                                                                             title="Remove from team"
+                                                                            aria-label="Remove from team"
                                                                             on:click=move |_| {
                                                                                 let uid = uid_kick.clone();
                                                                                 leptos::task::spawn_local(async move {
@@ -1153,8 +1170,11 @@ pub fn TeamDashboard() -> impl IntoView {
                                 // Recent games
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
-                                        <h3 class="text-lg font-semibold text-primary">"Recent Games"</h3>
-                                        <A href="/stats" attr:class="text-accent text-sm hover:underline">"View all stats \u{2192}"</A>
+                                        <div>
+                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Battle log"</div>
+                                            <h3 class="font-display italic text-2xl text-primary">"Recent Games"</h3>
+                                        </div>
+                                        <A href="/stats" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all stats \u{2192}"</A>
                                     </div>
                                     <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || recent_matches.get().map(|res| match res {
@@ -1174,9 +1194,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             let date_str = m.game_end.unwrap_or_else(|| "Unknown".into());
                                                             view! {
                                                                 <div class=if win {
-                                                                    "flex items-center gap-3 bg-blue-950/40 border border-blue-800/30 rounded-lg px-4 py-2.5"
+                                                                    "flex items-center gap-3 bg-info/10 border border-info/30 rounded-xl px-4 py-2.5"
                                                                 } else {
-                                                                    "flex items-center gap-3 bg-red-950/40 border border-red-800/30 rounded-lg px-4 py-2.5"
+                                                                    "flex items-center gap-3 bg-danger/10 border border-danger/30 rounded-xl px-4 py-2.5"
                                                                 }>
                                                                     <img src=champ_img alt=m.champion.clone() class="w-8 h-8 rounded-full" />
                                                                     <div class="flex-1 min-w-0">
@@ -1184,13 +1204,13 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                             <span class="text-primary text-sm font-medium">{m.champion}</span>
                                                                             <span class="text-muted text-xs">{m.username}</span>
                                                                         </div>
-                                                                        <span class="text-dimmed text-xs">{date_str}</span>
+                                                                        <span class="text-dimmed text-xs font-mono">{date_str}</span>
                                                                     </div>
-                                                                    <span class="text-secondary text-sm font-medium">{kda}</span>
+                                                                    <span class="text-secondary text-sm font-mono tabular-nums">{kda}</span>
                                                                     <span class=if win {
-                                                                        "text-xs font-bold text-blue-400 bg-blue-500/20 rounded px-1.5 py-0.5"
+                                                                        "font-imperial uppercase tracking-[0.18em] text-[10px] text-info bg-info/20 rounded-md px-2 py-0.5"
                                                                     } else {
-                                                                        "text-xs font-bold text-red-400 bg-red-500/20 rounded px-1.5 py-0.5"
+                                                                        "font-imperial uppercase tracking-[0.18em] text-[10px] text-danger bg-danger/20 rounded-md px-2 py-0.5"
                                                                     }>
                                                                         {if win { "W" } else { "L" }}
                                                                     </span>
@@ -1211,8 +1231,11 @@ pub fn TeamDashboard() -> impl IntoView {
                                 // Action Items widget
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
-                                        <h3 class="text-lg font-semibold text-primary">"Open Action Items"</h3>
-                                        <A href="/action-items" attr:class="text-accent text-sm hover:underline">"View all \u{2192}"</A>
+                                        <div>
+                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Tasking"</div>
+                                            <h3 class="font-display italic text-2xl text-primary">"Open Action Items"</h3>
+                                        </div>
+                                        <A href="/action-items" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all \u{2192}"</A>
                                     </div>
                                     <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || action_items_res.get().map(|result| match result {
@@ -1227,15 +1250,15 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             <p class="text-secondary text-sm mb-2">{total}" open item(s)"</p>
                                                             {top_items.into_iter().map(|item| {
                                                                 let status_dot = match item.status.as_str() {
-                                                                    "in_progress" => "w-2 h-2 rounded-full bg-yellow-500 shrink-0",
-                                                                    _ => "w-2 h-2 rounded-full bg-green-500 shrink-0",
+                                                                    "in_progress" => "w-2.5 h-2.5 rounded-full bg-warning shrink-0",
+                                                                    _ => "w-2.5 h-2.5 rounded-full bg-success shrink-0",
                                                                 };
                                                                 view! {
-                                                                    <div class="flex items-center gap-2 bg-elevated border border-divider rounded px-3 py-2">
-                                                                        <span class=status_dot></span>
+                                                                    <div class="flex items-center gap-2 bg-elevated border border-outline/50 rounded-lg px-3 py-2">
+                                                                        <span class=status_dot aria-hidden="true"></span>
                                                                         <span class="text-primary text-sm truncate">{item.text}</span>
                                                                         {item.assigned_to.map(|a| view! {
-                                                                            <span class="text-xs bg-surface text-muted rounded px-1.5 py-0.5 shrink-0">{a}</span>
+                                                                            <span class="text-xs bg-surface text-muted rounded-md px-2 py-0.5 shrink-0">{a}</span>
                                                                         })}
                                                                     </div>
                                                                 }
@@ -1252,8 +1275,11 @@ pub fn TeamDashboard() -> impl IntoView {
                                 // Post-Game Summaries Panel
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
-                                        <h3 class="text-lg font-semibold text-primary">"Recent Reviews"</h3>
-                                        <A href="/post-game" attr:class="text-accent text-sm hover:underline">"View all reviews"</A>
+                                        <div>
+                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Debrief"</div>
+                                            <h3 class="font-display italic text-2xl text-primary">"Recent Reviews"</h3>
+                                        </div>
+                                        <A href="/post-game" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all reviews"</A>
                                     </div>
                                     <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || post_game_panel.get().map(|result| match result {
@@ -1273,9 +1299,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         };
                                                         let top_improvements: Vec<String> = preview.improvements.into_iter().take(2).collect();
                                                         view! {
-                                                            <div class="bg-elevated border border-divider rounded-lg p-3">
+                                                            <div class="bg-elevated border border-outline/50 rounded-xl p-3">
                                                                 {preview.created_at.map(|d| view! {
-                                                                    <p class="text-xs text-muted mb-1">{format_timestamp(&d)}</p>
+                                                                    <p class="text-xs text-muted mb-1 font-mono">{format_timestamp(&d)}</p>
                                                                 })}
                                                                 {top_improvements.into_iter().map(|imp| view! {
                                                                     <p class="text-sm text-secondary truncate">{imp}</p>
@@ -1298,8 +1324,11 @@ pub fn TeamDashboard() -> impl IntoView {
                                 // Pool Gap Warnings Panel
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
-                                        <h3 class="text-lg font-semibold text-primary">"Pool Gap Warnings"</h3>
-                                        <A href="/champion-pool" attr:class="text-accent text-sm hover:underline">"Manage pools"</A>
+                                        <div>
+                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Reconnaissance"</div>
+                                            <h3 class="font-display italic text-2xl text-primary">"Pool Gap Warnings"</h3>
+                                        </div>
+                                        <A href="/champion-pool" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"Manage pools"</A>
                                     </div>
                                     <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
                                         {move || pool_gap_panel.get().map(|result| match result {
@@ -1319,13 +1348,13 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         };
                                                         let missing = warning.missing_classes.join(", ");
                                                         view! {
-                                                            <div class="flex items-start gap-2 bg-elevated border border-divider rounded px-3 py-2">
-                                                                <span class="text-yellow-500 shrink-0 font-bold">"!"</span>
+                                                            <div class="flex items-start gap-2 bg-elevated border border-warning/30 rounded-lg px-3 py-2">
+                                                                <span class="text-warning shrink-0 font-bold" aria-hidden="true">"!"</span>
                                                                 <div>
                                                                     <p class="text-primary text-sm">{label}</p>
                                                                     <p class="text-xs text-muted">{"Missing: "}{missing}</p>
                                                                     {warning.dominant_class.map(|dc| view! {
-                                                                        <span class="text-xs bg-surface text-muted rounded px-1.5 py-0.5">{"Dominant: "}{dc}</span>
+                                                                        <span class="text-xs bg-surface text-muted rounded-md px-2 py-0.5">{"Dominant: "}{dc}</span>
                                                                     })}
                                                                 </div>
                                                             </div>
@@ -1349,7 +1378,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     <div class="flex items-center gap-3">
                                                         <span class="text-secondary text-sm">"Are you sure you want to leave this team?"</span>
                                                         <button
-                                                            class="bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                            class="bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                                             on:click=move |_| {
                                                                 leptos::task::spawn_local(async move {
                                                                     match leave_team().await {
@@ -1364,7 +1393,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             }
                                                         >"Yes, leave"</button>
                                                         <button
-                                                            class="bg-overlay hover:bg-overlay-strong text-secondary text-sm rounded px-3 py-1.5 transition-colors cursor-pointer"
+                                                            class="bg-surface hover:bg-overlay text-secondary text-sm rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                             on:click=move |_| set_leave_confirm.set(false)
                                                         >"Cancel"</button>
                                                     </div>
@@ -1372,7 +1401,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                             } else {
                                                 view! {
                                                     <button
-                                                        class="text-red-400 hover:text-red-300 text-sm transition-colors border border-red-400/20 hover:border-red-400/40 rounded-lg px-3 py-1.5 cursor-pointer"
+                                                        class="text-danger hover:opacity-80 text-sm transition-colors border border-danger/30 hover:border-danger/50 rounded-lg px-3 py-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
                                                         on:click=move |_| set_leave_confirm.set(true)
                                                     >"Leave Team"</button>
                                                 }.into_any()
@@ -1393,6 +1422,7 @@ pub fn TeamDashboard() -> impl IntoView {
                     }.into_any(),
                 })}}
             </Suspense>
+            </div>
         </div>
     }
 }
@@ -1409,9 +1439,12 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
     view! {
         <div>
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-lg font-semibold text-primary">"Team Notebook"</h3>
+                <div>
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Folio"</div>
+                    <h3 class="font-display italic text-2xl text-primary">"Team Notebook"</h3>
+                </div>
                 <button
-                    class="text-muted hover:text-accent text-sm transition-colors cursor-pointer"
+                    class="text-muted hover:text-accent text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1"
                     on:click=move |_| set_expanded.update(|v| *v = !*v)
                 >
                     {move || if expanded.get() { "Collapse" } else { "Show all" }}
@@ -1425,10 +1458,10 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                     on:input=move |ev| set_new_note.set(event_target_value(&ev))
                     placeholder="Write a note for the team..."
                     rows="2"
-                    class="flex-1 bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent resize-none"
+                    class="flex-1 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
                 />
                 <button
-                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-2 text-sm transition-colors cursor-pointer self-end"
+                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer self-end focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:click=move |_| {
                         let content = new_note.get_untracked();
                         if content.trim().is_empty() {
@@ -1486,9 +1519,9 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
 
                                             view! {
                                                 <div class=if pinned {
-                                                    "bg-accent/10 border border-accent/30 rounded-lg p-4"
+                                                    "bg-accent/10 border border-accent/30 rounded-xl p-4"
                                                 } else {
-                                                    "bg-surface border border-divider rounded-lg p-4"
+                                                    "bg-elevated border border-outline/50 rounded-xl p-4"
                                                 }>
                                                     <div class="flex items-start gap-3">
                                                         // Author avatar
@@ -1500,14 +1533,14 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                 <span class="text-primary text-sm font-medium">{note.author_name.clone()}</span>
                                                                 {if pinned {
                                                                     view! {
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="currentColor" viewBox="0 0 24 24">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                                                             <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
                                                                         </svg>
                                                                     }.into_any()
                                                                 } else {
                                                                     view! { <span></span> }.into_any()
                                                                 }}
-                                                                <span class="text-dimmed text-xs ml-auto">
+                                                                <span class="text-dimmed text-xs ml-auto font-mono">
                                                                     {note.created_at.as_deref().map(format_timestamp).unwrap_or_default()}
                                                                 </span>
                                                             </div>
@@ -1528,11 +1561,11 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                                     prop:value=move || edit_content.get()
                                                                                     on:input=move |ev| set_edit_content.set(event_target_value(&ev))
                                                                                     rows="3"
-                                                                                    class="w-full bg-surface/50 border border-outline/50 rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent resize-none"
+                                                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
                                                                                 />
                                                                                 <div class="flex gap-2">
                                                                                     <button
-                                                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-bold rounded px-3 py-1 transition-colors cursor-pointer"
+                                                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-bold rounded-lg px-3 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                                         on:click=move |_| {
                                                                                             let id = nid_save.clone();
                                                                                             let content = edit_content.get_untracked();
@@ -1548,7 +1581,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                                         }
                                                                                     >"Save"</button>
                                                                                     <button
-                                                                                        class="text-secondary hover:text-primary text-xs rounded px-3 py-1 transition-colors cursor-pointer"
+                                                                                        class="text-secondary hover:text-primary text-xs rounded-lg px-3 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                                         on:click=move |_| set_editing_id.set(None)
                                                                                     >"Cancel"</button>
                                                                                 </div>
@@ -1566,7 +1599,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                             <div class="flex items-center gap-2 mt-2">
                                                                 // Pin/Unpin
                                                                 <button
-                                                                    class="text-muted hover:text-accent text-xs transition-colors cursor-pointer"
+                                                                    class="text-muted hover:text-accent text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-1"
                                                                     title=if pinned { "Unpin" } else { "Pin" }
                                                                     on:click=move |_| {
                                                                         let id = note_id_pin.clone();
@@ -1588,7 +1621,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                     let nid = note_id.clone();
                                                                     view! {
                                                                         <button
-                                                                            class="text-muted hover:text-accent text-xs transition-colors cursor-pointer"
+                                                                            class="text-muted hover:text-accent text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-1"
                                                                             on:click=move |_| {
                                                                                 set_edit_content.set(content_for_btn.clone());
                                                                                 set_editing_id.set(Some(nid.clone()));
@@ -1603,7 +1636,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                 {if can_delete {
                                                                     view! {
                                                                         <button
-                                                                            class="text-muted hover:text-red-400 text-xs transition-colors cursor-pointer"
+                                                                            class="text-muted hover:text-danger text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded-md px-1"
                                                                             on:click=move |_| {
                                                                                 let id = note_id_del.clone();
                                                                                 leptos::task::spawn_local(async move {
@@ -1629,7 +1662,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                             }
                         }
                         Err(e) => view! {
-                            <p class="text-red-400 text-sm">{format!("Could not load notes: {e}")}</p>
+                            <p class="text-danger text-sm" role="alert">{format!("Could not load notes: {e}")}</p>
                         }.into_any(),
                     })
                 }}

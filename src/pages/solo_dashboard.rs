@@ -1,3 +1,4 @@
+use crate::components::ornaments::HeraldicDivider;
 use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, StatusMessage, ToastContext, ToastKind};
 use crate::models::match_data::{GoalProgressPayload, PlayerMatchStats, RankedSnapshot};
 use crate::models::user::RankedInfo;
@@ -292,54 +293,64 @@ pub fn SoloDashboardPage() -> impl IntoView {
     };
 
     view! {
-        <div class="max-w-2xl mx-auto py-8 px-6 flex flex-col gap-8">
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+            <div class="max-w-3xl mx-auto flex flex-col gap-8">
 
-            // ── Header + Sync Button ────────────────────────────────────────
-            <div class="flex items-center justify-between">
-                <h1 class="text-3xl font-bold text-primary">"My Dashboard"</h1>
-                <button
-                    class=move || if syncing.get() {
-                        "bg-accent opacity-60 cursor-not-allowed text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm"
-                    } else {
-                        "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
-                    }
-                    on:click=do_sync
-                    disabled=move || syncing.get()
-                >
-                    {move || if syncing.get() {
-                        view! { <span>"Syncing..."</span> }.into_any()
-                    } else {
-                        view! { <span>"Sync Matches"</span> }.into_any()
-                    }}
-                </button>
-            </div>
-
-            // ── Ranked Badge + LP History + Matches + Goals ─────────────────
-            <Suspense fallback=|| view! {
-                <div class="flex flex-col gap-4">
-                    <SkeletonCard height="h-28" />
-                    <SkeletonCard height="h-16" />
-                    <SkeletonCard height="h-16" />
-                    <SkeletonCard height="h-16" />
-                </div>
-            }>
-                {move || dashboard_resource.get().map(|result| match result {
-                    Err(e) => view! {
-                        <ErrorBanner message=format!("Failed to load dashboard: {e}") />
-                    }.into_any(),
-                    Ok(data) => view! {
-                        <div class="flex flex-col gap-8">
-                            <RankedBadgeSection ranked=data.ranked />
-                            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window />
-                            <MatchListSection
-                                matches=data.matches
-                                queue_filter=queue_filter
-                            />
-                            <GoalCards progress_resource=goal_progress_resource />
+                // ── Header + Sync Button ────────────────────────────────────────
+                <header class="flex items-end justify-between">
+                    <div>
+                        <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
+                            "Solo Constellation"
                         </div>
-                    }.into_any(),
-                })}
-            </Suspense>
+                        <h1 class="font-display italic text-[44px] leading-tight text-primary mt-1">
+                            "My Dashboard"
+                        </h1>
+                        <div class="mt-3"><HeraldicDivider width=320 /></div>
+                    </div>
+                    <button
+                        class=move || if syncing.get() {
+                            "bg-accent opacity-60 cursor-not-allowed text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        } else {
+                            "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        }
+                        on:click=do_sync
+                        disabled=move || syncing.get()
+                    >
+                        {move || if syncing.get() {
+                            view! { <span>"Syncing..."</span> }.into_any()
+                        } else {
+                            view! { <span>"Sync Matches"</span> }.into_any()
+                        }}
+                    </button>
+                </header>
+
+                // ── Ranked Badge + LP History + Matches + Goals ─────────────────
+                <Suspense fallback=|| view! {
+                    <div class="flex flex-col gap-4">
+                        <SkeletonCard height="h-28" />
+                        <SkeletonCard height="h-16" />
+                        <SkeletonCard height="h-16" />
+                        <SkeletonCard height="h-16" />
+                    </div>
+                }>
+                    {move || dashboard_resource.get().map(|result| match result {
+                        Err(e) => view! {
+                            <ErrorBanner message=format!("Failed to load dashboard: {e}") />
+                        }.into_any(),
+                        Ok(data) => view! {
+                            <div class="flex flex-col gap-8">
+                                <RankedBadgeSection ranked=data.ranked />
+                                <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window />
+                                <MatchListSection
+                                    matches=data.matches
+                                    queue_filter=queue_filter
+                                />
+                                <GoalCards progress_resource=goal_progress_resource />
+                            </div>
+                        }.into_any(),
+                    })}
+                </Suspense>
+            </div>
         </div>
     }
 }
@@ -351,8 +362,8 @@ pub fn SoloDashboardPage() -> impl IntoView {
 #[component]
 fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
     view! {
-        <div class="bg-elevated border border-divider rounded-xl p-6">
-            <p class="text-xs text-dimmed uppercase tracking-wider mb-3">"Ranked Solo/Duo"</p>
+        <div class="bg-elevated border border-outline rounded-xl p-6">
+            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-accent mb-3">"Ranked Solo / Duo"</div>
             {match ranked {
                 Some(info) => {
                     let tier = info.tier.clone();
@@ -371,16 +382,17 @@ fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
                     };
 
                     view! {
-                        <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-5">
                             <img
                                 src=tier_emblem_url(&tier_for_img)
                                 alt=tier.clone()
-                                class="w-16 h-16 object-contain"
+                                class="w-20 h-20 object-contain"
+                                style="filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-accent) 35%, transparent))"
                             />
                             <div class="flex flex-col gap-1">
-                                <span class="text-3xl font-semibold text-primary">{display_name}</span>
-                                <span class="text-xl font-semibold text-secondary">{format!("{} LP", info.lp)}</span>
-                                <span class="text-sm text-muted">
+                                <span class="font-display italic text-primary text-[32px] leading-tight">{display_name}</span>
+                                <span class="font-mono text-2xl text-accent tabular-nums">{format!("{} LP", info.lp)}</span>
+                                <span class="text-sm text-muted font-mono tabular-nums">
                                     {format!("{}W {}L ({})", info.wins, info.losses, wr)}
                                 </span>
                             </div>
@@ -396,10 +408,11 @@ fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
                             viewBox="0 0 24 24"
                             stroke="currentColor"
                             stroke-width="1.5"
+                            aria-hidden="true"
                         >
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                         </svg>
-                        <span class="text-xl font-semibold text-muted">"Unranked"</span>
+                        <span class="font-display italic text-2xl text-muted">"Unranked"</span>
                     </div>
                 }.into_any(),
             }}
@@ -416,9 +429,12 @@ fn MatchListSection(
         <div class="flex flex-col gap-3">
             // Section header
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-primary">"Recent Matches"</h2>
+                <div>
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Battle log"</div>
+                    <h2 class="font-display italic text-2xl text-primary">"Recent Matches"</h2>
+                </div>
                 <select
-                    class="bg-surface border border-outline/50 rounded-lg px-3 py-2 text-sm text-secondary"
+                    class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-secondary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:change=move |ev| {
                         let val = event_target_value(&ev);
                         let qf = match val.as_str() {
@@ -447,12 +463,12 @@ fn MatchListSection(
                     <div class="flex flex-col gap-2">
                         {matches.into_iter().map(|m| {
                             let border_class = if m.win {
-                                "border-l-4 border-blue-500"
+                                "border-l-4 border-info"
                             } else {
-                                "border-l-4 border-red-500/50"
+                                "border-l-4 border-danger/60"
                             };
                             let row_class = format!(
-                                "bg-surface {} rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-elevated/50 transition-colors",
+                                "bg-elevated border border-outline/50 {} rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-surface transition-colors",
                                 border_class
                             );
                             let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
@@ -460,11 +476,11 @@ fn MatchListSection(
                             let match_href = format!("/match/{}", m.match_id);
 
                             view! {
-                                <a href=match_href class="block cursor-pointer hover:bg-elevated/50 transition-colors">
+                                <a href=match_href class="block cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
                                     <div class=row_class>
                                         <span class="text-sm font-medium text-primary flex-1">{m.champion}</span>
-                                        <span class="text-sm text-secondary">{kda}</span>
-                                        <span class="text-xs text-muted">{cs_str}</span>
+                                        <span class="text-sm text-secondary font-mono tabular-nums">{kda}</span>
+                                        <span class="text-xs text-muted font-mono tabular-nums">{cs_str}</span>
                                     </div>
                                 </a>
                             }
@@ -492,9 +508,9 @@ fn LpHistoryGraph(
         view! {
             <button
                 class=move || if active() {
-                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 } else {
-                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
+                    "bg-surface border border-outline/50 text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 }
                 on:click=move |_| lp_window.set(w)
             >{w}</button>
@@ -502,9 +518,12 @@ fn LpHistoryGraph(
     };
 
     view! {
-        <div class="bg-elevated border border-divider rounded-xl p-4 flex flex-col gap-3">
+        <div class="bg-elevated border border-outline rounded-xl p-5 flex flex-col gap-3">
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-primary">"LP History"</h2>
+                <div>
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Form curve"</div>
+                    <h2 class="font-display italic text-2xl text-primary">"LP History"</h2>
+                </div>
                 <div class="flex items-center gap-2">
                     {render_pill("7d")}
                     {render_pill("30d")}
@@ -665,17 +684,18 @@ fn LpGraphSvg(
                 }).collect_view()}
 
                 {(!area_d.is_empty()).then(|| view! {
-                    <path d=area_d fill="var(--t-accent)" opacity="0.1" />
+                    <path d=area_d style="fill: var(--color-accent)" opacity="0.1" />
                 })}
 
                 {(n >= 2).then(|| view! {
-                    <polyline points=line_points fill="none" stroke="var(--t-accent)"
+                    <polyline points=line_points fill="none"
+                              style="stroke: var(--color-accent)"
                               stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
                 })}
 
                 {points.iter().map(|(x, y)| view! {
                     <circle cx=format!("{:.1}", x) cy=format!("{:.1}", y) r="3"
-                            fill="var(--t-accent)" />
+                            style="fill: var(--color-accent)" />
                 }).collect_view()}
             </svg>
 
@@ -687,9 +707,9 @@ fn LpGraphSvg(
                     format!("position: absolute; left: {}px; top: {}px; pointer-events: none;", (x + 8.0) as i32, (y - 50.0).max(0.0) as i32)
                 };
                 view! {
-                    <div class="absolute bg-elevated border border-divider rounded-lg px-3 py-2 shadow-lg z-10 min-w-32" style=style>
+                    <div class="absolute bg-elevated border border-outline rounded-lg px-3 py-2 shadow-lg z-10 min-w-32" style=style>
                         <div class="text-sm text-primary font-semibold">{label}</div>
-                        <div class="text-xs text-muted">{date}</div>
+                        <div class="text-xs text-muted font-mono">{date}</div>
                     </div>
                 }
             })}
@@ -718,7 +738,10 @@ fn tier_label_display(t: &str) -> &'static str {
 fn GoalCards(progress_resource: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl IntoView {
     view! {
         <div class="flex flex-col gap-3">
-            <h2 class="text-xl font-semibold text-primary">"Goals"</h2>
+            <div>
+                <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Captain\u{2019}s oath"</div>
+                <h2 class="font-display italic text-2xl text-primary">"Goals"</h2>
+            </div>
             <Suspense fallback=|| view! { <SkeletonCard height="h-28" /> }>
                 {move || progress_resource.get().map(|result| match result {
                     Err(_) => view! {
@@ -768,19 +791,19 @@ fn RankTargetCard(
     let payload_clone = payload.clone();
 
     view! {
-        <div class="bg-elevated border border-divider/50 rounded-xl p-4 flex flex-col gap-2">
+        <div class="bg-elevated border border-outline/50 rounded-xl p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                 </svg>
-                <span class="text-sm font-semibold text-primary">"Rank Target"</span>
+                <span class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"Rank Target"</span>
             </div>
             {move || if editing.get() {
                 let is_master = matches!(tier_edit.get().to_uppercase().as_str(), "MASTER" | "GRANDMASTER" | "CHALLENGER");
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
-                        <label class="text-xs text-muted uppercase tracking-wider">"Tier"</label>
-                        <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors w-full"
+                        <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Tier"</label>
+                        <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
                                 on:change=move |ev| tier_edit.set(event_target_value(&ev))>
                             {RANK_TIERS.iter().map(|t| {
                                 let selected = tier_edit.get_untracked().to_uppercase() == *t;
@@ -788,8 +811,8 @@ fn RankTargetCard(
                             }).collect_view()}
                         </select>
                         {(!is_master).then(|| view! {
-                            <label class="text-xs text-muted uppercase tracking-wider">"Division"</label>
-                            <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors w-full"
+                            <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Division"</label>
+                            <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
                                     on:change=move |ev| div_edit.set(event_target_value(&ev))>
                                 {RANK_DIVISIONS.iter().map(|d| {
                                     let selected = div_edit.get_untracked() == *d;
@@ -798,15 +821,15 @@ fn RankTargetCard(
                             </select>
                         })}
                         <div class="flex items-center gap-2 mt-2">
-                            <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors" on:click=on_save>"Save Goal"</button>
-                            <button class="text-muted hover:text-secondary text-xs" on:click=on_discard>"Discard"</button>
+                            <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_save>"Save Goal"</button>
+                            <button class="text-muted hover:text-secondary text-xs focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_discard>"Discard"</button>
                         </div>
                         {move || error_msg.get().map(|m| view! { <StatusMessage message=m /> })}
                     </div>
                 }.into_any()
             } else if payload_clone.rank.is_none() {
                 view! {
-                    <button class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-semibold px-3 py-1.5 rounded-lg mt-2 self-start transition-colors" on:click=on_set>"Set Goal"</button>
+                    <button class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-semibold px-3 py-1.5 rounded-lg mt-2 self-start transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_set>"Set Goal"</button>
                 }.into_any()
             } else {
                 let rank_p = payload_clone.rank.clone().unwrap();
@@ -833,17 +856,17 @@ fn RankTargetCard(
                 view! {
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
-                            <div class="text-xs text-muted uppercase tracking-wider">"Target"</div>
-                            {achieved.then(|| view! { <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold rounded-full px-2 py-0.5">"Achieved"</span> })}
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target"</div>
+                            {achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-imperial uppercase tracking-[0.18em] text-[10px] rounded-full px-2 py-0.5">"Achieved"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{target_display}</div>
-                        <div class="text-xl font-semibold text-primary mt-1">{current_label}</div>
+                        <div class="font-display italic text-primary text-2xl mt-1">{current_label}</div>
                         <div class="text-xs text-muted">{format!("{} LP to go", to_go)}</div>
-                        <div class="w-full bg-elevated rounded-full h-2 mt-2">
-                            <div class=move || if achieved { "h-2 rounded-full bg-emerald-500/60 transition-all" } else { "h-2 rounded-full bg-accent/50 transition-all" }
+                        <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
+                            <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
                                  style=format!("width: {:.0}%", pct) />
                         </div>
-                        <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2" on:click=on_edit>"Edit Goal"</button>
+                        <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_edit>"Edit Goal"</button>
                     </div>
                 }.into_any()
             }}
@@ -882,31 +905,31 @@ fn CsGoalCard(
     let on_edit = move |_| editing.set(true);
     let cs_state = payload.cs.clone();
     view! {
-        <div class="bg-elevated border border-divider/50 rounded-xl p-4 flex flex-col gap-2">
+        <div class="bg-elevated border border-outline/50 rounded-xl p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                 </svg>
-                <span class="text-sm font-semibold text-primary">"CS per Minute"</span>
+                <span class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"CS per Minute"</span>
             </div>
             {move || if editing.get() {
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
-                        <label class="text-xs text-muted uppercase tracking-wider">"Target CS/min"</label>
+                        <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target CS/min"</label>
                         <input type="number" min="0" max="15" step="0.1"
                                prop:value=move || target_edit.get()
                                on:input=move |ev| target_edit.set(event_target_value(&ev))
-                               class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors w-full" />
+                               class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full" />
                         <div class="flex items-center gap-2 mt-2">
-                            <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors" on:click=on_save>"Save Goal"</button>
-                            <button class="text-muted hover:text-secondary text-xs" on:click=on_discard>"Discard"</button>
+                            <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_save>"Save Goal"</button>
+                            <button class="text-muted hover:text-secondary text-xs focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_discard>"Discard"</button>
                         </div>
                         {move || error_msg.get().map(|m| view! { <StatusMessage message=m /> })}
                     </div>
                 }.into_any()
             } else if cs_state.is_none() {
                 view! {
-                    <button class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-semibold px-3 py-1.5 rounded-lg mt-2 self-start transition-colors" on:click=on_set>"Set Goal"</button>
+                    <button class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-semibold px-3 py-1.5 rounded-lg mt-2 self-start transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_set>"Set Goal"</button>
                 }.into_any()
             } else {
                 let p = cs_state.clone().unwrap();
@@ -914,8 +937,8 @@ fn CsGoalCard(
                 view! {
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
-                            <div class="text-xs text-muted uppercase tracking-wider">"Target"</div>
-                            {p.achieved.then(|| view! { <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold rounded-full px-2 py-0.5">"On track"</span> })}
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target"</div>
+                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-imperial uppercase tracking-[0.18em] text-[10px] rounded-full px-2 py-0.5">"On track"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{format!("{:.1} CS/min", target)}</div>
                         {match p.current_value {
@@ -926,16 +949,16 @@ fn CsGoalCard(
                                 let pct = ((cur / target.max(0.01)) * 100.0).clamp(0.0, 100.0);
                                 let achieved = p.achieved;
                                 view! {
-                                    <div class="text-xl font-semibold text-primary mt-1">{format!("{:.1}", cur)}</div>
-                                    <div class="text-xs text-muted">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
-                                    <div class="w-full bg-elevated rounded-full h-2 mt-2">
-                                        <div class=move || if achieved { "h-2 rounded-full bg-emerald-500/60 transition-all" } else { "h-2 rounded-full bg-accent/50 transition-all" }
+                                    <div class="font-display italic text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
+                                    <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
+                                    <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
+                                        <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
                                              style=format!("width: {:.0}%", pct) />
                                     </div>
                                 }.into_any()
                             }
                         }}
-                        <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2" on:click=on_edit>"Edit Goal"</button>
+                        <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_edit>"Edit Goal"</button>
                     </div>
                 }.into_any()
             }}
@@ -974,31 +997,31 @@ fn DeathsGoalCard(
     let on_edit = move |_| editing.set(true);
     let deaths_state = payload.deaths.clone();
     view! {
-        <div class="bg-elevated border border-divider/50 rounded-xl p-4 flex flex-col gap-2">
+        <div class="bg-elevated border border-outline/50 rounded-xl p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                 </svg>
-                <span class="text-sm font-semibold text-primary">"Deaths per Game"</span>
+                <span class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"Deaths per Game"</span>
             </div>
             {move || if editing.get() {
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
-                        <label class="text-xs text-muted uppercase tracking-wider">"Max deaths per game"</label>
+                        <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Max deaths per game"</label>
                         <input type="number" min="0" max="20" step="1"
                                prop:value=move || target_edit.get()
                                on:input=move |ev| target_edit.set(event_target_value(&ev))
-                               class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 transition-colors w-full" />
+                               class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full" />
                         <div class="flex items-center gap-2 mt-2">
-                            <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors" on:click=on_save>"Save Goal"</button>
-                            <button class="text-muted hover:text-secondary text-xs" on:click=on_discard>"Discard"</button>
+                            <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_save>"Save Goal"</button>
+                            <button class="text-muted hover:text-secondary text-xs focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_discard>"Discard"</button>
                         </div>
                         {move || error_msg.get().map(|m| view! { <StatusMessage message=m /> })}
                     </div>
                 }.into_any()
             } else if deaths_state.is_none() {
                 view! {
-                    <button class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-semibold px-3 py-1.5 rounded-lg mt-2 self-start transition-colors" on:click=on_set>"Set Goal"</button>
+                    <button class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-semibold px-3 py-1.5 rounded-lg mt-2 self-start transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_set>"Set Goal"</button>
                 }.into_any()
             } else {
                 let p = deaths_state.clone().unwrap();
@@ -1006,8 +1029,8 @@ fn DeathsGoalCard(
                 view! {
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
-                            <div class="text-xs text-muted uppercase tracking-wider">"Target"</div>
-                            {p.achieved.then(|| view! { <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold rounded-full px-2 py-0.5">"On track"</span> })}
+                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target"</div>
+                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-imperial uppercase tracking-[0.18em] text-[10px] rounded-full px-2 py-0.5">"On track"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{format!("{:.0} deaths or fewer", target)}</div>
                         {match p.current_value {
@@ -1018,16 +1041,16 @@ fn DeathsGoalCard(
                                 let pct = if cur <= target { 100.0f32 } else { ((target / cur.max(0.01)) * 100.0).clamp(0.0, 100.0) };
                                 let achieved = p.achieved;
                                 view! {
-                                    <div class="text-xl font-semibold text-primary mt-1">{format!("{:.1}", cur)}</div>
-                                    <div class="text-xs text-muted">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
-                                    <div class="w-full bg-elevated rounded-full h-2 mt-2">
-                                        <div class=move || if achieved { "h-2 rounded-full bg-emerald-500/60 transition-all" } else { "h-2 rounded-full bg-accent/50 transition-all" }
+                                    <div class="font-display italic text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
+                                    <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
+                                    <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
+                                        <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
                                              style=format!("width: {:.0}%", pct) />
                                     </div>
                                 }.into_any()
                             }
                         }}
-                        <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2" on:click=on_edit>"Edit Goal"</button>
+                        <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_edit>"Edit Goal"</button>
                     </div>
                 }.into_any()
             }}
