@@ -210,205 +210,211 @@ pub fn PersonalLearningsPage() -> impl IntoView {
     let toast = use_context::<ToastContext>();
 
     view! {
-        <div class="max-w-7xl mx-auto px-6 py-10">
-            // Page header
-            <div class="flex items-center justify-between mb-6">
-                <div>
-                    <h1 class="text-3xl font-bold text-primary">"Personal Learnings"</h1>
-                    <p class="text-sm text-muted mt-1">"Your private post-game reflections"</p>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-7xl mx-auto px-6 py-10">
+                // Page header
+                <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
+                    <div class="flex flex-col gap-2">
+                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                            "The journal"
+                        </span>
+                        <h1 class="font-display italic text-primary text-3xl">"Personal learnings"</h1>
+                        <p class="text-muted text-sm">"Your private post-game reflections."</p>
+                    </div>
+                    <a
+                        href="/personal-learnings/new"
+                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    >
+                        "+ New learning"
+                    </a>
                 </div>
-                <a
-                    href="/personal-learnings/new"
-                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-5 py-2 rounded-lg text-sm transition-colors"
-                >
-                    "+ New Learning"
-                </a>
-            </div>
 
-            <Suspense fallback=move || view! {
-                <div class="text-muted text-sm">"Loading..."</div>
-            }>
-                {move || {
-                    let data = learnings.get();
-                    match data {
-                        None => view! { <div></div> }.into_any(),
-                        Some(Err(e)) => view! {
-                            <ErrorBanner message=e.to_string() />
-                        }.into_any(),
-                        Some(Ok(all_learnings)) => {
-                            let all_learnings = StoredValue::new(all_learnings);
+                <Suspense fallback=move || view! {
+                    <div class="text-muted text-sm">"Loading..."</div>
+                }>
+                    {move || {
+                        let data = learnings.get();
+                        match data {
+                            None => view! { <div></div> }.into_any(),
+                            Some(Err(e)) => view! {
+                                <ErrorBanner message=e.to_string() />
+                            }.into_any(),
+                            Some(Ok(all_learnings)) => {
+                                let all_learnings = StoredValue::new(all_learnings);
 
-                            // Unique champions for dropdown
-                            let unique_champions: Vec<String> = {
-                                let mut set = std::collections::BTreeSet::new();
-                                all_learnings.with_value(|ls| {
-                                    for l in ls {
-                                        if let Some(c) = &l.champion {
-                                            set.insert(c.clone());
+                                // Unique champions for dropdown
+                                let unique_champions: Vec<String> = {
+                                    let mut set = std::collections::BTreeSet::new();
+                                    all_learnings.with_value(|ls| {
+                                        for l in ls {
+                                            if let Some(c) = &l.champion {
+                                                set.insert(c.clone());
+                                            }
                                         }
-                                    }
-                                });
-                                set.into_iter().collect()
-                            };
-
-                            view! {
-                                // Filter bar
-                                <div class="flex items-center gap-3 mb-6 flex-wrap">
-                                    <span class="text-muted text-sm">"Filter:"</span>
-                                    // Type filter
-                                    <select
-                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50"
-                                        on:change=move |ev| filter_type.set(event_target_value(&ev))
-                                    >
-                                        <option value="all">"All Types"</option>
-                                        <option value="general">"General"</option>
-                                        <option value="champion">"Champion"</option>
-                                        <option value="matchup">"Matchup"</option>
-                                    </select>
-                                    // Champion filter
-                                    <select
-                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50"
-                                        on:change=move |ev| filter_champion.set(event_target_value(&ev))
-                                    >
-                                        <option value="all">"All Champions"</option>
-                                        {unique_champions.into_iter().map(|c| {
-                                            let c2 = c.clone();
-                                            view! { <option value=c>{c2}</option> }
-                                        }).collect_view()}
-                                    </select>
-                                    // Tag filter
-                                    <select
-                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50"
-                                        on:change=move |ev| filter_tag.set(event_target_value(&ev))
-                                    >
-                                        <option value="all">"All Tags"</option>
-                                        {LEARNING_TAGS.iter().map(|t| {
-                                            let t = *t;
-                                            view! { <option value=t>{t}</option> }
-                                        }).collect_view()}
-                                    </select>
-                                    // Sort (right-aligned)
-                                    <select
-                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 ml-auto"
-                                        on:change=move |ev| sort_mode.set(event_target_value(&ev))
-                                    >
-                                        <option value="newest">"Newest first"</option>
-                                        <option value="champion">"By champion"</option>
-                                    </select>
-                                </div>
-
-                                // Card grid
-                                {move || {
-                                    let ft = filter_type.get();
-                                    let fc = filter_champion.get();
-                                    let ftag = filter_tag.get();
-                                    let sm = sort_mode.get();
-
-                                    let filtered: Vec<PersonalLearning> = all_learnings.with_value(|ls| {
-                                        ls.iter()
-                                            .filter(|l| {
-                                                let type_ok = ft == "all" || l.learning_type == ft;
-                                                let champ_ok = fc == "all"
-                                                    || l.champion.as_deref() == Some(fc.as_str());
-                                                let tag_ok = ftag == "all"
-                                                    || l.tags.contains(&ftag);
-                                                type_ok && champ_ok && tag_ok
-                                            })
-                                            .cloned()
-                                            .collect()
                                     });
+                                    set.into_iter().collect()
+                                };
 
-                                    if all_learnings.with_value(|ls| ls.is_empty()) {
-                                        // No learnings at all
-                                        return view! {
-                                            <div class="text-center py-20">
-                                                <h2 class="text-xl font-bold text-primary mb-2">"No learnings yet"</h2>
-                                                <p class="text-muted text-sm mb-6">
-                                                    "Write your first reflection after a game. Start from a match or create one here."
-                                                </p>
-                                                <a
-                                                    href="/personal-learnings/new"
-                                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-5 py-2 rounded-lg text-sm transition-colors"
-                                                >
-                                                    "Write your first learning"
-                                                </a>
-                                            </div>
-                                        }.into_any();
-                                    }
+                                view! {
+                                    // Filter bar (Card.plain)
+                                    <div class="bg-elevated border border-divider rounded-xl p-4 flex items-center gap-3 mb-6 flex-wrap">
+                                        <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filter"</span>
+                                        // Type filter
+                                        <select
+                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                            on:change=move |ev| filter_type.set(event_target_value(&ev))
+                                        >
+                                            <option value="all">"All Types"</option>
+                                            <option value="general">"General"</option>
+                                            <option value="champion">"Champion"</option>
+                                            <option value="matchup">"Matchup"</option>
+                                        </select>
+                                        // Champion filter
+                                        <select
+                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                            on:change=move |ev| filter_champion.set(event_target_value(&ev))
+                                        >
+                                            <option value="all">"All Champions"</option>
+                                            {unique_champions.into_iter().map(|c| {
+                                                let c2 = c.clone();
+                                                view! { <option value=c>{c2}</option> }
+                                            }).collect_view()}
+                                        </select>
+                                        // Tag filter
+                                        <select
+                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                            on:change=move |ev| filter_tag.set(event_target_value(&ev))
+                                        >
+                                            <option value="all">"All Tags"</option>
+                                            {LEARNING_TAGS.iter().map(|t| {
+                                                let t = *t;
+                                                view! { <option value=t>{t}</option> }
+                                            }).collect_view()}
+                                        </select>
+                                        // Sort (right-aligned)
+                                        <select
+                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors ml-auto"
+                                            on:change=move |ev| sort_mode.set(event_target_value(&ev))
+                                        >
+                                            <option value="newest">"Newest first"</option>
+                                            <option value="champion">"By champion"</option>
+                                        </select>
+                                    </div>
 
-                                    if filtered.is_empty() {
-                                        return view! {
-                                            <div class="text-center py-20">
-                                                <p class="text-muted text-sm mb-3">"No learnings match these filters."</p>
-                                                <button
-                                                    class="text-accent text-sm hover:underline cursor-pointer"
-                                                    on:click=move |_| {
-                                                        filter_type.set("all".to_string());
-                                                        filter_champion.set("all".to_string());
-                                                        filter_tag.set("all".to_string());
-                                                    }
-                                                >
-                                                    "Reset filters"
-                                                </button>
-                                            </div>
-                                        }.into_any();
-                                    }
+                                    // Card grid
+                                    {move || {
+                                        let ft = filter_type.get();
+                                        let fc = filter_champion.get();
+                                        let ftag = filter_tag.get();
+                                        let sm = sort_mode.get();
 
-                                    if sm == "champion" {
-                                        // Group by champion
-                                        let mut grouped: BTreeMap<String, Vec<PersonalLearning>> = BTreeMap::new();
-                                        for l in filtered {
-                                            let key = l.champion.clone().unwrap_or_else(|| "General".to_string());
-                                            grouped.entry(key).or_default().push(l);
+                                        let filtered: Vec<PersonalLearning> = all_learnings.with_value(|ls| {
+                                            ls.iter()
+                                                .filter(|l| {
+                                                    let type_ok = ft == "all" || l.learning_type == ft;
+                                                    let champ_ok = fc == "all"
+                                                        || l.champion.as_deref() == Some(fc.as_str());
+                                                    let tag_ok = ftag == "all"
+                                                        || l.tags.contains(&ftag);
+                                                    type_ok && champ_ok && tag_ok
+                                                })
+                                                .cloned()
+                                                .collect()
+                                        });
+
+                                        if all_learnings.with_value(|ls| ls.is_empty()) {
+                                            // No learnings at all
+                                            return view! {
+                                                <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
+                                                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Empty journal"</span>
+                                                    <h2 class="font-display italic text-primary text-2xl mt-2">"No learnings yet"</h2>
+                                                    <p class="text-muted text-sm mt-3 mb-6 max-w-md mx-auto">
+                                                        "Write your first reflection after a game. Start from a match or create one here."
+                                                    </p>
+                                                    <a
+                                                        href="/personal-learnings/new"
+                                                        class="inline-flex items-center bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    >
+                                                        "Write your first learning"
+                                                    </a>
+                                                </div>
+                                            }.into_any();
                                         }
 
-                                        view! {
-                                            <div>
-                                                {grouped.into_iter().map(|(champ, items)| {
-                                                    view! {
-                                                        <div class="mb-6">
-                                                            <p class="text-xs text-dimmed uppercase tracking-wider py-2 mb-2 border-b border-divider/30">
-                                                                {champ}
-                                                            </p>
-                                                            <div class="grid grid-cols-2 lg:grid-cols-3 gap-6">
-                                                                {items.into_iter().map(|l| {
-                                                                    view! {
-                                                                        <LearningCard
-                                                                            learning=l
-                                                                            expanded_id=expanded_id
-                                                                            learnings=learnings
-                                                                            toast=toast
-                                                                        />
-                                                                    }
-                                                                }).collect_view()}
+                                        if filtered.is_empty() {
+                                            return view! {
+                                                <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
+                                                    <p class="text-muted text-sm mb-3">"No learnings match these filters."</p>
+                                                    <button
+                                                        class="text-accent text-sm hover:underline cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
+                                                        on:click=move |_| {
+                                                            filter_type.set("all".to_string());
+                                                            filter_champion.set("all".to_string());
+                                                            filter_tag.set("all".to_string());
+                                                        }
+                                                    >
+                                                        "Reset filters"
+                                                    </button>
+                                                </div>
+                                            }.into_any();
+                                        }
+
+                                        if sm == "champion" {
+                                            // Group by champion
+                                            let mut grouped: BTreeMap<String, Vec<PersonalLearning>> = BTreeMap::new();
+                                            for l in filtered {
+                                                let key = l.champion.clone().unwrap_or_else(|| "General".to_string());
+                                                grouped.entry(key).or_default().push(l);
+                                            }
+
+                                            view! {
+                                                <div>
+                                                    {grouped.into_iter().map(|(champ, items)| {
+                                                        view! {
+                                                            <div class="mb-6">
+                                                                <p class="font-imperial uppercase tracking-wider text-xs text-muted py-2 mb-2 border-b border-divider/30">
+                                                                    {champ}
+                                                                </p>
+                                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                                    {items.into_iter().map(|l| {
+                                                                        view! {
+                                                                            <LearningCard
+                                                                                learning=l
+                                                                                expanded_id=expanded_id
+                                                                                learnings=learnings
+                                                                                toast=toast
+                                                                            />
+                                                                        }
+                                                                    }).collect_view()}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="grid grid-cols-2 lg:grid-cols-3 gap-6">
-                                                {filtered.into_iter().map(|l| {
-                                                    view! {
-                                                        <LearningCard
-                                                            learning=l
-                                                            expanded_id=expanded_id
-                                                            learnings=learnings
-                                                            toast=toast
-                                                        />
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        }.into_any()
-                                    }
-                                }}
-                            }.into_any()
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! {
+                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {filtered.into_iter().map(|l| {
+                                                        view! {
+                                                            <LearningCard
+                                                                learning=l
+                                                                expanded_id=expanded_id
+                                                                learnings=learnings
+                                                                toast=toast
+                                                            />
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any()
+                                        }
+                                    }}
+                                }.into_any()
+                            }
                         }
-                    }
-                }}
-            </Suspense>
+                    }}
+                </Suspense>
+            </div>
         </div>
     }
 }
@@ -438,9 +444,9 @@ fn LearningCard(
 
     let card_class = move || {
         if is_expanded2() {
-            "bg-accent/10 border border-accent/30 rounded-xl p-4 transition-all"
+            "bg-elevated border border-accent/40 rounded-xl p-4 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
         } else {
-            "bg-elevated/30 border border-divider/30 rounded-xl p-4 hover:bg-overlay/30 transition-all cursor-pointer"
+            "bg-elevated border border-divider rounded-xl p-4 hover:border-outline transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
         }
     };
 
@@ -465,7 +471,7 @@ fn LearningCard(
                         _ => "General",
                     };
                     view! {
-                        <span class="bg-overlay text-muted text-xs font-bold rounded px-2 py-0.5">
+                        <span class="bg-surface text-muted text-[10px] font-imperial uppercase tracking-wider rounded px-2 py-0.5 border border-outline/50">
                             {type_label}
                         </span>
                     }
@@ -473,12 +479,12 @@ fn LearningCard(
                 {learning.with_value(|l| {
                     match l.win_loss.as_deref() {
                         Some("win") => view! {
-                            <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded px-2 py-0.5">
+                            <span class="bg-success/15 text-success border border-success/30 text-[10px] font-imperial uppercase tracking-wider rounded px-2 py-0.5">
                                 "Win"
                             </span>
                         }.into_any(),
                         Some("loss") => view! {
-                            <span class="bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold rounded px-2 py-0.5">
+                            <span class="bg-danger/15 text-danger border border-danger/30 text-[10px] font-imperial uppercase tracking-wider rounded px-2 py-0.5">
                                 "Loss"
                             </span>
                         }.into_any(),
@@ -487,17 +493,16 @@ fn LearningCard(
                 })}
                 {learning.with_value(|l| {
                     l.created_at.as_ref().map(|ts| {
-                        // Show just the date portion
                         let date = ts.split('T').next().unwrap_or(ts.as_str()).to_string();
                         view! {
-                            <span class="text-xs text-dimmed ml-auto">{date}</span>
+                            <span class="font-mono text-xs text-dimmed ml-auto tabular-nums">{date}</span>
                         }
                     })
                 })}
             </div>
 
             // Title
-            <p class="text-sm font-bold text-primary truncate mb-1">
+            <p class="font-display italic text-primary text-base leading-snug truncate mb-1">
                 {learning.with_value(|l| l.title.clone())}
             </p>
 
@@ -509,7 +514,7 @@ fn LearningCard(
                         let url = champion_icon_url(champ);
                         let champ = champ.clone();
                         return view! {
-                            <img src=url alt=champ class="w-5 h-5 rounded object-cover mb-1" />
+                            <img src=url alt=champ class="w-6 h-6 rounded object-cover mb-1 border border-outline/50" />
                         }.into_any();
                     }
                 }
@@ -521,7 +526,7 @@ fn LearningCard(
                 {learning.with_value(|l| {
                     let preview = &l.what_happened;
                     if preview.len() > 80 {
-                        format!("{}…", &preview[..80])
+                        format!("{}\u{2026}", &preview[..80])
                     } else {
                         preview.clone()
                     }
@@ -534,7 +539,7 @@ fn LearningCard(
                     l.tags.iter().map(|tag| {
                         let tag = tag.clone();
                         view! {
-                            <span class="rounded-full px-3 py-1 text-xs font-normal bg-overlay text-muted">
+                            <span class="rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-surface text-muted border border-outline/40">
                                 {tag}
                             </span>
                         }
@@ -555,31 +560,31 @@ fn LearningCard(
                 let del_id = id_for_delete.clone();
 
                 view! {
-                    <div class="border-t border-divider/30 pt-4 mt-2" on:click=move |ev| ev.stop_propagation()>
+                    <div class="border-t border-divider/40 pt-4 mt-2" on:click=move |ev| ev.stop_propagation()>
                         <div class="space-y-3 mb-4">
                             <div>
-                                <p class="text-xs text-dimmed uppercase tracking-wider mb-1">"What happened"</p>
+                                <p class="font-imperial uppercase tracking-wider text-[10px] text-muted mb-1">"What happened"</p>
                                 <p class="text-sm text-secondary">{what_happened}</p>
                             </div>
                             <div>
-                                <p class="text-xs text-dimmed uppercase tracking-wider mb-1">"What I learned"</p>
+                                <p class="font-imperial uppercase tracking-wider text-[10px] text-muted mb-1">"What I learned"</p>
                                 <p class="text-sm text-secondary">{what_i_learned}</p>
                             </div>
                             <div>
-                                <p class="text-xs text-dimmed uppercase tracking-wider mb-1">"Next time I will..."</p>
+                                <p class="font-imperial uppercase tracking-wider text-[10px] text-muted mb-1">"Next time I will..."</p>
                                 <p class="text-sm text-secondary">{next_time}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
                             <a
                                 href=edit_href
-                                class="bg-elevated border border-divider text-secondary hover:text-primary px-3 py-1 rounded-lg text-xs transition-colors"
+                                class="bg-surface border border-outline/50 text-secondary hover:text-primary hover:border-outline px-3 py-1 rounded-lg text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 on:click=move |ev| ev.stop_propagation()
                             >
                                 "Edit"
                             </a>
                             <button
-                                class="text-red-400/50 hover:text-red-400 text-xs transition-colors cursor-pointer"
+                                class="text-danger/70 hover:text-danger text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
                                 on:click=move |ev| {
                                     ev.stop_propagation();
                                     let id = del_id.clone();
@@ -602,7 +607,7 @@ fn LearningCard(
                                     });
                                 }
                             >
-                                "Delete Learning"
+                                "Delete learning"
                             </button>
                         </div>
                     </div>
@@ -765,9 +770,9 @@ pub fn NewLearningPage() -> impl IntoView {
             let champ = champion.get_untracked();
             let opp = opponent.get_untracked();
             match lt.as_str() {
-                "matchup" => format!("{} vs {} — {}", champ, opp, current_date_short()),
-                "champion" => format!("{} — {}", champ, current_date_short()),
-                _ => format!("General — {}", current_date_short()),
+                "matchup" => format!("{} vs {} \u{2014} {}", champ, opp, current_date_short()),
+                "champion" => format!("{} \u{2014} {}", champ, current_date_short()),
+                _ => format!("General \u{2014} {}", current_date_short()),
             }
         };
 
@@ -839,266 +844,277 @@ pub fn NewLearningPage() -> impl IntoView {
     };
 
     view! {
-        <div class="max-w-2xl mx-auto px-6 py-10">
-            // Page heading
-            <h1 class="text-3xl font-bold text-primary mb-6">
-                {move || if is_editing.get() { "Edit Learning" } else { "New Learning" }}
-            </h1>
-
-            // Event context banner (from match timeline link)
-            {move || {
-                let en = event_name_signal.get();
-                let gts = game_timestamp_ms.get();
-                if !en.is_empty() && !gts.is_empty() {
-                    // Format timestamp (ms -> mm:ss)
-                    let ts_ms: i64 = gts.parse().unwrap_or(0);
-                    let total_secs = ts_ms / 1000;
-                    let mins = total_secs / 60;
-                    let secs = total_secs % 60;
-                    let formatted = format!("{mins}:{secs:02}");
-                    view! {
-                        <div class="bg-elevated border border-divider rounded-lg p-3 text-sm text-secondary mb-4">
-                            {format!("From match: {en} at {formatted}")}
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
-                }
-            }}
-
-            // Save error banner
-            {move || {
-                if let Some(err) = save_error.get() {
-                    view! { <div class="mb-4"><ErrorBanner message=err /></div> }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
-                }
-            }}
-
-            <div class="space-y-6">
-
-                // Step 1: Type selector
-                <div>
-                    <label class="text-sm text-secondary block mb-2">"Learning Type"</label>
-                    <div class="flex gap-2">
-                        {["general", "champion", "matchup"].iter().map(|&lt_val| {
-                            let lt_val_str = lt_val.to_string();
-                            let lt_val_str2 = lt_val.to_string();
-                            let label = match lt_val {
-                                "general" => "General",
-                                "champion" => "Champion",
-                                "matchup" => "Matchup",
-                                _ => lt_val,
-                            };
-                            view! {
-                                <button
-                                    class=move || {
-                                        if learning_type.get() == lt_val_str {
-                                            "px-4 py-2 rounded-lg text-sm font-bold bg-accent text-accent-contrast cursor-pointer"
-                                        } else {
-                                            "px-4 py-2 rounded-lg text-sm font-normal bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer"
-                                        }
-                                    }
-                                    on:click=move |_| learning_type.set(lt_val_str2.clone())
-                                >
-                                    {label}
-                                </button>
-                            }
-                        }).collect_view()}
-                    </div>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-2xl mx-auto px-6 py-10">
+                // Page heading
+                <div class="flex flex-col gap-2 mb-6">
+                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                        {move || if is_editing.get() { "Revise the entry" } else { "A new chapter" }}
+                    </span>
+                    <h1 class="font-display italic text-primary text-3xl">
+                        {move || if is_editing.get() { "Edit learning" } else { "New learning" }}
+                    </h1>
                 </div>
 
-                // Step 2: Conditional champion fields
-                <Suspense fallback=move || view! { <div></div> }>
-                    {move || {
-                        let lt = learning_type.get();
-                        let champ_list = champions.get()
-                            .and_then(|r| r.ok())
-                            .unwrap_or_default();
-                        let champ_list2 = champ_list.clone();
+                // Event context banner (from match timeline link)
+                {move || {
+                    let en = event_name_signal.get();
+                    let gts = game_timestamp_ms.get();
+                    if !en.is_empty() && !gts.is_empty() {
+                        // Format timestamp (ms -> mm:ss)
+                        let ts_ms: i64 = gts.parse().unwrap_or(0);
+                        let total_secs = ts_ms / 1000;
+                        let mins = total_secs / 60;
+                        let secs = total_secs % 60;
+                        let formatted = format!("{mins}:{secs:02}");
+                        view! {
+                            <div class="bg-elevated border border-divider rounded-lg p-3 text-sm text-secondary mb-4">
+                                <span class="font-imperial uppercase tracking-wider text-[10px] text-muted">"From match"</span>
+                                <div class="mt-1">{format!("{en} at {formatted}")}</div>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }
+                }}
 
-                        match lt.as_str() {
-                            "champion" => view! {
-                                <div>
-                                    <label class="text-sm text-secondary block mb-2">"Champion"</label>
-                                    <ChampionAutocomplete
-                                        champions=champ_list
-                                        value=champion
-                                        placeholder="Search champion..."
-                                    />
-                                </div>
-                            }.into_any(),
-                            "matchup" => view! {
-                                <div class="space-y-3">
-                                    <div>
-                                        <label class="text-sm text-secondary block mb-2">"Your Champion"</label>
-                                        <ChampionAutocomplete
-                                            champions=champ_list
-                                            value=champion
-                                            placeholder="Your champion..."
-                                        />
-                                    </div>
-                                    <div>
-                                        <label class="text-sm text-secondary block mb-2">"Opponent Champion"</label>
-                                        <ChampionAutocomplete
-                                            champions=champ_list2
-                                            value=opponent
-                                            placeholder="Opponent champion..."
-                                        />
-                                    </div>
-                                </div>
-                            }.into_any(),
-                            _ => view! { <span></span> }.into_any(),
-                        }
-                    }}
-                </Suspense>
+                // Save error banner
+                {move || {
+                    if let Some(err) = save_error.get() {
+                        view! { <div class="mb-4"><ErrorBanner message=err /></div> }.into_any()
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }
+                }}
 
-                // Step 3: Three required text areas
-                <div>
-                    <label class="text-sm text-secondary block mb-1">"What happened"</label>
-                    <textarea
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
-                        rows="4"
-                        placeholder="Describe what happened in the game..."
-                        prop:value=move || what_happened.get()
-                        on:input=move |ev| {
-                            what_happened.set(event_target_value(&ev));
-                            what_happened_error.set(false);
-                        }
-                    ></textarea>
-                    {move || {
-                        if what_happened_error.get() {
-                            view! {
-                                <p class="text-red-400 text-xs mt-1">"This field is required to save."</p>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }
-                    }}
-                </div>
+                // Form Card.plain
+                <div class="bg-elevated border border-divider rounded-xl p-6">
+                    <div class="space-y-6">
 
-                <div>
-                    <label class="text-sm text-secondary block mb-1">"What I learned"</label>
-                    <textarea
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
-                        rows="4"
-                        placeholder="What did you learn from this experience?"
-                        prop:value=move || what_i_learned.get()
-                        on:input=move |ev| {
-                            what_i_learned.set(event_target_value(&ev));
-                            what_i_learned_error.set(false);
-                        }
-                    ></textarea>
-                    {move || {
-                        if what_i_learned_error.get() {
-                            view! {
-                                <p class="text-red-400 text-xs mt-1">"This field is required to save."</p>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }
-                    }}
-                </div>
-
-                <div>
-                    <label class="text-sm text-secondary block mb-1">"Next time I will..."</label>
-                    <textarea
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
-                        rows="4"
-                        placeholder="What will you do differently next time?"
-                        prop:value=move || next_time.get()
-                        on:input=move |ev| {
-                            next_time.set(event_target_value(&ev));
-                            next_time_error.set(false);
-                        }
-                    ></textarea>
-                    {move || {
-                        if next_time_error.get() {
-                            view! {
-                                <p class="text-red-400 text-xs mt-1">"This field is required to save."</p>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }
-                    }}
-                </div>
-
-                // Step 4: Tag chips
-                <div>
-                    <label class="text-sm text-secondary block mb-2">"Tags"</label>
-                    <div class="flex flex-wrap gap-2">
-                        {LEARNING_TAGS.iter().map(|&tag| {
-                            let tag_str = tag.to_string();
-                            let tag_str2 = tag.to_string();
-                            view! {
-                                <button
-                                    class=move || {
-                                        if selected_tags.get().contains(&tag_str) {
-                                            "rounded-full px-3 py-1 text-xs font-bold bg-accent text-accent-contrast cursor-pointer"
-                                        } else {
-                                            "rounded-full px-3 py-1 text-xs font-normal bg-overlay text-muted hover:bg-overlay-strong hover:text-secondary transition-colors cursor-pointer"
-                                        }
-                                    }
-                                    on:click=move |_| {
-                                        let t = tag_str2.clone();
-                                        selected_tags.update(|tags| {
-                                            if let Some(pos) = tags.iter().position(|x| x == &t) {
-                                                tags.remove(pos);
-                                            } else {
-                                                tags.push(t);
+                        // Step 1: Type selector
+                        <div>
+                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Learning type"</label>
+                            <div class="flex gap-2 flex-wrap">
+                                {["general", "champion", "matchup"].iter().map(|&lt_val| {
+                                    let lt_val_str = lt_val.to_string();
+                                    let lt_val_str2 = lt_val.to_string();
+                                    let label = match lt_val {
+                                        "general" => "General",
+                                        "champion" => "Champion",
+                                        "matchup" => "Matchup",
+                                        _ => lt_val,
+                                    };
+                                    view! {
+                                        <button
+                                            class=move || {
+                                                if learning_type.get() == lt_val_str {
+                                                    "px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                } else {
+                                                    "px-4 py-2 rounded-lg text-sm bg-surface border border-outline/50 text-secondary hover:text-primary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                }
                                             }
-                                        });
+                                            on:click=move |_| learning_type.set(lt_val_str2.clone())
+                                        >
+                                            {label}
+                                        </button>
                                     }
-                                >
-                                    {tag}
-                                </button>
-                            }
-                        }).collect_view()}
-                    </div>
-                </div>
+                                }).collect_view()}
+                            </div>
+                        </div>
 
-                // Step 5: Title field
-                <div>
-                    <label class="text-sm text-secondary block mb-1">"Title"</label>
-                    <input
-                        type="text"
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50"
-                        placeholder="Auto-generated from type and champion..."
-                        prop:value=move || {
-                            if title_edited.get() {
-                                title.get()
-                            } else {
+                        // Step 2: Conditional champion fields
+                        <Suspense fallback=move || view! { <div></div> }>
+                            {move || {
                                 let lt = learning_type.get();
-                                let champ = champion.get();
-                                let opp = opponent.get();
-                                match lt.as_str() {
-                                    "matchup" => format!("{} vs {} — {}", champ, opp, current_date_short()),
-                                    "champion" => format!("{} — {}", champ, current_date_short()),
-                                    _ => format!("General — {}", current_date_short()),
-                                }
-                            }
-                        }
-                        on:input=move |ev| {
-                            title.set(event_target_value(&ev));
-                            title_edited.set(true);
-                        }
-                    />
-                </div>
+                                let champ_list = champions.get()
+                                    .and_then(|r| r.ok())
+                                    .unwrap_or_default();
+                                let champ_list2 = champ_list.clone();
 
-                // Save / Cancel buttons
-                <div class="flex items-center gap-3 pt-2">
-                    <button
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-5 py-2 rounded-lg text-sm transition-colors cursor-pointer"
-                        on:click=handle_save
-                    >
-                        "Save Learning"
-                    </button>
-                    <a
-                        href="/personal-learnings"
-                        class="bg-elevated border border-divider text-secondary hover:text-primary px-5 py-2 rounded-lg text-sm transition-colors"
-                    >
-                        "Discard Changes"
-                    </a>
+                                match lt.as_str() {
+                                    "champion" => view! {
+                                        <div>
+                                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Champion"</label>
+                                            <ChampionAutocomplete
+                                                champions=champ_list
+                                                value=champion
+                                                placeholder="Search champion..."
+                                            />
+                                        </div>
+                                    }.into_any(),
+                                    "matchup" => view! {
+                                        <div class="space-y-3">
+                                            <div>
+                                                <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Your champion"</label>
+                                                <ChampionAutocomplete
+                                                    champions=champ_list
+                                                    value=champion
+                                                    placeholder="Your champion..."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Opponent champion"</label>
+                                                <ChampionAutocomplete
+                                                    champions=champ_list2
+                                                    value=opponent
+                                                    placeholder="Opponent champion..."
+                                                />
+                                            </div>
+                                        </div>
+                                    }.into_any(),
+                                    _ => view! { <span></span> }.into_any(),
+                                }
+                            }}
+                        </Suspense>
+
+                        // Step 3: Three required text areas
+                        <div>
+                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"What happened"</label>
+                            <textarea
+                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                rows="4"
+                                placeholder="Describe what happened in the game..."
+                                prop:value=move || what_happened.get()
+                                on:input=move |ev| {
+                                    what_happened.set(event_target_value(&ev));
+                                    what_happened_error.set(false);
+                                }
+                            ></textarea>
+                            {move || {
+                                if what_happened_error.get() {
+                                    view! {
+                                        <p class="text-danger text-xs mt-1" role="alert">"This field is required to save."</p>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }
+                            }}
+                        </div>
+
+                        <div>
+                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"What I learned"</label>
+                            <textarea
+                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                rows="4"
+                                placeholder="What did you learn from this experience?"
+                                prop:value=move || what_i_learned.get()
+                                on:input=move |ev| {
+                                    what_i_learned.set(event_target_value(&ev));
+                                    what_i_learned_error.set(false);
+                                }
+                            ></textarea>
+                            {move || {
+                                if what_i_learned_error.get() {
+                                    view! {
+                                        <p class="text-danger text-xs mt-1" role="alert">"This field is required to save."</p>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }
+                            }}
+                        </div>
+
+                        <div>
+                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"Next time I will..."</label>
+                            <textarea
+                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                rows="4"
+                                placeholder="What will you do differently next time?"
+                                prop:value=move || next_time.get()
+                                on:input=move |ev| {
+                                    next_time.set(event_target_value(&ev));
+                                    next_time_error.set(false);
+                                }
+                            ></textarea>
+                            {move || {
+                                if next_time_error.get() {
+                                    view! {
+                                        <p class="text-danger text-xs mt-1" role="alert">"This field is required to save."</p>
+                                    }.into_any()
+                                } else {
+                                    view! { <span></span> }.into_any()
+                                }
+                            }}
+                        </div>
+
+                        // Step 4: Tag chips
+                        <div>
+                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Tags"</label>
+                            <div class="flex flex-wrap gap-2">
+                                {LEARNING_TAGS.iter().map(|&tag| {
+                                    let tag_str = tag.to_string();
+                                    let tag_str2 = tag.to_string();
+                                    view! {
+                                        <button
+                                            class=move || {
+                                                if selected_tags.get().contains(&tag_str) {
+                                                    "rounded-full px-3 py-1 text-xs font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                } else {
+                                                    "rounded-full px-3 py-1 text-xs font-medium bg-surface border border-outline/40 text-muted hover:text-secondary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                }
+                                            }
+                                            on:click=move |_| {
+                                                let t = tag_str2.clone();
+                                                selected_tags.update(|tags| {
+                                                    if let Some(pos) = tags.iter().position(|x| x == &t) {
+                                                        tags.remove(pos);
+                                                    } else {
+                                                        tags.push(t);
+                                                    }
+                                                });
+                                            }
+                                        >
+                                            {tag}
+                                        </button>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        </div>
+
+                        // Step 5: Title field
+                        <div>
+                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"Title"</label>
+                            <input
+                                type="text"
+                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                placeholder="Auto-generated from type and champion..."
+                                prop:value=move || {
+                                    if title_edited.get() {
+                                        title.get()
+                                    } else {
+                                        let lt = learning_type.get();
+                                        let champ = champion.get();
+                                        let opp = opponent.get();
+                                        match lt.as_str() {
+                                            "matchup" => format!("{} vs {} \u{2014} {}", champ, opp, current_date_short()),
+                                            "champion" => format!("{} \u{2014} {}", champ, current_date_short()),
+                                            _ => format!("General \u{2014} {}", current_date_short()),
+                                        }
+                                    }
+                                }
+                                on:input=move |ev| {
+                                    title.set(event_target_value(&ev));
+                                    title_edited.set(true);
+                                }
+                            />
+                        </div>
+
+                        // Save / Cancel buttons
+                        <div class="flex items-center gap-3 pt-2">
+                            <button
+                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                on:click=handle_save
+                            >
+                                "Save learning"
+                            </button>
+                            <a
+                                href="/personal-learnings"
+                                class="bg-surface border border-outline/50 text-secondary hover:text-primary hover:border-outline px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            >
+                                "Discard changes"
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1111,7 +1127,5 @@ pub fn NewLearningPage() -> impl IntoView {
 
 fn current_date_short() -> String {
     // Static fallback — auto-titles are user-editable, so approximate date is acceptable.
-    // SSR renders this on server; WASM reads it from the hydrated DOM.
-    // For accurate dates, the title field is fully editable by the user.
     "Today".to_string()
 }

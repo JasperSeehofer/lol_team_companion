@@ -1,5 +1,8 @@
+use crate::components::ornaments::HeraldicDivider;
+use crate::models::match_data::{
+    ComparisonMode, EventCategory, MatchParticipant, PerformanceStats, TimelineEvent,
+};
 use leptos::prelude::*;
-use crate::models::match_data::{ComparisonMode, EventCategory, MatchParticipant, PerformanceStats, TimelineEvent};
 
 #[server]
 pub async fn fetch_match_detail(
@@ -187,28 +190,33 @@ fn ItemIcon(item_id: i32) -> impl IntoView {
         view! {
             <img
                 src=format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/item/{item_id}.png")
-                class="w-6 h-6 rounded"
+                class="w-6 h-6 rounded border border-divider/30"
                 title=format!("Item {item_id}")
+                alt=format!("Item {item_id}")
             />
         }.into_any()
     } else {
         view! {
-            <div class="w-6 h-6 rounded bg-elevated border border-divider/30" />
+            <div class="w-6 h-6 rounded bg-elevated border border-divider/30" aria-hidden="true" />
         }.into_any()
     }
 }
 
 #[component]
-fn ParticipantRow(
-    p: MatchParticipant,
-    is_user: bool,
-) -> impl IntoView {
+fn ParticipantRow(p: MatchParticipant, is_user: bool) -> impl IntoView {
     let row_class = if is_user {
-        "h-12 flex items-center gap-3 px-3 border-l-4 border-accent bg-accent/10".to_string()
-    } else if p.win {
-        "h-12 flex items-center gap-3 px-3 bg-blue-500/5".to_string()
+        "grid grid-cols-[40px_120px_80px_1fr_80px_60px_60px] gap-3 items-center px-3 py-2 border-b border-divider/30 last:border-b-0 border-l-4 border-l-accent bg-accent-soft".to_string()
     } else {
-        "h-12 flex items-center gap-3 px-3 bg-red-500/5".to_string()
+        "grid grid-cols-[40px_120px_80px_1fr_80px_60px_60px] gap-3 items-center px-3 py-2 border-b border-divider/30 last:border-b-0 hover:bg-overlay/30 transition-colors".to_string()
+    };
+
+    let role_label = match p.team_position.as_str() {
+        "TOP" => "Top",
+        "JUNGLE" => "Jng",
+        "MIDDLE" => "Mid",
+        "BOTTOM" => "Bot",
+        "UTILITY" => "Sup",
+        _ => "—",
     };
 
     let champ_icon = champion_icon_url(&p.champion_name);
@@ -221,20 +229,25 @@ fn ParticipantRow(
 
     view! {
         <div class=row_class>
-            // Champion icon (36px)
-            <div class="w-9 shrink-0">
-                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-full" />
+            // Cell 1: role label (40px)
+            <span class="font-imperial uppercase tracking-wider text-[10px] text-muted text-center">
+                {role_label}
+            </span>
+
+            // Cell 2: champion tile + summoner (120px)
+            <div class="flex items-center gap-2 min-w-0">
+                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-full border border-outline/50 shrink-0" />
+                <div class="min-w-0">
+                    <span class="text-primary text-xs font-medium truncate block">{summoner}</span>
+                    <span class="font-mono text-[10px] text-dimmed truncate block">{champ_name}</span>
+                </div>
             </div>
-            // Summoner name (flex-1, min 160px)
-            <div class="flex-1 min-w-[160px] truncate">
-                <span class="text-sm text-primary">{summoner}</span>
-            </div>
-            // KDA (80px)
-            <div class="w-20 text-center shrink-0">
-                <span class="text-sm font-semibold text-primary">{kda}</span>
-            </div>
-            // Items (180px)
-            <div class="w-[180px] flex items-center gap-1 shrink-0">
+
+            // Cell 3: KDA (80px)
+            <span class="font-mono text-sm font-semibold text-primary tabular-nums text-center">{kda}</span>
+
+            // Cell 4: items (1fr, ~180px)
+            <div class="flex items-center gap-1">
                 <ItemIcon item_id=items[0] />
                 <ItemIcon item_id=items[1] />
                 <ItemIcon item_id=items[2] />
@@ -242,18 +255,15 @@ fn ParticipantRow(
                 <ItemIcon item_id=items[4] />
                 <ItemIcon item_id=items[5] />
             </div>
-            // Damage (80px)
-            <div class="w-20 text-center shrink-0">
-                <span class="text-sm text-secondary">{dmg}</span>
-            </div>
-            // Gold (80px)
-            <div class="w-20 text-center shrink-0">
-                <span class="text-sm text-secondary">{gold}</span>
-            </div>
-            // Vision (64px)
-            <div class="w-16 text-center shrink-0">
-                <span class="text-sm text-secondary">{p.vision_score}</span>
-            </div>
+
+            // Cell 5: damage (80px)
+            <span class="font-mono text-sm text-accent tabular-nums text-right">{dmg}</span>
+
+            // Cell 6: gold (60px)
+            <span class="font-mono text-sm text-secondary tabular-nums text-right">{gold}</span>
+
+            // Cell 7: vision (60px)
+            <span class="font-mono text-sm text-secondary tabular-nums text-right">{p.vision_score}</span>
         </div>
     }
 }
@@ -266,49 +276,40 @@ fn TeamScoreboard(
     user_participant_id: i32,
     team_color: &'static str, // "blue" or "red"
 ) -> impl IntoView {
-    let header_cls = if team_color == "blue" {
-        "bg-blue-500/20 border border-blue-500/40 rounded-t-xl p-3 flex items-center justify-between"
+    // Use semantic info (lapis blue) for friendly side, danger (oxblood red) for enemy side.
+    let (header_bg, eyebrow_color) = if team_color == "blue" {
+        ("bg-info/15 border-b border-info/30", "text-info")
     } else {
-        "bg-red-500/20 border border-red-500/40 rounded-t-xl p-3 flex items-center justify-between"
-    };
-
-    let result_cls = if team_color == "blue" {
-        "text-xs uppercase tracking-wider text-blue-400"
-    } else {
-        "text-xs uppercase tracking-wider text-red-400"
+        ("bg-danger/15 border-b border-danger/30", "text-danger")
     };
 
     let result_text = if team_win { "Victory" } else { "Defeat" };
+    let result_color = if team_win { "text-success" } else { "text-danger" };
+    let header_class = format!("{header_bg} px-4 py-3 flex items-center justify-between");
+    let eyebrow_class = format!("font-imperial uppercase tracking-[0.18em] text-[10px] {eyebrow_color}");
+    let result_class = format!("font-imperial uppercase tracking-[0.18em] text-[10px] {result_color}");
 
     view! {
-        <div class="bg-surface border border-divider rounded-xl overflow-hidden">
+        <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
             // Team header
-            <div class=header_cls>
-                <h2 class="text-xl font-semibold text-primary">{title}</h2>
-                <span class=result_cls>{result_text}</span>
+            <div class=header_class>
+                <div class="flex items-baseline gap-3">
+                    <span class=eyebrow_class>{title.clone()}</span>
+                </div>
+                <span class=result_class>{result_text}</span>
             </div>
+
             // Column headers
-            <div class="flex items-center gap-3 px-3 py-2 border-b border-divider/50">
-                <div class="w-9 shrink-0"></div>
-                <div class="flex-1 min-w-[160px]">
-                    <span class="text-xs font-normal text-muted uppercase tracking-wider">"Summoner"</span>
-                </div>
-                <div class="w-20 text-center shrink-0">
-                    <span class="text-xs font-normal text-muted uppercase tracking-wider">"KDA"</span>
-                </div>
-                <div class="w-[180px] shrink-0">
-                    <span class="text-xs font-normal text-muted uppercase tracking-wider">"Items"</span>
-                </div>
-                <div class="w-20 text-center shrink-0">
-                    <span class="text-xs font-normal text-muted uppercase tracking-wider">"Damage"</span>
-                </div>
-                <div class="w-20 text-center shrink-0">
-                    <span class="text-xs font-normal text-muted uppercase tracking-wider">"Gold"</span>
-                </div>
-                <div class="w-16 text-center shrink-0">
-                    <span class="text-xs font-normal text-muted uppercase tracking-wider">"Vision"</span>
-                </div>
+            <div class="grid grid-cols-[40px_120px_80px_1fr_80px_60px_60px] gap-3 items-center px-3 py-2 border-b border-divider bg-surface/50">
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-center">"Role"</span>
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">"Player"</span>
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-center">"KDA"</span>
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">"Items"</span>
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-right">"Damage"</span>
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-right">"Gold"</span>
+                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-right">"Vision"</span>
             </div>
+
             // Participant rows
             {participants.into_iter().map(|p| {
                 let is_user = p.participant_id == user_participant_id;
@@ -355,28 +356,35 @@ fn PerformanceBar(
     let fill_pct = normalize_pct(user_val, avg);
     let marker_pct = avg_marker_pct(user_val, avg);
     let verdict = performance_verdict(user_val, avg);
+    let verdict_color = match verdict {
+        "Above average" => "text-success",
+        "Below average" => "text-danger",
+        _ => "text-muted",
+    };
+    let verdict_class = format!("font-imperial uppercase tracking-wider text-[10px] w-24 shrink-0 {verdict_color}");
 
     view! {
         <div class="flex items-center gap-3 mb-3">
-            // Label (120px)
-            <span class="text-sm text-secondary w-[120px] shrink-0">{label}</span>
+            // Label (140px) — imperial eyebrow
+            <span class="font-imperial uppercase tracking-wider text-[10px] text-muted w-[140px] shrink-0">{label}</span>
             // Bar track (flex-1)
-            <div class="bg-elevated h-4 rounded-full relative flex-1">
+            <div class="bg-surface border border-outline/30 h-3.5 rounded-full relative flex-1 overflow-hidden">
                 // Bar fill
                 <div
-                    class="bg-accent/70 h-full rounded-full"
+                    class="bg-accent/70 h-full rounded-full transition-all duration-200"
                     style=format!("width: {}%", fill_pct)
                 />
                 // Average marker
                 <div
-                    class="absolute top-0 h-full w-0.5 bg-muted/50"
+                    class="absolute top-0 h-full w-0.5 bg-muted/60"
                     style=format!("left: {}%", marker_pct)
+                    aria-hidden="true"
                 />
             </div>
-            // Number (64px)
-            <span class="text-sm font-semibold text-primary w-16 text-right shrink-0">{display_val}</span>
-            // Verdict (80px)
-            <span class="text-xs text-muted w-20 shrink-0">{verdict}</span>
+            // Number (72px)
+            <span class="font-mono text-sm font-semibold text-primary tabular-nums w-16 text-right shrink-0">{display_val}</span>
+            // Verdict (96px)
+            <span class=verdict_class>{verdict}</span>
         </div>
     }
 }
@@ -401,43 +409,48 @@ fn PerformanceSection(
     let perf_stored = StoredValue::new(perf);
 
     view! {
-        <div class="bg-surface border border-divider rounded-xl p-4">
-            <h2 class="text-xl font-semibold text-primary mb-3">"My Performance"</h2>
+        <div class="bg-elevated border border-divider rounded-xl p-6">
+            <div class="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
+                <div class="flex flex-col gap-1">
+                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"My performance"</span>
+                    <h2 class="font-display italic text-primary text-xl">"The breakdown"</h2>
+                </div>
 
-            // Comparison toggle
-            <div class="flex gap-2 mb-4">
-                <button
-                    class=move || if comparison_mode.get() == ComparisonMode::GameAverage {
-                        "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                    } else {
-                        "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                    }
-                    on:click=move |_| set_comparison_mode.set(ComparisonMode::GameAverage)
-                >
-                    "vs Game Average"
-                </button>
-                <button
-                    class=move || {
-                        let base = if comparison_mode.get() == ComparisonMode::LaneOpponent {
-                            "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
+                // Comparison toggle
+                <div class="flex gap-2">
+                    <button
+                        class=move || if comparison_mode.get() == ComparisonMode::GameAverage {
+                            "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         } else {
-                            "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                        };
-                        if !has_lane_opponent {
-                            format!("{base} opacity-40 cursor-not-allowed")
-                        } else {
-                            base.to_string()
+                            "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         }
-                    }
-                    on:click=move |_| {
-                        if has_lane_opponent {
-                            set_comparison_mode.set(ComparisonMode::LaneOpponent);
+                        on:click=move |_| set_comparison_mode.set(ComparisonMode::GameAverage)
+                    >
+                        "vs Game Average"
+                    </button>
+                    <button
+                        class=move || {
+                            let base = if comparison_mode.get() == ComparisonMode::LaneOpponent {
+                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            } else {
+                                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            };
+                            if !has_lane_opponent {
+                                format!("{base} opacity-40 cursor-not-allowed")
+                            } else {
+                                base.to_string()
+                            }
                         }
-                    }
-                    title=if has_lane_opponent { "" } else { "Lane role data not available for this match" }
-                >
-                    "vs Lane Opponent"
-                </button>
+                        on:click=move |_| {
+                            if has_lane_opponent {
+                                set_comparison_mode.set(ComparisonMode::LaneOpponent);
+                            }
+                        }
+                        title=if has_lane_opponent { "" } else { "Lane role data not available for this match" }
+                    >
+                        "vs Lane Opponent"
+                    </button>
+                </div>
             </div>
 
             // Performance bars
@@ -513,7 +526,7 @@ fn PerformanceSection(
                         user_champion, opponent_champion, match_id, result_str
                     )
                 }
-                class="mt-4 inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-bold px-3 py-2 rounded-lg text-sm transition-colors"
+                class="mt-4 inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
             >
                 "Add Learning"
             </a>
@@ -560,375 +573,376 @@ pub fn MatchDetailPage() -> impl IntoView {
     let (selected_event, set_selected_event) = signal(Option::<usize>::None);
 
     view! {
-        <div class="max-w-6xl mx-auto px-6 py-6">
-            // Back link
-            <a href="/stats" class="text-muted hover:text-secondary text-sm">"<- Back to history"</a>
+        <div class="canvas-grain bg-base min-h-screen">
+            <div class="max-w-6xl mx-auto px-8 py-6">
+                // Back link
+                <a
+                    href="/stats"
+                    class="font-imperial uppercase tracking-wider text-[10px] text-muted hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
+                >
+                    "\u{2190} Back to history"
+                </a>
 
-            <div class="mt-4">
-                <Suspense fallback=move || view! {
-                    <div class="flex flex-col gap-6">
-                        <SkeletonCard height="h-12" />
-                        <SkeletonCard height="h-48" />
-                        <SkeletonCard height="h-48" />
-                        <SkeletonCard height="h-16" />
-                        <SkeletonCard height="h-32" />
-                    </div>
-                }>
-                    {move || {
-                        let _ = retry_count.get(); // track retry
-                        detail.get().map(|result| match result {
-                            Err(e) => {
-                                let err_msg = format!("Failed to load match: {e}");
-                                view! {
-                                    <div class="flex flex-col gap-4">
-                                        <ErrorBanner message=err_msg />
-                                        <button
-                                            class="self-start bg-elevated border border-outline text-secondary hover:text-primary px-4 py-2 rounded-lg text-sm transition-colors"
-                                            on:click=move |_| {
-                                                detail.refetch();
-                                                set_retry_count.update(|c| *c += 1);
-                                            }
-                                        >
-                                            "Retry"
-                                        </button>
-                                    </div>
-                                }.into_any()
-                            }
-                            Ok(d) => {
-                                let d_stored = StoredValue::new(d.clone());
-
-                                // Find user's champion and opponent
-                                let user_participant = d.participants.iter()
-                                    .find(|p| p.participant_id == d.user_participant_id)
-                                    .cloned();
-                                let user_champion = user_participant.as_ref()
-                                    .map(|p| p.champion_name.clone())
-                                    .unwrap_or_default();
-                                let user_position = user_participant.as_ref()
-                                    .map(|p| p.team_position.clone())
-                                    .unwrap_or_default();
-                                let user_team_id = user_participant.as_ref()
-                                    .map(|p| p.team_id)
-                                    .unwrap_or(100);
-
-                                // Find lane opponent (same position, opposing team)
-                                let opponent_team_id = if user_team_id == 100 { 200 } else { 100 };
-                                let opponent_champion = if user_position.is_empty() {
-                                    String::new()
-                                } else {
-                                    d.participants.iter()
-                                        .find(|p| p.team_id == opponent_team_id && p.team_position == user_position)
-                                        .map(|p| p.champion_name.clone())
-                                        .unwrap_or_default()
-                                };
-
-                                // Split teams
-                                let blue_team: Vec<MatchParticipant> = d.participants.iter()
-                                    .filter(|p| p.team_id == 100)
-                                    .cloned()
-                                    .collect();
-                                let red_team: Vec<MatchParticipant> = d.participants.iter()
-                                    .filter(|p| p.team_id == 200)
-                                    .cloned()
-                                    .collect();
-
-                                let blue_win = blue_team.first().map(|p| p.win).unwrap_or(false);
-                                let red_win = red_team.first().map(|p| p.win).unwrap_or(false);
-
-                                // Page header info
-                                let user_kda = user_participant.as_ref()
-                                    .map(|p| format!("{}/{}/{}", p.kills, p.deaths, p.assists))
-                                    .unwrap_or_default();
-                                let user_win = user_participant.as_ref()
-                                    .map(|p| p.win)
-                                    .unwrap_or(false);
-
-                                let win_badge_cls = if user_win {
-                                    "bg-blue-500/20 text-blue-400 text-sm font-bold px-3 py-1 rounded"
-                                } else {
-                                    "bg-red-500/20 text-red-400 text-sm font-bold px-3 py-1 rounded"
-                                };
-                                let win_text = if user_win { "Victory" } else { "Defeat" };
-
-                                let perf = d_stored.with_value(|d| d.performance.clone());
-                                let game_duration = d.game_duration;
-                                let user_pid = d.user_participant_id;
-
-                                // Pre-clone for PerformanceSection (user_champion/opponent_champion
-                                // are moved into the event detail closure below)
-                                let user_champion_for_perf = user_champion.clone();
-                                let opponent_champion_for_perf = opponent_champion.clone();
-                                let match_id_for_perf = d_stored.with_value(|d| d.match_id.clone());
-
-                                view! {
-                                    <div class="flex flex-col gap-6">
-                                        // Page header
-                                        <div class="flex items-center gap-4">
-                                            <h1 class="text-3xl font-semibold text-primary">"Match Detail"</h1>
-                                            {user_participant.map(|p| {
-                                                let icon = champion_icon_url(&p.champion_name);
-                                                let champ = p.champion_name.clone();
-                                                view! {
-                                                    <img src=icon alt=champ.clone() class="w-7 h-7 rounded-full" />
-                                                    <span class="text-primary text-sm">{champ}</span>
+                <div class="mt-4">
+                    <Suspense fallback=move || view! {
+                        <div class="flex flex-col gap-6">
+                            <SkeletonCard height="h-12" />
+                            <SkeletonCard height="h-48" />
+                            <SkeletonCard height="h-48" />
+                            <SkeletonCard height="h-16" />
+                            <SkeletonCard height="h-32" />
+                        </div>
+                    }>
+                        {move || {
+                            let _ = retry_count.get(); // track retry
+                            detail.get().map(|result| match result {
+                                Err(e) => {
+                                    let err_msg = format!("Failed to load match: {e}");
+                                    view! {
+                                        <div class="flex flex-col gap-4">
+                                            <ErrorBanner message=err_msg />
+                                            <button
+                                                class="self-start bg-elevated border border-outline text-secondary hover:text-primary px-4 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                on:click=move |_| {
+                                                    detail.refetch();
+                                                    set_retry_count.update(|c| *c += 1);
                                                 }
-                                            })}
-                                            <span class="text-secondary text-sm">{user_kda}</span>
-                                            <span class=win_badge_cls>{win_text}</span>
-                                            <span class="text-muted text-xs ml-2">
-                                                {format!("{} · {}", d.game_mode, format_duration(d.game_duration))}
-                                            </span>
+                                            >
+                                                "Retry"
+                                            </button>
                                         </div>
+                                    }.into_any()
+                                }
+                                Ok(d) => {
+                                    let d_stored = StoredValue::new(d.clone());
 
-                                        // Blue team scoreboard
-                                        <TeamScoreboard
-                                            title="Blue Team".to_string()
-                                            team_win=blue_win
-                                            participants=blue_team
-                                            user_participant_id=user_pid
-                                            team_color="blue"
-                                        />
+                                    // Find user's champion and opponent
+                                    let user_participant = d.participants.iter()
+                                        .find(|p| p.participant_id == d.user_participant_id)
+                                        .cloned();
+                                    let user_champion = user_participant.as_ref()
+                                        .map(|p| p.champion_name.clone())
+                                        .unwrap_or_default();
+                                    let user_position = user_participant.as_ref()
+                                        .map(|p| p.team_position.clone())
+                                        .unwrap_or_default();
+                                    let user_team_id = user_participant.as_ref()
+                                        .map(|p| p.team_id)
+                                        .unwrap_or(100);
 
-                                        // Red team scoreboard
-                                        <TeamScoreboard
-                                            title="Red Team".to_string()
-                                            team_win=red_win
-                                            participants=red_team
-                                            user_participant_id=user_pid
-                                            team_color="red"
-                                        />
+                                    // Find lane opponent (same position, opposing team)
+                                    let opponent_team_id = if user_team_id == 100 { 200 } else { 100 };
+                                    let opponent_champion = if user_position.is_empty() {
+                                        String::new()
+                                    } else {
+                                        d.participants.iter()
+                                            .find(|p| p.team_id == opponent_team_id && p.team_position == user_position)
+                                            .map(|p| p.champion_name.clone())
+                                            .unwrap_or_default()
+                                    };
 
-                                        // Timeline section
-                                        {
-                                            let timeline_events = d_stored.with_value(|d| d.timeline_events.clone());
-                                            let participants_for_timeline = d_stored.with_value(|d| d.participants.clone());
-                                            let participants_for_detail = participants_for_timeline.clone();
+                                    // Split teams
+                                    let blue_team: Vec<MatchParticipant> = d.participants.iter()
+                                        .filter(|p| p.team_id == 100)
+                                        .cloned()
+                                        .collect();
+                                    let red_team: Vec<MatchParticipant> = d.participants.iter()
+                                        .filter(|p| p.team_id == 200)
+                                        .cloned()
+                                        .collect();
 
-                                            view! {
-                                                <div class="bg-surface border border-divider rounded-xl p-4">
-                                                    <h2 class="text-xl font-semibold text-primary mb-3">"Timeline"</h2>
+                                    let blue_win = blue_team.first().map(|p| p.win).unwrap_or(false);
+                                    let red_win = red_team.first().map(|p| p.win).unwrap_or(false);
 
-                                                    // Filter toggles row
-                                                    <div class="flex gap-2 flex-wrap mb-3">
-                                                        <button
-                                                            class=move || if show_objectives.get() {
-                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                                                            } else {
-                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                                                            }
-                                                            on:click=move |_| set_show_objectives.set(!show_objectives.get_untracked())
-                                                        >"Objectives"</button>
-                                                        <button
-                                                            class=move || if show_towers.get() {
-                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                                                            } else {
-                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                                                            }
-                                                            on:click=move |_| set_show_towers.set(!show_towers.get_untracked())
-                                                        >"Towers"</button>
-                                                        <button
-                                                            class=move || if show_kills.get() {
-                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                                                            } else {
-                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                                                            }
-                                                            on:click=move |_| set_show_kills.set(!show_kills.get_untracked())
-                                                        >"Kills"</button>
-                                                        <button
-                                                            class=move || if show_wards.get() {
-                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                                                            } else {
-                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                                                            }
-                                                            on:click=move |_| set_show_wards.set(!show_wards.get_untracked())
-                                                        >"Wards"</button>
-                                                        <button
-                                                            class=move || if show_recalls.get() {
-                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                                                            } else {
-                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                                                            }
-                                                            on:click=move |_| set_show_recalls.set(!show_recalls.get_untracked())
-                                                        >"Recalls"</button>
-                                                        <button
-                                                            class=move || if show_teamfights.get() {
-                                                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold"
-                                                            } else {
-                                                                "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors"
-                                                            }
-                                                            on:click=move |_| set_show_teamfights.set(!show_teamfights.get_untracked())
-                                                        >"Teamfights"</button>
-                                                    </div>
+                                    // Page header info
+                                    let user_kda = user_participant.as_ref()
+                                        .map(|p| format!("{}/{}/{}", p.kills, p.deaths, p.assists))
+                                        .unwrap_or_default();
+                                    let user_win = user_participant.as_ref()
+                                        .map(|p| p.win)
+                                        .unwrap_or(false);
 
-                                                    // Timeline bar track
-                                                    <div class="relative w-full h-10 bg-elevated border border-divider rounded-lg">
-                                                        {move || {
-                                                            let events = timeline_events.clone();
-                                                            let participants_ref = participants_for_timeline.clone();
-                                                            let visible: Vec<(usize, crate::models::match_data::TimelineEvent)> = events
-                                                                .iter()
-                                                                .enumerate()
-                                                                .filter(|(_, e)| match e.category {
-                                                                    EventCategory::Objective => show_objectives.get(),
-                                                                    EventCategory::Tower => show_towers.get(),
-                                                                    EventCategory::Kill => show_kills.get(),
-                                                                    EventCategory::Ward => show_wards.get(),
-                                                                    EventCategory::Teamfight => show_teamfights.get(),
-                                                                    EventCategory::Recall => show_recalls.get(),
-                                                                })
-                                                                .map(|(idx, e)| (idx, e.clone()))
-                                                                .collect();
+                                    let result_word = if user_win { "Victory" } else { "Defeat" };
+                                    let result_color = if user_win { "text-success" } else { "text-danger" };
+                                    let result_eyebrow_class = format!("font-imperial uppercase tracking-[0.18em] text-[11px] {result_color}");
 
-                                                            if visible.is_empty() {
-                                                                return view! {
-                                                                    <p class="text-sm text-muted text-center py-4 absolute inset-0 flex items-center justify-center">
-                                                                        "No events match the current filters."
-                                                                    </p>
-                                                                }.into_any();
-                                                            }
+                                    let perf = d_stored.with_value(|d| d.performance.clone());
+                                    let game_duration = d.game_duration;
+                                    let user_pid = d.user_participant_id;
 
-                                                            visible.into_iter().map(|(idx, event)| {
-                                                                let left_pct = timeline_pct(event.timestamp_ms, game_duration);
-                                                                let tooltip = event_tooltip(&event, &participants_ref);
+                                    // Pre-clone for PerformanceSection
+                                    let user_champion_for_perf = user_champion.clone();
+                                    let opponent_champion_for_perf = opponent_champion.clone();
+                                    let match_id_for_perf = d_stored.with_value(|d| d.match_id.clone());
+                                    let match_id_for_header = match_id_for_perf.clone();
 
-                                                                let (size_class, shape_class) = match event.category {
-                                                                    EventCategory::Objective => {
-                                                                        match event.monster_type.as_deref() {
-                                                                            Some(m) if m.contains("BARON") || m.contains("HORDE") =>
-                                                                                ("w-4 h-4", "rounded-full border-2"),
-                                                                            _ => ("w-3 h-3", "rounded-full"),
-                                                                        }
-                                                                    }
-                                                                    EventCategory::Tower => ("w-2 h-2", "rounded-sm"),
-                                                                    EventCategory::Kill => ("w-2 h-2", "rounded-full"),
-                                                                    EventCategory::Ward => ("w-2 h-2", "rounded-full"),
-                                                                    EventCategory::Recall => ("w-2 h-2", "rounded-full"),
-                                                                    EventCategory::Teamfight => ("w-4 h-4", "rounded-full"),
-                                                                };
+                                    view! {
+                                        <div class="flex flex-col gap-6">
+                                            // Imperial header
+                                            <div class="flex flex-col gap-3 mt-2">
+                                                <span class=result_eyebrow_class>
+                                                    {format!("{} \u{00B7} match recap", result_word)}
+                                                </span>
+                                                <div class="flex items-end gap-4 flex-wrap">
+                                                    {user_participant.map(|p| {
+                                                        let icon = champion_icon_url(&p.champion_name);
+                                                        let champ = p.champion_name.clone();
+                                                        let champ_label = champ.clone();
+                                                        view! {
+                                                            <h1 class="font-display italic text-primary text-[40px] leading-none">
+                                                                {champ_label}
+                                                            </h1>
+                                                            <div class="flex items-center gap-3">
+                                                                <img src=icon alt=champ class="w-10 h-10 rounded-full border border-outline/50" />
+                                                                <span class="font-mono text-sm text-secondary tabular-nums">{user_kda}</span>
+                                                            </div>
+                                                        }
+                                                    })}
+                                                </div>
+                                                <div class="flex items-center gap-3 flex-wrap font-mono text-xs text-dimmed">
+                                                    <span class="tabular-nums">{format!("{} \u{00B7} {}", d.game_mode, format_duration(d.game_duration))}</span>
+                                                    <span aria-hidden="true">"·"</span>
+                                                    <span class="truncate max-w-[280px]">{format!("match {}", match_id_for_header)}</span>
+                                                </div>
+                                            </div>
 
-                                                                let team_color = match event.team_id {
-                                                                    Some(100) => "bg-blue-400 border-blue-500",
-                                                                    Some(200) => "bg-red-400 border-red-500",
-                                                                    _ => "bg-muted border-muted",
-                                                                };
+                                            <HeraldicDivider />
 
-                                                                let is_user_event = event.killer_participant_id == Some(user_pid)
-                                                                    || event.involved_participants.contains(&user_pid);
-                                                                let user_ring = if is_user_event {
-                                                                    " ring-2 ring-accent ring-offset-1 ring-offset-base"
-                                                                } else {
-                                                                    ""
-                                                                };
+                                            // Blue team scoreboard
+                                            <TeamScoreboard
+                                                title="Blue side".to_string()
+                                                team_win=blue_win
+                                                participants=blue_team
+                                                user_participant_id=user_pid
+                                                team_color="blue"
+                                            />
 
-                                                                let btn_class = format!(
-                                                                    "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 {size_class} {shape_class} {team_color}{user_ring} cursor-pointer transition-transform z-10"
-                                                                );
-                                                                let btn_class_selected = format!(
-                                                                    "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 {size_class} {shape_class} {team_color}{user_ring} cursor-pointer transition-transform scale-150 z-20"
-                                                                );
+                                            // Red team scoreboard
+                                            <TeamScoreboard
+                                                title="Red side".to_string()
+                                                team_win=red_win
+                                                participants=red_team
+                                                user_participant_id=user_pid
+                                                team_color="red"
+                                            />
 
-                                                                view! {
-                                                                    <button
-                                                                        class=move || if selected_event.get() == Some(idx) {
-                                                                            btn_class_selected.clone()
-                                                                        } else {
-                                                                            btn_class.clone()
-                                                                        }
-                                                                        style=format!("left: {left_pct:.2}%")
-                                                                        title=tooltip
-                                                                        on:click=move |ev| {
-                                                                            ev.stop_propagation();
-                                                                            let current = selected_event.get_untracked();
-                                                                            if current == Some(idx) {
-                                                                                set_selected_event.set(None);
-                                                                            } else {
-                                                                                set_selected_event.set(Some(idx));
+                                            // Timeline section
+                                            {
+                                                let timeline_events = d_stored.with_value(|d| d.timeline_events.clone());
+                                                let participants_for_timeline = d_stored.with_value(|d| d.participants.clone());
+                                                let participants_for_detail = participants_for_timeline.clone();
+
+                                                view! {
+                                                    <div class="bg-elevated border border-divider rounded-xl p-6">
+                                                        <div class="flex flex-col gap-1 mb-4">
+                                                            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"The game · 00:00 \u{2192} " {format_duration(d.game_duration)}</span>
+                                                            <h2 class="font-display italic text-primary text-xl">"Timeline"</h2>
+                                                        </div>
+
+                                                        // Filter pills row
+                                                        <div class="flex gap-2 flex-wrap mb-4">
+                                                            <FilterPill label="Objectives" active=show_objectives setter=set_show_objectives />
+                                                            <FilterPill label="Towers" active=show_towers setter=set_show_towers />
+                                                            <FilterPill label="Kills" active=show_kills setter=set_show_kills />
+                                                            <FilterPill label="Wards" active=show_wards setter=set_show_wards />
+                                                            <FilterPill label="Recalls" active=show_recalls setter=set_show_recalls />
+                                                            <FilterPill label="Teamfights" active=show_teamfights setter=set_show_teamfights />
+                                                        </div>
+
+                                                        // Timeline bar track
+                                                        <div class="relative w-full h-12 bg-surface border border-divider rounded-lg">
+                                                            // Center axis line
+                                                            <div class="absolute left-3 right-3 top-1/2 h-px bg-divider -translate-y-1/2" aria-hidden="true"></div>
+                                                            {move || {
+                                                                let events = timeline_events.clone();
+                                                                let participants_ref = participants_for_timeline.clone();
+                                                                let visible: Vec<(usize, crate::models::match_data::TimelineEvent)> = events
+                                                                    .iter()
+                                                                    .enumerate()
+                                                                    .filter(|(_, e)| match e.category {
+                                                                        EventCategory::Objective => show_objectives.get(),
+                                                                        EventCategory::Tower => show_towers.get(),
+                                                                        EventCategory::Kill => show_kills.get(),
+                                                                        EventCategory::Ward => show_wards.get(),
+                                                                        EventCategory::Teamfight => show_teamfights.get(),
+                                                                        EventCategory::Recall => show_recalls.get(),
+                                                                    })
+                                                                    .map(|(idx, e)| (idx, e.clone()))
+                                                                    .collect();
+
+                                                                if visible.is_empty() {
+                                                                    return view! {
+                                                                        <p class="font-mono text-xs text-muted text-center absolute inset-0 flex items-center justify-center">
+                                                                            "No events match the current filters."
+                                                                        </p>
+                                                                    }.into_any();
+                                                                }
+
+                                                                visible.into_iter().map(|(idx, event)| {
+                                                                    let left_pct = timeline_pct(event.timestamp_ms, game_duration);
+                                                                    let tooltip = event_tooltip(&event, &participants_ref);
+
+                                                                    let (size_class, shape_class) = match event.category {
+                                                                        EventCategory::Objective => {
+                                                                            match event.monster_type.as_deref() {
+                                                                                Some(m) if m.contains("BARON") || m.contains("HORDE") =>
+                                                                                    ("w-4 h-4", "rounded-full border-2"),
+                                                                                _ => ("w-3 h-3", "rounded-full"),
                                                                             }
                                                                         }
-                                                                    />
+                                                                        EventCategory::Tower => ("w-2.5 h-2.5", "rounded-sm"),
+                                                                        EventCategory::Kill => ("w-2.5 h-2.5", "rounded-full"),
+                                                                        EventCategory::Ward => ("w-2 h-2", "rounded-full"),
+                                                                        EventCategory::Recall => ("w-2 h-2", "rounded-full"),
+                                                                        EventCategory::Teamfight => ("w-4 h-4", "rounded-full"),
+                                                                    };
+
+                                                                    // Friendly side -> info; enemy side -> danger.
+                                                                    let team_color = match event.team_id {
+                                                                        Some(100) => "bg-info border-info",
+                                                                        Some(200) => "bg-danger border-danger",
+                                                                        _ => "bg-muted border-muted",
+                                                                    };
+
+                                                                    let is_user_event = event.killer_participant_id == Some(user_pid)
+                                                                        || event.involved_participants.contains(&user_pid);
+                                                                    let user_ring = if is_user_event {
+                                                                        " ring-2 ring-accent ring-offset-1 ring-offset-elevated"
+                                                                    } else {
+                                                                        ""
+                                                                    };
+
+                                                                    let btn_class = format!(
+                                                                        "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 {size_class} {shape_class} {team_color}{user_ring} cursor-pointer transition-transform z-10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                    );
+                                                                    let btn_class_selected = format!(
+                                                                        "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 {size_class} {shape_class} {team_color}{user_ring} cursor-pointer transition-transform scale-150 z-20 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                    );
+
+                                                                    view! {
+                                                                        <button
+                                                                            class=move || if selected_event.get() == Some(idx) {
+                                                                                btn_class_selected.clone()
+                                                                            } else {
+                                                                                btn_class.clone()
+                                                                            }
+                                                                            style=format!("left: {left_pct:.2}%")
+                                                                            title=tooltip
+                                                                            on:click=move |ev| {
+                                                                                ev.stop_propagation();
+                                                                                let current = selected_event.get_untracked();
+                                                                                if current == Some(idx) {
+                                                                                    set_selected_event.set(None);
+                                                                                } else {
+                                                                                    set_selected_event.set(Some(idx));
+                                                                                }
+                                                                            }
+                                                                        />
+                                                                    }
+                                                                }).collect_view().into_any()
+                                                            }}
+                                                        </div>
+
+                                                        // Event detail panel
+                                                        {move || {
+                                                            let events = d_stored.with_value(|d| d.timeline_events.clone());
+                                                            let participants_ref = participants_for_detail.clone();
+                                                            if let Some(idx) = selected_event.get() {
+                                                                if let Some(event) = events.get(idx) {
+                                                                    let detail_text = event_tooltip(event, &participants_ref);
+                                                                    let involved_names: Vec<String> = event.involved_participants.iter()
+                                                                        .filter_map(|id| participants_ref.iter().find(|p| p.participant_id == *id))
+                                                                        .map(|p| p.summoner_name.clone())
+                                                                        .collect();
+                                                                    let has_involved = !involved_names.is_empty();
+                                                                    let names_str = involved_names.join(", ");
+
+                                                                    // Event-type to tag suggestion mapping (per D-13)
+                                                                    let tag_hint = match event.event_type.as_str() {
+                                                                        "ELITE_MONSTER_KILL" | "BUILDING_KILL" => "Objective+Control",
+                                                                        "CHAMPION_KILL" => "Teamfighting",
+                                                                        _ => "",
+                                                                    };
+
+                                                                    let event_learning_url = {
+                                                                        let mid = d_stored.with_value(|d| d.match_id.clone());
+                                                                        let result_str = if user_win { "win" } else { "loss" };
+                                                                        let evt_name = detail_text.replace(' ', "+");
+                                                                        format!(
+                                                                            "/personal-learnings/new?champion={}&opponent={}&match_id={}&result={}&event_ts={}&event_name={}&tag_hint={}",
+                                                                            user_champion, opponent_champion, mid, result_str,
+                                                                            event.timestamp_ms, evt_name, tag_hint
+                                                                        )
+                                                                    };
+
+                                                                    return view! {
+                                                                        <div class="bg-surface border border-outline/50 rounded-lg p-4 mt-4">
+                                                                            <p class="font-mono text-sm text-secondary">{detail_text}</p>
+                                                                            {if has_involved {
+                                                                                view! {
+                                                                                    <p class="font-mono text-xs text-muted mt-2">
+                                                                                        "Involved: " {names_str}
+                                                                                    </p>
+                                                                                }.into_any()
+                                                                            } else {
+                                                                                view! { <span /> }.into_any()
+                                                                            }}
+                                                                            <a
+                                                                                href=event_learning_url
+                                                                                class="inline-flex items-center gap-1.5 text-accent hover:text-accent-hover text-xs font-medium transition-colors mt-3 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
+                                                                            >
+                                                                                "+ Add Learning from this event"
+                                                                            </a>
+                                                                        </div>
+                                                                    }.into_any();
                                                                 }
-                                                            }).collect_view().into_any()
+                                                            }
+                                                            view! { <span /> }.into_any()
                                                         }}
                                                     </div>
-
-                                                    // Event detail panel
-                                                    {move || {
-                                                        let events = d_stored.with_value(|d| d.timeline_events.clone());
-                                                        let participants_ref = participants_for_detail.clone();
-                                                        if let Some(idx) = selected_event.get() {
-                                                            if let Some(event) = events.get(idx) {
-                                                                let detail_text = event_tooltip(event, &participants_ref);
-                                                                let involved_names: Vec<String> = event.involved_participants.iter()
-                                                                    .filter_map(|id| participants_ref.iter().find(|p| p.participant_id == *id))
-                                                                    .map(|p| p.summoner_name.clone())
-                                                                    .collect();
-                                                                let has_involved = !involved_names.is_empty();
-                                                                let names_str = involved_names.join(", ");
-
-                                                                // Event-type to tag suggestion mapping (per D-13)
-                                                                let tag_hint = match event.event_type.as_str() {
-                                                                    "ELITE_MONSTER_KILL" | "BUILDING_KILL" => "Objective+Control",
-                                                                    "CHAMPION_KILL" => "Teamfighting",
-                                                                    _ => "",
-                                                                };
-
-                                                                let event_learning_url = {
-                                                                    let mid = d_stored.with_value(|d| d.match_id.clone());
-                                                                    let result_str = if user_win { "win" } else { "loss" };
-                                                                    let evt_name = detail_text.replace(' ', "+");
-                                                                    format!(
-                                                                        "/personal-learnings/new?champion={}&opponent={}&match_id={}&result={}&event_ts={}&event_name={}&tag_hint={}",
-                                                                        user_champion, opponent_champion, mid, result_str,
-                                                                        event.timestamp_ms, evt_name, tag_hint
-                                                                    )
-                                                                };
-
-                                                                return view! {
-                                                                    <div class="bg-surface border border-divider rounded-lg p-4 mt-3">
-                                                                        <p class="text-sm text-secondary">{detail_text}</p>
-                                                                        {if has_involved {
-                                                                            view! {
-                                                                                <p class="text-xs text-muted mt-2">
-                                                                                    "Involved: " {names_str}
-                                                                                </p>
-                                                                            }.into_any()
-                                                                        } else {
-                                                                            view! { <span /> }.into_any()
-                                                                        }}
-                                                                        <a
-                                                                            href=event_learning_url
-                                                                            class="text-accent hover:text-accent-hover text-xs font-normal transition-colors flex items-center gap-1.5 mt-2"
-                                                                        >
-                                                                            "+ Add Learning from this event"
-                                                                        </a>
-                                                                    </div>
-                                                                }.into_any();
-                                                            }
-                                                        }
-                                                        view! { <span /> }.into_any()
-                                                    }}
-                                                </div>
+                                                }
                                             }
-                                        }
 
-                                        // Performance section
-                                        <PerformanceSection
-                                            perf=perf
-                                            _game_duration_secs=game_duration
-                                            comparison_mode=comparison_mode
-                                            set_comparison_mode=set_comparison_mode
-                                            user_champion=user_champion_for_perf
-                                            opponent_champion=opponent_champion_for_perf
-                                            match_id=match_id_for_perf
-                                            user_win=user_win
-                                        />
-                                    </div>
-                                }.into_any()
-                            }
-                        })
-                    }}
-                </Suspense>
+                                            // Performance section
+                                            <PerformanceSection
+                                                perf=perf
+                                                _game_duration_secs=game_duration
+                                                comparison_mode=comparison_mode
+                                                set_comparison_mode=set_comparison_mode
+                                                user_champion=user_champion_for_perf
+                                                opponent_champion=opponent_champion_for_perf
+                                                match_id=match_id_for_perf
+                                                user_win=user_win
+                                            />
+                                        </div>
+                                    }.into_any()
+                                }
+                            })
+                        }}
+                    </Suspense>
+                </div>
             </div>
         </div>
+    }
+}
+
+/// Timeline filter pill — extracted helper for visual consistency.
+#[component]
+fn FilterPill(
+    label: &'static str,
+    active: ReadSignal<bool>,
+    setter: WriteSignal<bool>,
+) -> impl IntoView {
+    view! {
+        <button
+            class=move || if active.get() {
+                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+            } else {
+                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+            }
+            on:click=move |_| setter.set(!active.get_untracked())
+        >
+            {label}
+        </button>
     }
 }

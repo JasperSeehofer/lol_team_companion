@@ -64,20 +64,22 @@ enum SortDir {
 // Helper functions
 // ---------------------------------------------------------------------------
 
+/// Map strategy tags to semantic-token color pairs (bg+border classes, text class).
+///
+/// All raw color literals (red/blue/violet/orange/emerald/cyan/amber) were
+/// retired in plan 17-04 in favour of theme-aware semantic tokens. The mapping
+/// preserves the editorial intent (warm/cool/neutral) while allowing the
+/// pandemonium theme to recolor without code changes.
 fn tag_colors(tag: &str) -> (&'static str, &'static str) {
-    // Returns (bg+border classes, text class)
     match tag {
-        "teamfight" => ("bg-red-500/10 border-red-500/30", "text-red-400"),
-        "split-push" => ("bg-blue-500/10 border-blue-500/30", "text-blue-400"),
-        "poke" => ("bg-violet-500/10 border-violet-500/30", "text-violet-400"),
-        "engage" => ("bg-orange-500/10 border-orange-500/30", "text-orange-400"),
-        "protect-the-adc" => (
-            "bg-emerald-500/10 border-emerald-500/30",
-            "text-emerald-400",
-        ),
-        "scaling" => ("bg-cyan-500/10 border-cyan-500/30", "text-cyan-400"),
-        "skirmish" => ("bg-amber-500/10 border-amber-500/30", "text-amber-400"),
-        _ => ("bg-elevated border-divider", "text-muted"),
+        "teamfight" => ("bg-danger/10 border border-danger/30", "text-danger"),
+        "split-push" => ("bg-info/10 border border-info/30", "text-info"),
+        "poke" => ("bg-accent/10 border border-accent/30", "text-accent"),
+        "engage" => ("bg-warning/10 border border-warning/30", "text-warning"),
+        "protect-the-adc" => ("bg-success/10 border border-success/30", "text-success"),
+        "scaling" => ("bg-info/10 border border-info/30", "text-info"),
+        "skirmish" => ("bg-warning/10 border border-warning/30", "text-warning"),
+        _ => ("bg-elevated border border-divider", "text-muted"),
     }
 }
 
@@ -135,46 +137,55 @@ pub fn AnalyticsPage() -> impl IntoView {
     let open_plan: RwSignal<Option<String>> = RwSignal::new(None);
 
     view! {
-        <div class="min-h-screen bg-base">
-            <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <h1 class="text-3xl font-bold text-primary">"Analytics"</h1>
-                <p class="text-muted text-sm mt-1">"Track strategy effectiveness and plan outcomes"</p>
+        <div class="canvas-grain bg-base min-h-screen">
+            <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+                // Imperial header
+                <div class="flex flex-col gap-2 mb-6">
+                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                        "The ledger"
+                    </span>
+                    <h1 class="font-display italic text-primary text-3xl">"Analytics"</h1>
+                    <p class="text-muted text-sm">"Track strategy effectiveness and plan outcomes."</p>
+                </div>
 
                 <Suspense fallback=|| view! { <p class="text-muted py-8">"Loading analytics..."</p> }>
                     {move || {
                         Suspend::new(async move {
                             match analytics.await {
                                 Err(_) => view! {
-                                    <p class="text-muted text-sm text-center py-8">
-                                        "Failed to load analytics \u{2014} try refreshing the page"
-                                    </p>
+                                    <div class="bg-elevated border border-divider rounded-xl py-12 px-6 text-center">
+                                        <p class="text-muted text-sm">
+                                            "Failed to load analytics \u{2014} try refreshing the page"
+                                        </p>
+                                    </div>
                                 }.into_any(),
                                 Ok(payload) => {
                                     let no_team = payload.tag_summaries.is_empty()
                                         && payload.plan_effectiveness.is_empty();
 
                                     if no_team {
-                                        // Could be no team OR simply no data yet — check plan count
-                                        // We use plan_effectiveness empty as "no data" distinction
-                                        // Since both are empty when no team, we show no-team state
                                         view! {
-                                            <div class="py-16 text-center">
-                                                <p class="text-primary font-semibold text-sm">"No analytics data yet"</p>
-                                                <p class="text-muted text-sm mt-2">
+                                            <div class="bg-elevated border border-divider rounded-xl py-16 px-6 text-center">
+                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"No analytics yet"</span>
+                                                <h2 class="font-display italic text-primary text-2xl mt-2">"No data to chart."</h2>
+                                                <p class="text-muted text-sm mt-3 max-w-md mx-auto">
                                                     "Create or join a team to get started."
                                                 </p>
-                                                <a href="/team/roster"
-                                                   class="inline-block mt-4 text-accent hover:text-accent-hover text-sm">
-                                                    "Go to Team Roster"
+                                                <a
+                                                    href="/team/roster"
+                                                    class="inline-flex items-center mt-5 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                >
+                                                    "Go to team roster"
                                                 </a>
                                             </div>
                                         }.into_any()
                                     } else if payload.tag_summaries.is_empty() && !payload.plan_effectiveness.is_empty() {
                                         // Has plans but no tagged reviews
                                         view! {
-                                            <div class="py-16 text-center">
-                                                <p class="text-primary font-semibold text-sm">"No plan effectiveness data yet"</p>
-                                                <p class="text-muted text-sm mt-2">
+                                            <div class="bg-elevated border border-divider rounded-xl py-16 px-6 text-center">
+                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Awaiting reviews"</span>
+                                                <h2 class="font-display italic text-primary text-2xl mt-2">"No plan effectiveness data yet."</h2>
+                                                <p class="text-muted text-sm mt-3 max-w-md mx-auto">
                                                     "Link post-game reviews to game plans to start tracking strategy outcomes."
                                                 </p>
                                             </div>
@@ -185,7 +196,7 @@ pub fn AnalyticsPage() -> impl IntoView {
 
                                         view! {
                                             // Strategy Tag Cards
-                                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
+                                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                                 {tag_summaries.into_iter().filter(|s| s.games_played > 0).map(|s| {
                                                     let (bg_border, text_color) = tag_colors(&s.tag);
                                                     let win_pct = if s.games_played > 0 {
@@ -198,18 +209,18 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                     let wl = format!("{}-{}", s.wins, s.losses);
                                                     let games = s.games_played;
                                                     view! {
-                                                        <div class=format!("bg-elevated border rounded-lg p-4 {bg_border}")>
-                                                            <div class=format!("text-xs uppercase tracking-wider mb-2 {text_color}")>
+                                                        <div class=format!("rounded-xl p-4 {bg_border}")>
+                                                            <div class=format!("font-imperial uppercase tracking-wider text-[10px] mb-2 {text_color}")>
                                                                 {tag_label}
                                                             </div>
-                                                            <div class="text-primary text-3xl font-bold">
+                                                            <div class="font-display italic text-primary text-3xl tabular-nums">
                                                                 {format!("{win_pct}%")}
                                                             </div>
                                                             <div class="flex items-center gap-3 mt-1">
-                                                                <span class="text-muted text-sm">{wl}</span>
+                                                                <span class="font-mono text-secondary text-sm tabular-nums">{wl}</span>
                                                                 <span class="text-accent text-sm">{stars}</span>
                                                             </div>
-                                                            <div class="text-dimmed text-xs mt-1">
+                                                            <div class="font-mono text-dimmed text-xs mt-1 tabular-nums">
                                                                 {format!("{games} games")}
                                                             </div>
                                                         </div>
@@ -218,26 +229,27 @@ pub fn AnalyticsPage() -> impl IntoView {
                                             </div>
 
                                             // Game Plan Effectiveness Table
-                                            <h2 class="text-sm font-semibold text-primary mt-8 mb-4">
-                                                "Game Plan Effectiveness"
-                                            </h2>
-                                            <div class="bg-surface border border-divider rounded-xl overflow-hidden">
+                                            <div class="mt-10 mb-4 flex flex-col gap-1">
+                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"By plan"</span>
+                                                <h2 class="font-display italic text-primary text-2xl">"Game plan effectiveness"</h2>
+                                            </div>
+                                            <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
                                                 <table class="w-full">
-                                                    <thead class="bg-overlay/50">
+                                                    <thead class="bg-surface/50">
                                                         <tr>
-                                                            <th class="px-4 py-4 text-left text-xs text-muted uppercase tracking-wider">
+                                                            <th class="px-4 py-4 text-left font-imperial uppercase tracking-wider text-[10px] text-muted">
                                                                 "Plan"
                                                             </th>
-                                                            <th class="px-4 py-4 text-left text-xs text-muted uppercase tracking-wider">
+                                                            <th class="px-4 py-4 text-left font-imperial uppercase tracking-wider text-[10px] text-muted">
                                                                 "Tag"
                                                             </th>
                                                             <th
                                                                 class=move || {
                                                                     let (col, _) = sort_state.get();
                                                                     if col == SortColumn::WinLoss {
-                                                                        "px-4 py-4 text-center text-xs text-primary uppercase tracking-wider cursor-pointer hover:text-primary"
+                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-primary cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     } else {
-                                                                        "px-4 py-4 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary"
+                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-muted cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     }
                                                                 }
                                                                 on:click=move |_| {
@@ -269,9 +281,9 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                 class=move || {
                                                                     let (col, _) = sort_state.get();
                                                                     if col == SortColumn::Rating {
-                                                                        "px-4 py-4 text-center text-xs text-primary uppercase tracking-wider cursor-pointer hover:text-primary"
+                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-primary cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     } else {
-                                                                        "px-4 py-4 text-center text-xs text-muted uppercase tracking-wider cursor-pointer hover:text-primary"
+                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-muted cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     }
                                                                 }
                                                                 on:click=move |_| {
@@ -285,7 +297,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                     });
                                                                 }
                                                             >
-                                                                "Avg Rating"
+                                                                "Avg rating"
                                                                 {move || {
                                                                     let (col, dir) = sort_state.get();
                                                                     if col == SortColumn::Rating {
@@ -331,13 +343,13 @@ pub fn AnalyticsPage() -> impl IntoView {
 
                                                                 let (tag_bg, tag_text) = match &tag {
                                                                     Some(t) => tag_colors(t),
-                                                                    None => ("bg-elevated border-divider", "text-muted"),
+                                                                    None => ("bg-elevated border border-divider", "text-muted"),
                                                                 };
 
                                                                 view! {
                                                                     // Data row
                                                                     <tr
-                                                                        class="border-t border-divider hover:bg-elevated/50 cursor-pointer transition-colors"
+                                                                        class="border-t border-divider hover:bg-overlay/30 cursor-pointer transition-colors"
                                                                         on:click=move |_| {
                                                                             let id = plan_id_toggle.clone();
                                                                             open_plan.update(|current| {
@@ -352,7 +364,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                         <td class="px-4 py-4 text-sm text-primary">
                                                                             {plan_name}
                                                                             " "
-                                                                            <span class="text-muted text-xs">
+                                                                            <span class="text-muted text-xs" aria-hidden="true">
                                                                                 {move || {
                                                                                     if open_plan.get().as_deref() == Some(&plan_id_chevron) {
                                                                                         "\u{25BC}"
@@ -363,17 +375,17 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                             </span>
                                                                         </td>
                                                                         <td class="px-4 py-4">
-                                                                            <span class=format!("text-xs px-2 py-1 rounded border {tag_bg} {tag_text}")>
+                                                                            <span class=format!("font-imperial uppercase tracking-wider text-[10px] px-2 py-1 rounded {tag_bg} {tag_text}")>
                                                                                 {match &tag {
                                                                                     Some(t) => t.clone(),
                                                                                     None => "\u{2014}".to_string(),
                                                                                 }}
                                                                             </span>
                                                                         </td>
-                                                                        <td class="px-4 py-4 text-center text-sm">
-                                                                            <span class="text-emerald-400">{wins}</span>
+                                                                        <td class="px-4 py-4 text-center font-mono text-sm tabular-nums">
+                                                                            <span class="text-success">{wins}</span>
                                                                             <span class="text-muted mx-1">"-"</span>
-                                                                            <span class="text-red-400">{losses}</span>
+                                                                            <span class="text-danger">{losses}</span>
                                                                         </td>
                                                                         <td class="px-4 py-4 text-center text-sm text-accent">
                                                                             {rating_to_stars(avg_rating)}
@@ -397,8 +409,8 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                                                 <div>
                                                                                                     {reviews_inner.into_iter().map(|review| {
                                                                                                         let outcome_class = match review.win_loss.as_deref() {
-                                                                                                            Some("win") => "text-emerald-400",
-                                                                                                            Some("loss") => "text-red-400",
+                                                                                                            Some("win") => "text-success",
+                                                                                                            Some("loss") => "text-danger",
                                                                                                             _ => "text-muted",
                                                                                                         };
                                                                                                         let outcome_label = match review.win_loss.as_deref() {
@@ -413,7 +425,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                                                         view! {
                                                                                                             <div class="border-l-2 border-accent pl-3 mb-2 last:mb-0">
                                                                                                                 <div class="flex items-center gap-3">
-                                                                                                                    <span class=format!("text-xs {outcome_class} font-semibold uppercase")>
+                                                                                                                    <span class=format!("font-imperial uppercase tracking-wider text-[10px] {outcome_class}")>
                                                                                                                         {outcome_label}
                                                                                                                     </span>
                                                                                                                     <span class="text-accent text-xs">{stars}</span>
