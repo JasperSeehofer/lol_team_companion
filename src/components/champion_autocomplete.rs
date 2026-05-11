@@ -111,7 +111,7 @@ pub fn ChampionAutocomplete(
                                     type="button"
                                     // Phase 17: text-secondary default, hover -> bg-elevated text-primary,
                                     // focus-visible ring for keyboard parity (G-12).
-                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-secondary text-left cursor-pointer transition-colors hover:bg-elevated hover:text-primary focus-visible:bg-elevated focus-visible:text-primary focus-visible:outline-none"
+                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-secondary text-left cursor-pointer transition-colors hover:bg-elevated hover:text-primary focus-visible:bg-elevated focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset"
                                     on:mousedown=move |ev| {
                                         ev.prevent_default();
                                         select_champion(c_for_click.clone());
