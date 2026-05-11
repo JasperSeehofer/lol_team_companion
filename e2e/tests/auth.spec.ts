@@ -11,13 +11,17 @@ const TEST_USERNAME = `e2euser_${TIMESTAMP}`;
 
 test.describe("Registration", () => {
   test("shows register form", async ({ page }) => {
-    await page.goto("/auth/register");
+    // Phase 17 D-16: registration is gated behind an invite token.
+    // Without ?invite=... the page Effect-redirects to /closed-beta.
+    await page.goto("/auth/register?invite=E2E-TEST");
     await expect(page.locator("input[type=email], input[name=email]")).toBeVisible();
     await expect(page.locator("input[type=password], input[name=password]")).toBeVisible();
   });
 
   test("can register a new account", async ({ page }) => {
-    await page.goto("/auth/register");
+    // Phase 17 D-16: registration is gated behind an invite token.
+    // Without ?invite=... the page Effect-redirects to /closed-beta.
+    await page.goto("/auth/register?invite=E2E-TEST");
 
     await page.fill("input[name=username]", TEST_USERNAME);
     await page.fill("input[name=email]", TEST_EMAIL);
@@ -61,7 +65,9 @@ test.describe("Full auth flow", () => {
 
   test("register → auto-login → profile accessible", async ({ page }) => {
     // Register
-    await page.goto("/auth/register");
+    // Phase 17 D-16: registration is gated behind an invite token.
+    // Without ?invite=... the page Effect-redirects to /closed-beta.
+    await page.goto("/auth/register?invite=E2E-TEST");
     await page.fill("input[name=username]", flowUsername);
     await page.fill("input[name=email]", flowEmail);
     await page.fill("input[name=password]", TEST_PASSWORD);
