@@ -1551,7 +1551,7 @@ pub fn DraftPage() -> impl IntoView {
                         <input
                             type="text"
                             prop:value=move || draft_name.get()
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                             on:input=move |ev| set_draft_name.set(event_target_value(&ev))
                         />
                     </div>
@@ -1567,7 +1567,7 @@ pub fn DraftPage() -> impl IntoView {
                                     <select
                                         prop:value=move || selected_team_id.get()
                                         on:change=move |ev| set_selected_team_id.set(event_target_value(&ev))
-                                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus:border-accent"
+                                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                     >
                                         {teams.into_iter().map(|t| {
                                             let id = t.id.clone().unwrap_or_default();
@@ -1590,7 +1590,7 @@ pub fn DraftPage() -> impl IntoView {
                                 <input
                                     type="text"
                                     prop:value=move || opp_filter_text.get()
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
                                     placeholder="Search opponents..."
                                     on:input=move |ev| {
                                         let val = event_target_value(&ev);
@@ -1829,7 +1829,7 @@ pub fn DraftPage() -> impl IntoView {
                         <textarea
                             rows="3"
                             placeholder="Win condition notes..."
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus:border-accent resize-none"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
                             prop:value=move || win_conditions.get()
                             on:input=move |ev| set_win_conditions.set(event_target_value(&ev))
                         />
@@ -1839,7 +1839,7 @@ pub fn DraftPage() -> impl IntoView {
                         <textarea
                             rows="3"
                             placeholder="Threats to be aware of..."
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus:border-accent resize-none"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
                             prop:value=move || watch_out.get()
                             on:input=move |ev| set_watch_out.set(event_target_value(&ev))
                         />
@@ -1973,19 +1973,19 @@ pub fn DraftPage() -> impl IntoView {
                                                 <input
                                                     type="text"
                                                     placeholder="Series name..."
-                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                                     prop:value=move || series_name_input.get()
                                                     on:input=move |ev| set_series_name_input.set(event_target_value(&ev))
                                                 />
                                                 <input
                                                     type="text"
                                                     placeholder="Opponent name..."
-                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                                     prop:value=move || series_opponent_input.get()
                                                     on:input=move |ev| set_series_opponent_input.set(event_target_value(&ev))
                                                 />
                                                 <select
-                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                                     prop:value=move || series_format_input.get()
                                                     on:change=move |ev| set_series_format_input.set(event_target_value(&ev))
                                                 >
@@ -2172,7 +2172,7 @@ pub fn DraftPage() -> impl IntoView {
                                         <div class="flex items-center gap-1">
                                             <span class="text-dimmed text-xs">{slot_label}</span>
                                             <select
-                                                class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer"
+                                                class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer"
                                                 prop:value=override_val
                                                 on:change=move |ev| {
                                                     let val = event_target_value(&ev);
@@ -2210,7 +2210,7 @@ pub fn DraftPage() -> impl IntoView {
                                     <input
                                         type="text"
                                         placeholder="Pick rationale..."
-                                        class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus:border-accent"
+                                        class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                         prop:value=move || slot_comment_input.get()
                                         on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
                                         on:keydown=move |ev: web_sys::KeyboardEvent| {
@@ -2262,7 +2262,7 @@ pub fn DraftPage() -> impl IntoView {
                     <textarea
                         rows="3"
                         placeholder="Add a comment..."
-                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus:border-accent resize-none"
+                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
                         on:input=move |ev| set_comment_input.set(event_target_value(&ev))
                         prop:value=move || comment_input.get()
                     />
@@ -3589,7 +3589,7 @@ pub fn DraftPage() -> impl IntoView {
                                                 <input
                                                     type="text"
                                                     placeholder="Champion name..."
-                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                                     prop:value=move || ban_new_champ.get()
                                                     on:input=move |ev| set_ban_new_champ.set(event_target_value(&ev))
                                                 />
@@ -3599,7 +3599,7 @@ pub fn DraftPage() -> impl IntoView {
                                                 <input
                                                     type="text"
                                                     placeholder="Why ban?"
-                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus:border-accent"
+                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
                                                     prop:value=move || ban_new_reason.get()
                                                     on:input=move |ev| set_ban_new_reason.set(event_target_value(&ev))
                                                 />

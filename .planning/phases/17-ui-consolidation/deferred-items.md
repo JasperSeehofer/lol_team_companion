@@ -43,6 +43,23 @@ from the scoped CI sweep list and move it to the global sweep.
 **Acceptance gate:** at the end of Phase 17, the `style_guardrails` job's
 G-12 step should drop the `PHASE_17_FILES` scope and run codebase-wide.
 
+## Plan 17-07 sweep findings
+
+- **G-01 hits in `.claude/skills/skill-creator/`** — `eval_review.html` and
+  `eval-viewer/viewer.html` import Poppins + Lora from `fonts.googleapis.com`.
+  These are out-of-band tooling assets, never served by the lol-companion
+  app, never reach an end-user browser. **Out of scope for Phase 17**
+  (G-01 governs the product surface). Disposition: leave as-is; if the
+  skill-creator gets repackaged for distribution, audit it separately.
+- **`champion_autocomplete.rs` dropdown-item focus ring (fixed in 17-07)** —
+  formerly used `focus-visible:bg-elevated` + `outline-none` without a ring,
+  which was technically G-12-compliant (background change provides a focus
+  indicator) but inconsistent with the rest of the app. Added
+  `focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset`
+  to match the rest of the app. The row at line 61 (the autocomplete input
+  itself, not the dropdown items) is still tracked in the table above
+  as part of the legacy form-input cohort.
+
 ## Plan 17-01 specific
 
 - **`/solo-dashboard` route inconsistency:** Plan 17-01 task 11 references

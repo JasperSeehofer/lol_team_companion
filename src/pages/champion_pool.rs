@@ -1028,7 +1028,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                     <label class="block text-muted text-xs font-medium mb-1">"General Notes"</label>
                                                                     <textarea
                                                                         rows="3"
-                                                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
+                                                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 resize-none transition-colors"
                                                                         placeholder="General notes about this champion..."
                                                                         prop:value=move || notes_input.get()
                                                                         on:input=move |ev| set_notes_input.set(event_target_value(&ev))
@@ -1311,7 +1311,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     <div>
                                         <label class="block text-muted text-xs font-medium mb-1">"Type"</label>
                                         <select
-                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus:border-accent/50 cursor-pointer"
+                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 cursor-pointer"
                                             prop:value=move || note_form_type.get()
                                             on:change=move |ev| set_note_form_type.set(event_target_value(&ev))
                                         >
@@ -1350,7 +1350,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     } else {
                                         view! {
                                             <input type="text"
-                                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 transition-colors"
+                                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
                                                 placeholder="e.g. Level 6 all-in"
                                                 prop:value=move || note_form_title.get()
                                                 on:input=move |ev| set_note_form_title.set(event_target_value(&ev))
@@ -1390,7 +1390,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     <label class="block text-muted text-xs font-medium mb-1">"Content"</label>
                                     <textarea
                                         rows="3"
-                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus:border-accent/50 resize-none transition-colors"
+                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 resize-none transition-colors"
                                         placeholder="Notes, strategy, details..."
                                         prop:value=move || note_form_content.get()
                                         on:input=move |ev| set_note_form_content.set(event_target_value(&ev))
