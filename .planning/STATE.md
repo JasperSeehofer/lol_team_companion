@@ -3,23 +3,23 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Launch Readiness
 status: ready_to_plan
-stopped_at: Phase 17 UI-SPEC approved
-last_updated: "2026-05-07T13:18:37.326Z"
+stopped_at: Phase 17 complete (UI Consolidation, 10/10 plans, 6-pillar PASS-with-deferred)
+last_updated: "2026-05-11T00:00:00.000Z"
 progress:
   total_phases: 12
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 25
-  completed_plans: 15
-  percent: 60
+  completed_plans: 25
+  percent: 100
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 17 (ui-consolidation) — EXECUTING
-Plan: 1 of 10
+Phase: 17 (ui-consolidation) — COMPLETE
+Plan: 10 of 10
 
-Next: `/gsd-spec-phase 16` (or `/gsd-discuss-phase 16` if SPEC unnecessary), then plan/execute the close-out
+Next: discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md`) before proceeding to existing Phase 18 (Bug-Report Widget — already partly shipped in 17-06; needs scope reconciliation).
 
 ## Project Reference
 
@@ -46,6 +46,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 14]: Resource<Result<Vec<...>>> type used for LearningCard prop to match Leptos resource typing
 - [Phase 14]: current_date_short() returns static Today — auto-title is user-editable so approximate is acceptable
 - [Phase 16]: v1.2 Solo Mode & Match Intelligence shipped 2026-05-07; close-out resolved WR-01 (refetch hoisting) and WR-02 (dead get_personal_goals removed); 15-REVIEW.md fully reconciled; second-pass review found 0 new HIGH/Critical
+- [Phase 17]: UI consolidation complete 2026-05-11; demacia/pandemonium themes adopted (color-only swap — structural variants scoped as new Phase 18); self-hosted fonts (G-01 zero hits); 4-hub IA; 22 visual-regression baselines committed; 6-pillar audit PASS-with-deferred; FLUX placeholder backgrounds with AI-IMAGES.md reproducibility log; Open-Design seeded as cross-repo design system
 
 ## Blockers/Concerns
 
@@ -54,10 +55,10 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-05-07T11:49:09.308Z
-Stopped at: Phase 17 UI-SPEC approved
-Resume file: .planning/phases/17-ui-consolidation/17-UI-SPEC.md
-Next command: `/gsd-spec-phase 16` or `/gsd-discuss-phase 16` to start the Phase 15 close-out.
+Last session: 2026-05-11
+Stopped at: Phase 17 complete; Phase 18 (Region Variants) scoped, awaiting plan-phase
+Resume file: `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md` (advisory plan for Phase 18 scope)
+Next command: `/gsd-spec-phase 18` for Phase 18 (Region Variants) — Demacia + Pandemonium structural component branches per Open-Design mockups.
 
 ## v1.3 Decisions (baked in pivot 2026-05-06)
 
