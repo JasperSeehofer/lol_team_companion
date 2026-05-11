@@ -18,10 +18,10 @@
 
 **Known Gaps (deferred):**
 
-- IN-01 hardcoded Data Dragon patch version → deferred to Phase 19 (Production Hardening) for dynamic version loading
+- IN-01 hardcoded Data Dragon patch version → deferred to Phase 20 (Production Hardening, renumbered from 19) for dynamic version loading
 - IN-02 `unwrap_or(None)` anti-pattern at db.rs:4832 → info-only; ad-hoc when surrounding code is touched
 - IN-03 spurious `#[allow(dead_code)]` on `trends_window_to_cutoff` → info-only; ad-hoc when surrounding code is touched
-- Old Phase 16 (Draft Integration) → renumbered Phase 24 in v1.4; XFEAT-03/XFEAT-04 ship post-launch when real-user data is in
+- Old Phase 16 (Draft Integration) → renumbered Phase 25 in v1.4 (was 24 until Region Variants inserted as Phase 18 on 2026-05-11); XFEAT-03/XFEAT-04 ship post-launch when real-user data is in
 
 ---
 

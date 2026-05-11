@@ -1,6 +1,6 @@
-# Phase 23 — Soft Launch + Feedback Loop (SPEC seed)
+# Phase 24 — Soft Launch + Feedback Loop (SPEC seed)
 
-**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Run `/gsd-spec-phase 23` to expand.
+**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Renumbered from Phase 23 → 24 on 2026-05-11 when Phase 18 (Region Variants) was inserted. Run `/gsd-spec-phase 24` to expand.
 
 **Milestone:** v1.3 Launch Readiness (final phase)
 
@@ -10,13 +10,13 @@ Real users on real traffic, with the bug-report inbox driving the v1.4 backlog.
 
 ## Launch shape (DECIDED in pivot)
 
-**Closed beta via named-friends invite list.** Public URL but distributed only to a small list (~5-15 people). Soft entry; no marketing push. Riot Developer Portal "Personal API Key" approval required (handled in Phase 21). DSE + Impressum live (Phase 21). Vault Tier-A section live (Phase 21).
+**Closed beta via named-friends invite list.** Public URL but distributed only to a small list (~5-15 people). Soft entry; no marketing push. Riot Developer Portal "Personal API Key" approval required (handled in Phase 22). DSE + Impressum live (Phase 22). Vault Tier-A section live (Phase 22).
 
 ## In-scope
 
 ### Deploy
-1. Production deploy to the chosen domain (handled by Phase 20 `just deploy`)
-2. Final pre-flight smoke per Phase 22 LAUNCH-GATE.md commands
+1. Production deploy to the chosen domain (handled by Phase 21 `just deploy`)
+2. Final pre-flight smoke per Phase 23 LAUNCH-GATE.md commands
 3. Verify all `/legal/*` routes serve correctly on the production domain (not just localhost)
 
 ### Onboarding
@@ -46,7 +46,7 @@ Real users on real traffic, with the bug-report inbox driving the v1.4 backlog.
 - Translations (deferred)
 - Analytics tooling (deferred — bug-report inbox + manual feedback is sufficient for closed beta)
 
-## Success criteria (verify with `/gsd-verify-work 23`)
+## Success criteria (verify with `/gsd-verify-work 24`)
 
 1. Production deploy live at chosen domain; HTTPS valid; pages render
 2. Named-friends invite list onboarded (at least 5 people register)
@@ -58,20 +58,20 @@ Real users on real traffic, with the bug-report inbox driving the v1.4 backlog.
 
 ## Required reading before discuss-phase
 
-1. `.planning/LAUNCH-GATE.md` (Phase 22 output)
-2. `infra/RUNBOOK.md` (Phase 20 output)
+1. `.planning/LAUNCH-GATE.md` (Phase 23 output)
+2. `infra/RUNBOOK.md` (Phase 21 output)
 3. `[[charter]]`, `[[values-charter]]` — what kind of launch we want (no dark patterns, transparency, scientific integrity in claims)
 4. `[[cross-project-memory]]` — feynman-lookup launch-week observations (if any)
 
 ## Plans
 
-TBD — produced by `/gsd-plan-phase 23`. Likely 1-2 plans:
-- 23-01: deploy + verify live + send invites
-- 23-02: week-1 monitoring + triage + v1.4 seeding
+TBD — produced by `/gsd-plan-phase 24`. Likely 1-2 plans:
+- 24-01: deploy + verify live + send invites
+- 24-02: week-1 monitoring + triage + v1.4 seeding
 
 ## Depends on
 
-- Phase 22 complete (LAUNCH-GATE.md all-green)
+- Phase 23 complete (LAUNCH-GATE.md all-green)
 
 ## Hard NOs during launch
 

@@ -60,21 +60,22 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - Launch shape: closed beta via named-friends invite list (no public self-serve registration in v1.3).
 
 - [x] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81` (15-REVIEW.md was not updated). Remaining: clear WR-01 (refetch lp_history + goal_progress resources after sync) + WR-02 (orphan get_personal_goals — wire or remove); secondary code review + verification; mark v1.2 fully closed. (completed 2026-05-07)
-- [ ] **Phase 17: UI Consolidation** - Run `/gsd-ui-phase` for UI-SPEC; Claude Design primary pass; Open-Design fills missing surfaces; retroactive `/gsd-ui-review` after implementation.
-- [ ] **Phase 18: Bug-Report Widget** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start.
-- [ ] **Phase 19: Production Hardening** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
-- [ ] **Phase 19.1: Closed-Beta Access Gate (INSERTED 2026-05-07)** - Gate registration behind an invite mechanism so the deployed binary is URL-reachable but only the named-friends list can sign up. Login + legal pages remain public.
-- [ ] **Phase 20: Deploy Infra (shared CAX11)** - Cross-compile via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36`; new systemd unit at port 3001; Caddyfile stanza; `just deploy` recipe; pre-deploy smoke + post-deploy WASM-200 + server-fn check (per feynman 2026-04-16 incident).
-- [ ] **Phase 21: Compliance & Transparency** - Pick + register TLD (flag values charter for non-EU); DSE + Impressum (§5 DDG, no Steuernummer); Tier-A transparency in `[[lol-team-companion]]` vault entity; G-01..G-13 CI sweep; Riot Developer Portal application.
-- [ ] **Phase 22: Pre-Launch Full Review** - `/gsd-audit-milestone v1.3` + full `/gsd-code-review` + `/gsd-secure-phase` + `/gsd-ui-review` + `/ultrareview` + `/consult security`; fix HIGH findings; produce `.planning/LAUNCH-GATE.md`.
-- [ ] **Phase 23: Soft Launch + Feedback Loop** - Deploy; named-friends invite list; monitor `bug_report` for 1 week; weekly `/gsd-inbox` triage; backlog grooming feeds v1.4.
+- [x] **Phase 17: UI Consolidation** - Claude Design primary pass + Open-Design utility surfaces; 22 visual-regression baselines; 6-pillar audit PASS-with-deferred. (completed 2026-05-11)
+- [ ] **Phase 18: Region Variants (INSERTED 2026-05-11)** - Demacia + Pandemonium structural component branches per Open-Design mockups: shared region-variant primitives (RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone/oil-spill backgrounds, glitch text-shadow util), then port hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta) to genuinely different per-region layouts (not color-only swap), then regenerate visual baselines per theme.
+- [ ] **Phase 19: Bug-Report Widget (renumbered from 18)** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start.
+- [ ] **Phase 20: Production Hardening (renumbered from 19)** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
+- [ ] **Phase 20.1: Closed-Beta Access Gate (renumbered from 19.1)** - Gate registration behind an invite mechanism so the deployed binary is URL-reachable but only the named-friends list can sign up. Login + legal pages remain public.
+- [ ] **Phase 21: Deploy Infra (shared CAX11) (renumbered from 20)** - Cross-compile via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36`; new systemd unit at port 3001; Caddyfile stanza; `just deploy` recipe; pre-deploy smoke + post-deploy WASM-200 + server-fn check (per feynman 2026-04-16 incident).
+- [ ] **Phase 22: Compliance & Transparency (renumbered from 21)** - Pick + register TLD (flag values charter for non-EU); DSE + Impressum (§5 DDG, no Steuernummer); Tier-A transparency in `[[lol-team-companion]]` vault entity; G-01..G-13 CI sweep; Riot Developer Portal application.
+- [ ] **Phase 23: Pre-Launch Full Review (renumbered from 22)** - `/gsd-audit-milestone v1.3` + full `/gsd-code-review` + `/gsd-secure-phase` + `/gsd-ui-review` + `/ultrareview` + `/consult security`; fix HIGH findings; produce `.planning/LAUNCH-GATE.md`.
+- [ ] **Phase 24: Soft Launch + Feedback Loop (renumbered from 23)** - Deploy; named-friends invite list; monitor `bug_report` for 1 week; weekly `/gsd-inbox` triage; backlog grooming feeds v1.4.
 
 ### 🔜 v1.4 Draft Integration & Post-Launch Backlog (Deferred)
 
 **Milestone Goal:** Once v1.3 is shipped and producing real-user match data, ship the deferred Draft Integration alongside the highest-priority items surfaced from the launch bug-report inbox.
 
-- [ ] **Phase 24: Draft Integration** (was old Phase 16) - Personal matchup notes surface in draft Intel sidebar; champion pool cards display solo-history win rate badges. Depends on Phase 14 + Phase 15 — both already complete.
-- [ ] Phase 25+: Inbox-driven backlog from v1.3 launch (defined post-launch).
+- [ ] **Phase 25: Draft Integration** (was old Phase 16, then renumbered Phase 24, now Phase 25 after Region Variants insertion) - Personal matchup notes surface in draft Intel sidebar; champion pool cards display solo-history win rate badges. Depends on Phase 14 + Phase 15 — both already complete.
+- [ ] Phase 26+: Inbox-driven backlog from v1.3 launch (defined post-launch).
 
 ## Phase Details
 
@@ -208,7 +209,19 @@ Plans:
 - [x] 17-07-PLAN.md — Final audit: visual-regression baselines (22 routes), /gsd-ui-review 17 6-pillar audit (PASS-with-deferred), G-01/G-12/raw-hex grep sweeps, 17-UI-REVIEW.md, full-suite test pass
 **UI hint**: yes (entire phase is UI work)
 
-### Phase 18: Bug-Report Widget
+### Phase 18: Region Variants (INSERTED 2026-05-11)
+**Goal**: Demacia and Pandemonium themes render genuinely different component compositions per region (not color-only swap), per Open-Design mockups
+**Depends on**: Phase 17
+**Why this phase exists**: Phase 17 ported color tokens for both regions but did NOT branch component structure. Open-Design mockups show structurally different visual languages (Demacia: heraldic crests, gilt cards, wax-letter dossiers, HeraldicDivider; Pandemonium: glitch type, riot-tape ticker, toxic-sticker bans, halftone backgrounds, SoloForge replacement for SoloConstellation). Phase 17-UI-REVIEW.md flagged the gap as MEDIUM/deferred under Visual coherence. Closed-beta launch (Phase 24) is the public moment for regional identity — must ship before then to avoid the region concept reading as cosmetic.
+**Likely scope** (refined in SPEC):
+  - Shared region-variant primitives: RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone + oil-spill background utilities, glitch text-shadow utility
+  - Per-page region branches for ~9 hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta)
+  - SoloConstellation → split into Demacia constellation + Pandemonium SoloForge
+  - Regenerate visual-regression baselines per theme (~40 snapshots total)
+**Plans**: TBD (produced by `/gsd-plan-phase 18`)
+**UI hint**: yes (entire phase is UI structural work)
+
+### Phase 19: Bug-Report Widget (renumbered from Phase 18)
 **Goal**: A floating in-app feedback button that lets the user click any page element, describe what went wrong or what they wish for, and have it auto-exported to a Claude-readable inbox file so the next coding session sees the queue without manual triage
 **Depends on**: Phase 16
 **Capture model** (decided in pivot plan):
@@ -228,7 +241,7 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 
-### Phase 19: Production Hardening
+### Phase 20: Production Hardening (renumbered from Phase 19)
 **Goal**: Close all production-readiness gaps surfaced by the audit so the binary is safe to deploy behind HTTPS on Hetzner
 **Depends on**: Phase 16
 **Hard blockers to close**:
@@ -248,28 +261,28 @@ Plans:
 **Plans**: TBD
 **UI hint**: no (backend-only)
 
-### Phase 19.1: Closed-Beta Access Gate (INSERTED 2026-05-07)
+### Phase 20.1: Closed-Beta Access Gate (renumbered from Phase 19.1)
 **Goal**: Public registration is gated by an invite mechanism so that the deployed v1.3 binary is reachable by URL but only the named-friends list can complete account creation
-**Depends on**: Phase 19
+**Depends on**: Phase 20
 **Decisions to lock in plan-phase**:
   - **Gate model**: choose one of (A) single shared `BETA_INVITE_CODE` env var, (B) per-user `invite_code` SurrealDB table minted by an admin, or (C) email allow-list. Leaning (B) because it gives per-friend revocation, tracks who consumed which code, and surfaces a real "X of N invites used" signal during the beta. Plan-phase locks the choice.
-  - **Gate location**: registration server fn only. Login still works for already-registered users; homepage and `/legal/impressum` + `/legal/datenschutz` (per Phase 21) stay reachable without a code so the legal pages can be cited externally.
+  - **Gate location**: registration server fn only. Login still works for already-registered users; homepage and `/legal/impressum` + `/legal/datenschutz` (per Phase 22) stay reachable without a code so the legal pages can be cited externally.
   - **Admin role**: a single admin user (first registered, or flagged via `ADMIN_USER_EMAIL` env) sees an admin-only "Mint invite" page listing issued codes and their consumed status. Non-admin users get a 404 on the route, not a 403, to avoid leaking the route's existence.
   - **Removal path**: when the gate is dropped (likely v1.4 or post-beta), the `invite_code` table can stay (audit trail) but the registration fn check becomes feature-flag-controlled. No migrations needed to drop the gate.
-  - **No anti-bot beyond the code**: a 6-12 char alphanumeric code from a CSPRNG is sufficient for ≤ 30-account beta. No CAPTCHA, no rate-limiting work in this phase (Phase 19 already adds Riot-side timeouts; abuse handling for registration deferred to v1.4 if needed).
+  - **No anti-bot beyond the code**: a 6-12 char alphanumeric code from a CSPRNG is sufficient for ≤ 30-account beta. No CAPTCHA, no rate-limiting work in this phase (Phase 20 already adds Riot-side timeouts; abuse handling for registration deferred to v1.4 if needed).
 **Success Criteria**:
   1. Registration server fn rejects sign-ups without a valid, unconsumed invite code and returns a clean form-level error
   2. Admin can mint invite codes via an admin-only route; on consumption each code is marked with the consuming `user_id` and timestamp
   3. Login, homepage, and `/legal/*` routes remain reachable without an invite code
   4. New `invite_code` table appears in `schema.surql` (or chosen alternative is documented) with appropriate field constraints
   5. e2e smoke test covers: invalid code → reject; valid code → registration succeeds and code is marked consumed; reuse of consumed code → reject
-  6. Bug-report widget (Phase 18) still functions for invited users — no regression on already-shipped surfaces
+  6. Bug-report widget (Phase 19) still functions for invited users — no regression on already-shipped surfaces
 **Plans**: TBD
 **UI hint**: yes (registration form change + minimal admin-mint page)
 
-### Phase 20: Deploy Infrastructure (Shared CAX11)
+### Phase 21: Deploy Infrastructure (Shared CAX11) (renumbered from Phase 20)
 **Goal**: Get the production binary running on feynman-lookup's existing Hetzner CAX11 alongside the existing service, served via Caddy at the new domain
-**Depends on**: Phase 19, Phase 19.1
+**Depends on**: Phase 20, Phase 20.1
 **Decisions baked in**:
   - Same CAX11, no new VPS provisioning (`cloud-init.yml` already applied)
   - Cross-compile locally via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36` (Debian 12 glibc pin per `[[cross-project-memory]]`)
@@ -288,7 +301,7 @@ Plans:
 **Plans**: TBD
 **UI hint**: no
 
-### Phase 21: Compliance & Transparency
+### Phase 22: Compliance & Transparency (renumbered from Phase 21)
 **Goal**: All EU-compliance artifacts in place before any external user touches the deployed app — Impressum, Datenschutzerklärung, vault Tier-A section, Riot API approval status, and a CI sweep for the project's hard-NO guardrails
 **Depends on**: Phase 16
 **Hard blockers (from vault `[[guardrails]]` and `[[values-charter]]`)**:
@@ -308,13 +321,13 @@ Plans:
   1. `/legal/impressum` and `/legal/datenschutz` routes live with all required clauses
   2. Vault `[[lol-team-companion]]` Tier-A section exists with data flows, legal basis, retention, third parties
   3. CI workflow includes a guardrails sweep that fails on any hit
-  4. Riot Developer Portal application status documented in `.planning/phases/21-compliance-transparency/21-RIOT-STATUS.md`
+  4. Riot Developer Portal application status documented in `.planning/phases/22-compliance-transparency/22-RIOT-STATUS.md`
 **Plans**: TBD
 **UI hint**: minimal (legal pages only)
 
-### Phase 22: Pre-Launch Full Review
+### Phase 23: Pre-Launch Full Review (renumbered from Phase 22)
 **Goal**: A comprehensive multi-tool review of the entire v1.3 milestone before any public-facing deploy, producing a single LAUNCH-GATE.md that is the go/no-go document
-**Depends on**: Phase 17, 18, 19, 20, 21
+**Depends on**: Phase 17, 18, 19, 20, 21, 22
 **Review chain**:
   1. `/gsd-audit-milestone v1.3` — does v1.3 deliver on its goal?
   2. `/gsd-code-review` (full repo, not just diff) — bugs, security, quality
@@ -323,15 +336,15 @@ Plans:
   5. `/ultrareview` — multi-agent cloud review of the launch branch
   6. `/consult security "v1.3 launch checklist"` — vault security advisor pass
 **Success Criteria**:
-  1. All HIGH findings from any tool are fixed before Phase 23
+  1. All HIGH findings from any tool are fixed before Phase 24
   2. `.planning/LAUNCH-GATE.md` exists with one row per check (PASS/FAIL/WAIVED with rationale)
   3. Post-deploy smoke commands documented and dry-run on staging
 **Plans**: TBD
 **UI hint**: no
 
-### Phase 23: Soft Launch + Feedback Loop
+### Phase 24: Soft Launch + Feedback Loop (renumbered from Phase 23)
 **Goal**: Real users on real traffic, with the bug-report inbox driving the v1.4 backlog
-**Depends on**: Phase 22
+**Depends on**: Phase 23
 **Success Criteria**:
   1. Production deploy live at chosen domain
   2. Named-friends invite list (5-15 people) onboarded with personal invite links
@@ -342,7 +355,7 @@ Plans:
 **Plans**: TBD
 **UI hint**: no
 
-### Phase 24: Draft Integration (deferred from old Phase 16, now in v1.4)
+### Phase 25: Draft Integration (deferred from old Phase 16, then Phase 24, now Phase 25 after Region Variants insertion)
 **Goal**: Personal game experience feeds back into draft decisions — matchup notes surface in the draft Intel sidebar and solo match history win rates appear as badges on champion pool cards
 **Depends on**: Phase 14, Phase 15
 **Requirements**: XFEAT-03, XFEAT-04
@@ -355,7 +368,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 22 → 23. v1.4 starts at 24 post-launch.
+Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, inserted 2026-05-11) → 19 → 20 → 20.1 → 21 → 22 → 23 → 24. v1.4 starts at 25 post-launch.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -377,11 +390,12 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 → 19 → 19.1 → 20 �
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Bug-Report Widget | v1.3 | 0/? | Not started | - |
-| 19. Production Hardening | v1.3 | 0/? | Not started | - |
-| 19.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (INSERTED 2026-05-07) | - |
-| 20. Deploy Infra (CAX11) | v1.3 | 0/? | Not started | - |
-| 21. Compliance & Transparency | v1.3 | 0/? | Not started | - |
-| 22. Pre-Launch Full Review | v1.3 | 0/? | Not started | - |
-| 23. Soft Launch + Feedback Loop | v1.3 | 0/? | Not started | - |
-| 24. Draft Integration (deferred) | v1.4 | 0/? | Deferred | - |
+| 18. Region Variants | v1.3 | 0/? | Not started (INSERTED 2026-05-11) | - |
+| 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
+| 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
+| 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
+| 21. Deploy Infra (CAX11) | v1.3 | 0/? | Not started (renumbered from 20) | - |
+| 22. Compliance & Transparency | v1.3 | 0/? | Not started (renumbered from 21) | - |
+| 23. Pre-Launch Full Review | v1.3 | 0/? | Not started (renumbered from 22) | - |
+| 24. Soft Launch + Feedback Loop | v1.3 | 0/? | Not started (renumbered from 23) | - |
+| 25. Draft Integration (deferred) | v1.4 | 0/? | Deferred (renumbered from 24) | - |

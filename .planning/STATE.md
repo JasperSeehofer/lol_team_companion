@@ -19,7 +19,7 @@ Milestone: v1.3 Launch Readiness
 Phase: 17 (ui-consolidation) — COMPLETE
 Plan: 10 of 10
 
-Next: discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md`) before proceeding to existing Phase 18 (Bug-Report Widget — already partly shipped in 17-06; needs scope reconciliation).
+Next: spec/discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md`). Phase 18 was inserted on 2026-05-11; Bug-Report Widget is now Phase 19; subsequent phases renumbered 19→20, 20→21, 21→22, 22→23, 23→24, 19.1→20.1, v1.4 Phase 24→25.
 
 ## Project Reference
 
@@ -66,9 +66,10 @@ Next command: `/gsd-spec-phase 18` for Phase 18 (Region Variants) — Demacia + 
 - Hetzner: reuse feynman-lookup's CAX11; new domain (e.g. `lol-companion.gg` placeholder); Caddy stanza → port 3001
 - Bug-report widget captures: page URL + semantic element label + free text + bug/wishlist toggle (no screenshots, no CSS selectors)
 - Launch shape: closed beta via named-friends invite list (no public self-serve registration in v1.3)
-- Old Phase 16 (Draft Integration) → deferred to v1.4 Phase 24
+- Old Phase 16 (Draft Integration) → deferred to v1.4 (now Phase 25 after Region Variants insertion on 2026-05-11)
+- [2026-05-11] Region Variants inserted as new Phase 18; subsequent v1.3 phases renumbered (18→19 Bug-Report Widget, 19→20 Prod Hardening, 19.1→20.1 Access Gate, 20→21 Deploy, 21→22 Compliance, 22→23 Pre-Launch, 23→24 Soft Launch)
 
-## Blind-spot Inventory (carried into Phase 21 / Phase 22)
+## Blind-spot Inventory (carried into Phase 22 / Phase 23)
 
 1. Riot Developer Portal application status
 2. G-13 Tier-A transparency section missing in vault `[[lol-team-companion]]`
@@ -84,4 +85,4 @@ Next command: `/gsd-spec-phase 18` for Phase 18 (Region Variants) — Demacia + 
 12. `cargo-leptos` `_bg.wasm` rename in deploy recipe
 13. Two-layer firewall (Hetzner Cloud + on-host ufw)
 14. Vault staleness: `[[lol-team-companion]]`, `[[product-portfolio]]`, `[[self-employment-action-plan]]`
-15. Backup: feynman has none — Phase 19 SurrealKV snapshot must work standalone
+15. Backup: feynman has none — Phase 20 SurrealKV snapshot must work standalone

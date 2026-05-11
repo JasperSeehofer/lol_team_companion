@@ -1,12 +1,12 @@
-# Phase 22 — Pre-Launch Full Review (SPEC seed)
+# Phase 23 — Pre-Launch Full Review (SPEC seed)
 
-**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Run `/gsd-spec-phase 22` to expand.
+**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Renumbered from Phase 22 → 23 on 2026-05-11 when Phase 18 (Region Variants) was inserted. Run `/gsd-spec-phase 23` to expand.
 
 **Milestone:** v1.3 Launch Readiness
 
 ## Goal (one sentence)
 
-A comprehensive multi-tool review of the entire v1.3 milestone before any public-facing deploy, producing a single LAUNCH-GATE.md that is the go/no-go document for Phase 23.
+A comprehensive multi-tool review of the entire v1.3 milestone before any public-facing deploy, producing a single LAUNCH-GATE.md that is the go/no-go document for Phase 24.
 
 ## Why this phase exists
 
@@ -17,7 +17,7 @@ Each prior phase has its own narrow review (`/gsd-code-review N`, `/gsd-ui-revie
 ### Review chain (run in order)
 1. **`/gsd-audit-milestone v1.3`** — does v1.3 deliver on its goal? Cross-phase coherence check.
 2. **`/gsd-code-review`** on the full repo (not just the latest phase diff). Bugs, security, quality.
-3. **`/gsd-secure-phase`** retroactive on phases 16-21. Threat-model verification.
+3. **`/gsd-secure-phase`** retroactive on phases 16-22. Threat-model verification.
 4. **`/gsd-ui-review`** on the production build. 6-pillar visual audit.
 5. **`/ultrareview`** — multi-agent cloud review of the launch branch. (User-triggered, billed.)
 6. **`/consult security "v1.3 launch checklist"`** — vault security advisor pass.
@@ -28,9 +28,9 @@ Each prior phase has its own narrow review (`/gsd-code-review N`, `/gsd-ui-revie
    - Check name
    - Status: PASS / FAIL / WAIVED
    - Evidence (link / hash / quote)
-   - If FAIL → fix is required before Phase 23
+   - If FAIL → fix is required before Phase 24
    - If WAIVED → user must explicitly approve with rationale
-9. Pre-flight smoke commands (used during deploy in Phase 23) documented and dry-run on staging or local prod-like build.
+9. Pre-flight smoke commands (used during deploy in Phase 24) documented and dry-run on staging or local prod-like build.
 
 ### Specific items to verify (curated from blind-spot list)
 10. No `fonts.googleapis.com` / `fonts.gstatic.com` in deployed HTML (G-01)
@@ -41,7 +41,7 @@ Each prior phase has its own narrow review (`/gsd-code-review N`, `/gsd-ui-revie
 15. `/healthz`, server-fn endpoint, and `_bg.wasm` all return 200 in a staging-equivalent test
 16. Cookie `Secure` flag confirmed on prod (curl `-I` to inspect Set-Cookie)
 17. CSP headers present on all responses
-18. SurrealKV backup script tested round-trip (Phase 19 deliverable; verify here)
+18. SurrealKV backup script tested round-trip (Phase 20 deliverable; verify here)
 
 ## Out of scope
 
@@ -49,9 +49,9 @@ Each prior phase has its own narrow review (`/gsd-code-review N`, `/gsd-ui-revie
 - Performance benchmarking (deferred — closed beta load is small)
 - Penetration testing (deferred to post-launch; the GSD security suite + vault security consult is the minimum)
 
-## Success criteria (verify with `/gsd-verify-work 22`)
+## Success criteria (verify with `/gsd-verify-work 23`)
 
-1. All 7 review steps run; outputs preserved in `.planning/phases/22-pre-launch-review/`
+1. All 7 review steps run; outputs preserved in `.planning/phases/23-pre-launch-review/`
 2. `.planning/LAUNCH-GATE.md` has every row populated; no UNKNOWN status remains
 3. All FAIL findings have a fix commit referenced; all WAIVED findings have explicit user approval recorded
 4. No HIGH-severity findings remain unfixed
@@ -60,20 +60,20 @@ Each prior phase has its own narrow review (`/gsd-code-review N`, `/gsd-ui-revie
 ## Required reading before discuss-phase
 
 1. `.planning/ROADMAP.md` (the v1.3 milestone block — what we're auditing against)
-2. The 6 prior-phase SPECs (16-21) — what each promised
+2. The 7 prior-phase SPECs (16-22) — what each promised
 3. `[[guardrails]]` — the canonical hard-NO list
 4. `[[cross-project-incidents]]` — production-only failure modes to specifically check
 5. `[[agent-weaknesses]]` — W-PRE (Premature closure) is the highest-risk failure mode for this phase: do not declare PASS without runtime verification on a running server
 
 ## Plans
 
-TBD — produced by `/gsd-plan-phase 22`. Likely 2 plans:
-- 22-01: Run the review chain + populate LAUNCH-GATE.md
-- 22-02: Fix all FAIL findings; re-run failed checks until green
+TBD — produced by `/gsd-plan-phase 23`. Likely 2 plans:
+- 23-01: Run the review chain + populate LAUNCH-GATE.md
+- 23-02: Fix all FAIL findings; re-run failed checks until green
 
 ## Depends on
 
-- Phase 17, 18, 19, 20, 21 all complete
+- Phase 17, 18, 19, 20, 21, 22 all complete
 
 ---
 

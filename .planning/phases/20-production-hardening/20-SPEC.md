@@ -1,6 +1,6 @@
-# Phase 19 — Production Hardening (SPEC seed)
+# Phase 20 — Production Hardening (SPEC seed)
 
-**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Run `/gsd-spec-phase 19` to expand.
+**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Renumbered from Phase 19 → 20 on 2026-05-11 when Phase 18 (Region Variants) was inserted. Run `/gsd-spec-phase 20` to expand.
 
 **Milestone:** v1.3 Launch Readiness
 
@@ -29,9 +29,9 @@ A pre-pivot audit (see `/home/jasper/.claude/plans/i-want-to-pause-groovy-widget
 - Sentry / OpenTelemetry / Prometheus metrics (deferred to v1.4 — log-based observability is sufficient for closed beta)
 - CSRF middleware (Leptos `<Form>` macro provides token; defer explicit middleware to post-launch)
 - Rate limiting on app endpoints (closed beta scope is small; defer)
-- HTTPS termination (Caddy handles in Phase 20)
+- HTTPS termination (Caddy handles in Phase 21)
 
-## Success criteria (verify with `/gsd-verify-work 19`)
+## Success criteria (verify with `/gsd-verify-work 20`)
 
 1. Same binary runs locally (`cargo leptos watch`) and on prod (env vars only differ; no recompile required between environments)
 2. Riot API outage produces graceful UI fallback (skeleton + "Riot API unreachable, retrying" toast), not a 500
@@ -51,10 +51,10 @@ A pre-pivot audit (see `/home/jasper/.claude/plans/i-want-to-pause-groovy-widget
 
 ## Plans
 
-TBD — produced by `/gsd-plan-phase 19`. Likely 2-3 plans:
-- 19-01: env-driven config (site-addr, cookie secure, log level) + `.env.example`
-- 19-02: Riot API resilience (timeout/retry/cache) + dynamic Data Dragon patch
-- 19-03: Graceful shutdown + backup script + log structure
+TBD — produced by `/gsd-plan-phase 20`. Likely 2-3 plans:
+- 20-01: env-driven config (site-addr, cookie secure, log level) + `.env.example`
+- 20-02: Riot API resilience (timeout/retry/cache) + dynamic Data Dragon patch
+- 20-03: Graceful shutdown + backup script + log structure
 
 ## Notes
 

@@ -1,6 +1,6 @@
-# Phase 21 — Compliance & Transparency (SPEC seed)
+# Phase 22 — Compliance & Transparency (SPEC seed)
 
-**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Run `/gsd-spec-phase 21` to expand. Consult vault on every decision (`/consult legal "..."`).
+**Status:** SEED — produced by the v1.2 → v1.3 pivot on 2026-05-06. Renumbered from Phase 21 → 22 on 2026-05-11 when Phase 18 (Region Variants) was inserted. Run `/gsd-spec-phase 22` to expand. Consult vault on every decision (`/consult legal "..."`).
 
 **Milestone:** v1.3 Launch Readiness
 
@@ -10,7 +10,7 @@ All EU-compliance artifacts in place before any external user touches the deploy
 
 ## Why this phase exists
 
-`[[guardrails#G-13]]` is a hard NO: shipped production features must have a Tier-A transparency section in the wiki entity page. The current `wiki/entities/lol-team-companion.md` has none. A closed beta with real users is a "shipped production feature" under this guardrail. Phase 21 closes the gap.
+`[[guardrails#G-13]]` is a hard NO: shipped production features must have a Tier-A transparency section in the wiki entity page. The current `wiki/entities/lol-team-companion.md` has none. A closed beta with real users is a "shipped production feature" under this guardrail. Phase 22 closes the gap.
 
 ## In-scope
 
@@ -47,7 +47,7 @@ All EU-compliance artifacts in place before any external user touches the deploy
 8. Run sweep on every push and PR.
 
 ### Riot Developer Portal
-9. **Confirm Riot Developer Portal application status**. If not approved, submit a Personal API Key application. Document status in `21-RIOT-STATUS.md` for the phase folder.
+9. **Confirm Riot Developer Portal application status**. If not approved, submit a Personal API Key application. Document status in `22-RIOT-STATUS.md` for the phase folder.
 10. If charging for the app, "prior written approval" is also required — but v1.3 is closed beta with no monetization, so unlikely needed in this milestone.
 
 ## Out of scope
@@ -56,13 +56,13 @@ All EU-compliance artifacts in place before any external user touches the deploy
 - DSE for non-implemented features (only document what actually ships)
 - Multi-language legal pages (German + English; translate post-launch if needed)
 
-## Success criteria (verify with `/gsd-verify-work 21`)
+## Success criteria (verify with `/gsd-verify-work 22`)
 
 1. Domain registered and DNS pointing at CAX11
 2. `/legal/impressum` and `/legal/datenschutz` routes live with all required clauses
 3. Vault `wiki/entities/lol-team-companion.md` Tier-A section exists with data flows, legal basis, retention, third parties — verified by `/consult legal "audit lol-team-companion Tier-A section"`
 4. CI guardrails sweep job exists and passes on a clean main; intentionally-broken test branches fail it
-5. Riot Developer Portal application status documented in `21-RIOT-STATUS.md`
+5. Riot Developer Portal application status documented in `22-RIOT-STATUS.md`
 6. No `§5 TMG` anywhere in the deployed HTML or markdown
 7. No Steuernummer line in the Impressum
 
@@ -77,14 +77,14 @@ All EU-compliance artifacts in place before any external user touches the deploy
 
 ## Plans
 
-TBD — produced by `/gsd-plan-phase 21`. Likely 3 plans:
-- 21-01: Legal pages (Impressum + DSE) + routes + tests for guardrail strings
-- 21-02: Vault Tier-A update + Riot Developer Portal application
-- 21-03: CI guardrails sweep
+TBD — produced by `/gsd-plan-phase 22`. Likely 3 plans:
+- 22-01: Legal pages (Impressum + DSE) + routes + tests for guardrail strings
+- 22-02: Vault Tier-A update + Riot Developer Portal application
+- 22-03: CI guardrails sweep
 
 ## Depends on
 
-- Phase 16 only (no dependency on Phase 19 / 20 at the spec level — can proceed in parallel; only the DNS step in Phase 20 depends on Phase 21 having registered the domain)
+- Phase 16 only (no dependency on Phase 20 / 21 at the spec level — can proceed in parallel; only the DNS step in Phase 21 depends on Phase 22 having registered the domain)
 
 ---
 
