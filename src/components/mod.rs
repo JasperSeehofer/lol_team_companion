@@ -5,6 +5,7 @@ pub mod draft_board;
 pub mod icon;
 pub mod nav;
 pub mod ornaments;
+pub mod skeleton;
 pub mod stat_card;
 pub mod theme_toggle;
 pub mod tree_graph;
