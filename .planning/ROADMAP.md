@@ -218,7 +218,27 @@ Plans:
   - Per-page region branches for ~9 hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta)
   - SoloConstellation → split into Demacia constellation + Pandemonium SoloForge
   - Regenerate visual-regression baselines per theme (~40 snapshots total)
-**Plans**: TBD (produced by `/gsd-plan-phase 18`)
+**Plans**: 10 plans across 5 waves
+Plans:
+**Wave 1** *(parallel — no dependency)*
+- [ ] 18-01-PLAN.md — Port ~24 region primitives under src/components/region/ + delete ornaments.rs
+- [ ] 18-02-PLAN.md — PageLoading + PageEmpty per-region skeleton + empty states + animation keyframes
+
+**Wave 2** *(parallel — depend on Wave 1)*
+- [ ] 18-03-PLAN.md — Port 3 no-patch pages: tree-drafter + champion-pool + match-report
+- [ ] 18-04-PLAN.md — Port draft-carousel + draft-war-table with light mismatch patches
+- [ ] 18-05-PLAN.md — Port solo-constellation with medium mismatch patches (D pool-gaps/last-10/sort + P tier-crest/4-cards)
+
+**Wave 3** *(depend on Wave 1; 18-06 heaviest)*
+- [ ] 18-06-PLAN.md — Heavy port: team-dashboard with full Pandemonium 7-section data-surface rebuild (CHECKPOINT)
+- [ ] 18-07-PLAN.md — 4 sibling pairs port: draft-ledger, solo-journal, solo-forge, team-game-day-brief (gate pre-cleared per RESEARCH F-01)
+
+**Wave 4** *(depends on Waves 2 + 3)*
+- [ ] 18-08-PLAN.md — Schema fields + DB getter/setter pairs + ModeToggle UI primitive + resolve_mode + server fns with allowlist
+
+**Wave 5** *(parallel — depend on Wave 4)*
+- [ ] 18-09-PLAN.md — pixelmatch + pngjs install + 26 scoped baselines + region-diff.spec.ts (pixelDiffRatio > 0.40)
+- [ ] 18-10-PLAN.md — 6-pillar audit + REQ-7 utility-route grep gate + 18-UI-REVIEW.md + user manual review (CHECKPOINT)
 **UI hint**: yes (entire phase is UI structural work)
 
 ### Phase 19: Bug-Report Widget (renumbered from Phase 18)
@@ -390,7 +410,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Region Variants | v1.3 | 0/? | Not started (INSERTED 2026-05-11) | - |
+| 18. Region Variants | v1.3 | 0/10 | Planned 2026-05-14 (INSERTED 2026-05-11) | - |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
