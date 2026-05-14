@@ -1,10 +1,11 @@
 ---
 phase: 18
 slug: region-variants
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-14
+reviewed_at: 2026-05-14
 ---
 
 # Phase 18 — UI Design Contract: Region Variants
