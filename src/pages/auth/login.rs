@@ -10,7 +10,7 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::components::ornaments::CompanionSigil;
+use crate::components::region::CompanionSigil;
 use crate::components::ui::ErrorBanner;
 
 #[server]

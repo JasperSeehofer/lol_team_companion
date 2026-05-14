@@ -1,4 +1,4 @@
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 use crate::components::stat_card::StatCard;
 use crate::components::ui::{EmptyState, ErrorBanner, NoTeamState, SkeletonCard};
 use crate::models::match_data::ChampionTrend;

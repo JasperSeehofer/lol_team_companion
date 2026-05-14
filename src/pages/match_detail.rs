@@ -1,4 +1,4 @@
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 use crate::models::match_data::{
     ComparisonMode, EventCategory, MatchParticipant, PerformanceStats, TimelineEvent,
 };

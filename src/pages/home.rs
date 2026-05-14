@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::components::ornaments::{GiltCorner, HeraldicDivider};
+use crate::components::region::{GiltCorner, HeraldicDivider};
 use crate::components::ui::ErrorBanner;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

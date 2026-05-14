@@ -12,7 +12,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_query_map;
 
-use crate::components::ornaments::CompanionSigil;
+use crate::components::region::CompanionSigil;
 use crate::components::ui::ErrorBanner;
 
 #[server]

@@ -1,4 +1,4 @@
-use crate::components::ornaments::FleurDeLis;
+use crate::components::region::FleurDeLis;
 use crate::models::champion::Champion;
 use crate::models::draft::role_icon_url;
 use leptos::prelude::*;

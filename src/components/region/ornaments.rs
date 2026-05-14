@@ -1,7 +1,7 @@
-//! Shared SVG ornament primitives per UI-SPEC §"Ornament Library".
-//! Sources: `/tmp/lol-design-handoff/lol-team-companion-app/project/components.jsx`
-//! lines 168-208 (GiltCorner, HeraldicDivider, RiotTape) and lines 433-443
-//! (CompanionSigil); foundations.jsx lines 105-115 (Crown).
+//! Region-aware ornament primitives.
+//! Per phase 18 D-02, this consolidates all ornaments under region/.
+//! CompanionSigil is the legacy reference for the move || if is_pandemonium { … }.into_any() pattern.
+//! New region primitives accept `region: String` as a prop (NOT use_context) per SPEC Constraints.
 //!
 //! All stroke/fill colors use CSS custom properties (`var(--color-accent)`,
 //! `var(--gold-2)`, `var(--accent-3)`) so theme switching automatically
@@ -128,6 +128,10 @@ pub fn RiotTape(
 /// Companion sigil + wordmark. Reads the `InitialTheme` context to
 /// switch between Demacia (shield + Cinzel imperial uppercase) and
 /// Pandemonium (VT323 glitch wordmark "COMPANION_").
+///
+/// NOTE: `CompanionSigil` is the ONLY primitive that uses `use_context::<InitialTheme>()`
+/// internally (legacy pattern, preserved verbatim from old ornaments.rs).
+/// All NEW region-branching primitives accept `region: String` as a prop instead.
 #[component]
 pub fn CompanionSigil() -> impl IntoView {
     let is_pandemonium = use_context::<InitialTheme>()

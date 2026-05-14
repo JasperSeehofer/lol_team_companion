@@ -4,7 +4,7 @@ use leptos_router::{
     hooks::use_location,
 };
 
-use crate::components::ornaments::CompanionSigil;
+use crate::components::region::CompanionSigil;
 use crate::components::theme_toggle::ThemeToggle;
 use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};

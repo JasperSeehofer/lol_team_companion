@@ -8,7 +8,7 @@
 
 use leptos::prelude::*;
 
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 
 #[component]
 pub fn ImpressumPage() -> impl IntoView {
