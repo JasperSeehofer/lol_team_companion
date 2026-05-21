@@ -22,6 +22,9 @@ pub struct PublicUser {
     pub mode: String,
     pub riot_region: Option<String>,
     pub theme: String,
+    pub draft_mode: String,
+    pub team_dashboard_mode: String,
+    pub solo_mode: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

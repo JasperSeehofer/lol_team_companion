@@ -24,6 +24,9 @@ struct DbUser {
     mode: Option<String>,
     riot_region: Option<String>,
     theme: Option<String>,
+    draft_mode: Option<String>,
+    team_dashboard_mode: Option<String>,
+    solo_mode: Option<String>,
 }
 
 impl From<DbUser> for AppUser {
@@ -38,6 +41,9 @@ impl From<DbUser> for AppUser {
             mode: u.mode.unwrap_or_else(|| "solo".to_string()),
             riot_region: u.riot_region,
             theme: u.theme.unwrap_or_else(|| "demacia".to_string()),
+            draft_mode: u.draft_mode.unwrap_or_else(|| "auto".to_string()),
+            team_dashboard_mode: u.team_dashboard_mode.unwrap_or_else(|| "auto".to_string()),
+            solo_mode: u.solo_mode.unwrap_or_else(|| "auto".to_string()),
         }
     }
 }
@@ -53,6 +59,9 @@ pub struct AppUser {
     pub mode: String,
     pub riot_region: Option<String>,
     pub theme: String,
+    pub draft_mode: String,
+    pub team_dashboard_mode: String,
+    pub solo_mode: String,
 }
 
 impl AuthUser for AppUser {

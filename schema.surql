@@ -13,6 +13,12 @@ DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS theme ON user TYPE string DEFAULT 'demacia'
   ASSERT $value IN ['demacia', 'pandemonium'];
 
+-- Phase 18 region-variants: per-route mode persistence (D-03)
+-- No ASSERT constraint — value set is wider (route-scoped) + may grow in future phases
+DEFINE FIELD IF NOT EXISTS draft_mode ON user TYPE string DEFAULT 'auto';
+DEFINE FIELD IF NOT EXISTS team_dashboard_mode ON user TYPE string DEFAULT 'auto';
+DEFINE FIELD IF NOT EXISTS solo_mode ON user TYPE string DEFAULT 'auto';
+
 -- Teams
 DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON team TYPE string;
