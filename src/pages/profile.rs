@@ -16,6 +16,9 @@ pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
         mode: u.mode,
         riot_region: u.riot_region,
         theme: u.theme,
+        draft_mode: u.draft_mode,
+        team_dashboard_mode: u.team_dashboard_mode,
+        solo_mode: u.solo_mode,
     }))
 }
 

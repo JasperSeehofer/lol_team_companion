@@ -570,6 +570,48 @@ fn role_icon_url(role: &str) -> &'static str {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Phase 18-08: Mode toggle persistence
+// ---------------------------------------------------------------------------
+
+/// Persist the user's team dashboard mode preference. Validates against allowlist.
+/// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
+#[server]
+pub async fn set_team_dashboard_mode_pref(mode: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    // App-layer validation — DB has no ASSERT per Research Pitfall 4
+    const VALID: &[&str] = &["auto", "dashboard", "brief"];
+    if !VALID.contains(&mode.as_str()) {
+        return Err(ServerFnError::new("Invalid team dashboard mode"));
+    }
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    db::set_user_team_dashboard_mode(&db, &user.id, &mode)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+/// Resolve the effective team dashboard mode from a stored preference and region context.
+/// Returns region-coupled defaults when stored == "auto" (D-04).
+/// An explicit user pick (stored != "auto") always wins over the default (D-05).
+fn resolve_team_dashboard_mode(stored: &str, region: &str) -> String {
+    if stored != "auto" {
+        return stored.to_string();
+    }
+    match region {
+        "pandemonium" => "brief".to_string(),
+        _ => "dashboard".to_string(),
+    }
+}
+
 /// Top-level team dashboard page. Reads region once, dispatches to region-specific view.
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
@@ -578,14 +620,14 @@ pub fn TeamDashboard() -> impl IntoView {
     let region = theme.0.clone();
     let is_pandemonium = region == "pandemonium";
 
-    // === Mode selection stub — replaced in 18-08 ===
-    // 18-08 wires the toggle between "dashboard" and "brief" modes.
-    // Brief mode is built in 18-07. Until 18-08, default to dashboard.
-    let mode: String = "dashboard".to_string();
-    // === End mode stub ===
-
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+
+    // Mode preference — signal-driven, persisted via set_team_dashboard_mode_pref server fn (18-08)
+    let (mode_current, set_mode_current) = signal(
+        resolve_team_dashboard_mode("auto", &region)
+    );
+    let region_for_mode = region.clone();
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
     Effect::new(move || {
         match auth_user.get() {
@@ -597,9 +639,25 @@ pub fn TeamDashboard() -> impl IntoView {
             }
             Some(Ok(Some(u))) => {
                 is_solo_mode.set(u.mode == "solo");
+                let resolved = resolve_team_dashboard_mode(&u.team_dashboard_mode, &region_for_mode);
+                set_mode_current.set(resolved);
             }
             _ => {}
         }
+    });
+
+    let set_mode_action = Action::new(move |new_mode: &String| {
+        let m = new_mode.clone();
+        async move { set_team_dashboard_mode_pref(m).await }
+    });
+    Effect::new(move |_| {
+        if let Some(Ok(())) = set_mode_action.value().get() {
+            auth_user.refetch();
+        }
+    });
+    let on_mode_select = Callback::new(move |new_mode: String| {
+        set_mode_current.set(new_mode.clone());
+        set_mode_action.dispatch(new_mode);
     });
 
     let dashboard = Resource::new(|| (), |_| get_team_dashboard());
@@ -609,9 +667,23 @@ pub fn TeamDashboard() -> impl IntoView {
     let post_game_panel = Resource::new(|| (), |_| get_post_game_panel());
     let pool_gap_panel = Resource::new(|| (), |_| get_pool_gap_panel());
 
+    let region_for_toggle = region.clone();
+
     view! {
         <div class="canvas-grain bg-base min-h-screen px-8 py-6">
             <div class="max-w-5xl mx-auto">
+            // Mode toggle — Dashboard / Game Day Brief (18-08)
+            <div class="mb-4 flex items-center">
+                <ModeToggle
+                    region=region_for_toggle
+                    current=mode_current
+                    options=vec![
+                        ("dashboard".to_string(), "Dashboard".to_string(), "DASHBOARD".to_string()),
+                        ("brief".to_string(), "Game Day Brief".to_string(), "GAME_DAY".to_string()),
+                    ]
+                    on_select=on_mode_select
+                />
+            </div>
             <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                 {move || {
                     if is_solo_mode.get() {
@@ -640,9 +712,8 @@ pub fn TeamDashboard() -> impl IntoView {
                     }
                     dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
-                        // Brief mode (18-07): region-aware game-day brief sub-view.
-                        // 18-08 will replace the mode stub with DB-backed persistence.
-                        if mode == "brief" {
+                        // Brief mode — signal-driven (18-08: DB persistence + resolve_team_dashboard_mode)
+                        if mode_current.get() == "brief" {
                             let region_brief = region.clone();
                             return view! {
                                 <TeamGameDayBriefView region=region_brief team=team members=members />

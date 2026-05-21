@@ -1,7 +1,7 @@
 use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, RiotTape, SectionHead, Stat};
+use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape, SectionHead, Stat};
 use crate::components::skeleton::PageLoading;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
@@ -878,20 +878,60 @@ fn normalize_role(role: &str) -> &str {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Phase 18-08: Mode toggle persistence
+// ---------------------------------------------------------------------------
+
+/// Persist the user's draft mode preference. Validates against allowlist before DB write.
+/// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
+#[server]
+pub async fn set_draft_mode_pref(mode: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    // App-layer validation — DB has no ASSERT per Research Pitfall 4
+    const VALID: &[&str] = &["auto", "carousel", "war-table", "ledger"];
+    if !VALID.contains(&mode.as_str()) {
+        return Err(ServerFnError::new("Invalid draft mode"));
+    }
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    db::set_user_draft_mode(&db, &user.id, &mode)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+/// Resolve the effective mode from a stored preference and region context.
+/// Returns region-coupled defaults when stored == "auto" (D-04).
+/// An explicit user pick (stored != "auto") always wins over the default (D-05).
+fn resolve_mode(stored: &str, region: &str, route: &str) -> String {
+    if stored != "auto" {
+        return stored.to_string();
+    }
+    match (route, region) {
+        ("draft", "demacia") => "carousel".to_string(),
+        ("draft", "pandemonium") => "ledger".to_string(),
+        ("team-dashboard", "demacia") => "dashboard".to_string(),
+        ("team-dashboard", "pandemonium") => "brief".to_string(),
+        ("solo", "demacia") => "constellation".to_string(),
+        ("solo", "pandemonium") => "forge".to_string(),
+        _ => "carousel".to_string(),
+    }
+}
+
 #[component]
 pub fn DraftPage() -> impl IntoView {
     // Region — read ONCE at page entry, passed to all sub-views (18-04)
     let theme = use_context::<InitialTheme>().unwrap_or_default();
     let region = theme.0.clone();
 
-    // === Mode selection stub — replaced in 18-08 ===
-    // 18-08 wires the toggle UI + DB persistence + resolve_mode().
-    // For 18-04 we render carousel as default. Pandemonium ledger is built in 18-07
-    // — until that ships, Pandemonium falls back to carousel here.
-    let mode: String = "carousel".to_string();
-    // === End mode stub ===
-
-    // Auth redirect
+    // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -903,6 +943,35 @@ pub fn DraftPage() -> impl IntoView {
     });
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
+
+    // Mode preference — signal-driven, persisted via set_draft_mode_pref server fn (18-08)
+    // Initialised from auth_user resource; resolve_mode() applies region-coupled default when "auto".
+    let (mode_current, set_mode_current) = signal(
+        resolve_mode("auto", &region, "draft")
+    );
+    // Keep mode_current synced with DB value when auth_user loads/refetches
+    let region_for_mode = region.clone();
+    Effect::new(move |_| {
+        if let Some(Ok(Some(user))) = auth_user.get() {
+            let resolved = resolve_mode(&user.draft_mode, &region_for_mode, "draft");
+            set_mode_current.set(resolved);
+        }
+    });
+    let set_mode_action = Action::new(move |new_mode: &String| {
+        let m = new_mode.clone();
+        async move { set_draft_mode_pref(m).await }
+    });
+    // Refetch user after successful mode persist so mode_current stays in sync
+    Effect::new(move |_| {
+        if let Some(Ok(())) = set_mode_action.value().get() {
+            auth_user.refetch();
+        }
+    });
+    let on_mode_select = Callback::new(move |new_mode: String| {
+        set_mode_current.set(new_mode.clone()); // optimistic update
+        set_mode_action.dispatch(new_mode);
+    });
+
     let (draft_name, set_draft_name) = signal(String::new());
     let (opponent, set_opponent) = signal(String::new());
     let (opp_filter_text, set_opp_filter_text) = signal(String::new());
@@ -1535,6 +1604,17 @@ pub fn DraftPage() -> impl IntoView {
                     };
                     view! { <span class=cls>{text}</span> }
                 })}
+                // Mode toggle — carousel / war-table / ledger (18-08)
+                <ModeToggle
+                    region=region.clone()
+                    current=mode_current
+                    options=vec![
+                        ("carousel".to_string(), "Carousel".to_string(), "CAROUSEL".to_string()),
+                        ("war-table".to_string(), "War Table".to_string(), "WAR_TABLE".to_string()),
+                        ("ledger".to_string(), "Ledger".to_string(), "LEDGER".to_string()),
+                    ]
+                    on_select=on_mode_select
+                />
                 <div class="ml-auto flex items-center gap-3">
                     <button
                         class=move || if intel_open.get() {
@@ -2130,9 +2210,9 @@ pub fn DraftPage() -> impl IntoView {
                 }}
             </div>
 
-            // Board + Comments — mode-dispatched (18-04: carousel/war-table; 18-07: ledger)
+            // Board + Comments — mode-dispatched (18-04: carousel/war-table; 18-07: ledger; 18-08: signal-driven)
             <div class="flex gap-4">
-                {match mode.as_str() {
+                {move || match mode_current.get().as_str() {
                     "war-table" => view! {
                         <DraftWarTableView
                             region=region.clone()

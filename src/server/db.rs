@@ -4518,6 +4518,99 @@ pub async fn set_user_theme(db: &Surreal<Db>, user_id: &str, theme: &str) -> DbR
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Phase 18: per-route mode preferences (draft_mode, team_dashboard_mode, solo_mode)
+// ---------------------------------------------------------------------------
+
+/// Read the user's draft mode preference. Returns "auto" if the field is not set
+/// (legacy users created before Phase 18 have NONE from the schema DEFAULT).
+pub async fn get_user_draft_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DraftModeRecord {
+        draft_mode: Option<String>,
+    }
+    let mut result = db
+        .query("SELECT draft_mode FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+    let row: Option<DraftModeRecord> = result.take(0)?;
+    Ok(row
+        .and_then(|r| r.draft_mode)
+        .unwrap_or_else(|| "auto".to_string()))
+}
+
+/// Persist the user's draft mode preference. App-layer validation handles allowlist.
+pub async fn set_user_draft_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET draft_mode = $mode")
+        .bind(("user_key", user_key))
+        .bind(("mode", mode.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// Read the user's team dashboard mode preference. Returns "auto" if not set.
+pub async fn get_user_team_dashboard_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct TeamDashboardModeRecord {
+        team_dashboard_mode: Option<String>,
+    }
+    let mut result = db
+        .query("SELECT team_dashboard_mode FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+    let row: Option<TeamDashboardModeRecord> = result.take(0)?;
+    Ok(row
+        .and_then(|r| r.team_dashboard_mode)
+        .unwrap_or_else(|| "auto".to_string()))
+}
+
+/// Persist the user's team dashboard mode preference.
+pub async fn set_user_team_dashboard_mode(
+    db: &Surreal<Db>,
+    user_id: &str,
+    mode: &str,
+) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET team_dashboard_mode = $mode")
+        .bind(("user_key", user_key))
+        .bind(("mode", mode.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// Read the user's solo mode preference. Returns "auto" if not set.
+pub async fn get_user_solo_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct SoloModeRecord {
+        solo_mode: Option<String>,
+    }
+    let mut result = db
+        .query("SELECT solo_mode FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key))
+        .await?;
+    let row: Option<SoloModeRecord> = result.take(0)?;
+    Ok(row
+        .and_then(|r| r.solo_mode)
+        .unwrap_or_else(|| "auto".to_string()))
+}
+
+/// Persist the user's solo mode preference.
+pub async fn set_user_solo_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    db.query("UPDATE type::record('user', $user_key) SET solo_mode = $mode")
+        .bind(("user_key", user_key))
+        .bind(("mode", mode.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
 pub async fn set_user_region(db: &Surreal<Db>, user_id: &str, region: &str) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     db.query("UPDATE type::record('user', $user_key) SET riot_region = $region")
