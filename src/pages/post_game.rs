@@ -1,3 +1,5 @@
+use crate::app::InitialTheme;
+use crate::components::region::{Card, SectionHead};
 use crate::components::ui::{ErrorBanner, SkeletonCard, ToastContext, ToastKind};
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
@@ -363,6 +365,10 @@ pub fn PostGamePage() -> impl IntoView {
         }
     });
 
+    // Region — read ONCE at page entry, passed as String prop to sub-views
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+
     // URL query params
     use leptos_router::hooks::use_query_map;
     let query = use_query_map();
@@ -557,13 +563,15 @@ pub fn PostGamePage() -> impl IntoView {
     view! {
         <div class="canvas-grain bg-base min-h-screen">
             <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
-                // Page header per UI-SPEC §"Post-Game Page Layout" (visual layer only)
-                <div>
-                    <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - post-game"</p>
-                    <h1 class="font-display italic text-4xl text-primary mt-1">"What we learned in the field."</h1>
-                    <p class="text-muted text-sm mt-1">"Analyze games, track patterns, and improve together."</p>
-                </div>
+                // Page header — region-aware SectionHead
+                <SectionHead
+                    region=region.clone()
+                    title="What we learned in the field.".to_string()
+                    eyebrow="Strategy hub \u{00B7} Post-Game"
+                />
 
+                // Main content — wrapped in region-aware Card
+                <Card region=region.clone()>
             {move || action_item_count.get().map(|n| {
                 let label = if n == 1 {
                     "1 action item created".to_string()
@@ -998,6 +1006,7 @@ pub fn PostGamePage() -> impl IntoView {
                     </div>
                 </div>
             </div>
+            </Card>
             </div>
         </div>
     }

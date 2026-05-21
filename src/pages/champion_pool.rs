@@ -1,4 +1,6 @@
+use crate::app::InitialTheme;
 use crate::components::champion_autocomplete::ChampionAutocomplete;
+use crate::components::region::*;
 use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
@@ -360,6 +362,10 @@ pub fn ChampionPoolPage() -> impl IntoView {
         }
     });
 
+    // Region — read ONCE at page entry, passed as String prop to sub-views
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+
     let has_team = Resource::new(
         || (),
         |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
@@ -495,16 +501,15 @@ pub fn ChampionPoolPage() -> impl IntoView {
     view! {
         <div class="canvas-grain bg-base min-h-screen">
             <div class="max-w-7xl mx-auto py-8 px-6 flex flex-col gap-6">
-                // Page header per UI-SPEC §"Champion Pool Page Layout"
-                <div class="flex items-end justify-between gap-4 flex-wrap">
-                    <div>
-                        <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - champion pool"</p>
-                        <h1 class="font-display italic text-4xl text-primary mt-1">"Your champions, by station."</h1>
-                        <p class="text-muted text-sm mt-1">"Organize your roster by role and readiness tier."</p>
-                    </div>
-                </div>
+                // Page header — region-aware SectionHead
+                <SectionHead
+                    region=region.clone()
+                    title="Your champions, by station.".to_string()
+                    eyebrow="Strategy hub \u{00B7} Champion Pool"
+                />
 
-                // Role tabs — scrollable on mobile
+                // Role tabs and content — wrapped in region-aware Card
+                <Card region=region.clone()>
                 <div class="flex gap-1 overflow-x-auto pb-1">
                     {POOL_ROLES.iter().map(|&role| {
                         view! {
@@ -1408,7 +1413,8 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     })}
                 </div>
             </div>
-            </div>
+            </Card>
+        </div>
         </div>
     }
 }

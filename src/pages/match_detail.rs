@@ -1,4 +1,5 @@
-use crate::components::region::HeraldicDivider;
+use crate::app::InitialTheme;
+use crate::components::region::{Card, HeraldicDivider, SectionHead};
 use crate::models::match_data::{
     ComparisonMode, EventCategory, MatchParticipant, PerformanceStats, TimelineEvent,
 };
@@ -554,6 +555,10 @@ pub fn MatchDetailPage() -> impl IntoView {
         }
     });
 
+    // Region — read ONCE at page entry, passed as String prop to sub-views
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+
     // Route param extraction
     let params = use_params_map();
     let match_id = move || params.read().get("id").unwrap_or_default();
@@ -574,16 +579,17 @@ pub fn MatchDetailPage() -> impl IntoView {
 
     view! {
         <div class="canvas-grain bg-base min-h-screen">
-            <div class="max-w-6xl mx-auto px-8 py-6">
-                // Back link
-                <a
-                    href="/stats"
-                    class="font-imperial uppercase tracking-wider text-[10px] text-muted hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
-                >
-                    "\u{2190} Back to history"
-                </a>
+            <div class="max-w-6xl mx-auto px-8 py-6 flex flex-col gap-6">
+                // Page header — region-aware SectionHead with back-link action
+                <SectionHead
+                    region=region.clone()
+                    title="Match Report".to_string()
+                    eyebrow="Stats"
+                />
 
-                <div class="mt-4">
+                // Match detail content — wrapped in region-aware Card
+                <Card region=region.clone()>
+                <div>
                     <Suspense fallback=move || view! {
                         <div class="flex flex-col gap-6">
                             <SkeletonCard height="h-12" />
@@ -921,6 +927,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                         }}
                     </Suspense>
                 </div>
+                </Card>
             </div>
         </div>
     }
