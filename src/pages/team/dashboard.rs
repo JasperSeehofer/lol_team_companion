@@ -1,4 +1,5 @@
-use crate::components::region::HeraldicDivider;
+use crate::app::InitialTheme;
+use crate::components::region::*;
 use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
@@ -569,10 +570,22 @@ fn role_icon_url(role: &str) -> &'static str {
     }
 }
 
+/// Top-level team dashboard page. Reads region once, dispatches to region-specific view.
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
+    // Read region once at page entry — passed as String to all subcomponents.
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+    let is_pandemonium = region == "pandemonium";
+
+    // === Mode selection stub — replaced in 18-08 ===
+    // 18-08 wires the toggle between "dashboard" and "brief" modes.
+    // Brief mode is built in 18-07. Until 18-08, default to dashboard.
+    let mode: String = "dashboard".to_string();
+    let _ = mode;
+    // === End mode stub ===
+
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    // Auth redirect + mode detection
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
     Effect::new(move || {
@@ -600,15 +613,6 @@ pub fn TeamDashboard() -> impl IntoView {
     view! {
         <div class="canvas-grain bg-base min-h-screen px-8 py-6">
             <div class="max-w-5xl mx-auto">
-                <header class="mb-6">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
-                        "The Strategy Room"
-                    </div>
-                    <h1 class="font-display italic text-[44px] leading-tight text-primary mt-1">
-                        "Team Dashboard"
-                    </h1>
-                    <div class="mt-3"><HeraldicDivider width=320 /></div>
-                </header>
             <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                 {move || {
                     if is_solo_mode.get() {
@@ -637,9 +641,13 @@ pub fn TeamDashboard() -> impl IntoView {
                     }
                     dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
-                        let is_leader = team.created_by == current_user_id;
-                        let created_by = team.created_by.clone();
-                        let (edit_name, set_edit_name) = signal(team.name.clone());
+                        if is_pandemonium {
+                            view! { <PandemoniumTeamDashboard team=team members=members /> }.into_any()
+                        } else {
+                            // Demacia: original team management UI with gilt header
+                            let is_leader = team.created_by == current_user_id;
+                            let created_by = team.created_by.clone();
+                            let (edit_name, set_edit_name) = signal(team.name.clone());
                         let (edit_region, set_edit_region) = signal(team.region.clone());
                         let (show_edit_modal, set_show_edit_modal) = signal(false);
                         let (leave_confirm, set_leave_confirm) = signal(false);
@@ -682,11 +690,12 @@ pub fn TeamDashboard() -> impl IntoView {
 
                         view! {
                             <div class="flex flex-col gap-6">
-                                // Team info card
-                                <div class="bg-elevated border border-outline rounded-xl p-6">
+                                // Team info card — gilt Card (region primitive)
+                                <Card region="demacia".to_string() variant="gilt".to_string()>
+                                <div>
                                     <div class="flex items-start justify-between gap-4">
                                         <div>
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Roster sigil"</div>
+                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"STRATEGY ROOM"</div>
                                             <div class="flex items-center gap-2">
                                                 <h2 class="font-display italic text-[28px] text-accent">{team.name.clone()}</h2>
                                                 {if is_leader {
@@ -729,7 +738,14 @@ pub fn TeamDashboard() -> impl IntoView {
                                     } else {
                                         view! { <span></span> }.into_any()
                                     }}
+                                    <div class="mt-4 pt-3 border-t border-divider/50 flex items-center gap-3">
+                                        <HeraldicDivider width=200 />
+                                        <Btn region="demacia".to_string() variant="primary".to_string()>
+                                            <A href="/draft" attr:class="text-inherit no-underline">"Open Draft"</A>
+                                        </Btn>
+                                    </div>
                                 </div>
+                                </Card>
 
                                 // Edit team modal (leader only)
                                 {move || if show_edit_modal.get() {
@@ -1413,6 +1429,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 }}
                             </div>
                         }.into_any()
+                        } // end else (Demacia) branch
                     },
                     Ok(None) => view! {
                         <NoTeamState />
@@ -1667,6 +1684,240 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                     })
                 }}
             </Suspense>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pandemonium Team Dashboard — 7-section full data-surface rebuild
+// Per CONTENT-CONTRACT-AUDIT.md: all 7 sections must be visually present.
+// Placeholder values have TODO comments for future data-source wiring.
+// ---------------------------------------------------------------------------
+
+/// Pandemonium variant of the team dashboard. Receives team + members from the
+/// parent Suspense so it renders without an additional network round-trip.
+#[component]
+fn PandemoniumTeamDashboard(
+    team: crate::models::team::Team,
+    members: Vec<TeamMember>,
+) -> impl IntoView {
+    let team_name = team.name.clone();
+
+    // Section 2: build roster slots from real member data where available.
+    // Pad to 5 slots with empty placeholders.
+    let starters: Vec<Option<TeamMember>> = {
+        let mut slots: Vec<Option<TeamMember>> = vec![None; 5];
+        let role_order = ["top", "jungle", "mid", "bot", "support"];
+        for (i, role) in role_order.iter().enumerate() {
+            if let Some(m) = members.iter().find(|m| m.role == *role && m.roster_type == "starter") {
+                slots[i] = Some(m.clone());
+            }
+        }
+        slots
+    };
+    let role_labels = ["TOP", "JGL", "MID", "BOT", "SUP"];
+
+    view! {
+        <div class="space-y-3 bg-base bg-scanline p-4">
+
+            // Section 1: RiotTape header strip
+            <RiotTape width=1200 label="TEAM_BRIEF GAME_DAY" />
+
+            // Section 2: 5-player roster row with MoodMeter
+            <div>
+                <div class="font-mono text-[10px] text-muted uppercase tracking-[0.16em] mb-2">"// ROSTER"</div>
+                <div class="grid grid-cols-5 gap-2">
+                    {starters.into_iter().enumerate().map(|(i, slot)| {
+                        let role_label = role_labels[i];
+                        // TODO(future phase): wire mood from team-vibe-check feature
+                        let mood_value = 0.7_f64;
+                        let player_name = slot.map(|m| m.username).unwrap_or_else(|| "// EMPTY".to_string());
+                        let name_clone = player_name.clone();
+                        view! {
+                            <div class="bg-surface border border-outline/30 p-3 flex flex-col items-center gap-2 relative">
+                                // bracket corners (zine aesthetic)
+                                <div class="absolute top-0 left-0 w-2 h-2 border-l-2 border-t-2 border-accent"></div>
+                                <div class="absolute top-0 right-0 w-2 h-2 border-r-2 border-t-2 border-accent"></div>
+                                <div class="absolute bottom-0 left-0 w-2 h-2 border-l-2 border-b-2 border-accent"></div>
+                                <div class="absolute bottom-0 right-0 w-2 h-2 border-r-2 border-b-2 border-accent"></div>
+                                <span class="font-mono text-[10px] text-muted uppercase">{role_label}</span>
+                                <span class="font-glitch text-[11px] uppercase tracking-[0.14em] text-accent text-center truncate w-full"
+                                      style="text-shadow: -1px -1px 0 var(--accent-2), 1px 1px 0 var(--t-accent);">
+                                    {name_clone}
+                                </span>
+                                <MoodMeter value=mood_value />
+                                <span class="font-mono text-[9px] text-muted">"MOOD"</span>
+                            </div>
+                        }
+                    }).collect_view()}
+                </div>
+            </div>
+
+            // Section 3: Captain's note
+            // TODO(future phase): add captain_note field to Team model and wire here.
+            <div class="bg-surface border border-outline/30 p-4 relative">
+                <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
+                <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
+                <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
+                <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
+                <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// FROM_THE_CAPTAIN"</div>
+                <p class="font-mono text-[13px] leading-relaxed text-secondary whitespace-pre-wrap">
+                    "Watch for their level-6 baron-area invade — we ate it last time.\nMid roams hard at 3:45. Stay on wards, keep tempo."
+                </p>
+            </div>
+
+            // Section 4: Reasoned Bans
+            // TODO(future phase): wire from ban-reasoning feature when built.
+            <PandemoniumBansPanel />
+
+            // Section 5: Our Pool Ready
+            // TODO(future phase): compute from champion_pool resource per-player.
+            <div class="bg-surface border border-outline/30 p-4 relative">
+                <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
+                <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
+                <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
+                <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
+                <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// READINESS"</div>
+                <div class="font-mono text-[11px] text-muted uppercase mb-3">"OUR POOL READY"</div>
+                <div class="flex items-baseline gap-2">
+                    <span class="font-mono text-[28px] tabular-nums text-accent">"4"</span>
+                    <span class="font-mono text-muted text-[12px]">"/ 5 PLAYERS · POOL FILLED"</span>
+                </div>
+                <div class="mt-2 h-2 bg-elevated">
+                    <div class="h-2 bg-accent" style="width: 80%"></div>
+                </div>
+            </div>
+
+            // Section 6: Their Pattern (opponent intel)
+            // TODO(future phase): wire from get_opponents_for_team or opponent-intel resource.
+            <div class="bg-surface border border-outline/30 p-4 relative">
+                <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
+                <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
+                <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
+                <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
+                <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// SCOUT"</div>
+                <div class="font-mono text-[11px] text-muted uppercase mb-3">"THEIR PATTERN"</div>
+                <div class="space-y-2 font-mono text-[12px]">
+                    <div>
+                        <span class="text-accent">"// LAST_5_BANS"</span>
+                        <span class="ml-2 text-secondary">"Yasuo, Yone, Akali, Zed, Sylas"</span>
+                    </div>
+                    <div>
+                        <span class="text-accent">"// PICK_HABIT"</span>
+                        <span class="ml-2 text-secondary">"Mid-priority drafts; engage support always blue side"</span>
+                    </div>
+                    <div>
+                        <span class="text-accent">"// EARLY_GAME"</span>
+                        <span class="ml-2 text-secondary">"Jungle invades 2:30–3:30; rotates bot at 5:00"</span>
+                    </div>
+                </div>
+            </div>
+
+            // Section 7: Threat Ranking + "If you let it through" warnings
+            <PandemoniumThreatsPanel />
+
+            // Team name footer
+            <div class="pt-2 border-t border-outline/20">
+                <span class="font-mono text-[10px] text-dimmed">"// SQUAD: "</span>
+                <span class="font-mono text-[10px] text-muted">{team_name}</span>
+            </div>
+        </div>
+    }
+}
+
+/// Pandemonium Section 4: Reasoned bans panel.
+/// Hardcoded placeholders — TODO(future phase): wire from ban-reasoning feature.
+#[component]
+fn PandemoniumBansPanel() -> impl IntoView {
+    view! {
+        <div class="bg-surface border border-outline/30 p-4 relative">
+            <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
+            <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
+            <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
+            <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
+            <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// PRE-PICK"</div>
+            <div class="font-mono text-[11px] text-muted uppercase mb-3">"REASONED BANS"</div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex items-start gap-2">
+                    <ChampTile name="Yasuo".to_string() size=40 banned=true />
+                    <div class="flex-1">
+                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"BAN"</span>
+                        <p class="font-mono text-[11px] text-muted mt-1">"OTP on mid; team-fight uptime kills us"</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <ChampTile name="Yone".to_string() size=40 banned=true />
+                    <div class="flex-1">
+                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"BAN"</span>
+                        <p class="font-mono text-[11px] text-muted mt-1">"Their mid/adc both proficient; pick rate 80%"</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <ChampTile name="Zed".to_string() size=40 banned=true />
+                    <div class="flex-1">
+                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"BAN"</span>
+                        <p class="font-mono text-[11px] text-muted mt-1">"Snowballs hard; our support can't disengage"</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-2">
+                    <ChampTile name="Akali".to_string() size=40 banned=true />
+                    <div class="flex-1">
+                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-elevated text-muted">"FLEX-BAN"</span>
+                        <p class="font-mono text-[11px] text-muted mt-1">"Counter to our top's current champion pool"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// Pandemonium Section 7: Threat ranking + "If you let it through" warnings.
+/// Hardcoded placeholders — TODO(future phase): wire from opponent-intel threat scoring.
+#[component]
+fn PandemoniumThreatsPanel() -> impl IntoView {
+    view! {
+        <div class="bg-surface border border-outline/30 p-4 relative">
+            <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
+            <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
+            <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
+            <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
+            <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// PRIORITY"</div>
+            <div class="font-mono text-[11px] text-muted uppercase mb-3">"THREATS"</div>
+            <ol class="space-y-3">
+                <li class="flex items-start gap-3">
+                    <span class="font-mono text-[18px] text-accent tabular-nums">"1."</span>
+                    <ChampTile name="Azir".to_string() size=40 />
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"CRITICAL"</span>
+                            <span class="font-mono text-[12px] text-primary">"Azir"</span>
+                        </div>
+                        <p class="font-mono text-[11px] text-danger mt-1">"If you let it through: 65% chance of team-fight loss"</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="font-mono text-[18px] text-accent tabular-nums">"2."</span>
+                    <ChampTile name="Orianna".to_string() size=40 />
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-elevated text-muted">"HIGH"</span>
+                            <span class="font-mono text-[12px] text-primary">"Orianna"</span>
+                        </div>
+                        <p class="font-mono text-[11px] text-danger mt-1">"If you let it through: peel composition counters our dive"</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="font-mono text-[18px] text-accent tabular-nums">"3."</span>
+                    <ChampTile name="Leona".to_string() size=40 />
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-elevated text-muted">"MED"</span>
+                            <span class="font-mono text-[12px] text-primary">"Leona"</span>
+                        </div>
+                        <p class="font-mono text-[11px] text-muted mt-1">"If you let it through: stun-chain disrupts our rotations"</p>
+                    </div>
+                </li>
+            </ol>
         </div>
     }
 }
