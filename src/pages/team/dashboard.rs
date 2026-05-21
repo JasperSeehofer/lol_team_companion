@@ -582,7 +582,6 @@ pub fn TeamDashboard() -> impl IntoView {
     // 18-08 wires the toggle between "dashboard" and "brief" modes.
     // Brief mode is built in 18-07. Until 18-08, default to dashboard.
     let mode: String = "dashboard".to_string();
-    let _ = mode;
     // === End mode stub ===
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
@@ -641,6 +640,14 @@ pub fn TeamDashboard() -> impl IntoView {
                     }
                     dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
+                        // Brief mode (18-07): region-aware game-day brief sub-view.
+                        // 18-08 will replace the mode stub with DB-backed persistence.
+                        if mode == "brief" {
+                            let region_brief = region.clone();
+                            return view! {
+                                <TeamGameDayBriefView region=region_brief team=team members=members />
+                            }.into_any();
+                        }
                         if is_pandemonium {
                             view! { <PandemoniumTeamDashboard team=team members=members /> }.into_any()
                         } else {
@@ -1919,5 +1926,290 @@ fn PandemoniumThreatsPanel() -> impl IntoView {
                 </li>
             </ol>
         </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TeamGameDayBriefView — 18-07
+// Game-day brief sub-view for /team/dashboard route mode="brief".
+// Demacia: "THE COMPANION GAZETTE" newspaper (3-col, gilt, Cormorant)
+// Pandemonium: "GAME_DAY · ZINE_v0.3" collage (RiotTape, rotated zine cards)
+// Mode toggle wired in 18-08; reachable now via mode="brief" stub.
+//
+// ChildrenFn rule: all String props inside Card/Glitch children must use
+// .clone() so the generated closure remains Fn. Data needing multiple
+// closure accesses uses StoredValue<T> (Copy, so closures stay Fn).
+// ---------------------------------------------------------------------------
+
+#[component]
+fn TeamGameDayBriefView(
+    region: String,
+    team: crate::models::team::Team,
+    members: Vec<crate::models::user::TeamMember>,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
+
+    let team_name_sv = StoredValue::new(team.name.clone());
+    let members_sv = StoredValue::new(members);
+
+    if is_pandemonium {
+        // Pandemonium: xeroxed match-day zine
+        let r1 = region.clone();
+        let r2 = region.clone();
+        let r3 = region.clone();
+        let r4 = region.clone();
+        let r5 = region.clone();
+        let r6 = region.clone();
+        let r7 = region.clone();
+        let r8 = region.clone();
+        let r9 = region.clone();
+        let r10 = region.clone();
+        view! {
+            <div class="canvas-grain bg-base flex flex-col gap-3">
+                <RiotTape label="GAME_DAY · ZINE_v0.3" />
+
+                // Section 1: Roster card
+                <div class="transform -rotate-1">
+                    <Card region=r1 variant="zine">
+                        <Glitch region=r2.clone()>"// ROSTER_CARD"</Glitch>
+                        <div class="mt-2 grid grid-cols-5 gap-2">
+                            {move || members_sv.get_value().into_iter().take(5).map(|m| {
+                                let role_sv = StoredValue::new(m.role.to_uppercase());
+                                let name_sv = StoredValue::new(
+                                    m.riot_summoner_name.unwrap_or_else(|| m.username.clone())
+                                );
+                                view! {
+                                    <div class="flex flex-col items-center gap-1">
+                                        <ChampTile name=name_sv.get_value() size=36 />
+                                        <span class="font-mono text-[9px] text-muted">
+                                            {move || format!("// {}", role_sv.get_value())}
+                                        </span>
+                                    </div>
+                                }
+                            }).collect_view()}
+                        </div>
+                    </Card>
+                </div>
+
+                // Section 2: Strat note
+                <div class="transform rotate-1">
+                    <Card region=r3 variant="zine">
+                        <Glitch region=r4.clone()>"// STRAT_NOTE"</Glitch>
+                        // TODO: wire real strategy from game_plan resource once linked
+                        <pre class="font-mono text-[11px] text-secondary mt-2 whitespace-pre-wrap leading-relaxed">
+                            "WIN_CON: early tower pressure\nBANS: focus engage supports\nDRAFT: flex top/mid picks preferred"
+                        </pre>
+                    </Card>
+                </div>
+
+                // Section 3: Opponent intel
+                <div class="transform -rotate-1">
+                    <Card region=r5 variant="zine">
+                        <Glitch region=r6.clone()>"// OPPONENT_INTEL"</Glitch>
+                        // TODO: wire real opponent data from match history when available
+                        <div class="mt-2 flex flex-col gap-1 font-mono text-[11px]">
+                            <div class="text-secondary">"LAST_5_BANS: Yasuo, Yone, Zed, Katarina, Akali"</div>
+                            <div class="text-secondary">"LAST_5_FORM: W · L · W · W · L"</div>
+                            <div class="text-secondary">"PLAYSTYLE: aggressive early, poke-heavy mid"</div>
+                        </div>
+                    </Card>
+                </div>
+
+                // Section 4: Threat rank
+                <div class="transform rotate-1">
+                    <Card region=r7 variant="zine">
+                        <Glitch region=r8.clone()>"// THREAT_RANK"</Glitch>
+                        <div class="mt-2 flex flex-col gap-2">
+                            <div class="flex items-center gap-3 border-b border-outline/20 pb-2">
+                                <ChampTile name="Azir".to_string() size=32 />
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <Badge tone="danger">"CRITICAL"</Badge>
+                                        <span class="font-mono text-[11px] text-primary">"Azir"</span>
+                                    </div>
+                                    <p class="font-mono text-[10px] text-muted mt-1">"// if let through: 65% team-fight loss"</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 border-b border-outline/20 pb-2">
+                                <ChampTile name="Orianna".to_string() size=32 />
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <Badge tone="warning">"HIGH"</Badge>
+                                        <span class="font-mono text-[11px] text-primary">"Orianna"</span>
+                                    </div>
+                                    <p class="font-mono text-[10px] text-muted mt-1">"// if let through: peel counters our dive"</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <ChampTile name="Leona".to_string() size=32 />
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <Badge tone="neutral">"MED"</Badge>
+                                        <span class="font-mono text-[11px] text-primary">"Leona"</span>
+                                    </div>
+                                    <p class="font-mono text-[10px] text-muted mt-1">"// if let through: stun-chain disrupts rotations"</p>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                // Footer: squad tag
+                <Card region=r9 variant="zine">
+                    <Glitch region=r10.clone()>
+                        {move || format!("// SQUAD: {}", team_name_sv.get_value())}
+                    </Glitch>
+                    <div class="mt-1 font-mono text-[10px] text-muted">
+                        {move || format!("{} MEMBERS CONFIRMED", members_sv.get_value().len())}
+                    </div>
+                </Card>
+            </div>
+        }.into_any()
+    } else {
+        // Demacia: "THE COMPANION GAZETTE" newspaper layout
+        let r1 = region.clone();
+        let r2 = region.clone();
+        let r3 = region.clone();
+        let r4 = region.clone();
+        let r5 = region.clone();
+        view! {
+            <div class="flex flex-col gap-6">
+                // Masthead
+                <Card region=r1.clone() variant="gilt">
+                    <div class="text-center py-2">
+                        <div class="font-imperial text-[9px] uppercase tracking-[0.25em] text-muted mb-1">
+                            "GAME DAY EDITION"
+                        </div>
+                        <h1 class="font-display font-bold text-[28px] tracking-[0.06em] text-primary uppercase">
+                            "THE COMPANION GAZETTE"
+                        </h1>
+                        <div class="font-imperial text-[10px] text-muted mt-1 tracking-[0.15em]">
+                            {move || format!("TEAM: {}", team_name_sv.get_value())}
+                        </div>
+                        <div class="mt-3 flex justify-center">
+                            <HeraldicDivider width=640 />
+                        </div>
+                    </div>
+                </Card>
+
+                // Three-column newspaper body
+                <div class="grid grid-cols-3 gap-4">
+                    // Column 1: Roster
+                    <Card region=r2.clone() variant="gilt">
+                        <SectionHead
+                            region=r2.clone()
+                            eyebrow="TODAY'S LINEUP"
+                            title="Roster".to_string()
+                        />
+                        <div class="mt-2 flex justify-center">
+                            <HeraldicDivider width=220 />
+                        </div>
+                        // Real roster from team members
+                        <div class="mt-3 flex flex-col gap-3">
+                            {move || members_sv.get_value().into_iter().take(5).map(|m| {
+                                let role_sv = StoredValue::new(m.role.clone());
+                                let name_sv = StoredValue::new(
+                                    m.riot_summoner_name.clone().unwrap_or_else(|| m.username.clone())
+                                );
+                                view! {
+                                    <div class="flex items-center gap-2 border-b border-outline/20 pb-2">
+                                        <ChampTile name=name_sv.get_value() size=32 />
+                                        <div class="flex-1">
+                                            <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted">
+                                                {move || role_sv.get_value()}
+                                            </div>
+                                            <div class="font-display text-[13px] text-primary italic">
+                                                {move || name_sv.get_value()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }).collect_view()}
+                        </div>
+                    </Card>
+
+                    // Column 2: Strategy
+                    <Card region=r3.clone() variant="gilt">
+                        <SectionHead
+                            region=r3.clone()
+                            eyebrow="TODAY'S ORDERS"
+                            title="Strategy".to_string()
+                        />
+                        <div class="mt-2 flex justify-center">
+                            <HeraldicDivider width=220 />
+                        </div>
+                        // TODO: wire real strategy from game_plan resource once linked
+                        <p class="font-display italic text-secondary text-[13px] leading-relaxed mt-3
+                            first-letter:float-left first-letter:font-display first-letter:text-5xl first-letter:text-accent first-letter:mr-1 first-letter:leading-none">
+                            "Early pressure along the top side. Secure Rift Herald first objective. Ban engage supports. Flex picks preferred for blue side."
+                        </p>
+                        <div class="mt-4">
+                            <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted mb-2">"BAN INTENTIONS"</div>
+                            <div class="font-display italic text-[12px] text-secondary">
+                                "Priority: Yasuo · Yone · Zed"
+                            </div>
+                        </div>
+                    </Card>
+
+                    // Column 3: Opponent intel + threats
+                    <Card region=r4.clone() variant="gilt">
+                        <SectionHead
+                            region=r4.clone()
+                            eyebrow="INTELLIGENCE"
+                            title="Opponent Intel".to_string()
+                        />
+                        <div class="mt-2 flex justify-center">
+                            <HeraldicDivider width=220 />
+                        </div>
+                        // TODO: wire real opponent data from match history when available
+                        <div class="mt-3 flex flex-col gap-3">
+                            <div>
+                                <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted mb-1">"RECENT FORM"</div>
+                                <p class="font-display italic text-[12px] text-secondary leading-relaxed
+                                    first-letter:float-left first-letter:font-display first-letter:text-5xl first-letter:text-accent first-letter:mr-1 first-letter:leading-none">
+                                    "Victory in 3 of last 5. Aggressive early, poke-heavy midgame."
+                                </p>
+                            </div>
+                            <div class="flex justify-center">
+                                <HeraldicDivider width=180 />
+                            </div>
+                            <div>
+                                <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted mb-2">"KEY THREATS"</div>
+                                <div class="flex flex-col gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <ChampTile name="Azir".to_string() size=28 />
+                                        <span class="font-display italic text-[12px] text-secondary">"Azir — must ban"</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <ChampTile name="Orianna".to_string() size=28 />
+                                        <span class="font-display italic text-[12px] text-secondary">"Orianna — peel threat"</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                // Editor's Note sidebar
+                <Card region=r5.clone() variant="gilt">
+                    <SectionHead
+                        region=r5.clone()
+                        eyebrow="FROM THE CAPTAIN"
+                        title="Editor's Note".to_string()
+                    />
+                    <div class="mt-2 flex justify-center">
+                        <HeraldicDivider width=480 />
+                    </div>
+                    // TODO: wire real captain's note from team notes once notes
+                    // resource exposes a "captain_note" field
+                    <p class="font-display italic text-secondary mt-3 text-[14px] leading-relaxed">
+                        "Today we face a disciplined opponent. Trust the preparation, execute the early game plan, and maintain map awareness above all else. Steady and methodical — that is how Demacia wins."
+                    </p>
+                    <div class="mt-3 font-imperial text-[9px] tracking-[0.18em] text-muted uppercase text-right">
+                        {move || format!("— {}", team_name_sv.get_value())}
+                    </div>
+                </Card>
+            </div>
+        }.into_any()
     }
 }
