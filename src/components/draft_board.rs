@@ -1,4 +1,4 @@
-use crate::components::region::FleurDeLis;
+use crate::components::region::{Card, ChampTile, Eyebrow, FleurDeLis, HeraldicDivider};
 use crate::models::champion::Champion;
 use crate::models::draft::role_icon_url;
 use leptos::prelude::*;
@@ -33,6 +33,7 @@ pub fn slot_meta(idx: usize) -> (&'static str, &'static str, &'static str) {
 
 #[component]
 pub fn DraftBoard(
+    region: String,
     draft_slots: ReadSignal<Vec<Option<String>>>,
     champion_map: HashMap<String, Champion>,
     active_slot: ReadSignal<Option<usize>>,
@@ -46,6 +47,7 @@ pub fn DraftBoard(
     #[prop(optional)] role_auto_guessed: Option<ReadSignal<Vec<bool>>>,
     #[prop(optional)] on_role_set: Option<Callback<(usize, String)>>,
 ) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
     let (first_pick_blue, set_first_pick_blue) = signal(true);
     let champion_map = StoredValue::new(champion_map);
     let role_popover_open: RwSignal<Option<usize>> = RwSignal::new(None);
@@ -128,31 +130,21 @@ pub fn DraftBoard(
                         let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                         if let Some(Some(champ_name)) = slots.get(slot_idx) {
                             let champ_name = champ_name.clone();
-                            let icon_url = champion_map.with_value(|m| {
-                                m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
-                            });
                             let on_slot_clear = on_slot_clear;
                             view! {
-                                <div class="relative w-full h-full">
-                                    <img
-                                        src=icon_url
-                                        alt=champ_name
-                                        class="w-full h-full object-cover grayscale brightness-50 rounded-full"
-                                    />
-                                    // Diagonal red ban-line overlay (the "Forsworn" mark)
-                                    <div
-                                        class="absolute inset-0 pointer-events-none flex items-center justify-center"
-                                        aria-hidden="true"
-                                    >
-                                        <div
-                                            class="absolute left-0 right-0 h-0.5 bg-danger rotate-45"
-                                            style="top: 50%; transform-origin: center;"
-                                        ></div>
-                                    </div>
+                                <div class="relative w-full h-full flex items-center justify-center">
+                                    // ChampTile handles grayscale + ban-bar overlay
+                                    <ChampTile name=champ_name size=56 banned=true />
                                     // Wax-seal fleur ornament (Demacia)
-                                    <div class="absolute -bottom-0.5 -right-0.5 opacity-70 pointer-events-none">
-                                        <FleurDeLis size=12 />
-                                    </div>
+                                    {if !is_pandemonium {
+                                        view! {
+                                            <div class="absolute -bottom-0.5 -right-0.5 opacity-70 pointer-events-none">
+                                                <FleurDeLis size=12 />
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {}.into_any()
+                                    }}
                                     {if is_highlighted {
                                         view! {
                                             <button
@@ -169,20 +161,22 @@ pub fn DraftBoard(
                                 </div>
                             }.into_any()
                         } else {
-                            // Empty ban slot: faint seal icon
+                            // Empty ban slot: ChampTile empty placeholder
                             view! {
-                                <span
-                                    class="text-dimmed opacity-60"
-                                    style="font-size: 18px; line-height: 1;"
-                                    aria-hidden="true"
-                                >"\u{2698}"</span>
+                                <ChampTile size=56 />
                             }.into_any()
                         }
                     }}
                 </div>
-                <span
-                    class="text-[10px] text-dimmed uppercase tracking-[0.18em] font-imperial leading-none"
-                >"Forsworn"</span>
+                {if is_pandemonium {
+                    view! {
+                        <span class="font-mono text-[10px] text-muted leading-none">"// BAN"</span>
+                    }.into_any()
+                } else {
+                    view! {
+                        <Eyebrow>"Forsworn"</Eyebrow>
+                    }.into_any()
+                }}
             </div>
         }
     };
@@ -256,9 +250,6 @@ pub fn DraftBoard(
                     );
                     if let Some(Some(champ_name)) = slots.get(slot_idx) {
                         let champ_name = champ_name.clone();
-                        let icon_url = champion_map.with_value(|m| {
-                            m.get(&champ_name).map(|c| c.image_full.clone()).unwrap_or_default()
-                        });
                         let on_slot_clear = on_slot_clear;
                         let warning = warning_slots.and_then(|ws| {
                             let warnings = ws.get();
@@ -278,7 +269,7 @@ pub fn DraftBoard(
                             <div class="relative h-full w-full">
                                 <div class={if is_blue { "flex h-full" } else { "flex flex-row-reverse h-full" }}>
                                     <div class="relative flex-shrink-0 h-full">
-                                        <img src=icon_url alt=champ_name.clone() class="h-full aspect-square object-cover" />
+                                        <ChampTile name=champ_name.clone() size=56 />
                                         {is_first_pick.then(|| view! {
                                             <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-[10px] font-bold px-1 leading-tight rounded-br font-imperial uppercase tracking-wider">"1st"</div>
                                         })}
@@ -448,13 +439,31 @@ pub fn DraftBoard(
         }
     };
 
+    // Region-branched outer card variant — static, not reactive
+    let card_variant = if is_pandemonium { "zine" } else { "gilt" };
+
     view! {
+        <Card region=region.clone() variant=card_variant.to_string()>
         <div class="grid grid-cols-[14rem_8rem_14rem] gap-x-4 gap-y-3">
 
-            // Row: Headers — Demacia House styling
-            <h3 class="font-imperial uppercase tracking-[0.18em] text-center text-xs text-info">"House Northwind"</h3>
-            <div></div>
-            <h3 class="font-imperial uppercase tracking-[0.18em] text-center text-xs text-danger">"House Frostbyte"</h3>
+            // Row: Headers — region-branched
+            {if is_pandemonium {
+                view! {
+                    <>
+                    <h3 class="font-mono uppercase tracking-[0.12em] text-center text-xs text-info">"// BLUE_SIDE"</h3>
+                    <div></div>
+                    <h3 class="font-mono uppercase tracking-[0.12em] text-center text-xs text-danger">"// RED_SIDE"</h3>
+                    </>
+                }.into_any()
+            } else {
+                view! {
+                    <>
+                    <h3 class="font-imperial uppercase tracking-[0.18em] text-center text-xs text-info">"House Northwind"</h3>
+                    <div class="flex items-center justify-center"><HeraldicDivider width=64 /></div>
+                    <h3 class="font-imperial uppercase tracking-[0.18em] text-center text-xs text-danger">"House Frostbyte"</h3>
+                    </>
+                }.into_any()
+            }}
 
             // Row: Phase 1 bans + first-pick toggle
             <div class="flex gap-2 justify-end">
@@ -521,5 +530,6 @@ pub fn DraftBoard(
             {render_pick_slot(19, false)}
 
         </div>
+        </Card>
     }
 }
