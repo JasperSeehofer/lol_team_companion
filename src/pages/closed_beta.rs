@@ -14,7 +14,7 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::components::ornaments::{CompanionSigil, FleurDeLis};
+use crate::components::region::{CompanionSigil, FleurDeLis};
 use crate::pages::profile::get_current_user;
 
 #[component]

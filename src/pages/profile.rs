@@ -1,4 +1,4 @@
-use crate::components::ornaments::{GiltCorner, HeraldicDivider};
+use crate::components::region::{GiltCorner, HeraldicDivider};
 use crate::components::ui::{EmptyState, SkeletonCard, SkeletonGrid, ToastContext, ToastKind};
 use crate::models::champion::ChampionPoolEntry;
 use crate::models::user::PublicUser;

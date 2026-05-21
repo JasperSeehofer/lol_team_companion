@@ -1,6 +1,6 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};

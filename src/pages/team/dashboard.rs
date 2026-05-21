@@ -1,4 +1,4 @@
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};

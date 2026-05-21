@@ -10,7 +10,7 @@
 
 use leptos::prelude::*;
 
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 
 /// Static demo rows for the visual stub. Phase 19.1 replaces these
 /// with `db::list_invite_codes()` against a real `invite_code` table.

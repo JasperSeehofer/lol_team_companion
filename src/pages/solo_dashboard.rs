@@ -1,4 +1,4 @@
-use crate::components::ornaments::HeraldicDivider;
+use crate::components::region::HeraldicDivider;
 use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, StatusMessage, ToastContext, ToastKind};
 use crate::models::match_data::{GoalProgressPayload, PlayerMatchStats, RankedSnapshot};
 use crate::models::user::RankedInfo;

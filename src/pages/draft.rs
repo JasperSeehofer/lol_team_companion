@@ -1,6 +1,6 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::ornaments::{CompanionSigil, HeraldicDivider};
+use crate::components::region::{CompanionSigil, HeraldicDivider};
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
