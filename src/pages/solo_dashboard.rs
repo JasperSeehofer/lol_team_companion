@@ -205,6 +205,48 @@ fn tier_emblem_url(tier: &str) -> String {
 
 
 // ---------------------------------------------------------------------------
+// Phase 18-08: Mode toggle persistence
+// ---------------------------------------------------------------------------
+
+/// Persist the user's solo mode preference. Validates against allowlist before DB write.
+/// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
+#[server]
+pub async fn set_solo_mode_pref(mode: String) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    // App-layer validation — DB has no ASSERT per Research Pitfall 4
+    const VALID: &[&str] = &["auto", "constellation", "forge", "journal"];
+    if !VALID.contains(&mode.as_str()) {
+        return Err(ServerFnError::new("Invalid solo mode"));
+    }
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db = use_context::<Arc<Surreal<Db>>>()
+        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    db::set_user_solo_mode(&db, &user.id, &mode)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+/// Resolve the effective solo mode from a stored preference and region context.
+/// Returns region-coupled defaults when stored == "auto" (D-04).
+/// An explicit user pick (stored != "auto") always wins over the default (D-05).
+fn resolve_mode(stored: &str, region: &str) -> String {
+    if stored != "auto" {
+        return stored.to_string();
+    }
+    match region {
+        "pandemonium" => "forge".to_string(),
+        _ => "constellation".to_string(),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -215,14 +257,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
     let theme = use_context::<InitialTheme>().unwrap_or_default();
     let region = theme.0.clone();
 
-    // === Mode selection stub — replaced in 18-08 ===
-    // 18-08 wires the toggle UI + DB persistence + resolve_mode().
-    // All three modes (constellation, forge, journal) are built in 18-07.
-    // Until 18-08, default to constellation.
-    let mode: String = "constellation".to_string();
-    // === End mode stub ===
-
-    // Auth redirect
+    // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -234,6 +269,31 @@ pub fn SoloDashboardPage() -> impl IntoView {
     });
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
+
+    // Mode preference — signal-driven, persisted via set_solo_mode_pref server fn (18-08)
+    let (mode_current, set_mode_current) = signal(
+        resolve_mode("auto", &region)
+    );
+    let region_for_mode = region.clone();
+    Effect::new(move |_| {
+        if let Some(Ok(Some(user))) = auth_user.get() {
+            let resolved = resolve_mode(&user.solo_mode, &region_for_mode);
+            set_mode_current.set(resolved);
+        }
+    });
+    let set_mode_action = Action::new(move |new_mode: &String| {
+        let m = new_mode.clone();
+        async move { set_solo_mode_pref(m).await }
+    });
+    Effect::new(move |_| {
+        if let Some(Ok(())) = set_mode_action.value().get() {
+            auth_user.refetch();
+        }
+    });
+    let on_mode_select = Callback::new(move |new_mode: String| {
+        set_mode_current.set(new_mode.clone());
+        set_mode_action.dispatch(new_mode);
+    });
 
     let queue_filter: RwSignal<Option<i32>> = RwSignal::new(None);
     let dashboard_resource = Resource::new(move || queue_filter.get(), |qf| get_solo_dashboard(qf));
@@ -308,6 +368,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
 
     let region_for_header = region.clone();
     let region_for_suspense = region.clone();
+    let region_for_toggle = region.clone();
 
     view! {
         <div class="canvas-grain bg-base min-h-screen px-8 py-6">
@@ -337,6 +398,19 @@ pub fn SoloDashboardPage() -> impl IntoView {
                             }}
                         </button>
                     </div>
+                    // Mode toggle — Constellation / Forge / Journal (18-08)
+                    <div class="mt-3">
+                        <ModeToggle
+                            region=region_for_toggle.clone()
+                            current=mode_current
+                            options=vec![
+                                ("constellation".to_string(), "Constellation".to_string(), "CONSTELLATION".to_string()),
+                                ("forge".to_string(), "Forge".to_string(), "FORGE".to_string()),
+                                ("journal".to_string(), "Journal".to_string(), "JOURNAL".to_string()),
+                            ]
+                            on_select=on_mode_select
+                        />
+                    </div>
                 </Card>
 
                 // ── Ranked Badge + LP History + Matches + Goals ─────────────────
@@ -354,9 +428,8 @@ pub fn SoloDashboardPage() -> impl IntoView {
                             let region_goals = region.clone();
                             let region_mode = region.clone();
 
-                            // Mode dispatch — 18-07 adds forge + journal sub-views.
-                            // 18-08 will replace the mode stub above with DB-backed persistence.
-                            match mode.as_str() {
+                            // Mode dispatch — signal-driven (18-08: DB persistence + resolve_mode)
+                            match mode_current.get().as_str() {
                                 "forge" => view! {
                                     <SoloForgeView
                                         region=region_mode
