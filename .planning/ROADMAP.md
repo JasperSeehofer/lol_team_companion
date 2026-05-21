@@ -234,7 +234,7 @@ Plans:
 - [x] 18-07-PLAN.md — 4 sibling pairs port: draft-ledger, solo-journal, solo-forge, team-game-day-brief (gate pre-cleared per RESEARCH F-01)
 
 **Wave 4** *(depends on Waves 2 + 3)*
-- [ ] 18-08-PLAN.md — Schema fields + DB getter/setter pairs + ModeToggle UI primitive + resolve_mode + server fns with allowlist
+- [x] 18-08-PLAN.md — Schema fields + DB getter/setter pairs + ModeToggle UI primitive + resolve_mode + server fns with allowlist
 
 **Wave 5** *(parallel — depend on Wave 4)*
 - [ ] 18-09-PLAN.md — pixelmatch + pngjs install + 26 scoped baselines + region-diff.spec.ts (pixelDiffRatio > 0.40)
@@ -410,7 +410,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Region Variants | v1.3 | 7/10 | In Progress|  |
+| 18. Region Variants | v1.3 | 8/10 | In Progress|  |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
