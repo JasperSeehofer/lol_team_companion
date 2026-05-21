@@ -221,8 +221,8 @@ Plans:
 **Plans**: 10 plans across 5 waves
 Plans:
 **Wave 1** *(parallel — no dependency)*
-- [ ] 18-01-PLAN.md — Port ~24 region primitives under src/components/region/ + delete ornaments.rs
-- [ ] 18-02-PLAN.md — PageLoading + PageEmpty per-region skeleton + empty states + animation keyframes
+- [x] 18-01-PLAN.md — Port ~24 region primitives under src/components/region/ + delete ornaments.rs
+- [x] 18-02-PLAN.md — PageLoading + PageEmpty per-region skeleton + empty states + animation keyframes
 
 **Wave 2** *(parallel — depend on Wave 1)*
 - [ ] 18-03-PLAN.md — Port 3 no-patch pages: tree-drafter + champion-pool + match-report
@@ -410,7 +410,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Region Variants | v1.3 | 0/10 | Planned 2026-05-14 (INSERTED 2026-05-11) | - |
+| 18. Region Variants | v1.3 | 2/10 | In Progress|  |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
