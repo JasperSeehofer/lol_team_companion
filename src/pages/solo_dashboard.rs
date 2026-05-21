@@ -217,9 +217,9 @@ pub fn SoloDashboardPage() -> impl IntoView {
 
     // === Mode selection stub — replaced in 18-08 ===
     // 18-08 wires the toggle UI + DB persistence + resolve_mode().
-    // Forge + Journal modes are built in 18-07. Until 18-08, default to constellation.
+    // All three modes (constellation, forge, journal) are built in 18-07.
+    // Until 18-08, default to constellation.
     let mode: String = "constellation".to_string();
-    let _ = mode; // consumed by 18-08
     // === End mode stub ===
 
     // Auth redirect
@@ -352,22 +352,39 @@ pub fn SoloDashboardPage() -> impl IntoView {
                             let region_inner = region.clone();
                             let region_lp = region.clone();
                             let region_goals = region.clone();
+                            let region_mode = region.clone();
 
-                            view! {
-                                // SoloConstellationContent: extracted sub-view to avoid FnOnce
-                                // closures (plan step 8 — sub-view extraction for recursion/closure safety).
-                                <SoloConstellationContent
-                                    region=region_inner
-                                    ranked=data.ranked
-                                    matches=data.matches
-                                    lp_history_resource=lp_history_resource
-                                    lp_window=lp_window
-                                    queue_filter=queue_filter
-                                    goal_progress_resource=goal_progress_resource
-                                    lp_region=region_lp
-                                    goals_region=region_goals
-                                />
-                            }.into_any()
+                            // Mode dispatch — 18-07 adds forge + journal sub-views.
+                            // 18-08 will replace the mode stub above with DB-backed persistence.
+                            match mode.as_str() {
+                                "forge" => view! {
+                                    <SoloForgeView
+                                        region=region_mode
+                                        ranked=data.ranked
+                                    />
+                                }.into_any(),
+                                "journal" => view! {
+                                    <SoloJournalView
+                                        region=region_mode
+                                        matches=data.matches
+                                    />
+                                }.into_any(),
+                                _ => view! {
+                                    // SoloConstellationContent: extracted sub-view to avoid FnOnce
+                                    // closures (plan step 8 — sub-view extraction for recursion/closure safety).
+                                    <SoloConstellationContent
+                                        region=region_inner
+                                        ranked=data.ranked
+                                        matches=data.matches
+                                        lp_history_resource=lp_history_resource
+                                        lp_window=lp_window
+                                        queue_filter=queue_filter
+                                        goal_progress_resource=goal_progress_resource
+                                        lp_region=region_lp
+                                        goals_region=region_goals
+                                    />
+                                }.into_any(),
+                            }
                         }
                     })}
                 </Suspense>
@@ -1262,5 +1279,364 @@ fn DeathsGoalCard(
                 }.into_any()
             }}
         </div>
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// SoloJournalView — 18-07
+// Personal journal / match diary sub-view for /solo route mode="journal".
+// Demacia: parchment diary (gilt Cards, Cormorant serif entries)
+// Pandemonium: photocopied fanzine (RiotTape, zine Cards, rotate transforms)
+//
+// ChildrenFn constraints (Card, Glitch both use ChildrenFn):
+//   - All String props in ChildrenFn bodies must use .clone() to remain Fn.
+//   - All String values used in multiple closures must each get their own
+//     StoredValue<String> so closures capture a Copy type and remain Fn.
+// ---------------------------------------------------------------------------
+
+/// Entry data for a journal row.
+#[derive(Clone)]
+struct JournalEntry {
+    date_label: String,
+    body: String,
+    won: bool,
+}
+
+#[component]
+fn SoloJournalView(
+    region: String,
+    /// Recent matches used as journal entry source.
+    matches: Vec<PlayerMatchStats>,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
+    let matches_empty = matches.is_empty();
+
+    let entries: Vec<JournalEntry> = matches.iter().take(5).map(|m| {
+        let outcome = if m.win { "Victory" } else { "Defeat" };
+        let body = format!("{} — {} · KDA {}/{}/{}", outcome, m.champion, m.kills, m.deaths, m.assists);
+        JournalEntry { date_label: "Recent".to_string(), body, won: m.win }
+    }).collect();
+
+    // StoredValue<Vec<JournalEntry>> is Copy+Send+Sync; get_value() returns a clone each call.
+    let entries_sv = StoredValue::new(entries);
+
+    if is_pandemonium {
+        let r_empty = region.clone();
+        // r_footer: used for Card region prop (clone) and Glitch region (another clone inside).
+        let r_footer = region.clone();
+        view! {
+            <div class="flex flex-col gap-3">
+                <RiotTape label="JOURNAL_RAW" />
+                {if matches_empty {
+                    view! {
+                        <PageEmpty region=r_empty kind="matches".to_string() />
+                    }.into_any()
+                } else {
+                    view! {
+                        <div class="flex flex-col gap-3 mt-2">
+                            // Each field uses its own StoredValue to avoid double-move of e.
+                            {move || entries_sv.get_value().into_iter().enumerate().map(|(i, e)| {
+                                let rotate_class = if i % 2 == 0 { "-rotate-1" } else { "rotate-1" };
+                                let win_label = if e.won { "WIN" } else { "LOSS" };
+                                let tone = if e.won { "accent" } else { "neutral" };
+                                let date_sv = StoredValue::new(e.date_label);
+                                let body_sv = StoredValue::new(e.body);
+                                view! {
+                                    <div class=format!("transform {}", rotate_class)>
+                                        <Card region="pandemonium".to_string() variant="zine">
+                                            <Glitch region="pandemonium".to_string()>
+                                                {move || format!("// ENTRY_{}", date_sv.get_value())}
+                                            </Glitch>
+                                            <div class="mt-2 font-mono text-[12px] text-primary leading-relaxed">
+                                                {move || body_sv.get_value()}
+                                            </div>
+                                            <div class="mt-2">
+                                                <Badge tone=tone>{win_label}</Badge>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                }
+                            }).collect_view()}
+                        </div>
+                    }.into_any()
+                }}
+                // TODO: wire personal_learnings resource when /personal-learnings phase connects
+                <Card region=r_footer.clone() variant="zine">
+                    <Glitch region=r_footer.clone()>"// DEEPER_NOTES"</Glitch>
+                    <pre class="font-mono text-[11px] text-secondary mt-2 whitespace-pre-wrap">
+                        "// Extended notes pending.\n// Navigate to /personal-learnings."
+                    </pre>
+                </Card>
+            </div>
+        }.into_any()
+    } else {
+        let r_empty = region.clone();
+        // r_hdr: used for Card region (.clone()) and SectionHead (.clone()), retain for further use.
+        let r_hdr = region.clone();
+        let r_footer = region.clone();
+        view! {
+            <div class="flex flex-col gap-4">
+                <Card region=r_hdr.clone() variant="gilt">
+                    <SectionHead
+                        region=r_hdr.clone()
+                        eyebrow="CHRONICLES"
+                        title="Journal".to_string()
+                    />
+                    <div class="mt-2 flex justify-center">
+                        <HeraldicDivider width=480 />
+                    </div>
+                </Card>
+                {if matches_empty {
+                    view! {
+                        <PageEmpty region=r_empty kind="matches".to_string() />
+                    }.into_any()
+                } else {
+                    view! {
+                        <div class="flex flex-col gap-3">
+                            {move || entries_sv.get_value().into_iter().map(|e| {
+                                let mood_class = if e.won {
+                                    "w-1 rounded-full bg-accent/60 self-stretch shrink-0"
+                                } else {
+                                    "w-1 rounded-full bg-secondary/30 self-stretch shrink-0"
+                                };
+                                let date_sv = StoredValue::new(e.date_label);
+                                let body_sv = StoredValue::new(e.body);
+                                view! {
+                                    <Card region="demacia".to_string() variant="gilt">
+                                        <div class="flex gap-3">
+                                            <div class=mood_class></div>
+                                            <div class="flex-1">
+                                                <div class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted mb-1">
+                                                    {move || date_sv.get_value()}
+                                                </div>
+                                                <p class="font-display italic text-secondary text-[13px] leading-relaxed">
+                                                    {move || body_sv.get_value()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                }
+                            }).collect_view()}
+                        </div>
+                    }.into_any()
+                }}
+                // TODO: wire personal_learnings resource when /personal-learnings phase connects
+                <Card region=r_footer.clone() variant="gilt">
+                    <Eyebrow>"EXTENDED CHRONICLES"</Eyebrow>
+                    <p class="font-display italic text-secondary mt-2 text-[13px]">
+                        "Navigate to /personal-learnings to document deeper match reflections."
+                    </p>
+                </Card>
+            </div>
+        }.into_any()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SoloForgeView — 18-07
+// Champion mastery / queue-prep sub-view for /solo route mode="forge".
+// Demacia: smith's workbench (gilt Cards, Crown, Cormorant typography)
+// Pandemonium: locker/workbench (RiotTape, zine Cards, mono checklist)
+// ---------------------------------------------------------------------------
+
+#[component]
+fn SoloForgeView(
+    region: String,
+    ranked: Option<RankedInfo>,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
+
+    let current_tier = ranked.as_ref().map(|r| r.tier.clone()).unwrap_or_else(|| "UNRANKED".to_string());
+    let current_division = ranked.as_ref().map(|r| r.division.clone()).unwrap_or_default();
+    let current_lp = ranked.as_ref().map(|r| r.lp).unwrap_or(0);
+    let tier_upper = current_tier.to_uppercase();
+
+    // TODO: wire real prep/pool data from champion pool + match history phases
+    // StoredValue<Vec<[String; N]>> — each String is Send+Sync+Clone.
+    let prep_sv = StoredValue::new(vec![
+        ["[ ]".to_string(), "Aatrox — review lvl 3 jungle clear".to_string()],
+        ["[ ]".to_string(), "Study: how to play into poke comps".to_string()],
+        ["[x]".to_string(), "Warmup: 20 CS practice tool".to_string()],
+        ["[ ]".to_string(), "Mental reset — previous tilt noted".to_string()],
+    ]);
+
+    // TODO: wire from champion pool resource once pool-fill aggregation is added
+    let pool_sv = StoredValue::new(vec![
+        ["Aatrox".to_string(),   "12 games".to_string(), "58% WR".to_string()],
+        ["Jax".to_string(),      "8 games".to_string(),  "62% WR".to_string()],
+        ["Malphite".to_string(), "5 games".to_string(),  "40% WR".to_string()],
+    ]);
+
+    let targets_sv = StoredValue::new(vec![
+        ["Aatrox".to_string(),   "Master carry patterns".to_string()],
+        ["Jax".to_string(),      "Refine split-push decision-making".to_string()],
+        ["Malphite".to_string(), "Consistent engage timing".to_string()],
+    ]);
+
+    let champ_pool_sv = StoredValue::new(vec![
+        "Aatrox".to_string(), "Jax".to_string(), "Malphite".to_string(),
+    ]);
+
+    if is_pandemonium {
+        let tier_pan = StoredValue::new(current_tier.clone());
+        let div_pan  = StoredValue::new(current_division.clone());
+        let tier_up_pan = StoredValue::new(tier_upper.clone());
+        let r1 = region.clone();
+        let r2 = region.clone();
+        let r3 = region.clone();
+        let r4 = region.clone();
+        let r5 = region.clone();
+        let r6 = region.clone();
+        let r7 = region.clone();
+        view! {
+            <div class="flex flex-col gap-3">
+                <RiotTape label="FORGE · QUEUE_PREP" />
+                // Rank display
+                <Card region=r1 variant="zine">
+                    <Glitch region=r2.clone()>"// TIER"</Glitch>
+                    <div class="flex items-center gap-4 mt-2">
+                        <RankBadge tier=tier_pan.get_value() division=div_pan.get_value() large=false />
+                        <LPProgress region=r3.clone() lp={current_lp.max(0) as u32} max=100 />
+                    </div>
+                    <div class="mt-2">
+                        <Glitch region=r4.clone()>
+                            {move || format!("// TIER · {}", tier_up_pan.get_value())}
+                        </Glitch>
+                    </div>
+                </Card>
+                // Queue prep checklist
+                <Card region=r5 variant="zine">
+                    <Glitch region=r6.clone()>"// PREP_LIST"</Glitch>
+                    <div class="mt-2 flex flex-col gap-1">
+                        {move || prep_sv.get_value().into_iter().map(|row| {
+                            let a_sv = StoredValue::new(row[0].clone());
+                            let b_sv = StoredValue::new(row[1].clone());
+                            view! {
+                                <div class="font-mono text-[12px] flex gap-2 items-baseline border-b border-outline/20 py-1">
+                                    <span class="text-accent shrink-0">{move || a_sv.get_value()}</span>
+                                    <span class="text-primary">{move || b_sv.get_value()}</span>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                </Card>
+                // Pool status
+                <Card region=r7 variant="zine">
+                    <Glitch region=region.clone()>"// POOL_STATUS"</Glitch>
+                    <div class="mt-2 flex flex-col gap-1">
+                        {move || pool_sv.get_value().into_iter().map(|row| {
+                            let a_sv = StoredValue::new(row[0].clone());
+                            let b_sv = StoredValue::new(row[1].clone());
+                            let c_sv = StoredValue::new(row[2].clone());
+                            view! {
+                                <div class="font-mono text-[11px] flex gap-2 items-baseline border-b border-outline/20 py-1">
+                                    <span class="text-primary flex-1">{move || a_sv.get_value()}</span>
+                                    <span class="text-secondary">{move || b_sv.get_value()}</span>
+                                    <span class="text-accent">{move || c_sv.get_value()}</span>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                </Card>
+                // CTA
+                <Btn region="pandemonium".to_string() variant="primary">
+                    "QUEUE"
+                </Btn>
+            </div>
+        }.into_any()
+    } else {
+        let tier_dem = StoredValue::new(current_tier.clone());
+        let div_dem  = StoredValue::new(current_division.clone());
+        let r1 = region.clone();
+        let r2 = region.clone();
+        let r3 = region.clone();
+        let r4 = region.clone();
+        let r5 = region.clone();
+        let r6 = region.clone();
+        let r7 = region.clone();
+        let r8 = region.clone();
+        view! {
+            <div class="flex flex-col gap-4">
+                // Forge header
+                <Card region=r1.clone() variant="gilt">
+                    <div class="text-center pb-2">
+                        <div class="flex justify-center mb-2">
+                            <Crown size=36 />
+                        </div>
+                        <h1 class="font-display text-[24px] tracking-[0.08em] text-accent uppercase">
+                            "FORGE"
+                        </h1>
+                        <SectionHead
+                            region=r1.clone()
+                            eyebrow="CHAMPION MASTERY"
+                            title="Workbench".to_string()
+                        />
+                        <div class="mt-2 flex justify-center">
+                            <HeraldicDivider width=400 />
+                        </div>
+                    </div>
+                </Card>
+                // Rank display
+                <Card region=r2 variant="gilt">
+                    <SectionHead
+                        region=r3.clone()
+                        eyebrow="CURRENT STANDING"
+                        title="Rank".to_string()
+                    />
+                    <div class="flex items-center gap-6 mt-3">
+                        <RankBadge tier=tier_dem.get_value() division=div_dem.get_value() large=true />
+                        <LPProgress region=r4.clone() lp={current_lp.max(0) as u32} max=100 />
+                    </div>
+                </Card>
+                // Improvement targets
+                <Card region=r5 variant="gilt">
+                    <SectionHead
+                        region=r6.clone()
+                        eyebrow="FORGE"
+                        title="Improvement Targets".to_string()
+                    />
+                    <div class="flex justify-center mt-2">
+                        <HeraldicDivider width=480 />
+                    </div>
+                    <div class="mt-3 flex flex-col gap-2">
+                        {move || targets_sv.get_value().into_iter().map(|row| {
+                            let a_sv = StoredValue::new(row[0].clone());
+                            let b_sv = StoredValue::new(row[1].clone());
+                            view! {
+                                <div class="flex items-baseline gap-3 border-b border-outline/20 py-2 font-display text-[13px]">
+                                    <span class="text-accent shrink-0">"•"</span>
+                                    <span class="text-primary font-semibold">{move || a_sv.get_value()}</span>
+                                    <span class="text-secondary italic flex-1">{move || b_sv.get_value()}</span>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                </Card>
+                // Tool rack: champion pool
+                <Card region=r7 variant="gilt">
+                    <SectionHead
+                        region=r8.clone()
+                        eyebrow="TOOL RACK"
+                        title="Champion Pool".to_string()
+                    />
+                    <div class="flex gap-3 mt-3 flex-wrap">
+                        {move || champ_pool_sv.get_value().into_iter().map(|champ| {
+                            let champ_badge_sv = StoredValue::new(champ.clone());
+                            view! {
+                                <div class="flex flex-col items-center gap-1">
+                                    <ChampTile name=champ size=56 />
+                                    <Badge tone="neutral">{move || champ_badge_sv.get_value()}</Badge>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                </Card>
+                // Queue CTA
+                <Btn region=region variant="primary">
+                    "Queue Aatrox"
+                </Btn>
+            </div>
+        }.into_any()
     }
 }
