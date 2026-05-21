@@ -1,6 +1,8 @@
-//! Region-aware interactive primitives: Btn, Badge.
+//! Region-aware interactive primitives: Btn, Badge, ModeToggle.
 //! Btn is region-branching (Demacia: gilt gradient + Cinzel; Pandemonium: flat accent + mono + offset shadow).
 //! Badge is region-neutral (same shape both regions).
+//! ModeToggle is region-branching: Demacia renders a segmented control with gilt borders;
+//!   Pandemonium renders a stamped tab-pull with bracket corner styling.
 //!
 //! G-12 compliance: all interactive elements use focus-visible:ring-2 focus-visible:ring-accent/50.
 //! No outline:none without ring replacement.
@@ -112,6 +114,99 @@ pub fn Btn(
                 {children()}
             </button>
         }.into_any()
+    }
+}
+
+/// Region-aware mode toggle for /draft, /solo, /team/dashboard routes.
+///
+/// Demacia: segmented control with gilt rounded pill border, Cinzel uppercase labels.
+/// Pandemonium: flat tab-pull with bracket corners, mono uppercase labels with underscores.
+///
+/// Props:
+/// - `region`: "demacia" | "pandemonium"
+/// - `current`: `ReadSignal<String>` — active mode value (signal-driven for optimistic updates)
+/// - `options`: `Vec<(value, demacia_label, pandemonium_label)>`
+/// - `on_select`: `Callback<String>` — fired when user picks a mode
+///
+/// G-12 compliant: all buttons have focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none.
+#[component]
+pub fn ModeToggle(
+    region: String,
+    /// Current mode value — signal-driven so active state stays in sync after server fn updates
+    current: ReadSignal<String>,
+    /// Mode options as (value, demacia_label, pandemonium_label) tuples
+    #[prop(into)]
+    options: Vec<(String, String, String)>,
+    /// Callback fired when the user picks a mode
+    on_select: Callback<String>,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
+    // Store options in a StoredValue so both move closures can access without ownership issues
+    let opts = StoredValue::new(options);
+
+    move || {
+        let options_snapshot = opts.get_value();
+        if is_pandemonium {
+            view! {
+                <div class="inline-flex items-stretch gap-0 bg-elevated rounded-none border border-accent/30">
+                    {options_snapshot.into_iter().map(|(value, _dem, pan)| {
+                        let v_for_class = value.clone();
+                        let v_for_aria = value.clone();
+                        let v_for_click = value.clone();
+                        view! {
+                            <button
+                                type="button"
+                                class=move || {
+                                    let active = current.get() == v_for_class;
+                                    if active {
+                                        "px-4 py-2 font-mono text-[12px] uppercase tracking-[0.12em] bg-accent text-accent-contrast rounded-none cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    } else {
+                                        "px-4 py-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted hover:text-secondary cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    }
+                                }
+                                aria-pressed=move || (current.get() == v_for_aria).to_string()
+                                on:click=move |_| on_select.run(v_for_click.clone())
+                            >
+                                {pan}
+                            </button>
+                        }
+                    }).collect_view()}
+                </div>
+            }.into_any()
+        } else {
+            // Demacia: segmented control with gilt pill border
+            view! {
+                <div
+                    class="inline-flex items-stretch gap-0 rounded-full border border-outline/50 overflow-hidden p-px"
+                    style="background: linear-gradient(180deg, var(--gold-1, var(--color-accent)) 0%, var(--gold-2, var(--color-accent)) 50%, var(--gold-3, var(--color-accent)) 100%);"
+                >
+                    <div class="inline-flex items-stretch gap-0 rounded-full bg-base">
+                        {options_snapshot.into_iter().map(|(value, dem, _pan)| {
+                            let v_for_class = value.clone();
+                            let v_for_aria = value.clone();
+                            let v_for_click = value.clone();
+                            view! {
+                                <button
+                                    type="button"
+                                    class=move || {
+                                        let active = current.get() == v_for_class;
+                                        if active {
+                                            "px-4 py-1.5 rounded-full font-imperial text-[12px] uppercase tracking-[0.14em] bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        } else {
+                                            "px-4 py-1.5 rounded-full font-imperial text-[12px] uppercase tracking-[0.14em] text-muted hover:text-secondary cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        }
+                                    }
+                                    aria-pressed=move || (current.get() == v_for_aria).to_string()
+                                    on:click=move |_| on_select.run(v_for_click.clone())
+                                >
+                                    {dem}
+                                </button>
+                            }
+                        }).collect_view()}
+                    </div>
+                </div>
+            }.into_any()
+        }
     }
 }
 
