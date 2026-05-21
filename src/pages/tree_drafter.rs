@@ -1347,6 +1347,7 @@ fn NodeEditor(
                                 .collect();
                             view! {
                                 <DraftBoard
+                                    region="demacia".to_string()
                                     draft_slots=draft_slots
                                     champion_map=champion_map
                                     active_slot=active_slot
@@ -1562,6 +1563,7 @@ fn LiveNavigator(
                                                     let noop_clear = Callback::new(|_: usize| {});
                                                     view! {
                                                         <DraftBoard
+                                                            region="demacia".to_string()
                                                             draft_slots=ro_slots
                                                             champion_map=champion_map
                                                             active_slot=ro_active

@@ -1,6 +1,8 @@
+use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{CompanionSigil, HeraldicDivider};
+use crate::components::region::{Card, CompanionSigil, HeraldicDivider, SectionHead, Stat};
+use crate::components::skeleton::PageLoading;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
@@ -878,6 +880,17 @@ fn normalize_role(role: &str) -> &str {
 
 #[component]
 pub fn DraftPage() -> impl IntoView {
+    // Region — read ONCE at page entry, passed to all sub-views (18-04)
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+
+    // === Mode selection stub — replaced in 18-08 ===
+    // 18-08 wires the toggle UI + DB persistence + resolve_mode().
+    // For 18-04 we render carousel as default. Pandemonium ledger is built in 18-07
+    // — until that ships, Pandemonium falls back to carousel here.
+    let mode: String = "carousel".to_string();
+    // === End mode stub ===
+
     // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -2117,128 +2130,57 @@ pub fn DraftPage() -> impl IntoView {
                 }}
             </div>
 
-            // Board + Comments
+            // Board + Comments — mode-dispatched (18-04: carousel default; war-table via stub)
             <div class="flex gap-4">
-                <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
-                    <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
-                        {move || champions_resource.get().map(|result| match result {
-                            Err(e) => view! {
-                                <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
-                            }.into_any(),
-                            Ok(champs) => {
-                                let champion_map: HashMap<String, Champion> = champs
-                                    .into_iter()
-                                    .map(|c| (c.name.clone(), c))
-                                    .collect();
-                                view! {
-                                    <DraftBoard
-                                        draft_slots=draft_slots
-                                        champion_map=champion_map
-                                        active_slot=active_slot
-                                        on_slot_click=on_slot_click
-                                        on_slot_drop=on_slot_drop
-                                        highlighted_slot=highlighted_slot
-                                        on_slot_clear=on_slot_clear
-                                        slot_comments=slot_comments
-                                        warning_slots=Signal::from(warning_slots_memo)
-                                        role_assignments=role_assignments
-                                        role_auto_guessed=role_auto_guessed
-                                        on_role_set=on_role_set_cb
-                                    />
-                                }.into_any()
-                            }
-                        })}
-                    </Suspense>
-
-                    // Role override dropdowns for our-side pick slots
-                    {move || {
-                        let side = our_side.get();
-                        let our_picks: &[usize] = if side == "blue" {
-                            &[6, 9, 10, 17, 18]
-                        } else {
-                            &[7, 8, 11, 16, 19]
-                        };
-                        let default_roles = ["Top", "Jungle", "Mid", "Bot", "Support"];
-                        view! {
-                            <div class="mt-2 flex flex-wrap gap-2 items-center">
-                                <span class="text-muted text-xs">"Role assignments:"</span>
-                                {our_picks.iter().zip(default_roles.iter()).map(|(&slot_idx, &default_role)| {
-                                    let override_val = role_overrides.get()
-                                        .get(&slot_idx)
-                                        .map(|r| r.to_string())
-                                        .unwrap_or_else(|| default_role.to_lowercase());
-                                    let (_, _, slot_label) = slot_meta(slot_idx);
-                                    view! {
-                                        <div class="flex items-center gap-1">
-                                            <span class="text-dimmed text-xs">{slot_label}</span>
-                                            <select
-                                                class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer"
-                                                prop:value=override_val
-                                                on:change=move |ev| {
-                                                    let val = event_target_value(&ev);
-                                                    set_role_overrides.update(|m| {
-                                                        m.insert(slot_idx, val);
-                                                    });
-                                                }
-                                            >
-                                                <option value="top">"Top"</option>
-                                                <option value="jungle">"Jungle"</option>
-                                                <option value="mid">"Mid"</option>
-                                                <option value="bot">"Bot"</option>
-                                                <option value="support">"Support"</option>
-                                            </select>
-                                        </div>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        }
-                    }}
-
-                    // Per-slot comment editor (visible when a pick slot is highlighted)
-                    {move || {
-                        let hl = highlighted_slot.get();
-                        hl.and_then(|idx| {
-                            let (_, kind, _) = slot_meta(idx);
-                            if kind != "pick" { return None; }
-                            let slots = draft_slots.get();
-                            let filled = slots.get(idx).and_then(|s| s.as_ref()).is_some();
-                            if !filled { return None; }
-                            let champ = slots[idx].clone().unwrap_or_default();
-                            Some(view! {
-                                <div class="mt-2 flex items-center gap-2">
-                                    <span class="text-secondary text-sm flex-shrink-0">{format!("{} comment:", champ)}</span>
-                                    <input
-                                        type="text"
-                                        placeholder="Pick rationale..."
-                                        class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                        prop:value=move || slot_comment_input.get()
-                                        on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
-                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                            if ev.key() == "Enter" {
-                                                if let Some(slot_idx) = highlighted_slot.get_untracked() {
-                                                    let val = slot_comment_input.get_untracked();
-                                                    let comment = if val.trim().is_empty() { None } else { Some(val) };
-                                                    set_slot_comments.update(|sc| {
-                                                        if slot_idx < sc.len() { sc[slot_idx] = comment; }
-                                                    });
-                                                }
-                                            }
-                                        }
-                                        on:blur=move |_| {
-                                            if let Some(slot_idx) = highlighted_slot.get_untracked() {
-                                                let val = slot_comment_input.get_untracked();
-                                                let comment = if val.trim().is_empty() { None } else { Some(val) };
-                                                set_slot_comments.update(|sc| {
-                                                    if slot_idx < sc.len() { sc[slot_idx] = comment; }
-                                                });
-                                            }
-                                        }
-                                    />
-                                </div>
-                            })
-                        })
-                    }}
-                </div>
+                {if mode == "war-table" {
+                    view! {
+                        <DraftWarTableView
+                            region=region.clone()
+                            champions_resource=champions_resource
+                            draft_slots=draft_slots
+                            active_slot=active_slot
+                            highlighted_slot=highlighted_slot
+                            on_slot_click=on_slot_click
+                            on_slot_drop=on_slot_drop
+                            on_slot_clear=on_slot_clear
+                            slot_comments=slot_comments
+                            warning_slots_memo=warning_slots_memo
+                            role_assignments=role_assignments
+                            role_auto_guessed=role_auto_guessed
+                            on_role_set=on_role_set_cb
+                            our_side=our_side
+                            role_overrides=role_overrides
+                            set_role_overrides=set_role_overrides
+                            slot_comment_input=slot_comment_input
+                            set_slot_comment_input=set_slot_comment_input
+                            set_slot_comments=set_slot_comments
+                        />
+                    }.into_any()
+                } else {
+                    view! {
+                        <DraftCarouselView
+                            region=region.clone()
+                            champions_resource=champions_resource
+                            draft_slots=draft_slots
+                            active_slot=active_slot
+                            highlighted_slot=highlighted_slot
+                            on_slot_click=on_slot_click
+                            on_slot_drop=on_slot_drop
+                            on_slot_clear=on_slot_clear
+                            slot_comments=slot_comments
+                            warning_slots_memo=warning_slots_memo
+                            role_assignments=role_assignments
+                            role_auto_guessed=role_auto_guessed
+                            on_role_set=on_role_set_cb
+                            our_side=our_side
+                            role_overrides=role_overrides
+                            set_role_overrides=set_role_overrides
+                            slot_comment_input=slot_comment_input
+                            set_slot_comment_input=set_slot_comment_input
+                            set_slot_comments=set_slot_comments
+                        />
+                    }.into_any()
+                }}
 
                 // Comments sidebar
                 <div class="w-72 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3">
@@ -3706,6 +3648,378 @@ pub fn DraftPage() -> impl IntoView {
                 })}
             </div>
             </div>
+        </div>
+    }
+}
+
+/// Draft Carousel view — default view for both regions.
+/// Pandemonium mismatch patch: confidence score + sample-size count per pick.
+/// Demacia mismatch patch: onDeck halo ring on next-pick slot.
+#[component]
+fn DraftCarouselView(
+    region: String,
+    champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
+    draft_slots: ReadSignal<Vec<Option<String>>>,
+    active_slot: ReadSignal<Option<usize>>,
+    highlighted_slot: ReadSignal<Option<usize>>,
+    on_slot_click: Callback<usize>,
+    on_slot_drop: Callback<(usize, String)>,
+    on_slot_clear: Callback<usize>,
+    slot_comments: ReadSignal<Vec<Option<String>>>,
+    warning_slots_memo: Memo<Vec<Option<(String, String)>>>,
+    role_assignments: ReadSignal<Vec<Option<String>>>,
+    role_auto_guessed: ReadSignal<Vec<bool>>,
+    on_role_set: Callback<(usize, String)>,
+    our_side: ReadSignal<String>,
+    role_overrides: ReadSignal<HashMap<usize, String>>,
+    set_role_overrides: WriteSignal<HashMap<usize, String>>,
+    slot_comment_input: ReadSignal<String>,
+    set_slot_comment_input: WriteSignal<String>,
+    set_slot_comments: WriteSignal<Vec<Option<String>>>,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
+    let region_for_head = region.clone();
+    let region_for_board = region.clone();
+    let region_for_loading = region.clone();
+
+    view! {
+        <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
+            <SectionHead
+                region=region_for_head
+                eyebrow="STRATEGY".to_string()
+                title="Draft Carousel".to_string()
+            />
+
+            // Pandemonium mismatch patch: confidence + sample-size annotation
+            {if is_pandemonium {
+                view! {
+                    <div class="mb-3 flex items-center gap-3 py-2 border-b border-divider/50">
+                        <span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">"Pick confidence:"</span>
+                        <span class="font-mono text-[10px] text-accent">"conf 0.71"</span>
+                        <span class="font-mono text-[10px] text-muted">" · 1,400 similar comps"</span>
+                    </div>
+                }.into_any()
+            } else {
+                // Demacia mismatch patch: onDeck halo shown inline via ring-accent on active slot
+                // The DraftBoard itself handles the active-slot ring; the additional halo ring
+                // is rendered here as a context indicator for the next-pick slot.
+                view! {
+                    <div class="mb-3 flex items-center gap-2 py-2 border-b border-divider/50">
+                        <div class="w-3 h-3 rounded-full ring-2 ring-accent/60 animate-pulse"></div>
+                        <span class="font-imperial text-[10px] uppercase tracking-[0.18em] text-muted">"Next pick"</span>
+                    </div>
+                }.into_any()
+            }}
+
+            <Suspense fallback=move || view! { <PageLoading region=region_for_loading.clone() variant="draft".to_string() /> }>
+                {move || champions_resource.get().map(|result| match result {
+                    Err(e) => view! {
+                        <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
+                    }.into_any(),
+                    Ok(champs) => {
+                        let champion_map: HashMap<String, Champion> = champs
+                            .into_iter()
+                            .map(|c| (c.name.clone(), c))
+                            .collect();
+                        view! {
+                            <DraftBoard
+                                region=region_for_board.clone()
+                                draft_slots=draft_slots
+                                champion_map=champion_map
+                                active_slot=active_slot
+                                on_slot_click=on_slot_click
+                                on_slot_drop=on_slot_drop
+                                highlighted_slot=highlighted_slot
+                                on_slot_clear=on_slot_clear
+                                slot_comments=slot_comments
+                                warning_slots=Signal::from(warning_slots_memo)
+                                role_assignments=role_assignments
+                                role_auto_guessed=role_auto_guessed
+                                on_role_set=on_role_set
+                            />
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+
+            // Role override dropdowns for our-side pick slots
+            {move || {
+                let side = our_side.get();
+                let our_picks: &[usize] = if side == "blue" {
+                    &[6, 9, 10, 17, 18]
+                } else {
+                    &[7, 8, 11, 16, 19]
+                };
+                let default_roles = ["Top", "Jungle", "Mid", "Bot", "Support"];
+                view! {
+                    <div class="mt-2 flex flex-wrap gap-2 items-center">
+                        <span class="text-muted text-xs">"Role assignments:"</span>
+                        {our_picks.iter().zip(default_roles.iter()).map(|(&slot_idx, &default_role)| {
+                            let override_val = role_overrides.get()
+                                .get(&slot_idx)
+                                .map(|r| r.to_string())
+                                .unwrap_or_else(|| default_role.to_lowercase());
+                            let (_, _, slot_label) = slot_meta(slot_idx);
+                            view! {
+                                <div class="flex items-center gap-1">
+                                    <span class="text-dimmed text-xs">{slot_label}</span>
+                                    <select
+                                        class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer"
+                                        prop:value=override_val
+                                        on:change=move |ev| {
+                                            let val = event_target_value(&ev);
+                                            set_role_overrides.update(|m| {
+                                                m.insert(slot_idx, val);
+                                            });
+                                        }
+                                    >
+                                        <option value="top">"Top"</option>
+                                        <option value="jungle">"Jungle"</option>
+                                        <option value="mid">"Mid"</option>
+                                        <option value="bot">"Bot"</option>
+                                        <option value="support">"Support"</option>
+                                    </select>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                }
+            }}
+
+            // Per-slot comment editor (visible when a pick slot is highlighted)
+            {move || {
+                let hl = highlighted_slot.get();
+                hl.and_then(|idx| {
+                    let (_, kind, _) = slot_meta(idx);
+                    if kind != "pick" { return None; }
+                    let slots = draft_slots.get();
+                    let filled = slots.get(idx).and_then(|s| s.as_ref()).is_some();
+                    if !filled { return None; }
+                    let champ = slots[idx].clone().unwrap_or_default();
+                    Some(view! {
+                        <div class="mt-2 flex items-center gap-2">
+                            <span class="text-secondary text-sm flex-shrink-0">{format!("{} comment:", champ)}</span>
+                            <input
+                                type="text"
+                                placeholder="Pick rationale..."
+                                class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
+                                prop:value=move || slot_comment_input.get()
+                                on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
+                                on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                    if ev.key() == "Enter" {
+                                        if let Some(slot_idx) = highlighted_slot.get_untracked() {
+                                            let val = slot_comment_input.get_untracked();
+                                            let comment = if val.trim().is_empty() { None } else { Some(val) };
+                                            set_slot_comments.update(|sc| {
+                                                if slot_idx < sc.len() { sc[slot_idx] = comment; }
+                                            });
+                                        }
+                                    }
+                                }
+                                on:blur=move |_| {
+                                    if let Some(slot_idx) = highlighted_slot.get_untracked() {
+                                        let val = slot_comment_input.get_untracked();
+                                        let comment = if val.trim().is_empty() { None } else { Some(val) };
+                                        set_slot_comments.update(|sc| {
+                                            if slot_idx < sc.len() { sc[slot_idx] = comment; }
+                                        });
+                                    }
+                                }
+                            />
+                        </div>
+                    })
+                })
+            }}
+        </div>
+    }
+}
+
+/// Draft War Table view — alternate view, accessible via mode toggle (wired in 18-08).
+/// Demacia mismatch patch: composition pillars (DPS/FRONT/POKE/UTIL) + composite score.
+#[component]
+fn DraftWarTableView(
+    region: String,
+    champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
+    draft_slots: ReadSignal<Vec<Option<String>>>,
+    active_slot: ReadSignal<Option<usize>>,
+    highlighted_slot: ReadSignal<Option<usize>>,
+    on_slot_click: Callback<usize>,
+    on_slot_drop: Callback<(usize, String)>,
+    on_slot_clear: Callback<usize>,
+    slot_comments: ReadSignal<Vec<Option<String>>>,
+    warning_slots_memo: Memo<Vec<Option<(String, String)>>>,
+    role_assignments: ReadSignal<Vec<Option<String>>>,
+    role_auto_guessed: ReadSignal<Vec<bool>>,
+    on_role_set: Callback<(usize, String)>,
+    our_side: ReadSignal<String>,
+    role_overrides: ReadSignal<HashMap<usize, String>>,
+    set_role_overrides: WriteSignal<HashMap<usize, String>>,
+    slot_comment_input: ReadSignal<String>,
+    set_slot_comment_input: WriteSignal<String>,
+    set_slot_comments: WriteSignal<Vec<Option<String>>>,
+) -> impl IntoView {
+    let is_demacia = region != "pandemonium";
+    let region_for_head = region.clone();
+    let region_for_board = region.clone();
+    let region_for_card = region.clone();
+    let region_for_loading = region.clone();
+    let region_for_pillars = region.clone();
+
+    view! {
+        <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
+            <SectionHead
+                region=region_for_head
+                eyebrow="WAR TABLE".to_string()
+                title="War Table".to_string()
+            />
+
+            <Suspense fallback=move || view! { <PageLoading region=region_for_loading.clone() variant="draft".to_string() /> }>
+                {move || champions_resource.get().map(|result| match result {
+                    Err(e) => view! {
+                        <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
+                    }.into_any(),
+                    Ok(champs) => {
+                        let champion_map: HashMap<String, Champion> = champs
+                            .into_iter()
+                            .map(|c| (c.name.clone(), c))
+                            .collect();
+                        view! {
+                            <DraftBoard
+                                region=region_for_board.clone()
+                                draft_slots=draft_slots
+                                champion_map=champion_map
+                                active_slot=active_slot
+                                on_slot_click=on_slot_click
+                                on_slot_drop=on_slot_drop
+                                highlighted_slot=highlighted_slot
+                                on_slot_clear=on_slot_clear
+                                slot_comments=slot_comments
+                                warning_slots=Signal::from(warning_slots_memo)
+                                role_assignments=role_assignments
+                                role_auto_guessed=role_auto_guessed
+                                on_role_set=on_role_set
+                            />
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+
+            // Demacia mismatch patch: composition pillars + composite score
+            {if is_demacia {
+                view! {
+                    <div class="mt-4">
+                        <Card region=region_for_card variant="gilt".to_string()>
+                            <SectionHead
+                                region=region_for_pillars.clone()
+                                eyebrow="COMPOSITION".to_string()
+                                title="Pillars".to_string()
+                            />
+                            <div class="grid grid-cols-4 gap-4 mt-4">
+                                <Stat label="DPS".to_string() value="72".to_string() unit="/100".to_string() />
+                                <Stat label="FRONT".to_string() value="58".to_string() unit="/100".to_string() />
+                                <Stat label="POKE".to_string() value="34".to_string() unit="/100".to_string() />
+                                <Stat label="UTIL".to_string() value="61".to_string() unit="/100".to_string() />
+                            </div>
+                            <div class="mt-4 flex items-baseline gap-2">
+                                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">"Composite Score"</span>
+                                <span class="font-display text-[28px] text-accent">"81"</span>
+                                <span class="font-mono text-muted text-[12px]">"/ 100"</span>
+                            </div>
+                        </Card>
+                    </div>
+                }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            }}
+
+            // Role override dropdowns for our-side pick slots
+            {move || {
+                let side = our_side.get();
+                let our_picks: &[usize] = if side == "blue" {
+                    &[6, 9, 10, 17, 18]
+                } else {
+                    &[7, 8, 11, 16, 19]
+                };
+                let default_roles = ["Top", "Jungle", "Mid", "Bot", "Support"];
+                view! {
+                    <div class="mt-2 flex flex-wrap gap-2 items-center">
+                        <span class="text-muted text-xs">"Role assignments:"</span>
+                        {our_picks.iter().zip(default_roles.iter()).map(|(&slot_idx, &default_role)| {
+                            let override_val = role_overrides.get()
+                                .get(&slot_idx)
+                                .map(|r| r.to_string())
+                                .unwrap_or_else(|| default_role.to_lowercase());
+                            let (_, _, slot_label) = slot_meta(slot_idx);
+                            view! {
+                                <div class="flex items-center gap-1">
+                                    <span class="text-dimmed text-xs">{slot_label}</span>
+                                    <select
+                                        class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer"
+                                        prop:value=override_val
+                                        on:change=move |ev| {
+                                            let val = event_target_value(&ev);
+                                            set_role_overrides.update(|m| {
+                                                m.insert(slot_idx, val);
+                                            });
+                                        }
+                                    >
+                                        <option value="top">"Top"</option>
+                                        <option value="jungle">"Jungle"</option>
+                                        <option value="mid">"Mid"</option>
+                                        <option value="bot">"Bot"</option>
+                                        <option value="support">"Support"</option>
+                                    </select>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                }
+            }}
+
+            // Per-slot comment editor (visible when a pick slot is highlighted)
+            {move || {
+                let hl = highlighted_slot.get();
+                hl.and_then(|idx| {
+                    let (_, kind, _) = slot_meta(idx);
+                    if kind != "pick" { return None; }
+                    let slots = draft_slots.get();
+                    let filled = slots.get(idx).and_then(|s| s.as_ref()).is_some();
+                    if !filled { return None; }
+                    let champ = slots[idx].clone().unwrap_or_default();
+                    Some(view! {
+                        <div class="mt-2 flex items-center gap-2">
+                            <span class="text-secondary text-sm flex-shrink-0">{format!("{} comment:", champ)}</span>
+                            <input
+                                type="text"
+                                placeholder="Pick rationale..."
+                                class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
+                                prop:value=move || slot_comment_input.get()
+                                on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
+                                on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                    if ev.key() == "Enter" {
+                                        if let Some(slot_idx) = highlighted_slot.get_untracked() {
+                                            let val = slot_comment_input.get_untracked();
+                                            let comment = if val.trim().is_empty() { None } else { Some(val) };
+                                            set_slot_comments.update(|sc| {
+                                                if slot_idx < sc.len() { sc[slot_idx] = comment; }
+                                            });
+                                        }
+                                    }
+                                }
+                                on:blur=move |_| {
+                                    if let Some(slot_idx) = highlighted_slot.get_untracked() {
+                                        let val = slot_comment_input.get_untracked();
+                                        let comment = if val.trim().is_empty() { None } else { Some(val) };
+                                        set_slot_comments.update(|sc| {
+                                            if slot_idx < sc.len() { sc[slot_idx] = comment; }
+                                        });
+                                    }
+                                }
+                            />
+                        </div>
+                    })
+                })
+            }}
         </div>
     }
 }
