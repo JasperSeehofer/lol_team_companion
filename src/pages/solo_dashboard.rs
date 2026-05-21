@@ -1,5 +1,7 @@
-use crate::components::region::HeraldicDivider;
-use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, StatusMessage, ToastContext, ToastKind};
+use crate::app::InitialTheme;
+use crate::components::region::*;
+use crate::components::skeleton::{PageEmpty, PageLoading};
+use crate::components::ui::{ErrorBanner, StatusMessage, ToastContext, ToastKind};
 use crate::models::match_data::{GoalProgressPayload, PlayerMatchStats, RankedSnapshot};
 use crate::models::user::RankedInfo;
 use leptos::prelude::*;
@@ -208,6 +210,18 @@ fn tier_emblem_url(tier: &str) -> String {
 
 #[component]
 pub fn SoloDashboardPage() -> impl IntoView {
+    // Region read ONCE at page entry — passed as prop to all sub-components.
+    // Per SPEC Constraints: InitialTheme context must NOT be read inside primitives.
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+
+    // === Mode selection stub — replaced in 18-08 ===
+    // 18-08 wires the toggle UI + DB persistence + resolve_mode().
+    // Forge + Journal modes are built in 18-07. Until 18-08, default to constellation.
+    let mode: String = "constellation".to_string();
+    let _ = mode; // consumed by 18-08
+    // === End mode stub ===
+
     // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -292,62 +306,69 @@ pub fn SoloDashboardPage() -> impl IntoView {
         });
     };
 
+    let region_for_header = region.clone();
+    let region_for_suspense = region.clone();
+
     view! {
         <div class="canvas-grain bg-base min-h-screen px-8 py-6">
             <div class="max-w-3xl mx-auto flex flex-col gap-8">
 
-                // ── Header + Sync Button ────────────────────────────────────────
-                <header class="flex items-end justify-between">
-                    <div>
-                        <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
-                            "Solo Constellation"
-                        </div>
-                        <h1 class="font-display italic text-[44px] leading-tight text-primary mt-1">
-                            "My Dashboard"
-                        </h1>
-                        <div class="mt-3"><HeraldicDivider width=320 /></div>
+                // ── Solo-Constellation Header — region-aware ─────────────────────
+                <Card region=region_for_header.clone()
+                      variant=if region_for_header == "demacia" { "gilt" } else { "zine" }>
+                    <div class="flex items-end justify-between">
+                        <SectionHead region=region_for_header.clone()
+                                     eyebrow=if region_for_header == "demacia" { "STARS ALIGN" } else { "// SOLO_PROFILE" }
+                                     title=if region_for_header == "demacia" { "Constellation".to_string() } else { "FORGE".to_string() }
+                        />
+                        <button
+                            class=move || if syncing.get() {
+                                "bg-accent opacity-60 cursor-not-allowed text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            } else {
+                                "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            }
+                            on:click=do_sync
+                            disabled=move || syncing.get()
+                        >
+                            {move || if syncing.get() {
+                                view! { <span>"Syncing..."</span> }.into_any()
+                            } else {
+                                view! { <span>"Sync Matches"</span> }.into_any()
+                            }}
+                        </button>
                     </div>
-                    <button
-                        class=move || if syncing.get() {
-                            "bg-accent opacity-60 cursor-not-allowed text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                        } else {
-                            "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                        }
-                        on:click=do_sync
-                        disabled=move || syncing.get()
-                    >
-                        {move || if syncing.get() {
-                            view! { <span>"Syncing..."</span> }.into_any()
-                        } else {
-                            view! { <span>"Sync Matches"</span> }.into_any()
-                        }}
-                    </button>
-                </header>
+                </Card>
 
                 // ── Ranked Badge + LP History + Matches + Goals ─────────────────
-                <Suspense fallback=|| view! {
-                    <div class="flex flex-col gap-4">
-                        <SkeletonCard height="h-28" />
-                        <SkeletonCard height="h-16" />
-                        <SkeletonCard height="h-16" />
-                        <SkeletonCard height="h-16" />
-                    </div>
+                <Suspense fallback={
+                    let r = region_for_suspense.clone();
+                    move || view! { <PageLoading region=r.clone() variant="solo".to_string() /> }
                 }>
                     {move || dashboard_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load dashboard: {e}") />
                         }.into_any(),
-                        Ok(data) => view! {
-                            <div class="flex flex-col gap-8">
-                                <RankedBadgeSection ranked=data.ranked />
-                                <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window />
-                                <MatchListSection
+                        Ok(data) => {
+                            let region_inner = region.clone();
+                            let region_lp = region.clone();
+                            let region_goals = region.clone();
+
+                            view! {
+                                // SoloConstellationContent: extracted sub-view to avoid FnOnce
+                                // closures (plan step 8 — sub-view extraction for recursion/closure safety).
+                                <SoloConstellationContent
+                                    region=region_inner
+                                    ranked=data.ranked
                                     matches=data.matches
+                                    lp_history_resource=lp_history_resource
+                                    lp_window=lp_window
                                     queue_filter=queue_filter
+                                    goal_progress_resource=goal_progress_resource
+                                    lp_region=region_lp
+                                    goals_region=region_goals
                                 />
-                                <GoalCards progress_resource=goal_progress_resource />
-                            </div>
-                        }.into_any(),
+                            }.into_any()
+                        }
                     })}
                 </Suspense>
             </div>
@@ -359,6 +380,10 @@ pub fn SoloDashboardPage() -> impl IntoView {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// RankedBadgeSection is no longer the top-level rank display — the rank info is
+// now embedded inline inside SoloDashboardPage using RankBadge + LPProgress primitives.
+// Kept here for reference but not currently used.
+#[allow(dead_code)]
 #[component]
 fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
     view! {
@@ -424,15 +449,16 @@ fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
 fn MatchListSection(
     matches: Vec<PlayerMatchStats>,
     queue_filter: RwSignal<Option<i32>>,
+    region: String,
 ) -> impl IntoView {
+    let region_head = region.clone();
     view! {
         <div class="flex flex-col gap-3">
             // Section header
             <div class="flex items-center justify-between">
-                <div>
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Battle log"</div>
-                    <h2 class="font-display italic text-2xl text-primary">"Recent Matches"</h2>
-                </div>
+                <SectionHead region=region_head.clone()
+                             eyebrow="BATTLE LOG"
+                             title="Recent Matches".to_string() />
                 <select
                     class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-secondary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:change=move |ev| {
@@ -454,9 +480,7 @@ fn MatchListSection(
             // Match list
             {if matches.is_empty() {
                 view! {
-                    <EmptyState
-                        message="No matches yet — sync your match history to see recent games here."
-                    />
+                    <PageEmpty region=region.clone() kind="matches".to_string() />
                 }.into_any()
             } else {
                 view! {
@@ -500,6 +524,7 @@ fn MatchListSection(
 fn LpHistoryGraph(
     lp_history_resource: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
     lp_window: RwSignal<&'static str>,
+    region: String,
 ) -> impl IntoView {
     let tooltip: RwSignal<Option<(f64, f64, String, String)>> = RwSignal::new(None);
 
@@ -517,13 +542,13 @@ fn LpHistoryGraph(
         }
     };
 
+    let region_card = region.clone();
     view! {
-        <div class="bg-elevated border border-outline rounded-xl p-5 flex flex-col gap-3">
+        <Card region=region_card.clone()>
             <div class="flex items-center justify-between">
-                <div>
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Form curve"</div>
-                    <h2 class="font-display italic text-2xl text-primary">"LP History"</h2>
-                </div>
+                <SectionHead region=region.clone()
+                             eyebrow="FORM CURVE"
+                             title="LP History".to_string() />
                 <div class="flex items-center gap-2">
                     {render_pill("7d")}
                     {render_pill("30d")}
@@ -531,7 +556,10 @@ fn LpHistoryGraph(
                     {render_pill("All-time")}
                 </div>
             </div>
-            <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
+            <Suspense fallback={
+                let r = region.clone();
+                move || view! { <PageLoading region=r.clone() variant="solo".to_string() /> }
+            }>
                 {move || lp_history_resource.get().map(|result| match result {
                     Err(_) => view! {
                         <ErrorBanner message="Could not load LP history. Refresh to try again.".to_string() />
@@ -547,7 +575,7 @@ fn LpHistoryGraph(
                     }.into_any(),
                 })}
             </Suspense>
-        </div>
+        </Card>
     }
 }
 
@@ -731,18 +759,197 @@ fn tier_label_display(t: &str) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
+// Solo Constellation Content — extracted sub-view (plan 18-05 step 8)
+// Extracted to avoid FnOnce capture in the Suspense reactive closure.
+// All owned String data is passed as props; Resources are passed by copy.
+// ---------------------------------------------------------------------------
+
+#[component]
+#[allow(clippy::too_many_arguments)]
+fn SoloConstellationContent(
+    region: String,
+    ranked: Option<RankedInfo>,
+    matches: Vec<PlayerMatchStats>,
+    lp_history_resource: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
+    lp_window: RwSignal<&'static str>,
+    queue_filter: RwSignal<Option<i32>>,
+    goal_progress_resource: Resource<Result<GoalProgressPayload, ServerFnError>>,
+    lp_region: String,
+    goals_region: String,
+) -> impl IntoView {
+    let is_demacia = region == "demacia";
+    let is_pandemonium = region == "pandemonium";
+
+    let current_tier = ranked.as_ref().map(|r| r.tier.clone()).unwrap_or_else(|| "UNRANKED".to_string());
+    let current_division = ranked.as_ref().map(|r| r.division.clone()).unwrap_or_default();
+    let current_lp = ranked.as_ref().map(|r| r.lp).unwrap_or(0);
+
+    // Last-10 W/L for Demacia patch
+    let last10: Vec<bool> = matches.iter().take(10).map(|m| m.win).collect();
+    let last10_empty = last10.is_empty();
+
+    let region_badge = region.clone();
+    let current_tier_pan = current_tier.clone();
+    let region_sort = region.clone();
+    let region_pool = region.clone();
+
+    view! {
+        <div class="flex flex-col gap-8">
+
+            // ── Rank crest + LP progress ──────────────────────────────────────
+            <Card region=region.clone()
+                  variant=if region == "demacia" { "gilt" } else { "zine" }>
+                <div class="flex items-center gap-6">
+                    <RankBadge tier=current_tier.clone() division=current_division.clone() large=true />
+                    <LPProgress region=region.clone() lp={current_lp.max(0) as u32} max=100 />
+                </div>
+
+                // ── PANDEMONIUM PATCH (a): Tier crest — TIER label ──────────
+                {is_pandemonium.then(|| view! {
+                    <div class="flex items-center gap-3 mt-4">
+                        <Glitch region="pandemonium".to_string()>
+                            {format!("// TIER \u{00b7} {}", current_tier_pan.to_uppercase())}
+                        </Glitch>
+                    </div>
+                }.into_any())}
+            </Card>
+
+            // ── PANDEMONIUM PATCH (b): 4 deep stat cards (2×2 grid) ──────────
+            // TODO: Wire real KDA/CS/DMG/Vision values from dashboard_resource
+            // when per-stat aggregation is added in a future analytics phase.
+            // Current values are placeholders per CONTENT-CONTRACT-AUDIT.md.
+            {is_pandemonium.then(|| view! {
+                <div class="grid grid-cols-2 gap-2">
+                    <Card region="pandemonium".to_string() variant="zine">
+                        <Stat label="KDA".to_string() value="3.42".to_string() delta=0.18_f32 />
+                    </Card>
+                    <Card region="pandemonium".to_string() variant="zine">
+                        <Stat label="CS/min".to_string() value="7.1".to_string() delta={-0.2_f32} />
+                    </Card>
+                    <Card region="pandemonium".to_string() variant="zine">
+                        <Stat label="DMG Share".to_string() value="27.3".to_string() unit="%".to_string() delta=2.1_f32 />
+                    </Card>
+                    <Card region="pandemonium".to_string() variant="zine">
+                        <Stat label="Vision/min".to_string() value="1.4".to_string() delta=0.05_f32 />
+                    </Card>
+                </div>
+            }.into_any())}
+
+            // ── LP History ────────────────────────────────────────────────────
+            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window region=lp_region />
+
+            // ── DEMACIA PATCH (b): Last-10 W/L sequence ──────────────────────
+            {if is_demacia {
+                // Build pip views eagerly; wrap in StoredValue so they can be
+                // read from the Fn closure generated by view!.
+                let pips_stored = StoredValue::new(last10.iter().copied().map(|won| {
+                    let pip_class = if won {
+                        "w-4 h-4 rounded-full bg-accent"
+                    } else {
+                        "w-4 h-4 rounded-full bg-danger"
+                    };
+                    let pip_title = if won { "Win" } else { "Loss" };
+                    view! {
+                        <div class=pip_class title=pip_title></div>
+                    }
+                }).collect_view());
+                view! {
+                    <Card region="demacia".to_string() variant="gilt">
+                        <SectionHead region="demacia".to_string()
+                                     eyebrow="RECENT"
+                                     title="Last 10".to_string() />
+                        {if last10_empty {
+                            view! {
+                                <PageEmpty region="demacia".to_string() kind="matches".to_string() />
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="flex gap-1 mt-2">
+                                    {move || pips_stored.get_value()}
+                                </div>
+                            }.into_any()
+                        }}
+                    </Card>
+                }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
+
+            // ── Recent Matches (full list) ────────────────────────────────────
+            <MatchListSection
+                matches=matches
+                queue_filter=queue_filter
+                region=region_badge
+            />
+
+            // ── DEMACIA PATCH (c): Sort/filter controls ───────────────────────
+            {is_demacia.then(|| view! {
+                <div class="flex items-center gap-3">
+                    <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">"Sort"</span>
+                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Champion"</Btn>
+                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Queue"</Btn>
+                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Date"</Btn>
+                </div>
+            }.into_any())}
+
+            // ── DEMACIA PATCH (a): Pool-gap warnings ──────────────────────────
+            // TODO: Wire real pool-gap detection from match history
+            // in a future analytics phase. Current gaps are
+            // placeholder advisories per CONTENT-CONTRACT-AUDIT.md.
+            {is_demacia.then(|| view! {
+                <Card region=region_pool.clone() variant="gilt">
+                    <SectionHead region=region_pool.clone()
+                                 eyebrow="REVIEW"
+                                 title="Pool Gaps".to_string() />
+                    <ul class="space-y-2 mt-2">
+                        <li class="flex items-center gap-2">
+                            <Badge tone="warning">"Gap"</Badge>
+                            <span class="font-display italic text-secondary text-sm">
+                                "No reliable engage support \u{2014} consider learning Leona or Rell"
+                            </span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <Badge tone="warning">"Gap"</Badge>
+                            <span class="font-display italic text-secondary text-sm">
+                                "Low DPS jungle option \u{2014} pick up Kindred or Lillia"
+                            </span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <Badge tone="warning">"Gap"</Badge>
+                            <span class="font-display italic text-secondary text-sm">
+                                "Missing scaling carry \u{2014} practice Kayle or Vladimir"
+                            </span>
+                        </li>
+                    </ul>
+                </Card>
+            }.into_any())}
+
+            // ── Goals ─────────────────────────────────────────────────────────
+            <GoalCards progress_resource=goal_progress_resource region=goals_region />
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Goal Cards
 // ---------------------------------------------------------------------------
 
 #[component]
-fn GoalCards(progress_resource: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl IntoView {
+fn GoalCards(
+    progress_resource: Resource<Result<GoalProgressPayload, ServerFnError>>,
+    region: String,
+) -> impl IntoView {
+    let region_head = region.clone();
+    let region_suspense = region.clone();
     view! {
         <div class="flex flex-col gap-3">
-            <div>
-                <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Captain\u{2019}s oath"</div>
-                <h2 class="font-display italic text-2xl text-primary">"Goals"</h2>
-            </div>
-            <Suspense fallback=|| view! { <SkeletonCard height="h-28" /> }>
+            <SectionHead region=region_head.clone()
+                         eyebrow="CAPTAIN\u{2019}S OATH"
+                         title="Goals".to_string() />
+            <Suspense fallback={
+                let r = region_suspense.clone();
+                move || view! { <PageLoading region=r.clone() variant="solo".to_string() /> }
+            }>
                 {move || progress_resource.get().map(|result| match result {
                     Err(_) => view! {
                         <ErrorBanner message="Could not load goals. Refresh to try again.".to_string() />
