@@ -1,7 +1,7 @@
 use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{Card, CompanionSigil, HeraldicDivider, SectionHead, Stat};
+use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, RiotTape, SectionHead, Stat};
 use crate::components::skeleton::PageLoading;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
@@ -2130,10 +2130,10 @@ pub fn DraftPage() -> impl IntoView {
                 }}
             </div>
 
-            // Board + Comments — mode-dispatched (18-04: carousel default; war-table via stub)
+            // Board + Comments — mode-dispatched (18-04: carousel/war-table; 18-07: ledger)
             <div class="flex gap-4">
-                {if mode == "war-table" {
-                    view! {
+                {match mode.as_str() {
+                    "war-table" => view! {
                         <DraftWarTableView
                             region=region.clone()
                             champions_resource=champions_resource
@@ -2155,9 +2155,15 @@ pub fn DraftPage() -> impl IntoView {
                             set_slot_comment_input=set_slot_comment_input
                             set_slot_comments=set_slot_comments
                         />
-                    }.into_any()
-                } else {
-                    view! {
+                    }.into_any(),
+                    "ledger" => view! {
+                        <DraftLedgerView
+                            region=region.clone()
+                            draft_slots=draft_slots
+                            our_side=our_side
+                        />
+                    }.into_any(),
+                    _ => view! {
                         <DraftCarouselView
                             region=region.clone()
                             champions_resource=champions_resource
@@ -2179,7 +2185,7 @@ pub fn DraftPage() -> impl IntoView {
                             set_slot_comment_input=set_slot_comment_input
                             set_slot_comments=set_slot_comments
                         />
-                    }.into_any()
+                    }.into_any(),
                 }}
 
                 // Comments sidebar
@@ -4021,6 +4027,306 @@ fn DraftWarTableView(
                 })
             }}
         </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DraftLedgerView — 18-07
+// Ledger-style read-only view of the current draft state.
+// Demacia: medieval double-entry ledger (gilt Card, Cormorant serif)
+// Pandemonium: brutalist ledger (RiotTape header, monospace rows)
+// Mode dispatch wired in 18-08; for now reachable via mode="ledger" stub.
+// ---------------------------------------------------------------------------
+
+#[component]
+fn DraftLedgerView(
+    region: String,
+    draft_slots: ReadSignal<Vec<Option<String>>>,
+    our_side: ReadSignal<String>,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
+    let region_for_head = region.clone();
+    let region_for_blue = region.clone();
+    let region_for_red = region.clone();
+    let region_for_journal = region.clone();
+
+    // Slot layout per 20-slot draft board convention:
+    //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,14,16
+    //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,13,15
+    // Using canonical pick indices for side columns (5 picks each).
+    let blue_pick_slots: &[usize] = &[6, 9, 10, 17, 18];
+    let red_pick_slots:  &[usize] = &[7, 8, 11, 16, 19];
+    let blue_ban_slots:  &[usize] = &[0, 2, 4, 14, 16];
+    let red_ban_slots:   &[usize] = &[1, 3, 5, 13, 15];
+
+    if is_pandemonium {
+        view! {
+            // Pandemonium: brutalist dual-column ledger per content contract
+            <div class="flex-1 bg-base p-4" style="background-image: repeating-linear-gradient(0deg, transparent, transparent 23px, var(--color-outline, rgba(255,255,255,.05)) 24px)">
+                <RiotTape label="DRAFT_LEDGER · v0.1" />
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                    // Blue log column
+                    <Card region=region_for_blue.clone() variant="zine">
+                        <Glitch region=region_for_blue.clone()>"// BLUE_LOG"</Glitch>
+                        <div class="mt-2 flex flex-col gap-0.5">
+                            {move || {
+                                let slots = draft_slots.get();
+                                blue_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                    let name = slots.get(slot_idx)
+                                        .and_then(|s| s.as_ref())
+                                        .cloned()
+                                        .unwrap_or_else(|| "—".to_string());
+                                    view! {
+                                        <div class="flex items-center gap-2 py-1 border-b border-outline/30 font-mono text-[12px]">
+                                            <span class="text-accent w-5 shrink-0">{format!("{:02}", i + 1)}</span>
+                                            <span class="text-muted shrink-0">"|"</span>
+                                            <span class="text-primary flex-1">{name}</span>
+                                            <span class="text-muted shrink-0">"|"</span>
+                                            <span class="text-muted">"ROLE_TBD"</span>
+                                        </div>
+                                    }
+                                }).collect_view()
+                            }}
+                        </div>
+                        <div class="mt-3">
+                            <span class="font-mono text-[10px] text-muted uppercase tracking-[0.12em]">"// BANS"</span>
+                            <div class="mt-1 flex flex-col gap-0.5">
+                                {move || {
+                                    let slots = draft_slots.get();
+                                    blue_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                        let name = slots.get(slot_idx)
+                                            .and_then(|s| s.as_ref())
+                                            .cloned()
+                                            .unwrap_or_else(|| "—".to_string());
+                                        view! {
+                                            <div class="flex items-center gap-2 py-0.5 font-mono text-[11px] opacity-70">
+                                                <span class="text-muted w-5 shrink-0">{format!("{:02}", i + 1)}</span>
+                                                <span class="text-muted shrink-0">"|"</span>
+                                                <span class="text-secondary line-through flex-1">{name}</span>
+                                            </div>
+                                        }
+                                    }).collect_view()
+                                }}
+                            </div>
+                        </div>
+                    </Card>
+
+                    // Red log column
+                    <Card region=region_for_red.clone() variant="zine">
+                        <Glitch region=region_for_red.clone()>"// RED_LOG"</Glitch>
+                        <div class="mt-2 flex flex-col gap-0.5">
+                            {move || {
+                                let slots = draft_slots.get();
+                                red_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                    let name = slots.get(slot_idx)
+                                        .and_then(|s| s.as_ref())
+                                        .cloned()
+                                        .unwrap_or_else(|| "—".to_string());
+                                    view! {
+                                        <div class="flex items-center gap-2 py-1 border-b border-outline/30 font-mono text-[12px]">
+                                            <span class="text-accent w-5 shrink-0">{format!("{:02}", i + 1)}</span>
+                                            <span class="text-muted shrink-0">"|"</span>
+                                            <span class="text-primary flex-1">{name}</span>
+                                            <span class="text-muted shrink-0">"|"</span>
+                                            <span class="text-muted">"ROLE_TBD"</span>
+                                        </div>
+                                    }
+                                }).collect_view()
+                            }}
+                        </div>
+                        <div class="mt-3">
+                            <span class="font-mono text-[10px] text-muted uppercase tracking-[0.12em]">"// BANS"</span>
+                            <div class="mt-1 flex flex-col gap-0.5">
+                                {move || {
+                                    let slots = draft_slots.get();
+                                    red_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                        let name = slots.get(slot_idx)
+                                            .and_then(|s| s.as_ref())
+                                            .cloned()
+                                            .unwrap_or_else(|| "—".to_string());
+                                        view! {
+                                            <div class="flex items-center gap-2 py-0.5 font-mono text-[11px] opacity-70">
+                                                <span class="text-muted w-5 shrink-0">{format!("{:02}", i + 1)}</span>
+                                                <span class="text-muted shrink-0">"|"</span>
+                                                <span class="text-secondary line-through flex-1">{name}</span>
+                                            </div>
+                                        }
+                                    }).collect_view()
+                                }}
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                // Journal dump footer
+                <Card region=region_for_journal.clone() variant="zine">
+                    <Glitch region=region_for_journal.clone()>"// JOURNAL_DUMP"</Glitch>
+                    <pre class="font-mono text-[11px] text-secondary whitespace-pre-wrap mt-2">
+                        "// Post-game analysis pending.\n// Run /post-game to populate."
+                    </pre>
+                </Card>
+            </div>
+        }.into_any()
+    } else {
+        // Demacia: medieval double-entry ledger
+        view! {
+            <div class="flex-1 p-4">
+                // Heraldic header
+                <Card region=region_for_head.clone() variant="gilt">
+                    <div class="text-center pb-2">
+                        <div class="flex justify-center mb-2">
+                            <Crown size=36 />
+                        </div>
+                        <h1 class="font-display text-[28px] tracking-[0.08em] text-accent uppercase">"DRAFT LEDGER"</h1>
+                        <div class="mt-1">
+                            <Eyebrow>"Chronicled in this campaign"</Eyebrow>
+                        </div>
+                        <div class="mt-2 flex justify-center">
+                            <HeraldicDivider width=400 />
+                        </div>
+                        // Our side indicator
+                        {move || {
+                            let side = our_side.get();
+                            let label = if side == "blue" { "Blue Side — Our Forces" } else { "Red Side — Our Forces" };
+                            view! {
+                                <div class="mt-1">
+                                    <Eyebrow>{label}</Eyebrow>
+                                </div>
+                            }
+                        }}
+                    </div>
+                </Card>
+
+                // Two-column ledger
+                <div class="grid grid-cols-2 gap-6 mt-4">
+                    // Blue side column
+                    <Card region=region_for_blue.clone() variant="gilt">
+                        <div>
+                            <Eyebrow>"BLUE SIDE"</Eyebrow>
+                            <div class="mt-2 flex justify-center">
+                                <HeraldicDivider width=240 />
+                            </div>
+                        </div>
+                        // Picks
+                        <div class="mt-3">
+                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"PICKS"</span>
+                            <div class="mt-1 flex flex-col gap-1">
+                                {move || {
+                                    let slots = draft_slots.get();
+                                    blue_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                        let name = slots.get(slot_idx)
+                                            .and_then(|s| s.as_ref())
+                                            .cloned()
+                                            .unwrap_or_else(|| "—".to_string());
+                                        view! {
+                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-[13px]">
+                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-primary flex-1 mx-2">{name}</span>
+                                                <span class="text-muted/50 italic text-[11px]">"role"</span>
+                                            </div>
+                                        }
+                                    }).collect_view()
+                                }}
+                            </div>
+                        </div>
+                        // Bans
+                        <div class="mt-4">
+                            <div class="flex justify-center mb-1">
+                                <HeraldicDivider width=240 />
+                            </div>
+                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"BANS"</span>
+                            <div class="mt-1 flex flex-col gap-0.5">
+                                {move || {
+                                    let slots = draft_slots.get();
+                                    blue_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                        let name = slots.get(slot_idx)
+                                            .and_then(|s| s.as_ref())
+                                            .cloned()
+                                            .unwrap_or_else(|| "—".to_string());
+                                        view! {
+                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-[12px] opacity-70">
+                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-secondary line-through flex-1 mx-2">{name}</span>
+                                            </div>
+                                        }
+                                    }).collect_view()
+                                }}
+                            </div>
+                        </div>
+                    </Card>
+
+                    // Red side column
+                    <Card region=region_for_red.clone() variant="gilt">
+                        <div>
+                            <Eyebrow>"RED SIDE"</Eyebrow>
+                            <div class="mt-2 flex justify-center">
+                                <HeraldicDivider width=240 />
+                            </div>
+                        </div>
+                        // Picks
+                        <div class="mt-3">
+                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"PICKS"</span>
+                            <div class="mt-1 flex flex-col gap-1">
+                                {move || {
+                                    let slots = draft_slots.get();
+                                    red_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                        let name = slots.get(slot_idx)
+                                            .and_then(|s| s.as_ref())
+                                            .cloned()
+                                            .unwrap_or_else(|| "—".to_string());
+                                        view! {
+                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-[13px]">
+                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-primary flex-1 mx-2">{name}</span>
+                                                <span class="text-muted/50 italic text-[11px]">"role"</span>
+                                            </div>
+                                        }
+                                    }).collect_view()
+                                }}
+                            </div>
+                        </div>
+                        // Bans
+                        <div class="mt-4">
+                            <div class="flex justify-center mb-1">
+                                <HeraldicDivider width=240 />
+                            </div>
+                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"BANS"</span>
+                            <div class="mt-1 flex flex-col gap-0.5">
+                                {move || {
+                                    let slots = draft_slots.get();
+                                    red_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
+                                        let name = slots.get(slot_idx)
+                                            .and_then(|s| s.as_ref())
+                                            .cloned()
+                                            .unwrap_or_else(|| "—".to_string());
+                                        view! {
+                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-[12px] opacity-70">
+                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-secondary line-through flex-1 mx-2">{name}</span>
+                                            </div>
+                                        }
+                                    }).collect_view()
+                                }}
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                // Footer journal
+                <div class="mt-4">
+                    <Card region=region_for_journal.clone() variant="gilt">
+                        <Eyebrow>"JOURNAL"</Eyebrow>
+                        <div class="mt-2 flex justify-center">
+                            <HeraldicDivider width=560 />
+                        </div>
+                        <p class="font-display italic text-secondary mt-2 text-[14px]">
+                            // TODO: populate from post-game analysis once /post-game phase lands
+                            "Composite analysis to be recorded post-game. Navigate to /post-game to document."
+                        </p>
+                    </Card>
+                </div>
+            </div>
+        }.into_any()
     }
 }
 
