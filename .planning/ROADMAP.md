@@ -230,7 +230,7 @@ Plans:
 - [x] 18-05-PLAN.md — Port solo-constellation with medium mismatch patches (D pool-gaps/last-10/sort + P tier-crest/4-cards)
 
 **Wave 3** *(depend on Wave 1; 18-06 heaviest)*
-- [ ] 18-06-PLAN.md — Heavy port: team-dashboard with full Pandemonium 7-section data-surface rebuild (CHECKPOINT)
+- [x] 18-06-PLAN.md — Heavy port: team-dashboard with full Pandemonium 7-section data-surface rebuild (CHECKPOINT)
 - [ ] 18-07-PLAN.md — 4 sibling pairs port: draft-ledger, solo-journal, solo-forge, team-game-day-brief (gate pre-cleared per RESEARCH F-01)
 
 **Wave 4** *(depends on Waves 2 + 3)*
@@ -410,7 +410,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Region Variants | v1.3 | 5/10 | In Progress|  |
+| 18. Region Variants | v1.3 | 6/10 | In Progress|  |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
