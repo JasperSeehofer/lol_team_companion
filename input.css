@@ -185,6 +185,48 @@
   --font-ui: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-glitch: "VT323", "JetBrains Mono", monospace;
+
+  /* Phase 18 skeleton animations (region-aware loading + empty states) */
+  --animate-dem-shimmer: dem-shimmer 2.4s ease-in-out infinite;
+  --animate-pan-flicker: pan-flicker 1.6s ease-in-out infinite;
+  --animate-pan-scan: pan-scan 0.9s linear infinite;
+  --animate-pan-cursor: pan-cursor 0.9s steps(1) infinite;
+
+  @keyframes dem-shimmer {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.85; }
+  }
+  @keyframes pan-flicker {
+    0%, 100% { opacity: 0.55; }
+    48% { opacity: 0.55; }
+    50% { opacity: 0.95; }
+    52% { opacity: 0.55; }
+    80% { opacity: 0.75; }
+  }
+  @keyframes pan-scan {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 12px; }
+  }
+  @keyframes pan-cursor {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+}
+
+/* Pandemonium scanline background — used by PageLoading pandemonium variants */
+@utility bg-scanline {
+  background-image: repeating-linear-gradient(
+    0deg,
+    color-mix(in oklab, var(--color-accent) 14%, transparent),
+    color-mix(in oklab, var(--color-accent) 14%, transparent) 1px,
+    transparent 1px,
+    transparent 12px
+  );
+}
+
+/* Demacia parchment-tan shimmer overlay tint */
+@utility bg-parchment-shimmer {
+  background-color: color-mix(in oklab, var(--color-accent) 8%, var(--t-surface) 92%);
 }
 
 /* ============================================================
