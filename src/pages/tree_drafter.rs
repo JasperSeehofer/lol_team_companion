@@ -1,5 +1,7 @@
+use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
+use crate::components::region::*;
 use crate::components::tree_graph::TreeGraph;
 use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::Champion;
@@ -254,6 +256,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
             }
         }
     });
+
+    // Region — read ONCE at page entry, passed as String prop to sub-views
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
 
     // Mode: "edit" or "live"
     let (mode, set_mode) = signal("edit".to_string());
@@ -696,18 +702,21 @@ pub fn TreeDrafterPage() -> impl IntoView {
         set_active_slot.set(Some(slot_idx));
     });
 
+    let region_for_section = region.clone();
+
     view! {
         // Phase 17: canvas-grain wrapper + bg-base. Outer min-h-screen ensures the
         // grain extends past short pages; inner max-width container preserves the
         // 90rem cap from the previous layout.
         <div class="canvas-grain bg-base min-h-screen px-8 py-6">
         <div class="max-w-[90rem] mx-auto flex flex-col gap-6">
-            // Header — imperial wordmark, ghost-pair toggle.
+            // Header — region-aware SectionHead
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-display italic text-primary">"Tree Drafter"</h1>
-                    <p class="text-muted text-sm mt-1">"Plan branching draft strategies for every scenario"</p>
-                </div>
+                <SectionHead
+                    region=region_for_section
+                    title="Tree Drafter".to_string()
+                    eyebrow="Strategy"
+                />
                 <div class="flex gap-px rounded-lg overflow-hidden border border-divider/50">
                     <button
                         type="button"
@@ -737,7 +746,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 </div>
             </div>
 
-            // Main layout: sidebar + content
+            // Main layout: sidebar + content (Card wraps the interactive area per region grammar)
+            <Card region=region.clone()>
             <div class="flex gap-6 min-h-[36rem]">
                 // Left sidebar: tree list
                 <div class="w-72 flex-shrink-0 flex flex-col gap-4">
@@ -1095,6 +1105,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     }}
                 </div>
             </div>
+            </Card>
         </div>
         </div>
     }
