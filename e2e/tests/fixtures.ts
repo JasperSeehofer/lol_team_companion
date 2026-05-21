@@ -99,3 +99,45 @@ export const test = base.extend<Fixtures>({
 });
 
 export { expect };
+
+/**
+ * Set the region (theme) for the current page.
+ *
+ * Clicks the Demacia or Pandemonium button in the nav ThemeToggle,
+ * then waits for the WASM Effect to apply the change to data-theme.
+ * Per wasm-patterns rule 56: 700ms wait for WASM Effect settle.
+ */
+export async function setRegion(
+  page: import("@playwright/test").Page,
+  region: "demacia" | "pandemonium"
+): Promise<void> {
+  const themeAttr = await page.getAttribute("html", "data-theme");
+  if (themeAttr === region) return; // already correct region
+  const btnText = region === "pandemonium" ? "Pandemonium" : "Demacia";
+  await page.click(`button:has-text("${btnText}")`);
+  // wasm-patterns rule 56: WASM Effect fires asynchronously
+  await page.waitForTimeout(700);
+  const newTheme = await page.getAttribute("html", "data-theme");
+  if (newTheme !== region) {
+    throw new Error(`setRegion failed: expected ${region}, got ${newTheme}`);
+  }
+}
+
+/**
+ * Set the mode for the current page by clicking a ModeToggle button.
+ *
+ * Mode toggle buttons render labels per region per UI-SPEC:
+ * Demacia: title case ("Carousel"); Pandemonium: UPPER with underscores ("CAROUSEL", "WAR_TABLE")
+ * Accepts the canonical mode key (e.g. "carousel", "war-table", "ledger") and
+ * tries both title-case and uppercase+underscore variants.
+ */
+export async function setMode(
+  page: import("@playwright/test").Page,
+  mode: string
+): Promise<void> {
+  const titleCase = mode.charAt(0).toUpperCase() + mode.slice(1);
+  const upperUnderscore = mode.toUpperCase().replace(/-/g, "_");
+  const selector = `button:has-text("${titleCase}"), button:has-text("${upperUnderscore}")`;
+  await page.click(selector);
+  await page.waitForTimeout(500);
+}
