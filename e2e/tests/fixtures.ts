@@ -99,3 +99,75 @@ export const test = base.extend<Fixtures>({
 });
 
 export { expect };
+
+/**
+ * Set the region (theme) for the current page.
+ *
+ * Clicks the Demacia or Pandemonium button in the nav ThemeToggle,
+ * then waits for the WASM Effect to apply the change to data-theme.
+ * Per wasm-patterns rule 56: 700ms wait for WASM Effect settle.
+ */
+export async function setRegion(
+  page: import("@playwright/test").Page,
+  region: "demacia" | "pandemonium"
+): Promise<void> {
+  const themeAttr = await page.getAttribute("html", "data-theme");
+  if (themeAttr === region) return; // already correct region
+  const btnText = region === "pandemonium" ? "Pandemonium" : "Demacia";
+  await page.click(`button:has-text("${btnText}")`);
+  // wasm-patterns rule 56: WASM Effect fires asynchronously.
+  // Wait 700ms for the optimistic DOM update to apply (data-theme change on <html>).
+  // NOTE: This does NOT wait for the DB write to complete. If you need the server
+  // to render the new theme, call setRegion AFTER page.goto() (navigate-first pattern).
+  await page.waitForTimeout(700);
+  const newTheme = await page.getAttribute("html", "data-theme");
+  if (newTheme !== region) {
+    throw new Error(`setRegion failed: expected ${region}, got ${newTheme}`);
+  }
+}
+
+/**
+ * Set the mode for the current page by clicking a ModeToggle button.
+ *
+ * Mode toggle buttons render labels per region per UI-SPEC.
+ * Actual label text from controls.rs (18-08):
+ *
+ * Draft:   carousel→"Carousel"/"CAROUSEL",  war-table→"War Table"/"WAR_TABLE",  ledger→"Ledger"/"LEDGER"
+ * Solo:    constellation→"Constellation"/"CONSTELLATION",  forge→"Forge"/"FORGE",  journal→"Journal"/"JOURNAL"
+ * Team:    dashboard→"Dashboard"/"DASHBOARD",  brief→"Game Day Brief"/"GAME_DAY"
+ *
+ * The helper tries title-case, uppercase+underscore, and a label map for
+ * multi-word labels ("war-table" → "War Table") and demacia-only labels
+ * ("brief" → "Game Day Brief").
+ *
+ * @param page - Playwright Page
+ * @param mode - canonical mode key, e.g. "carousel", "war-table", "brief"
+ */
+export async function setMode(
+  page: import("@playwright/test").Page,
+  mode: string
+): Promise<void> {
+  // Mapping from canonical mode key → known label variants (demacia + pandemonium)
+  const LABEL_MAP: Record<string, string[]> = {
+    "carousel": ["Carousel", "CAROUSEL"],
+    "war-table": ["War Table", "WAR_TABLE"],
+    "ledger": ["Ledger", "LEDGER"],
+    "constellation": ["Constellation", "CONSTELLATION"],
+    "forge": ["Forge", "FORGE"],
+    "journal": ["Journal", "JOURNAL"],
+    "dashboard": ["Dashboard", "DASHBOARD"],
+    // "brief" has different labels per region: "Game Day Brief" (dem) vs "GAME_DAY" (pan)
+    "brief": ["Game Day Brief", "GAME_DAY"],
+  };
+
+  const candidates = LABEL_MAP[mode] ?? [
+    // Fallback: try title-case and uppercase+underscore
+    mode.charAt(0).toUpperCase() + mode.slice(1),
+    mode.toUpperCase().replace(/-/g, "_"),
+  ];
+
+  // Build a CSS selector that matches any candidate label (exact text match)
+  const selector = candidates.map(label => `button:has-text("${label}")`).join(", ");
+  await page.click(selector, { timeout: 10000 });
+  await page.waitForTimeout(500);
+}
