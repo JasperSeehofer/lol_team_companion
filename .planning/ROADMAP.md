@@ -61,7 +61,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 - [x] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81` (15-REVIEW.md was not updated). Remaining: clear WR-01 (refetch lp_history + goal_progress resources after sync) + WR-02 (orphan get_personal_goals — wire or remove); secondary code review + verification; mark v1.2 fully closed. (completed 2026-05-07)
 - [x] **Phase 17: UI Consolidation** - Claude Design primary pass + Open-Design utility surfaces; 22 visual-regression baselines; 6-pillar audit PASS-with-deferred. (completed 2026-05-11)
-- [ ] **Phase 18: Region Variants (INSERTED 2026-05-11)** - Demacia + Pandemonium structural component branches per Open-Design mockups: shared region-variant primitives (RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone/oil-spill backgrounds, glitch text-shadow util), then port hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta) to genuinely different per-region layouts (not color-only swap), then regenerate visual baselines per theme.
+- [x] **Phase 18: Region Variants (INSERTED 2026-05-11)** - Demacia + Pandemonium structural component branches per Open-Design mockups: shared region-variant primitives (RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone/oil-spill backgrounds, glitch text-shadow util), then port hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta) to genuinely different per-region layouts (not color-only swap), then regenerate visual baselines per theme. (completed 2026-05-22)
 - [ ] **Phase 19: Bug-Report Widget (renumbered from 18)** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start.
 - [ ] **Phase 20: Production Hardening (renumbered from 19)** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
 - [ ] **Phase 20.1: Closed-Beta Access Gate (renumbered from 19.1)** - Gate registration behind an invite mechanism so the deployed binary is URL-reachable but only the named-friends list can sign up. Login + legal pages remain public.
@@ -238,7 +238,7 @@ Plans:
 
 **Wave 5** *(parallel — depend on Wave 4)*
 - [x] 18-09-PLAN.md — pixelmatch + pngjs install + 26 scoped baselines + region-diff.spec.ts (pixelDiffRatio > 0.40)
-- [ ] 18-10-PLAN.md — 6-pillar audit + REQ-7 utility-route grep gate + 18-UI-REVIEW.md + user manual review (CHECKPOINT)
+- [x] 18-10-PLAN.md — 6-pillar audit + REQ-7 utility-route grep gate + 18-UI-REVIEW.md + user manual review (CHECKPOINT)
 **UI hint**: yes (entire phase is UI structural work)
 
 ### Phase 19: Bug-Report Widget (renumbered from Phase 18)
@@ -410,7 +410,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Region Variants | v1.3 | 9/10 | In Progress|  |
+| 18. Region Variants | v1.3 | 10/10 | Complete   | 2026-05-22 |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
