@@ -7,17 +7,17 @@ stopped_at: Phase 18 UI-SPEC approved
 last_updated: "2026-05-14T12:26:52.616Z"
 progress:
   total_phases: 13
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 35
   completed_plans: 25
-  percent: 71
+  percent: 54
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 18 (region-variants) — EXECUTING
-Plan: 1 of 10
+Phase: 19
+Plan: Not started
 
 Next: spec/discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md`). Phase 18 was inserted on 2026-05-11; Bug-Report Widget is now Phase 19; subsequent phases renumbered 19→20, 20→21, 21→22, 22→23, 23→24, 19.1→20.1, v1.4 Phase 24→25.
 
