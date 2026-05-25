@@ -118,10 +118,15 @@ export { expect };
  * Phase 18.1 spec_lock D-01: cookie name=`lol_companion_theme`, path=`/`, sameSite=`Lax`.
  * D-05: only `demacia` / `pandemonium` are valid values (TypeScript enforced).
  *
- * Edge case: when called BEFORE any `page.goto()`, `page.url()` is `about:blank`. The
- * `url` field in `addCookies` is set unconditionally to the dev server origin so the
- * cookie is scoped correctly even in that case; the subsequent `page.reload()` on
- * `about:blank` is a no-op and the next real navigation picks up the cookie.
+ * Edge case: when called BEFORE any `page.goto()`, `page.url()` is `about:blank`. We
+ * use the explicit `domain + path` form (rather than `url`) so the cookie is scoped
+ * to `127.0.0.1` regardless of the page's current URL. The subsequent `page.reload()`
+ * on `about:blank` is a no-op and the next real navigation picks up the cookie.
+ *
+ * Note: Playwright's `addCookies` API rejects passing BOTH `url` and `path` — you
+ * must pass either `url` alone (which derives domain+path) or the explicit
+ * `domain` + `path` pair. We use the latter form for clarity and so the cookie
+ * works even when called before any navigation.
  */
 export async function setRegion(
   page: import("@playwright/test").Page,
@@ -132,7 +137,7 @@ export async function setRegion(
     {
       name: "lol_companion_theme",
       value: region,
-      url: "http://127.0.0.1:3020",
+      domain: "127.0.0.1",
       path: "/",
       sameSite: "Lax",
     },
