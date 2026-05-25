@@ -23,7 +23,8 @@ expected: |
   - /tree-drafter, /champion-pool, /match/:id, /post-game — no-patch ports look correct
   - Mode toggle works and persists across reload + across region switch
   - Utility routes (login, register, profile, opponents, stats, legal, etc.) look IDENTICAL to pre-Phase-18
-awaiting: user response
+result: pass
+resolved: 2026-05-25 by Phase 18.1 — see .planning/phases/18.1-ssr-theme-injection-gap-closure-for-ui-18-runtime-01/18.1-03-EVIDENCE.md
 
 ## Tests
 
@@ -71,8 +72,43 @@ finding_id: UI-18-RUNTIME-01
 disposition: requires Phase 18.1 fix plan (axum middleware injection of
   InitialTheme from request cookie+session, OR client-side region prop that
   reactively re-renders region-branching subviews — leaning toward middleware).
+status: RESOLVED 2026-05-25 — Phase 18.1 closed the SSR theme-injection gap. Runtime agent-browser sweep across all 11 scoped pages × 2 regions (28 Pandemonium markers, 18 Demacia negative-space markers, 3/3 utility REQ-7 PASS, 3/3 mode-toggle D-04 PASS) confirms Pandemonium structural branches activate at SSR. See .planning/phases/18.1-ssr-theme-injection-gap-closure-for-ui-18-runtime-01/18.1-03-EVIDENCE.md for per-marker evidence. REQ-7 utility-route equivalence preserved.
 
-### 2. Verify pixelDiffRatio threshold deviation is acceptable
+### 2. UI-18.1-HYDRATE-01 — Pandemonium pages panic during WASM hydration
+expected: |
+  Pandemonium-themed pages should hydrate cleanly from SSR HTML so that
+  client-side interactivity (mode toggles, theme toggles, draft slot drag-drop,
+  and all other WASM event handlers) works after the page loads. The hydrate
+  step should produce no console panics; the SSR-rendered DOM should match
+  the WASM-rendered DOM exactly.
+reported: |
+  Phase 18.1-03 runtime agent-browser sweep (2026-05-25) found that every Pandemonium-themed
+  page panics during WASM hydration with the following stack:
+
+    [error] panicked at /home/jasper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tachys-0.2.14/src/html/mod.rs:217:14:
+    called `Option::unwrap()` on a `None` value
+
+  Demacia pages hydrate cleanly. SSR HTML for both regions renders correctly (this is what
+  proves the 18.1 architectural fix works). The hydration panic kills client-side interactivity
+  on Pandemonium pages — mode-toggle clicks, theme-toggle clicks, drag-drop, and other WASM
+  event handlers do not fire.
+
+  Latent bug: the Pandemonium structural branches built in Phase 18 contain an SSR/hydrate
+  mismatch that was hidden until Phase 18.1 made those branches reachable at runtime. A
+  specific component is hashing differently SSR-side vs hydrate-side, causing tachys to
+  unwrap a None when expecting a Some during DOM reconciliation.
+
+  Severity: bug (Pandemonium is unusable past initial render). Not a regression of 18.1's
+  scope (SSR injection); a NEW finding surfaced by it.
+
+  Evidence: see .planning/phases/18.1-ssr-theme-injection-gap-closure-for-ui-18-runtime-01/18.1-03-EVIDENCE.md, "Investigation Flag 1" section.
+result: issue
+severity: bug
+finding_id: UI-18.1-HYDRATE-01
+discovered_by: Phase 18.1-03
+recommended_disposition: Phase 18.2 (hydrate bridge) — narrow down which component triggers the unwrap, fix the SSR/hydrate hash mismatch, re-run the agent-browser sweep to verify interactivity restored.
+
+### 3. Verify pixelDiffRatio threshold deviation is acceptable
 expected: |
   Confirm `REGION_DIFF_THRESHOLD = 0.005` (0.5%) in `e2e/tests/region-diff.spec.ts` is
   sufficient to detect structural region differences for v1.3 closed-beta.
@@ -94,17 +130,24 @@ result: [pending]
 
 ## Summary
 
-total: 2
-passed: 0
+total: 3
+passed: 1
 issues: 1
-pending: 1
+pending: 2
 skipped: 0
 blocked: 0
+resolved: 1
+notes: |
+  Test 1 (UI-18-RUNTIME-01) resolved 2026-05-25 by Phase 18.1 — passed: 0 → 1, issues: 1 → 0 for this finding.
+  Test 2 (UI-18.1-HYDRATE-01) is a NEW finding surfaced by Phase 18.1's SSR fix; result: issue, severity: bug — recommended for Phase 18.2. Counts as issues: 1 (the new finding) AND pending: 1 (awaiting Phase 18.2 disposition).
+  Test 3 (pixelDiffRatio threshold) remains pending user response — counts as pending: 1.
+  Net: total 2 → 3 (added hydrate finding); passed 0 → 1; issues 1 → 1 (different finding); pending 1 → 2 (added hydrate awaiting 18.2); resolved 0 → 1.
 
 ## Gaps
 
 - truth: "Every scoped page renders STRUCTURALLY different markup between Demacia and Pandemonium at runtime in a real browser session"
-  status: failed
+  status: resolved
+  resolved_by: Phase 18.1
   reason: "Orchestrator agent-browser sweep 2026-05-25 — src/main.rs:88 hardcodes InitialTheme::default() (\"demacia\") at SSR. Region toggle persists to DB but next SSR request still gets \"demacia\". All scoped pages capture region=\"demacia\" once at component init, so is_pandemonium branches never activate. Visible effect: token swap (color/font) works via post-hydration data-theme flip, but DraftLedgerView, TeamDashboardView Pandemonium-rebuild, SoloForge, etc. never render their Pandemonium structural branches."
   severity: blocker
   test: 1
@@ -117,6 +160,21 @@ blocked: 0
     - axum middleware to inject InitialTheme from request cookie + auth session
     - client-side cookie write on theme toggle (so unauthenticated reloads keep theme)
     - OR: convert region: String prop to a reactive context that subviews subscribe to (would re-render structural branches without reload)
+
+- truth: "Pandemonium-themed pages hydrate cleanly from SSR HTML so client-side interactivity (mode toggles, theme toggle, drag-drop, all WASM event handlers) works after page load"
+  status: pending
+  discovered_by: Phase 18.1
+  reason: "Phase 18.1-03 runtime agent-browser sweep (2026-05-25) found that every Pandemonium-themed page panics during WASM hydration at tachys-0.2.14/src/html/mod.rs:217:14 ('called Option::unwrap() on a None value'). Demacia pages hydrate cleanly. SSR HTML for both regions renders correctly (proving 18.1 closed the SSR injection gap), but the latent SSR/hydrate hash mismatch was hidden pre-18.1 because Pandemonium branches never rendered at SSR. The panic kills all client-side interactivity on Pandemonium pages."
+  severity: bug
+  test: 2
+  finding_id: UI-18.1-HYDRATE-01
+  artifacts:
+    - .planning/phases/18.1-ssr-theme-injection-gap-closure-for-ui-18-runtime-01/18.1-03-EVIDENCE.md (Investigation Flag 1)
+  missing:
+    - Diagnosis of which Pandemonium component triggers the SSR/hydrate hash mismatch (likely a structural primitive used across all P pages, since the panic is universal)
+    - Fix for the unwrap-on-None in tachys hydration reconciliation (typically caused by SSR rendering markup that the client-side WASM render diverges from)
+    - Re-run of the agent-browser sweep with WASM event handlers exercised to confirm interactivity restored
+  recommended_disposition: Phase 18.2 (hydrate bridge) — narrow scope; touches structural Pandemonium primitives, not the SSR injection layer 18.1 just landed.
 
 ## How to run the visual review
 
