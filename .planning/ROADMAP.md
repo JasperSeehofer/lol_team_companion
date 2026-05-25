@@ -62,7 +62,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - [x] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81` (15-REVIEW.md was not updated). Remaining: clear WR-01 (refetch lp_history + goal_progress resources after sync) + WR-02 (orphan get_personal_goals — wire or remove); secondary code review + verification; mark v1.2 fully closed. (completed 2026-05-07)
 - [x] **Phase 17: UI Consolidation** - Claude Design primary pass + Open-Design utility surfaces; 22 visual-regression baselines; 6-pillar audit PASS-with-deferred. (completed 2026-05-11)
 - [x] **Phase 18: Region Variants (INSERTED 2026-05-11)** - Demacia + Pandemonium structural component branches per Open-Design mockups: shared region-variant primitives (RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone/oil-spill backgrounds, glitch text-shadow util), then port hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta) to genuinely different per-region layouts (not color-only swap), then regenerate visual baselines per theme. (completed 2026-05-22 — but **structural branching never activates at runtime; blocked on UI-18-RUNTIME-01; gap-closure in Phase 18.1**)
-- [ ] **Phase 18.1: SSR-Authoritative InitialTheme (gap closure for UI-18-RUNTIME-01)** - Close the Phase-17-deferred SSR theme-injection gap that blocks every Phase 18 structural region branch from activating at runtime. Axum middleware extracts theme from session cookie + `auth.user.theme`; `theme_toggle.rs` writes the cookie alongside the existing DB persist (so unauthenticated reloads persist); `main.rs:88` `provide_context(InitialTheme::default())` replaced with the per-request value. Re-run all 11 scoped pages × 2 regions × N modes in agent-browser to confirm structural branches activate; re-baseline 18-09's region-diff threshold (expect 5–15% pixel diff now, vs 0.5–2.5% pre-fix).
+- [ ] **Phase 18.1: SSR Theme Injection (gap closure for UI-18-RUNTIME-01)** - Close the Phase-17-deferred SSR theme-injection gap that blocks every Phase 18 structural region branch from activating at runtime. Axum middleware extracts theme from session cookie + `auth.user.theme`; `theme_toggle.rs` writes the cookie alongside the existing DB persist (so unauthenticated reloads persist); `main.rs:88` `provide_context(InitialTheme::default())` replaced with the per-request value. Re-run all 11 scoped pages × 2 regions × N modes in agent-browser to confirm structural branches activate; re-baseline 18-09's region-diff threshold (expect 5–15% pixel diff now, vs 0.5–2.5% pre-fix).
 - [ ] **Phase 19: Bug-Report Widget (renumbered from 18)** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start.
 - [ ] **Phase 20: Production Hardening (renumbered from 19)** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
 - [ ] **Phase 20.1: Closed-Beta Access Gate (renumbered from 19.1)** - Gate registration behind an invite mechanism so the deployed binary is URL-reachable but only the named-friends list can sign up. Login + legal pages remain public.
@@ -242,7 +242,7 @@ Plans:
 - [x] 18-10-PLAN.md — 6-pillar audit + REQ-7 utility-route grep gate + 18-UI-REVIEW.md + user manual review (CHECKPOINT)
 **UI hint**: yes (entire phase is UI structural work)
 
-### Phase 18.1: SSR-Authoritative InitialTheme (gap closure for UI-18-RUNTIME-01)
+### Phase 18.1: SSR Theme Injection (gap closure for UI-18-RUNTIME-01)
 **Goal**: Close the architectural gap that prevents every Phase 18 structural region branch from activating at runtime — make SSR provide `InitialTheme` from the actual user's persisted theme (cookie + auth.user.theme) so the `region: String` prop captured at page entry is "demacia" or "pandemonium" per the user's actual preference, not always the hardcoded default
 **Depends on**: Phase 18
 **Why this phase exists**: Phase 17 plan 17-01 task 6 noted at `src/main.rs:82-87` that "SSR-authoritative theme requires axum middleware injection ... deferred to a follow-up plan if FOUC becomes visible." Phase 18 built 24+ region-branching primitives and 11 scoped pages on top of `region: String` props sourced from `use_context::<InitialTheme>()`, but `main.rs:88` still hardcodes `provide_context(InitialTheme::default())` (= `"demacia"`). Effect at runtime: token swap (gold↔pink) works via post-hydration `<html data-theme>` flip, but every page's `region` prop is permanently `"demacia"`, so the Pandemonium structural branches (DraftLedgerView Pandemonium arm, the 7-section team-dashboard Pandemonium rebuild, SoloForge, SoloJournal, TeamGameDayBriefView, etc.) never activate. Verifier passed 7/8 by source-grep; 18-UI-REVIEW.md passed 22/22 by source-audit; 18-09 region-diff passed at 0.5% threshold because token swap is real — none of them rendered a Pandemonium page in a real browser. Discovered 2026-05-25 via user-driven agent-browser sweep. Recorded as UI-18-RUNTIME-01 (severity: blocker) in `.planning/phases/18-region-variants/18-HUMAN-UAT.md`.
@@ -267,6 +267,14 @@ Plans:
   7. 18-09 region-diff baselines re-captured at the post-18.1 runtime; new `REGION_DIFF_THRESHOLD` documented (expected ~0.05 lower bound, actual measurements ~0.05–0.15)
   8. Both compile targets clean; ≥111 unit tests pass; no regression on utility routes (REQ-7 holds — utility routes still have ZERO `is_pandemonium` references and still render identically across regions)
 **UI hint**: yes (gap closure for UI phase; small implementation surface but requires the agent-browser verification arc)
+**Plans**: 3 plans across 3 waves
+Plans:
+**Wave 1**
+- [ ] 18.1-01-PLAN.md — Axum middleware (`src/server/theme_layer.rs`) + main.rs per-request InitialTheme injection + theme_toggle.rs synchronous cookie write; pure-resolver unit tests; live curl precedence matrix (5 cases)
+**Wave 2** *(depends on 18.1-01)*
+- [ ] 18.1-02-PLAN.md — Playwright `setRegion` fixture switched to cookie-injection + reload; re-capture 24 scoped visual-regression baselines under post-18.1 runtime; calibrate `REGION_DIFF_THRESHOLD` from measured floor (expected 0.03–0.10)
+**Wave 3** *(depends on 18.1-02; CHECKPOINT)*
+- [ ] 18.1-03-PLAN.md — Agent-browser runtime sweep across all 11 scoped pages × 2 regions × ~29 configs; DOM-grep for per-page Pandemonium markers; utility-route REQ-7 spot-check; final human sign-off; flip UI-18-RUNTIME-01 → RESOLVED in 18-HUMAN-UAT.md
 
 ### Phase 19: Bug-Report Widget (renumbered from Phase 18)
 **Goal**: A floating in-app feedback button that lets the user click any page element, describe what went wrong or what they wish for, and have it auto-exported to a Claude-readable inbox file so the next coding session sees the queue without manual triage
@@ -438,6 +446,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
 | 18. Region Variants | v1.3 | 10/10 | Complete    | 2026-05-22 |
+| 18.1 SSR Theme Injection (gap closure) | v1.3 | 0/3 | Planned 2026-05-25 | - |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
