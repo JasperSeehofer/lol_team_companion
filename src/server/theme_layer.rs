@@ -45,8 +45,23 @@ const VALID_THEMES: [&str; 2] = ["demacia", "pandemonium"];
 /// - missing key
 /// - empty header
 /// - value not in `{"demacia", "pandemonium"}` (D-05)
-pub fn parse_theme_cookie(_cookie_header: &str) -> Option<String> {
-    // RED stub — to be implemented in GREEN
+///
+/// Validation against the allowlist mitigates T-18.1-01-01 (cookie
+/// tampering): a forged value cannot reach the `<html data-theme="">`
+/// attribute as anything other than one of two safe strings.
+pub fn parse_theme_cookie(cookie_header: &str) -> Option<String> {
+    for kv in cookie_header.split(';') {
+        let kv = kv.trim();
+        if let Some(value) = kv.strip_prefix("lol_companion_theme=") {
+            let value = value.trim();
+            if VALID_THEMES.contains(&value) {
+                return Some(value.to_string());
+            }
+            // D-05: invalid value → treat as absent. Continue scanning
+            // in case a later cookie with the same key is valid
+            // (defensive — clients typically send only one).
+        }
+    }
     None
 }
 
@@ -58,9 +73,10 @@ pub fn parse_theme_cookie(_cookie_header: &str) -> Option<String> {
 /// `parse_theme_cookie`. The `auth_theme` value comes from
 /// `AppUser.theme` which is constrained at the DB schema layer
 /// (`ASSERT $value IN ['demacia','pandemonium']`).
-pub fn resolve_theme(_cookie: Option<String>, _auth_theme: Option<String>) -> String {
-    // RED stub — to be implemented in GREEN
-    String::new()
+pub fn resolve_theme(cookie: Option<String>, auth_theme: Option<String>) -> String {
+    cookie
+        .or(auth_theme)
+        .unwrap_or_else(|| "demacia".to_string())
 }
 
 /// Axum middleware function: reads the cookie + `AuthSession` from

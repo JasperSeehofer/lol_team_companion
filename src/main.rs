@@ -6,8 +6,13 @@ use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use std::sync::Arc;
 
-use lol_team_companion::app::{shell, App, InitialTheme};
-use lol_team_companion::server::{auth::AuthBackend, db, session_store::SurrealSessionStore};
+use lol_team_companion::app::{shell, App};
+use lol_team_companion::server::{
+    auth::AuthBackend,
+    db,
+    session_store::SurrealSessionStore,
+    theme_layer::{theme_injection_middleware, REQUEST_THEME},
+};
 
 #[derive(Clone, axum::extract::FromRef)]
 struct AppState {
@@ -77,15 +82,18 @@ async fn main() {
                 move || {
                     let db = Arc::clone(&app_state.db);
                     provide_context(db);
-                    // Phase 17 plan 17-01 task 6: provide InitialTheme context.
-                    // The leptos context closure is sync, so we cannot await
-                    // the AuthSession extractor here. Default to "demacia"
-                    // (the design's default theme); the post-hydration
-                    // ThemeToggle.set_theme call writes the user's actual
-                    // preference back to <html data-theme>. SSR-authoritative
-                    // theme requires axum middleware injection which is
-                    // deferred to a follow-up plan if FOUC becomes visible.
-                    provide_context(InitialTheme::default());
+                    // Phase 18.1 plan 01: per-request InitialTheme,
+                    // read synchronously from the REQUEST_THEME tokio
+                    // task-local that `theme_injection_middleware` set
+                    // up earlier in the request lifecycle (after
+                    // auth_layer, before this closure runs). Falls
+                    // back to InitialTheme::default() ("demacia") when
+                    // the task-local is unset (e.g. requests that
+                    // bypass the leptos routes, like /healthz).
+                    let theme = REQUEST_THEME
+                        .try_with(|t| t.clone())
+                        .unwrap_or_default();
+                    provide_context(theme);
                 }
             },
             {
@@ -94,6 +102,15 @@ async fn main() {
             },
         )
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
+        // Phase 18.1: per-request theme injection middleware.
+        //
+        // Axum tower layering applies inside-out: the LAST `.layer()`
+        // call wraps the OUTERMOST middleware and runs FIRST on each
+        // request. We want auth_layer to run FIRST so AuthSession is
+        // in extensions when theme_injection_middleware reads it
+        // (D-03). Therefore theme_layer goes BEFORE auth_layer in the
+        // builder so it sits INSIDE auth_layer's wrap and runs SECOND.
+        .layer(axum::middleware::from_fn(theme_injection_middleware))
         .layer(auth_layer)
         .with_state(app_state);
 
