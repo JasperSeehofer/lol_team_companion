@@ -270,7 +270,7 @@ Plans:
 **Plans**: 3 plans across 3 waves
 Plans:
 **Wave 1**
-- [ ] 18.1-01-PLAN.md — Axum middleware (`src/server/theme_layer.rs`) + main.rs per-request InitialTheme injection + theme_toggle.rs synchronous cookie write; pure-resolver unit tests; live curl precedence matrix (5 cases)
+- [x] 18.1-01-PLAN.md — Axum middleware (`src/server/theme_layer.rs`) + main.rs per-request InitialTheme injection + theme_toggle.rs synchronous cookie write; pure-resolver unit tests; live curl precedence matrix (5 cases)
 **Wave 2** *(depends on 18.1-01)*
 - [ ] 18.1-02-PLAN.md — Playwright `setRegion` fixture switched to cookie-injection + reload; re-capture 24 scoped visual-regression baselines under post-18.1 runtime; calibrate `REGION_DIFF_THRESHOLD` from measured floor (expected 0.03–0.10)
 **Wave 3** *(depends on 18.1-02; CHECKPOINT)*
@@ -446,7 +446,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
 | 18. Region Variants | v1.3 | 10/10 | Complete    | 2026-05-22 |
-| 18.1 SSR Theme Injection (gap closure) | v1.3 | 0/3 | Planned 2026-05-25 | - |
+| 18.1 SSR Theme Injection (gap closure) | v1.3 | 1/3 | In Progress|  |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
