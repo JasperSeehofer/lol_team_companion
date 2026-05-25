@@ -302,7 +302,15 @@ Plans:
   8. Both compile targets clean; ≥121 unit tests pass; 52/52 Wave-2 e2e tests still pass; Phase 18.1 SSR injection still works (regression check on UI-18-RUNTIME-01 markers)
   9. No regression on Demacia: Demacia pages continue to hydrate cleanly and interact correctly
 **UI hint**: yes (gap closure for UI phase; small implementation surface but requires the agent-browser verification arc + new regression gate)
-**Plans**: TBD
+**Plans**: 5 plans across 2 waves
+Plans:
+**Wave 1** *(sequential — bisect → bisect → fix; each plan depends on prior)*
+- [ ] 18.2-01-PLAN.md — Bisect leaves-first cycles 1-4 (Card, SectionHead, Glitch, RiotTape) via short-circuit-and-reload; initialize 18.2-DIAGNOSIS.md with sanity baseline + per-cycle results
+- [ ] 18.2-02-PLAN.md — Bisect remaining leaves cycles 5-8 (CompanionSigil, ModeToggle, LPProgress, Btn) + per-page Pandemonium views (cycles 9-13 if needed) + D-04 WASM render-tracing escalation if needed; finalize Final culprit list + Root cause analysis in DIAGNOSIS.md
+- [ ] 18.2-03-PLAN.md — Apply real Leptos fix (Fix Pattern 1/2/3 per D-09) or D-10 cfg(ssr) fallback to identified culprit(s); regression check + Demacia parity sweep + Summary table in DIAGNOSIS.md
+**Wave 2** *(depend on Wave 1; Plan 05 has CHECKPOINT)*
+- [ ] 18.2-04-PLAN.md — Author e2e/tests/hydration-no-panic.spec.ts (14-row panic-sweep matrix + 5 D-13 interactivity triad tests); just verify + just e2e green
+- [ ] 18.2-05-PLAN.md — Agent-browser live re-sweep on 7 Pandemonium scoped routes × 2 regions + 4 interactivity probes captured in 18.2-05-EVIDENCE.md; human-verify checkpoint; flip UI-18.1-HYDRATE-01 → RESOLVED in 18-HUMAN-UAT.md (preserve reported: block per Phase 18.1 close-out pattern); update Summary + Gaps blocks (CHECKPOINT)
 
 ### Phase 19: Bug-Report Widget (renumbered from Phase 18)
 **Goal**: A floating in-app feedback button that lets the user click any page element, describe what went wrong or what they wish for, and have it auto-exported to a Claude-readable inbox file so the next coding session sees the queue without manual triage
