@@ -55,8 +55,31 @@ pub fn ThemeToggle(
 
         #[cfg(feature = "hydrate")]
         {
-            // Optimistic DOM update so the swap is instant.
+            use wasm_bindgen::JsCast;
+
             if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                // Phase 18.1: write the lol_companion_theme cookie
+                // SYNCHRONOUSLY in the same JS turn as the optimistic
+                // data-theme attribute update. This must happen BEFORE
+                // the `spawn_local` for the DB persist, so even a
+                // sub-100ms navigation after click honours the new
+                // value (closes the first-toggle race documented in
+                // 18.1-CONTEXT.md risk surface).
+                //
+                // Cookie attributes are LOCKED per D-01:
+                //   Path=/; Max-Age=31536000; SameSite=Lax
+                // NO HttpOnly — the client must read this cookie for
+                // the SSR-authoritative initial paint after reload.
+                // Per wasm-patterns rule 35: no `.unwrap()` in any
+                // hydrate code; every step is guarded.
+                if let Ok(html_doc) = doc.clone().dyn_into::<web_sys::HtmlDocument>() {
+                    let _ = html_doc.set_cookie(&format!(
+                        "lol_companion_theme={}; Path=/; Max-Age=31536000; SameSite=Lax",
+                        theme
+                    ));
+                }
+
+                // Optimistic DOM update so the swap is instant.
                 if let Some(root) = doc.document_element() {
                     let _ = root.set_attribute("data-theme", &theme);
                 }

@@ -4,20 +4,20 @@ milestone: v1.3
 milestone_name: Launch Readiness
 status: ready_to_plan
 stopped_at: Phase 18 UI-SPEC approved
-last_updated: "2026-05-14T12:26:52.616Z"
+last_updated: "2026-05-25T15:41:48.735Z"
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 7
-  total_plans: 35
-  completed_plans: 25
-  percent: 54
+  total_plans: 38
+  completed_plans: 35
+  percent: 92
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 19
-Plan: Not started
+Phase: 18.1 (ssr-theme-injection-gap-closure-for-ui-18-runtime-01) — EXECUTING
+Plan: 1 of 3
 
 Next: spec/discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md`). Phase 18 was inserted on 2026-05-11; Bug-Report Widget is now Phase 19; subsequent phases renumbered 19→20, 20→21, 21→22, 22→23, 23→24, 19.1→20.1, v1.4 Phase 24→25.
 
@@ -26,7 +26,7 @@ Next: spec/discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 18 — region-variants
+**Current focus:** Phase 18.1 — ssr-theme-injection-gap-closure-for-ui-18-runtime-01
 **v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions
