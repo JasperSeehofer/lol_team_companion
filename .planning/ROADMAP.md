@@ -446,7 +446,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
 | 18. Region Variants | v1.3 | 10/10 | Complete    | 2026-05-22 |
-| 18.1 SSR Theme Injection (gap closure) | v1.3 | 3/3 | Complete   | 2026-05-25 |
+| 18.1 SSR Theme Injection (gap closure) | v1.3 | 3/3 | Complete    | 2026-05-25 |
 | 19. Bug-Report Widget | v1.3 | 0/? | Not started (renumbered from 18) | - |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
