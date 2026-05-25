@@ -3,23 +3,23 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Launch Readiness
 status: ready_to_plan
-stopped_at: Phase 18 UI-SPEC approved
-last_updated: "2026-05-25T15:41:48.735Z"
+stopped_at: Phase 18.1 complete (UI-18-RUNTIME-01 resolved; UI-18.1-HYDRATE-01 logged for Phase 18.2)
+last_updated: "2026-05-25T22:00:25.553Z"
 progress:
-  total_phases: 14
-  completed_phases: 7
+  total_phases: 16
+  completed_phases: 8
   total_plans: 38
-  completed_plans: 35
-  percent: 92
+  completed_plans: 38
+  percent: 50
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 18.1 (ssr-theme-injection-gap-closure-for-ui-18-runtime-01) — EXECUTING
-Plan: 1 of 3
+Phase: 18.1 (ssr-theme-injection-gap-closure-for-ui-18-runtime-01) — COMPLETE (3/3 plans)
+Plan: 3 of 3 (complete)
 
-Next: spec/discuss/plan Phase 18 (Region Variants — see `/home/jasper/.claude/plans/there-is-a-continue-ancient-reef.md`). Phase 18 was inserted on 2026-05-11; Bug-Report Widget is now Phase 19; subsequent phases renumbered 19→20, 20→21, 21→22, 22→23, 23→24, 19.1→20.1, v1.4 Phase 24→25.
+Next: Phase 19 (Bug-Report Widget) is technically unblocked per the ROADMAP entry's dependency on UI-18-RUNTIME-01 closure. However, the new UI-18.1-HYDRATE-01 finding (Pandemonium WASM hydration panic — disables all client-side interactivity on Pandemonium pages) should likely be addressed in a Phase 18.2 (hydrate bridge) before Phase 19 begins implementation — otherwise the bug-report widget will not function for Pandemonium-cookie users. Surfaced for user/orchestrator decision. Resume command options: `/gsd-spec-phase 18.2` (recommended) OR `/gsd-spec-phase 19` (Phase 19 directly, accepting hydrate panic for now).
 
 ## Project Reference
 
@@ -47,6 +47,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 14]: current_date_short() returns static Today — auto-title is user-editable so approximate is acceptable
 - [Phase 16]: v1.2 Solo Mode & Match Intelligence shipped 2026-05-07; close-out resolved WR-01 (refetch hoisting) and WR-02 (dead get_personal_goals removed); 15-REVIEW.md fully reconciled; second-pass review found 0 new HIGH/Critical
 - [Phase 17]: UI consolidation complete 2026-05-11; demacia/pandemonium themes adopted (color-only swap — structural variants scoped as new Phase 18); self-hosted fonts (G-01 zero hits); 4-hub IA; 22 visual-regression baselines committed; 6-pillar audit PASS-with-deferred; FLUX placeholder backgrounds with AI-IMAGES.md reproducibility log; Open-Design seeded as cross-repo design system
+- [Phase 18.1]: UI-18-RUNTIME-01 resolved 2026-05-25 by SSR theme injection middleware (axum middleware + cookie write + per-request InitialTheme context). Runtime sweep proved Pandemonium structural branches activate at SSR (28 markers across 7 routes; 18 Demacia negative-space markers; 3/3 utility REQ-7 PASS; 3/3 mode-toggle D-04 PASS). New finding UI-18.1-HYDRATE-01 (WASM hydration panic on Pandemonium pages, tachys mod.rs:217 unwrap on None) recommended for Phase 18.2.
 
 ## Blockers/Concerns
 
@@ -55,10 +56,10 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-05-14T11:22:33.941Z
-Stopped at: Phase 18 UI-SPEC approved
-Resume file: .planning/phases/18-region-variants/18-UI-SPEC.md
-Next command: `/gsd-spec-phase 18` for Phase 18 (Region Variants) — Demacia + Pandemonium structural component branches per Open-Design mockups.
+Last session: 2026-05-25T22:00:03.867Z
+Stopped at: Phase 18.1 complete (UI-18-RUNTIME-01 resolved; UI-18.1-HYDRATE-01 logged for Phase 18.2)
+Resume file: .planning/phases/18.1-ssr-theme-injection-gap-closure-for-ui-18-runtime-01/18.1-03-SUMMARY.md
+Next command: `/gsd-spec-phase 18.2` (recommended — close UI-18.1-HYDRATE-01 hydrate panic) OR `/gsd-spec-phase 19` (Phase 19 Bug-Report Widget, accepting hydrate panic as known issue).
 
 ## v1.3 Decisions (baked in pivot 2026-05-06)
 
