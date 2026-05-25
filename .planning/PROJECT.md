@@ -143,4 +143,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 after Phase 16 — v1.2 shipped, active milestone v1.3 Launch Readiness*
+*Last updated: 2026-05-26 after Phase 18.1 — SSR-authoritative theme injection landed; UI-18-RUNTIME-01 resolved; Phase 18 region-branching activates at runtime. New finding UI-18.1-HYDRATE-01 tracked for Phase 18.2 (hydrate bridge) before Phase 19. v1.3 Launch Readiness in progress.*
