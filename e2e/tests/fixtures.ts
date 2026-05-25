@@ -103,26 +103,60 @@ export { expect };
 /**
  * Set the region (theme) for the current page.
  *
- * Clicks the Demacia or Pandemonium button in the nav ThemeToggle,
- * then waits for the WASM Effect to apply the change to data-theme.
- * Per wasm-patterns rule 56: 700ms wait for WASM Effect settle.
+ * Sets the `lol_companion_theme` cookie at the browser-context level and reloads so
+ * SSR honours the new region. Previously clicked the toggle and waited for the WASM
+ * Effect to flip `data-theme` post-hydration; that approach only flipped tokens, not
+ * structural region branches. Post-Phase-18.1, structural branches activate when SSR
+ * sees the cookie (see `src/server/theme_layer.rs::theme_injection_middleware`).
+ *
+ * The helper is backwards-compatible — every existing caller continues to work because
+ * the reload happens transparently here. Tests that call `setRegion(page, "pandemonium")`
+ * BEFORE `page.goto(...)` work because the cookie is set in the browser context first,
+ * so the next navigation already carries it. Tests that call `setRegion` AFTER
+ * `page.goto(...)` work because the helper reloads the current page.
+ *
+ * Phase 18.1 spec_lock D-01: cookie name=`lol_companion_theme`, path=`/`, sameSite=`Lax`.
+ * D-05: only `demacia` / `pandemonium` are valid values (TypeScript enforced).
+ *
+ * Edge case: when called BEFORE any `page.goto()`, `page.url()` is `about:blank`. We
+ * use the explicit `domain + path` form (rather than `url`) so the cookie is scoped
+ * to `127.0.0.1` regardless of the page's current URL. The subsequent `page.reload()`
+ * on `about:blank` is a no-op and the next real navigation picks up the cookie.
+ *
+ * Note: Playwright's `addCookies` API rejects passing BOTH `url` and `path` — you
+ * must pass either `url` alone (which derives domain+path) or the explicit
+ * `domain` + `path` pair. We use the latter form for clarity and so the cookie
+ * works even when called before any navigation.
  */
 export async function setRegion(
   page: import("@playwright/test").Page,
   region: "demacia" | "pandemonium"
 ): Promise<void> {
-  const themeAttr = await page.getAttribute("html", "data-theme");
-  if (themeAttr === region) return; // already correct region
-  const btnText = region === "pandemonium" ? "Pandemonium" : "Demacia";
-  await page.click(`button:has-text("${btnText}")`);
-  // wasm-patterns rule 56: WASM Effect fires asynchronously.
-  // Wait 700ms for the optimistic DOM update to apply (data-theme change on <html>).
-  // NOTE: This does NOT wait for the DB write to complete. If you need the server
-  // to render the new theme, call setRegion AFTER page.goto() (navigate-first pattern).
-  await page.waitForTimeout(700);
-  const newTheme = await page.getAttribute("html", "data-theme");
-  if (newTheme !== region) {
-    throw new Error(`setRegion failed: expected ${region}, got ${newTheme}`);
+  // 1. Inject the cookie at the browser-context layer (sent on next request).
+  await page.context().addCookies([
+    {
+      name: "lol_companion_theme",
+      value: region,
+      domain: "127.0.0.1",
+      path: "/",
+      sameSite: "Lax",
+    },
+  ]);
+
+  // 2. Reload so SSR re-renders the page with the new cookie. If the page hasn't
+  //    navigated yet (about:blank), reload is a no-op and the next goto() will
+  //    pick up the cookie. Skip the reload in that case to avoid spurious waits.
+  const currentUrl = page.url();
+  if (currentUrl && currentUrl !== "about:blank") {
+    await page.reload({ waitUntil: "networkidle" });
+    // wasm-patterns rule 56: 500ms hydrate settle.
+    await page.waitForTimeout(500);
+
+    // 3. Assert SSR honoured the cookie.
+    const themeAttr = await page.getAttribute("html", "data-theme");
+    if (themeAttr !== region) {
+      throw new Error(`setRegion failed: expected ${region}, got ${themeAttr}`);
+    }
   }
 }
 
