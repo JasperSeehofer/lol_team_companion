@@ -79,6 +79,51 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
+    // Phase 18.2 Plan 04 — Hydration-side InitialTheme provider.
+    //
+    // The SSR render path receives `InitialTheme` via
+    // `leptos_routes_with_context` in `main.rs` (the closure calls
+    // `provide_context(theme)` where `theme` is the request-scoped
+    // `REQUEST_THEME` task-local resolved by `theme_injection_middleware`).
+    //
+    // On the WASM hydrate path, `hydrate_body(App)` mounts this `App`
+    // component directly — `leptos_routes_with_context` does NOT run in
+    // the browser. Without an equivalent hydrate-side provider, every
+    // descendant `use_context::<InitialTheme>()` returns `None` and
+    // falls back to the `"demacia"` default. Pages like `Nav`,
+    // `DraftPage`, `SoloDashboardPage`, etc. read the context, derive a
+    // `region: String`, and pass it down to region-branching primitives
+    // (`Btn`, `ModeToggle`, `Card`, `Glitch`, `SectionHead`, ...). When
+    // SSR computed `region = "pandemonium"` and WASM hydrate computed
+    // `region = "demacia"`, every divergent primitive arm causes a
+    // structural mismatch that propagates up to `tachys-0.2.14/src/
+    // html/mod.rs:217 InertElement::hydrate Option::unwrap() on None`.
+    //
+    // Fix: on hydrate, read `<html data-theme="...">` (which the SSR
+    // shell rendered with the same resolved theme value) and provide
+    // it as context BEFORE the `view!` macro instantiates Routes /
+    // child components. The DOM attribute is the canonical SSR→WASM
+    // serialization channel — it survives across page navigations and
+    // is identical to what the SSR `theme_injection_middleware`
+    // resolved for the same request (D-02 precedence).
+    //
+    // On SSR, no provide is needed here because the outer
+    // `leptos_routes_with_context` closure already provided it. We
+    // gate the hydrate-side provide behind `cfg(feature = "hydrate")`
+    // because `web_sys::window()` is WASM-only and would not link in
+    // the SSR build; the SSR owner already has `InitialTheme` from the
+    // parent scope so descendants resolve correctly.
+    #[cfg(feature = "hydrate")]
+    {
+        let theme = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.document_element())
+            .and_then(|el| el.get_attribute("data-theme"))
+            .filter(|v| v == "demacia" || v == "pandemonium")
+            .unwrap_or_else(|| "demacia".to_string());
+        provide_context(InitialTheme(theme));
+    }
+
     view! {
         <Stylesheet id="leptos" href="/pkg/lol_team_companion.css" />
         <Title text="LoL Team Companion" />
