@@ -10,8 +10,6 @@
 
 use leptos::prelude::*;
 
-use crate::app::InitialTheme;
-
 /// Heraldic horizontal divider with central fleur. Demacia variant —
 /// callers should swap to `RiotTape` for Pandemonium contexts.
 #[component]
@@ -125,18 +123,34 @@ pub fn RiotTape(
     }
 }
 
-/// Companion sigil + wordmark. Reads the `InitialTheme` context to
+/// Companion sigil + wordmark. Takes `region: String` as a prop to
 /// switch between Demacia (shield + Cinzel imperial uppercase) and
 /// Pandemonium (VT323 glitch wordmark "COMPANION_").
 ///
-/// NOTE: `CompanionSigil` is the ONLY primitive that uses `use_context::<InitialTheme>()`
-/// internally (legacy pattern, preserved verbatim from old ornaments.rs).
-/// All NEW region-branching primitives accept `region: String` as a prop instead.
+/// Phase 18.2 Plan 03 — Hydration reconciliation fix:
+/// Previously this component read `use_context::<InitialTheme>()` internally,
+/// which produced a SSR/WASM divergence because `InitialTheme` is only
+/// provided in the SSR render path (main.rs `leptos_routes_with_context`)
+/// and NOT in the WASM hydrate path (`App::App()` does not re-provide it).
+/// On Pandemonium-cookie requests, SSR computed `is_pandemonium = true` and
+/// emitted the Pandemonium arm; WASM hydrate found no context and fell back
+/// to the Demacia arm, causing a structural hydration mismatch and the
+/// `tachys-0.2.14/src/html/mod.rs:217 Option::unwrap() on None` panic.
+///
+/// Per project convention (see `solo_dashboard.rs:256` and every other
+/// region primitive — Btn, ModeToggle, Card, Glitch, SectionHead, LPProgress):
+/// each call site reads `InitialTheme` at the page/shell level ONCE and
+/// passes the resulting `region: String` as a prop. Leptos serializes prop
+/// values into the hydration bundle, so the value is identical SSR→WASM.
 #[component]
-pub fn CompanionSigil() -> impl IntoView {
-    let is_pandemonium = use_context::<InitialTheme>()
-        .map(|t| t.0 == "pandemonium")
-        .unwrap_or(false);
+pub fn CompanionSigil(
+    /// Active region — `"pandemonium"` or `"demacia"` (or any other string
+    /// which falls back to the Demacia arm). The caller is responsible for
+    /// reading `use_context::<InitialTheme>()` ONCE at page entry and
+    /// passing the resulting `t.0` value here.
+    #[prop(into)] region: String,
+) -> impl IntoView {
+    let is_pandemonium = region == "pandemonium";
 
     if is_pandemonium {
         view! {

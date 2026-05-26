@@ -14,11 +14,16 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
+use crate::app::InitialTheme;
 use crate::components::region::{CompanionSigil, FleurDeLis};
 use crate::pages::profile::get_current_user;
 
 #[component]
 pub fn ClosedBetaPage() -> impl IntoView {
+    // Phase 18.2-03 — read region ONCE at page entry; pass as a prop
+    // to CompanionSigil so its branch decision matches SSR on hydrate.
+    let region = use_context::<InitialTheme>().unwrap_or_default().0;
+
     let user = Resource::new(|| (), |_| get_current_user());
 
     // D-15: redirect authenticated users to /team/dashboard. The
@@ -61,7 +66,7 @@ pub fn ClosedBetaPage() -> impl IntoView {
 
             <div class="relative z-10 max-w-3xl mx-auto py-24 px-6 text-center flex flex-col items-center">
                 <div class="mb-2">
-                    <CompanionSigil />
+                    <CompanionSigil region=region.clone() />
                 </div>
 
                 <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mt-8">

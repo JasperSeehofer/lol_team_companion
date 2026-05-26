@@ -12,6 +12,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_query_map;
 
+use crate::app::InitialTheme;
 use crate::components::region::CompanionSigil;
 use crate::components::ui::ErrorBanner;
 
@@ -54,6 +55,10 @@ pub async fn register_action(
 
 #[component]
 pub fn RegisterPage() -> impl IntoView {
+    // Phase 18.2-03 — read region ONCE at page entry; pass as a prop
+    // to CompanionSigil so SSR and WASM hydrate see the same value.
+    let region = use_context::<InitialTheme>().unwrap_or_default().0;
+
     let register = ServerAction::<RegisterAction>::new();
     let query = use_query_map();
 
@@ -114,7 +119,7 @@ pub fn RegisterPage() -> impl IntoView {
 
             <div class="relative z-10 bg-surface border border-divider rounded-xl p-8 max-w-sm w-full shadow-xl">
                 <div class="flex justify-center mb-6">
-                    <CompanionSigil />
+                    <CompanionSigil region=region.clone() />
                 </div>
 
                 <h1 class="font-display italic text-[24px] text-primary text-center">
