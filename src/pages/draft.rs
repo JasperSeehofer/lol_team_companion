@@ -1580,7 +1580,7 @@ pub fn DraftPage() -> impl IntoView {
             <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
             // War Table header strip — sigil, phase badge, opponent name, intel toggle
             <div class="bg-surface/80 backdrop-blur border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap">
-                <CompanionSigil />
+                <CompanionSigil region=region.clone() />
                 <div class="h-6 w-px bg-divider" aria-hidden="true"></div>
                 <span class="bg-accent text-accent-contrast font-imperial uppercase tracking-[0.18em] text-[10px] px-3 py-1 rounded">
                     {phase_label}

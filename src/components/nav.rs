@@ -4,6 +4,7 @@ use leptos_router::{
     hooks::use_location,
 };
 
+use crate::app::InitialTheme;
 use crate::components::region::CompanionSigil;
 use crate::components::theme_toggle::ThemeToggle;
 use crate::models::user::JoinRequest;
@@ -222,6 +223,12 @@ fn hub_for_path(path: &str) -> &'static str {
 
 #[component]
 pub fn Nav() -> impl IntoView {
+    // Phase 18.2-03 — read region ONCE at shell entry and pass it to
+    // CompanionSigil as a prop. The InitialTheme context is provided
+    // SSR-side only; props serialize across the SSR→WASM boundary and
+    // ensure hydration sees the same value the server rendered.
+    let region = use_context::<InitialTheme>().unwrap_or_default().0;
+
     let logout_action = ServerAction::<Logout>::new();
     let menu_open = RwSignal::new(false);
     let notif_open = RwSignal::new(false);
@@ -302,7 +309,7 @@ pub fn Nav() -> impl IntoView {
                 <div class="flex items-center gap-7 h-14">
                     // Sigil → home
                     <A href="/" attr:class="flex items-center shrink-0 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
-                        <CompanionSigil />
+                        <CompanionSigil region=region.clone() />
                     </A>
 
                     // 4 primary hubs
