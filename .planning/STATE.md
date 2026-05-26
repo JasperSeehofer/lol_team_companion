@@ -2,31 +2,31 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Launch Readiness
-status: ready_to_plan
-stopped_at: Phase 18.2 context gathered
-last_updated: "2026-05-26T00:06:47.469Z"
+status: phase_complete
+stopped_at: Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved
+last_updated: "2026-05-26T12:05:00.000Z"
 progress:
   total_phases: 17
-  completed_phases: 8
-  total_plans: 43
-  completed_plans: 38
-  percent: 47
+  completed_phases: 9
+  total_plans: 48
+  completed_plans: 43
+  percent: 53
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 18.2 (pandemonium-hydration-reconciliation-gap-closure-for-ui-18-1) — EXECUTING
-Plan: 1 of 5
+Phase: 18.2 complete (5/5 plans, verification passed 9/9 must-haves)
+Plan: —
 
-Next: Phase 19 (Bug-Report Widget) is technically unblocked per the ROADMAP entry's dependency on UI-18-RUNTIME-01 closure. However, the new UI-18.1-HYDRATE-01 finding (Pandemonium WASM hydration panic — disables all client-side interactivity on Pandemonium pages) should likely be addressed in a Phase 18.2 (hydrate bridge) before Phase 19 begins implementation — otherwise the bug-report widget will not function for Pandemonium-cookie users. Surfaced for user/orchestrator decision. Resume command options: `/gsd-spec-phase 18.2` (recommended) OR `/gsd-spec-phase 19` (Phase 19 directly, accepting hydrate panic for now).
+Next: Phase 19 (Bug-Report Widget) — now fully unblocked. UI-18-RUNTIME-01 resolved by Phase 18.1 (SSR theme injection); UI-18.1-HYDRATE-01 resolved by Phase 18.2 (cfg(hydrate) provide_context in App::App() reads <html data-theme> via web_sys before Routes — commit e67c7da; CompanionSigil prop refactor — commit 50c70a8; 19-test regression gate — commit ed82453). Resume command: `/gsd:plan-phase 19` (next milestone phase).
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 18.2 — pandemonium-hydration-reconciliation-gap-closure-for-ui-18-1
+**Current focus:** Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved; Phase 19 (Bug-Report Widget) unblocked
 **v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions
@@ -48,6 +48,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 - [Phase 16]: v1.2 Solo Mode & Match Intelligence shipped 2026-05-07; close-out resolved WR-01 (refetch hoisting) and WR-02 (dead get_personal_goals removed); 15-REVIEW.md fully reconciled; second-pass review found 0 new HIGH/Critical
 - [Phase 17]: UI consolidation complete 2026-05-11; demacia/pandemonium themes adopted (color-only swap — structural variants scoped as new Phase 18); self-hosted fonts (G-01 zero hits); 4-hub IA; 22 visual-regression baselines committed; 6-pillar audit PASS-with-deferred; FLUX placeholder backgrounds with AI-IMAGES.md reproducibility log; Open-Design seeded as cross-repo design system
 - [Phase 18.1]: UI-18-RUNTIME-01 resolved 2026-05-25 by SSR theme injection middleware (axum middleware + cookie write + per-request InitialTheme context). Runtime sweep proved Pandemonium structural branches activate at SSR (28 markers across 7 routes; 18 Demacia negative-space markers; 3/3 utility REQ-7 PASS; 3/3 mode-toggle D-04 PASS). New finding UI-18.1-HYDRATE-01 (WASM hydration panic on Pandemonium pages, tachys mod.rs:217 unwrap on None) recommended for Phase 18.2.
+- [Phase 18.2]: UI-18.1-HYDRATE-01 resolved 2026-05-26. Root cause: SSR provided `InitialTheme` via `leptos_routes_with_context` but the hydrate path had no equivalent — `use_context::<InitialTheme>()` returned `None` on WASM → demacia fallback → SSR/WASM structural prop divergence at every region-branching descendant. Fix: `cfg(feature="hydrate")` `provide_context(InitialTheme)` block in `App::App()` reading `<html data-theme>` via `web_sys` BEFORE `view!` instantiates `<Routes>` (commit e67c7da). Anti-pattern fix: CompanionSigil refactored to take `region: String` prop, removing internal `use_context` read (commit 50c70a8). Regression gate: `e2e/tests/hydration-no-panic.spec.ts` — 19 tests (14-row panic-sweep matrix × 7 routes × 2 regions + 5 D-13 interactivity triad), commit ed82453. Sweep: 0/14 panics post-fix; Demacia parity preserved; 121/121 unit tests pass. Tooling lesson: agent-browser text-mode `errors`/`console` silently truncates structured WASM panic entries — `--json` mode is mandatory for hydration panic capture (this masked the real symmetric-bug nature for two waves). Plan-structure deviation: fix actually landed in Wave 4 (expanded scope) rather than Wave 3 because Plan 03's deepened investigation revealed the Plan 01–02 baseline error.
 
 ## Blockers/Concerns
 
@@ -56,10 +57,10 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-05-25T23:12:38.688Z
-Stopped at: Phase 18.2 context gathered
-Resume file: .planning/phases/18.2-pandemonium-hydration-reconciliation-gap-closure-for-ui-18-1/18.2-CONTEXT.md
-Next command: `/gsd-spec-phase 18.2` (recommended — close UI-18.1-HYDRATE-01 hydrate panic) OR `/gsd-spec-phase 19` (Phase 19 Bug-Report Widget, accepting hydrate panic as known issue).
+Last session: 2026-05-26T12:05:00.000Z
+Stopped at: Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved; verification passed 9/9
+Resume file: .planning/phases/18.2-pandemonium-hydration-reconciliation-gap-closure-for-ui-18-1/18.2-VERIFICATION.md
+Next command: `/gsd:plan-phase 19` (next milestone phase — Bug-Report Widget; both UI-18-RUNTIME-01 + UI-18.1-HYDRATE-01 now resolved, so all Phase 18 dependencies are clear).
 
 ## v1.3 Decisions (baked in pivot 2026-05-06)
 
