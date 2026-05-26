@@ -305,7 +305,7 @@ Plans:
 **Plans**: 5 plans across 2 waves
 Plans:
 **Wave 1** *(sequential — bisect → bisect → fix; each plan depends on prior)*
-- [ ] 18.2-01-PLAN.md — Bisect leaves-first cycles 1-4 (Card, SectionHead, Glitch, RiotTape) via short-circuit-and-reload; initialize 18.2-DIAGNOSIS.md with sanity baseline + per-cycle results
+- [x] 18.2-01-PLAN.md — Bisect leaves-first cycles 1-4 (Card, SectionHead, Glitch, RiotTape) via short-circuit-and-reload; initialize 18.2-DIAGNOSIS.md with sanity baseline + per-cycle results
 - [ ] 18.2-02-PLAN.md — Bisect remaining leaves cycles 5-8 (CompanionSigil, ModeToggle, LPProgress, Btn) + per-page Pandemonium views (cycles 9-13 if needed) + D-04 WASM render-tracing escalation if needed; finalize Final culprit list + Root cause analysis in DIAGNOSIS.md
 - [ ] 18.2-03-PLAN.md — Apply real Leptos fix (Fix Pattern 1/2/3 per D-09) or D-10 cfg(ssr) fallback to identified culprit(s); regression check + Demacia parity sweep + Summary table in DIAGNOSIS.md
 **Wave 2** *(depend on Wave 1; Plan 05 has CHECKPOINT)*
