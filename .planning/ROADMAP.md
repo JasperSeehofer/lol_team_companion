@@ -329,8 +329,16 @@ Plans:
   4. On every server start, an auto-export task writes/updates `.planning/INBOX/bug-reports.md` with all open reports grouped by category and recency, formatted for direct ingestion by the next Claude session
   5. CLAUDE.md mentions the inbox location so future sessions discover it on context load
   6. No dark patterns (per `[[guardrails#G-10]]`) — neutral language, no pre-filled ratings, no confirmshaming
-**Plans**: TBD
-**UI hint**: yes
+**UI hint**: yes (floating widget UX + 7-page label rollout + e2e regression coverage)
+**Plans**: 4 plans across 3 waves
+Plans:
+**Wave 1** *(backend foundation)*
+- [ ] 19-01-PLAN.md — Schema + shared model + DB CRUD (create_bug_report, list_bug_reports, list_open_bug_reports) + inline integration tests (mitigates T-19-01 at DB layer via ASSERT clause; T-19-02 at DB layer via empty-description guard; T-19-05 deferred-with-Forbidden)
+**Wave 2** *(parallel — UI wiring + auto-export task)*
+- [ ] 19-02-PLAN.md — Extend Phase 17 widget stub: WidgetState (Idle/Selecting/Editing), global capture-phase click listener via StoredValue<Option<Closure>>, esc-cancel, real submit_bug_report server-fn call replacing console.log stub, toast "Thanks. Your report is in." (period), CSS rule for data-feedback-selecting outline; defense-in-depth server-fn validation
+- [ ] 19-03-PLAN.md — src/server/bug_report_export.rs with pure render_inbox + impure export_open_reports (BUG_REPORT_INBOX_PATH env var with default ./.planning/INBOX/bug-reports.md), main.rs synchronous .await hook with tracing::warn! warn-and-continue, CLAUDE.md ## Bug-Report Inbox section with T-19-04 prompt-injection warning, .planning/INBOX/.gitkeep marker
+**Wave 3** *(rollout + e2e regression — has manual checkpoint)*
+- [ ] 19-04-PLAN.md — data-feedback-label rollout to 7 first-priority pages (draft, solo_dashboard, team/dashboard, stats, champion_pool, game_plan, post_game) + e2e/tests/bug-report.spec.ts (5 tests via authedPage fixture) + human-verify checkpoint sweeping all 7 pages via agent-browser and inspecting inbox file after server restart; hydration-no-panic regression gate
 
 ### Phase 20: Production Hardening (renumbered from Phase 19)
 **Goal**: Close all production-readiness gaps surfaced by the audit so the binary is safe to deploy behind HTTPS on Hetzner
