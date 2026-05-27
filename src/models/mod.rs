@@ -1,4 +1,5 @@
 pub mod action_item;
+pub mod bug_report;
 pub mod champion;
 pub mod draft;
 pub mod game_plan;
