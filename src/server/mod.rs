@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bug_report_export;
 pub mod data_dragon;
 pub mod db;
 pub mod leaguepedia;
