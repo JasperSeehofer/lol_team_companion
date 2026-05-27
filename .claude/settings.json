@@ -1,1 +1,15 @@
-{}
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "/gsd:execute-phase",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/clean-orphan-targets.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
