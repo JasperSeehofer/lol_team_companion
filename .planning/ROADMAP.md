@@ -335,8 +335,8 @@ Plans:
 **Wave 1** *(backend foundation)*
 - [x] 19-01-PLAN.md — Schema + shared model + DB CRUD (create_bug_report, list_bug_reports, list_open_bug_reports) + inline integration tests (mitigates T-19-01 at DB layer via ASSERT clause; T-19-02 at DB layer via empty-description guard; T-19-05 deferred-with-Forbidden)
 **Wave 2** *(parallel — UI wiring + auto-export task)*
-- [ ] 19-02-PLAN.md — Extend Phase 17 widget stub: WidgetState (Idle/Selecting/Editing), global capture-phase click listener via StoredValue<Option<Closure>>, esc-cancel, real submit_bug_report server-fn call replacing console.log stub, toast "Thanks. Your report is in." (period), CSS rule for data-feedback-selecting outline; defense-in-depth server-fn validation
-- [ ] 19-03-PLAN.md — src/server/bug_report_export.rs with pure render_inbox + impure export_open_reports (BUG_REPORT_INBOX_PATH env var with default ./.planning/INBOX/bug-reports.md), main.rs synchronous .await hook with tracing::warn! warn-and-continue, CLAUDE.md ## Bug-Report Inbox section with T-19-04 prompt-injection warning, .planning/INBOX/.gitkeep marker
+- [x] 19-02-PLAN.md — Extend Phase 17 widget stub: WidgetState (Idle/Selecting/Editing), global capture-phase click listener via StoredValue<Option<Closure>>, esc-cancel, real submit_bug_report server-fn call replacing console.log stub, toast "Thanks. Your report is in." (period), CSS rule for data-feedback-selecting outline; defense-in-depth server-fn validation
+- [x] 19-03-PLAN.md — src/server/bug_report_export.rs with pure render_inbox + impure export_open_reports (BUG_REPORT_INBOX_PATH env var with default ./.planning/INBOX/bug-reports.md), main.rs synchronous .await hook with tracing::warn! warn-and-continue, CLAUDE.md ## Bug-Report Inbox section with T-19-04 prompt-injection warning, .planning/INBOX/.gitkeep marker
 **Wave 3** *(rollout + e2e regression — has manual checkpoint)*
 - [ ] 19-04-PLAN.md — data-feedback-label rollout to 7 first-priority pages (draft, solo_dashboard, team/dashboard, stats, champion_pool, game_plan, post_game) + e2e/tests/bug-report.spec.ts (5 tests via authedPage fixture) + human-verify checkpoint sweeping all 7 pages via agent-browser and inspecting inbox file after server restart; hydration-no-panic regression gate
 
@@ -491,7 +491,7 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
 | 18. Region Variants | v1.3 | 10/10 | Complete    | 2026-05-22 |
 | 18.1 SSR Theme Injection (gap closure) | v1.3 | 3/3 | Complete    | 2026-05-25 |
-| 19. Bug-Report Widget | v1.3 | 1/4 | In Progress|  |
+| 19. Bug-Report Widget | v1.3 | 3/4 | In Progress|  |
 | 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
 | 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
 | 21. Deploy Infra (CAX11) | v1.3 | 0/? | Not started (renumbered from 20) | - |
