@@ -11,6 +11,7 @@ use thiserror::Error;
 
 use crate::models::{
     action_item::ActionItem,
+    bug_report::BugReport,
     champion::{Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary},
     draft::{BanPriority, Draft, DraftAction, DraftTree, DraftTreeNode},
     game_plan::{
@@ -3097,6 +3098,110 @@ pub async fn delete_action_item(db: &Surreal<Db>, item_id: &str) -> DbResult<()>
 }
 
 // ---------------------------------------------------------------------------
+// Bug Reports (Phase 19 D-02/D-03)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbBugReport {
+    id: RecordId,
+    user: RecordId,
+    page_url: String,
+    element_label: String,
+    description: String,
+    category: String,
+    viewport_w: Option<i64>,
+    viewport_h: Option<i64>,
+    created_at: String,
+    status: String,
+}
+
+impl From<DbBugReport> for BugReport {
+    fn from(b: DbBugReport) -> Self {
+        BugReport {
+            id: Some(b.id.to_sql()),
+            user_id: b.user.to_sql(),
+            page_url: b.page_url,
+            element_label: b.element_label,
+            description: b.description,
+            category: b.category,
+            viewport_w: b.viewport_w.map(|v| v as i32),
+            viewport_h: b.viewport_h.map(|v| v as i32),
+            created_at: Some(b.created_at),
+            status: b.status,
+        }
+    }
+}
+
+pub async fn create_bug_report(
+    db: &Surreal<Db>,
+    user_id: &str,
+    page_url: String,
+    element_label: String,
+    description: String,
+    category: String,
+    viewport_w: Option<i32>,
+    viewport_h: Option<i32>,
+) -> DbResult<()> {
+    // T-19-02 mitigation: reject whitespace-only descriptions at the DB layer
+    // so any caller (server-fn, future CLI, etc.) gets the same guarantee.
+    if description.trim().is_empty() {
+        return Err(DbError::Other("Description is required".into()));
+    }
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    // Owned `String` for every `.bind` per surreal-patterns rule 4.
+    db.query(
+        "CREATE bug_report SET \
+             user = type::record('user', $user_key), \
+             page_url = $page_url, \
+             element_label = $element_label, \
+             description = $description, \
+             category = $category, \
+             viewport_w = $viewport_w, \
+             viewport_h = $viewport_h",
+    )
+    .bind(("user_key", user_key))
+    .bind(("page_url", page_url))
+    .bind(("element_label", element_label))
+    .bind(("description", description))
+    .bind(("category", category))
+    .bind(("viewport_w", viewport_w.map(|v| v as i64)))
+    .bind(("viewport_h", viewport_h.map(|v| v as i64)))
+    .await?
+    .check()?; // surreal-patterns rule 27: .check() on writes
+    Ok(())
+}
+
+pub async fn list_bug_reports(
+    db: &Surreal<Db>,
+    status: Option<&str>,
+) -> DbResult<Vec<BugReport>> {
+    let mut r = match status {
+        Some(s) => {
+            db.query(
+                "SELECT *, <string>created_at AS created_at \
+                 FROM bug_report WHERE status = $status \
+                 ORDER BY created_at DESC",
+            )
+            .bind(("status", s.to_string()))
+            .await?
+        }
+        None => {
+            db.query(
+                "SELECT *, <string>created_at AS created_at \
+                 FROM bug_report ORDER BY created_at DESC",
+            )
+            .await?
+        }
+    };
+    let rows: Vec<DbBugReport> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(BugReport::from).collect())
+}
+
+pub async fn list_open_bug_reports(db: &Surreal<Db>) -> DbResult<Vec<BugReport>> {
+    list_bug_reports(db, Some("open")).await
+}
+
+// ---------------------------------------------------------------------------
 // Team Notes (shared notebook)
 // ---------------------------------------------------------------------------
 
@@ -5835,5 +5940,102 @@ mod tests {
         // Assert: get_solo_matches(queue_filter=Some(420)) returns only solo/duo matches
         // Assert: get_solo_matches(queue_filter=None) returns all matches
         todo!("Promote to integration test when linker OOM is resolved");
+    }
+
+    // -----------------------------------------------------------------------
+    // Bug Reports (Phase 19 D-02/D-03)
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn bug_report_create_and_list_round_trip() {
+        use surrealdb::engine::local::Mem;
+        let db = surrealdb::Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // Seed a user.
+        let mut r = db
+            .query("CREATE user SET username='u', email='e@x.t', password_hash='h' RETURN id")
+            .await
+            .unwrap();
+        let row: Option<IdRecord> = r.take(0).unwrap();
+        let user_id = row.unwrap().id.to_sql();
+
+        create_bug_report(
+            &db,
+            &user_id,
+            "/draft".into(),
+            "Draft → Blue side → Pick 3".into(),
+            "Hover broke".into(),
+            "bug".into(),
+            Some(1920),
+            Some(1080),
+        )
+        .await
+        .unwrap();
+
+        let reports = list_open_bug_reports(&db).await.unwrap();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].category, "bug");
+        assert_eq!(reports[0].page_url, "/draft");
+    }
+
+    #[tokio::test]
+    async fn bug_report_rejects_invalid_category() {
+        use surrealdb::engine::local::Mem;
+        let db = surrealdb::Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        // Manually CREATE with bad category to exercise the ASSERT constraint
+        // — proves T-19-01 mitigation at the DB layer.
+        let result = db
+            .query(
+                "CREATE bug_report SET user=type::record('user','u1'), page_url='/x', element_label='y', description='z', category='spam'",
+            )
+            .await
+            .unwrap()
+            .check();
+        assert!(
+            result.is_err(),
+            "ASSERT $value IN ['bug','wishlist'] must reject 'spam'"
+        );
+    }
+
+    #[tokio::test]
+    async fn bug_report_rejects_empty_description() {
+        use surrealdb::engine::local::Mem;
+        let db = surrealdb::Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // T-19-02 mitigation: whitespace-only description rejected at DB layer
+        // before the CREATE even runs.
+        let result = create_bug_report(
+            &db,
+            "user:u1",
+            "/draft".into(),
+            "Draft → Pick 3".into(),
+            "   ".into(),
+            "bug".into(),
+            None,
+            None,
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "create_bug_report must reject whitespace-only description"
+        );
     }
 }
