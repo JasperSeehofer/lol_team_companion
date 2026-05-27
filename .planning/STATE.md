@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: Launch Readiness
 status: phase_complete
 stopped_at: Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved; verification passed 9/9
-last_updated: "2026-05-26T14:48:51.791Z"
+last_updated: "2026-05-26T14:51:54.295Z"
 progress:
   total_phases: 17
   completed_phases: 9
@@ -16,8 +16,8 @@ progress:
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 18.2 complete (5/5 plans, verification passed 9/9 must-haves)
-Plan: —
+Phase: 19 (bug-report-widget) — EXECUTING
+Plan: 1 of 4
 
 Next: Phase 19 (Bug-Report Widget) — now fully unblocked. UI-18-RUNTIME-01 resolved by Phase 18.1 (SSR theme injection); UI-18.1-HYDRATE-01 resolved by Phase 18.2 (cfg(hydrate) provide_context in App::App() reads <html data-theme> via web_sys before Routes — commit e67c7da; CompanionSigil prop refactor — commit 50c70a8; 19-test regression gate — commit ed82453). Resume command: `/gsd:plan-phase 19` (next milestone phase).
 
@@ -26,7 +26,7 @@ Next: Phase 19 (Bug-Report Widget) — now fully unblocked. UI-18-RUNTIME-01 res
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved; Phase 19 (Bug-Report Widget) unblocked
+**Current focus:** Phase 19 — bug-report-widget
 **v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions

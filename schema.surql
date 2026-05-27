@@ -317,3 +317,20 @@ DEFINE FIELD IF NOT EXISTS target_value ON personal_goal TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON personal_goal TYPE datetime DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON personal_goal TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS personal_goal_user_type ON personal_goal FIELDS user, goal_type UNIQUE;
+
+-- Bug reports (Phase 19 D-02) — captured by floating widget,
+-- exported to .planning/INBOX/bug-reports.md on server start.
+DEFINE TABLE IF NOT EXISTS bug_report SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON bug_report TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS page_url ON bug_report TYPE string;
+DEFINE FIELD IF NOT EXISTS element_label ON bug_report TYPE string;
+DEFINE FIELD IF NOT EXISTS description ON bug_report TYPE string;
+DEFINE FIELD IF NOT EXISTS category ON bug_report TYPE string
+  ASSERT $value IN ['bug', 'wishlist'];
+DEFINE FIELD IF NOT EXISTS viewport_w ON bug_report TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS viewport_h ON bug_report TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS created_at ON bug_report TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS status ON bug_report TYPE string DEFAULT 'open'
+  ASSERT $value IN ['open', 'triaged', 'closed'];
+DEFINE INDEX IF NOT EXISTS bug_report_status_created
+  ON bug_report FIELDS status, created_at;
