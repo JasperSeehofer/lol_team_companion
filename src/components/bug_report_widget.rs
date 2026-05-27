@@ -16,11 +16,87 @@ use leptos::ev;
 use leptos::prelude::*;
 
 use crate::components::icon::Icon;
+use crate::components::ui::{ToastContext, ToastKind};
 use crate::pages::profile::get_current_user;
 
 /// Pathname prefixes on which the widget should NOT render. UI-SPEC
 /// line 590 — public/auth/legal pages must not show the widget.
 const HIDDEN_PREFIXES: &[&str] = &["/auth", "/closed-beta", "/legal"];
+
+// ---------------------------------------------------------------------------
+// Server functions (Phase 19 plan 02)
+//
+// Per leptos-patterns rule 34 these MUST be defined before the calling
+// component, and per rule 9 every SSR-only `use` statement lives INSIDE
+// the function body.
+// ---------------------------------------------------------------------------
+
+/// Persist a bug report. Defense-in-depth: the DB layer already trims +
+/// rejects empty descriptions and the schema `ASSERT` clause rejects bad
+/// categories; we duplicate both checks here so the server-fn boundary
+/// fails fast and never reaches the DB with bad input.
+///
+/// T-19-01 mitigation: category whitelist.
+/// T-19-02 mitigation: description trim + length cap (4000 chars).
+#[server]
+pub async fn submit_bug_report(
+    page_url: String,
+    element_label: String,
+    description: String,
+    category: String,
+    viewport_w: Option<i32>,
+    viewport_h: Option<i32>,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    // T-19-02 server-fn guard (description hygiene).
+    let description = description.trim().to_string();
+    if description.is_empty() {
+        return Err(ServerFnError::new("Description is required"));
+    }
+    if description.len() > 4000 {
+        return Err(ServerFnError::new("Description exceeds 4000 characters"));
+    }
+    // T-19-01 server-fn guard (category whitelist).
+    if category != "bug" && category != "wishlist" {
+        return Err(ServerFnError::new("Invalid category"));
+    }
+
+    db::create_bug_report(
+        &surreal,
+        &user.id,
+        page_url,
+        element_label,
+        description,
+        category,
+        viewport_w,
+        viewport_h,
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
+/// List bug reports. v1 returns Forbidden for ALL callers — no admin role
+/// field exists on the user model yet. Plan 19-03 (inbox export) writes to
+/// disk via `db::list_open_bug_reports` directly, bypassing this gate.
+// TODO Phase 22: replace with admin gate once role field exists on user
+#[server]
+pub async fn list_bug_reports(
+    _status: Option<String>,
+) -> Result<Vec<crate::models::bug_report::BugReport>, ServerFnError> {
+    // TODO Phase 22: replace with admin gate once role field exists on user
+    Err(ServerFnError::new("Forbidden"))
+}
 
 #[component]
 pub fn BugReportWidget() -> impl IntoView {
