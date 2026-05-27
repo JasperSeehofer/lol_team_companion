@@ -362,3 +362,16 @@
 :root .auth-bg-demacia,
 [data-theme="demacia"] .auth-bg-demacia { display: block; opacity: 0.55; }
 [data-theme="pandemonium"] .auth-bg-demacia { display: none; }
+
+/* ============================================================
+   Bug-report widget — Phase 19 D-05.
+   Single O(1) selector lights up every tagged element while
+   the widget is in select-mode. Toggling the
+   `data-feedback-selecting` attribute on <html> activates this
+   rule for every descendant `[data-feedback-label]` element.
+   ============================================================ */
+[data-feedback-selecting] [data-feedback-label] {
+  outline: 2px solid var(--color-accent-soft, var(--color-accent));
+  outline-offset: 2px;
+  cursor: crosshair;
+}
