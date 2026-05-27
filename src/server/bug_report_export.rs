@@ -1,10 +1,12 @@
 //! Phase 19 D-04 — server-start auto-export of open bug reports.
 //!
 //! Runs once in main.rs after init_db and before axum::serve.
-//! Writes the path passed by main.rs (resolved from BUG_REPORT_INBOX_PATH
-//! env var, default ./.planning/INBOX/bug-reports.md) with YAML front-matter
+//! Writes the path passed by main.rs (default
+//! `./.planning/INBOX/bug-reports.md`) with YAML front-matter
 //! and one ## heading per open report. Failures are logged and
 //! swallowed (D-04.5); never block server start.
+//!
+//! Path resolution (env-var lookup) lives in main.rs, not here.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -24,10 +26,9 @@ pub enum ExportError {
 
 /// Reads open reports from the DB, renders them via [`render_inbox`], and
 /// writes the result synchronously to `inbox_path`. Creates parent
-/// directories on demand. The caller (main.rs) resolves the path from the
-/// `BUG_REPORT_INBOX_PATH` env var; env-var lookup deliberately does NOT
-/// live here so unit tests can pass tempdirs without racing on a
-/// process-global env var.
+/// directories on demand. The caller (main.rs) resolves the path from an
+/// env var; env-var lookup deliberately does NOT live here so unit tests
+/// can pass tempdirs without racing on a process-global env var.
 pub async fn export_open_reports(
     db: &Arc<Surreal<Db>>,
     inbox_path: &Path,
@@ -210,5 +211,103 @@ mod tests {
             .next()
             .unwrap();
         assert_eq!(snippet.len(), 60);
+    }
+
+    // ---------- Filesystem tolerance tests ----------
+    //
+    // Both pass `&Path` directly — no env-var mutation, no race against
+    // sibling tests. The env var is read only by main.rs, never by the
+    // library code under test.
+
+    #[tokio::test]
+    async fn writes_to_path() {
+        use serde::Deserialize;
+        use surrealdb::engine::local::Mem;
+        use surrealdb::types::{RecordId, SurrealValue, ToSql};
+
+        let path = std::env::temp_dir().join(format!(
+            "bug_report_test_{}_writes.md",
+            std::process::id()
+        ));
+        // Clean any leftover from a previous aborted run.
+        let _ = std::fs::remove_file(&path);
+
+        let db = Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // Seed a user — mirrors the IdRecord pattern at src/server/db.rs:43.
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct IdRow {
+            id: RecordId,
+        }
+        let mut r = db
+            .query("CREATE user SET username='u', email='e@x.t', password_hash='h' RETURN id")
+            .await
+            .unwrap();
+        let row: Option<IdRow> = r.take(0).unwrap();
+        let user_id = row.unwrap().id.to_sql();
+
+        db::create_bug_report(
+            &db,
+            &user_id,
+            "/draft".into(),
+            "Test → element".into(),
+            "test desc".into(),
+            "bug".into(),
+            Some(1024),
+            Some(768),
+        )
+        .await
+        .unwrap();
+
+        export_open_reports(&Arc::new(db), &path).await.unwrap();
+
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            body.contains("total_open: 1"),
+            "expected total_open: 1 in body, got: {}",
+            body
+        );
+        assert!(
+            body.contains("test desc"),
+            "expected report description in body, got: {}",
+            body
+        );
+
+        // Cleanup.
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn tolerates_unwritable_path() {
+        use surrealdb::engine::local::Mem;
+
+        let db = Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // /proc is a read-only kernel filesystem on Linux — create_dir_all
+        // on an arbitrary subdir under it MUST fail with an IO error.
+        let path =
+            std::path::PathBuf::from("/proc/this-cannot-be-written-to/bug-reports.md");
+
+        let result = export_open_reports(&Arc::new(db), &path).await;
+        assert!(
+            result.is_err(),
+            "expected Err on unwritable path, got Ok"
+        );
+        assert!(
+            matches!(result, Err(ExportError::Io(_))),
+            "expected ExportError::Io variant on unwritable path"
+        );
     }
 }

@@ -48,6 +48,19 @@ async fn main() {
         .await
         .expect("Failed to initialize SurrealDB");
 
+    // Phase 19 D-04 — auto-export open bug reports to the Claude inbox.
+    // Runs once, synchronously, after DB init and before axum::serve.
+    // Write failures are logged and swallowed (D-04.5).
+    let inbox_path = std::env::var("BUG_REPORT_INBOX_PATH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("./.planning/INBOX/bug-reports.md"));
+    if let Err(e) =
+        lol_team_companion::server::bug_report_export::export_open_reports(&surreal_db, &inbox_path)
+            .await
+    {
+        tracing::warn!("Bug-report inbox export failed: {e}");
+    }
+
     // Leptos config
     let conf = get_configuration(None).unwrap();
     let leptos_options = conf.leptos_options.clone();
