@@ -1013,7 +1013,7 @@ pub fn GamePlanPage() -> impl IntoView {
     // our_champ_signals/enemy_champ_signals used last for role-specific section
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Game plan">
             <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header per UI-SPEC §"Game Plan Page Layout"
                 <div>
@@ -1204,7 +1204,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                     let champ_list = result.unwrap_or_default();
                                     let champ_list2 = champ_list.clone();
                                     view! {
-                                        <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+                                        <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start" data-feedback-label="Game plan → Champion picker">
                                             // Our team
                                             <div class="flex flex-col gap-2">
                                                 <div class="flex items-center justify-between">
@@ -1583,7 +1583,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     </div>
 
                     // Notes
-                    <div class="bg-elevated border border-outline rounded-xl p-6">
+                    <div class="bg-elevated border border-outline rounded-xl p-6" data-feedback-label="Game plan → Plan body">
                         <label class="block text-muted text-xs font-medium mb-1">"Additional Notes"</label>
                         <textarea rows="3" class=textarea_class()
                             placeholder="Anything else the team should know..."

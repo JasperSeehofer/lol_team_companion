@@ -499,7 +499,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let (notes_input, set_notes_input) = signal(String::new());
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Champion pool">
             <div class="max-w-7xl mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header — region-aware SectionHead
                 <SectionHead
@@ -509,7 +509,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 />
 
                 // Role tabs and content — wrapped in region-aware Card
-                <Card region=region.clone()>
+                <Card region=region.clone() attr:data-feedback-label="Champion pool → Tier list">
                 <div class="flex gap-1 overflow-x-auto pb-1">
                     {POOL_ROLES.iter().map(|&role| {
                         view! {
@@ -535,7 +535,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     // Main content: tiers
                     <div class="flex-1 flex flex-col gap-4 min-w-0">
                     // Add champion form
-                    <div class="flex gap-2 items-end">
+                    <div class="flex gap-2 items-end" data-feedback-label="Champion pool → Add controls">
                         <div class="flex-1">
                             <Suspense fallback=|| view! { <div class="h-10 bg-overlay rounded animate-pulse"></div> }>
                                 {move || champions_resource.get().map(|result| {

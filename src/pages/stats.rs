@@ -328,7 +328,7 @@ pub fn StatsPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Stats">
             <div class="max-w-7xl mx-auto px-8 lg:px-16 py-11 flex flex-col gap-6">
                 // Imperial header
                 <div class="flex items-end justify-between gap-6 flex-wrap">
@@ -660,7 +660,7 @@ fn StatsContent(
     view! {
         <div class="flex flex-col gap-6">
             // Filters
-            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap">
+            <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap" data-feedback-label="Stats → Filters">
                 <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filters"</span>
 
                 // Queue type filter
@@ -746,7 +746,7 @@ fn StatsContent(
             // Two-column layout: 1.4fr battle log + 1fr folio recap
             <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8 items-start">
                 // Battle log column
-                <div class="bg-elevated border border-divider rounded-xl p-6">
+                <div class="bg-elevated border border-divider rounded-xl p-6" data-feedback-label="Stats → Match list">
                     <div class="flex items-baseline justify-between mb-4">
                         <span class="font-imperial uppercase tracking-wider text-xs text-muted">
                             "Battle log"

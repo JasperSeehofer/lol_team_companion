@@ -371,12 +371,13 @@ pub fn SoloDashboardPage() -> impl IntoView {
     let region_for_toggle = region.clone();
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Solo dashboard">
             <div class="max-w-3xl mx-auto flex flex-col gap-8">
 
                 // ── Solo-Constellation Header — region-aware ─────────────────────
                 <Card region=region_for_header.clone()
-                      variant=if region_for_header == "demacia" { "gilt" } else { "zine" }>
+                      variant=if region_for_header == "demacia" { "gilt" } else { "zine" }
+                      attr:data-feedback-label="Solo dashboard → Ranked snapshot">
                     <div class="flex items-end justify-between">
                         <SectionHead region=region_for_header.clone()
                                      eyebrow=if region_for_header == "demacia" { "STARS ALIGN" } else { "// SOLO_PROFILE" }
@@ -926,7 +927,7 @@ fn SoloConstellationContent(
             }.into_any())}
 
             // ── LP History ────────────────────────────────────────────────────
-            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window region=lp_region />
+            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window region=lp_region attr:data-feedback-label="Solo dashboard → LP history graph" />
 
             // ── DEMACIA PATCH (b): Last-10 W/L sequence ──────────────────────
             {is_demacia.then(|| {
@@ -962,6 +963,7 @@ fn SoloConstellationContent(
                 matches=matches
                 queue_filter=queue_filter
                 region=region_badge
+                attr:data-feedback-label="Solo dashboard → Recent matches"
             />
 
             // ── DEMACIA PATCH (c): Sort/filter controls ───────────────────────

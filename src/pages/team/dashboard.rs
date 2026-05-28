@@ -670,7 +670,7 @@ pub fn TeamDashboard() -> impl IntoView {
     let region_for_toggle = region.clone();
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Team dashboard">
             <div class="max-w-5xl mx-auto">
             // Mode toggle — Dashboard / Game Day Brief (18-08)
             <div class="mb-4 flex items-center">
@@ -914,7 +914,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 // Join requests (leader only)
                                 {if is_leader {
                                     view! {
-                                        <div>
+                                        <div data-feedback-label="Team dashboard → Join requests">
                                             <Suspense fallback=|| view! { <span></span> }>
                                                 {move || requests.get().map(|res| {
                                                     let reqs = res.unwrap_or_default();
@@ -991,7 +991,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 }}
 
                                 // Starting roster — 5 role slots
-                                <div>
+                                <div data-feedback-label="Team dashboard → Roster">
                                     <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Order of battle"</div>
                                     <h3 class="font-display italic text-2xl text-primary mb-3">"Starting Roster"</h3>
                                     <div class="grid grid-cols-5 gap-3">
@@ -1101,7 +1101,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 </div>
 
                                 // Coaches section
-                                <div>
+                                <div data-feedback-label="Team dashboard → Coaches">
                                     <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Council"</div>
                                     <h3 class="font-display italic text-2xl text-primary mb-3">"Coaches"</h3>
                                     {if coaches.is_empty() {

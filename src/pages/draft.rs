@@ -1576,10 +1576,10 @@ pub fn DraftPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Draft">
             <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
             // War Table header strip — sigil, phase badge, opponent name, intel toggle
-            <div class="bg-surface/80 backdrop-blur border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap">
+            <div class="bg-surface/80 backdrop-blur border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → War Table header">
                 <CompanionSigil region=region.clone() />
                 <div class="h-6 w-px bg-divider" aria-hidden="true"></div>
                 <span class="bg-accent text-accent-contrast font-imperial uppercase tracking-[0.18em] text-[10px] px-3 py-1 rounded">
@@ -3822,6 +3822,7 @@ fn DraftCarouselView(
                                 role_assignments=role_assignments
                                 role_auto_guessed=role_auto_guessed
                                 on_role_set=on_role_set
+                                attr:data-feedback-label="Draft → Action ledger"
                             />
                         }.into_any()
                     }
@@ -3984,6 +3985,7 @@ fn DraftWarTableView(
                                 role_assignments=role_assignments
                                 role_auto_guessed=role_auto_guessed
                                 on_role_set=on_role_set
+                                attr:data-feedback-label="Draft → Action ledger"
                             />
                         }.into_any()
                     }
@@ -4278,9 +4280,9 @@ fn DraftLedgerView(
                 </Card>
 
                 // Two-column ledger
-                <div class="grid grid-cols-2 gap-6 mt-4">
+                <div class="grid grid-cols-2 gap-6 mt-4" data-feedback-label="Draft → Two-column ledger">
                     // Blue side column
-                    <Card region=region_for_blue.clone() variant="gilt">
+                    <Card region=region_for_blue.clone() variant="gilt" attr:data-feedback-label="Draft → Blue side">
                         <div>
                             <Eyebrow>"BLUE SIDE"</Eyebrow>
                             <div class="mt-2 flex justify-center">
@@ -4336,7 +4338,7 @@ fn DraftLedgerView(
                     </Card>
 
                     // Red side column
-                    <Card region=region_for_red.clone() variant="gilt">
+                    <Card region=region_for_red.clone() variant="gilt" attr:data-feedback-label="Draft → Red side">
                         <div>
                             <Eyebrow>"RED SIDE"</Eyebrow>
                             <div class="mt-2 flex justify-center">

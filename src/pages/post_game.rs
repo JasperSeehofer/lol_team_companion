@@ -561,7 +561,7 @@ pub fn PostGamePage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Post game">
             <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header — region-aware SectionHead
                 <SectionHead
@@ -571,7 +571,7 @@ pub fn PostGamePage() -> impl IntoView {
                 />
 
                 // Main content — wrapped in region-aware Card
-                <Card region=region.clone()>
+                <Card region=region.clone() attr:data-feedback-label="Post game → Learning list">
             {move || action_item_count.get().map(|n| {
                 let label = if n == 1 {
                     "1 action item created".to_string()
@@ -949,7 +949,7 @@ pub fn PostGamePage() -> impl IntoView {
                     </div>
 
                     // Structured feedback
-                    <div class="grid grid-cols-3 gap-4">
+                    <div class="grid grid-cols-3 gap-4" data-feedback-label="Post game → Patterns">
                         // What went well
                         <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col gap-2">
                             <label class="text-emerald-400 text-xs font-semibold uppercase tracking-wider">"What Went Well"</label>
