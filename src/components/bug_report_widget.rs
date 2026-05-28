@@ -160,15 +160,17 @@ pub fn BugReportWidget() -> impl IntoView {
     let widget_visible = move || is_authed() && !on_pathname_excluded();
 
     view! {
-        <Show when=widget_visible fallback=|| ()>
-            <BugReportWidgetInner
-                widget_state=widget_state
-                report_kind=report_kind
-                report_text=report_text
-                element_label=element_label
-                submit_error=submit_error
-            />
-        </Show>
+        <Suspense fallback=|| ()>
+            <Show when=widget_visible fallback=|| ()>
+                <BugReportWidgetInner
+                    widget_state=widget_state
+                    report_kind=report_kind
+                    report_text=report_text
+                    element_label=element_label
+                    submit_error=submit_error
+                />
+            </Show>
+        </Suspense>
     }
 }
 

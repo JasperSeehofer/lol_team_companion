@@ -9,3 +9,6 @@ e2e/test-results/
 
 # Claude Design source bundle (extracted from share link; do not commit binary blobs)
 .local-design-source/
+
+# Bug-report inbox is rewritten on every server start (Phase 19-03 startup hook)
+.planning/INBOX/bug-reports.md
