@@ -237,6 +237,7 @@ fn BugReportWidgetInner(
                             "click",
                             cb.as_ref().unchecked_ref(),
                         );
+                        cb.forget();
                     }
                 });
                 esc_handle.update_value(|slot| {
@@ -245,6 +246,7 @@ fn BugReportWidgetInner(
                             "keydown",
                             cb.as_ref().unchecked_ref(),
                         );
+                        cb.forget();
                     }
                 });
                 if let Some(doc) = win.document() {
