@@ -377,7 +377,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
                 // ── Solo-Constellation Header — region-aware ─────────────────────
                 <Card region=region_for_header.clone()
                       variant=if region_for_header == "demacia" { "gilt" } else { "zine" }
-                      attr:data-feedback-label="Solo dashboard → Ranked snapshot">
+                      attr:data-feedback-label="Solo dashboard → Page header (mode toggle + sync)">
                     <div class="flex items-end justify-between">
                         <SectionHead region=region_for_header.clone()
                                      eyebrow=if region_for_header == "demacia" { "STARS ALIGN" } else { "// SOLO_PROFILE" }
@@ -889,7 +889,8 @@ fn SoloConstellationContent(
 
             // ── Rank crest + LP progress ──────────────────────────────────────
             <Card region=region.clone()
-                  variant=if region == "demacia" { "gilt" } else { "zine" }>
+                  variant=if region == "demacia" { "gilt" } else { "zine" }
+                  attr:data-feedback-label="Solo dashboard → Ranked snapshot">
                 <div class="flex items-center gap-6">
                     <RankBadge tier=current_tier.clone() division=current_division.clone() large=true />
                     <LPProgress region=region.clone() lp={current_lp.max(0) as u32} max=100 />
