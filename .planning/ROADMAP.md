@@ -77,7 +77,8 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 **Milestone Goal:** Once v1.3 is shipped and producing real-user match data, ship the deferred Draft Integration alongside the highest-priority items surfaced from the launch bug-report inbox.
 
 - [ ] **Phase 25: Draft Integration** (was old Phase 16, then renumbered Phase 24, now Phase 25 after Region Variants insertion) - Personal matchup notes surface in draft Intel sidebar; champion pool cards display solo-history win rate badges. Depends on Phase 14 + Phase 15 — both already complete.
-- [ ] Phase 26+: Inbox-driven backlog from v1.3 launch (defined post-launch).
+- [ ] **Phase 26: Riot PUUID Migration** (captured 2026-05-28 from Phase 19 verification session) - Riot deprecated the old key-encrypted PUUID format; stored PUUIDs from the legacy format now 400 with `"Exception decrypting <puuid>"` on `/match/v5/by-puuid/{puuid}/ids`. Write a one-shot migration: for every `user` row, re-resolve `puuid` via `account-v1 /by-riot-id/{game_name}/{tag_line}` and update the field. Add a 400-decrypt detection log so we know when this happens again. Not launch-blocking — affected users can re-link on `/profile` as a workaround.
+- [ ] Phase 27+: Inbox-driven backlog from v1.3 launch (defined post-launch).
 
 ## Phase Details
 
