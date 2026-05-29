@@ -233,9 +233,15 @@ fn BugReportWidgetInner(
                 // `update_value` block.
                 click_capture_handle.update_value(|slot| {
                     if let Some(cb) = slot.take() {
-                        let _ = win.remove_event_listener_with_callback(
+                        // Must match the add-side `capture: true` flag —
+                        // removeEventListener only detaches when capture
+                        // matches. Without this the listener stays
+                        // attached and subsequent clicks reopen the
+                        // modal even after Esc-cancel.
+                        let _ = win.remove_event_listener_with_callback_and_bool(
                             "click",
                             cb.as_ref().unchecked_ref(),
+                            true,
                         );
                         cb.forget();
                     }
