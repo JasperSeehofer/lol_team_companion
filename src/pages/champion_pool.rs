@@ -509,8 +509,8 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 />
 
                 // Role tabs and content — wrapped in region-aware Card
-                <Card region=region.clone() attr:data-feedback-label="Champion pool → Tier list">
-                <div class="flex gap-1 overflow-x-auto pb-1">
+                <Card region=region.clone()>
+                <div class="flex gap-1 overflow-x-auto pb-1" data-feedback-label="Champion pool → Role tabs">
                     {POOL_ROLES.iter().map(|&role| {
                         view! {
                             <button
@@ -558,6 +558,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     </div>
 
                     // Tier columns
+                    <div data-feedback-label="Champion pool → Tier list">
                     <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-20" /><SkeletonCard height="h-20" /></div> }>
                         {move || {
                             let role = active_role.get();
@@ -807,6 +808,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                             })
                         }}
                     </Suspense>
+                    </div>
                 </div>
 
                 // Deep-dive panel (sticky 380px sidebar) per UI-SPEC §"Champion Pool Page Layout"
