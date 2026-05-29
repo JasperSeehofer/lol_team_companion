@@ -131,6 +131,15 @@ test.describe("bug-report widget", () => {
     // Modal must NOT be open.
     await expect(authedPage.locator(MODAL_DIALOG)).toHaveCount(0);
 
+    // Listener-detach regression gate: after Esc, clicking a tagged
+    // element must NOT reopen the modal (the capture-phase click
+    // listener must be fully removed, not just visually quiesced).
+    // Without the capture-flag match on removeEventListener, this
+    // click silently reopens the modal — see widget commit 05697fe.
+    await authedPage.locator(TAGGED_DRAFT_ELEMENT).first().click();
+    await authedPage.waitForTimeout(200);
+    await expect(authedPage.locator(MODAL_DIALOG)).toHaveCount(0);
+
     expect(filterRealErrors(errors)).toHaveLength(0);
   });
 
