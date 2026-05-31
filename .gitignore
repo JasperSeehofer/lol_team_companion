@@ -12,3 +12,6 @@ e2e/test-results/
 
 # Bug-report inbox is rewritten on every server start (Phase 19-03 startup hook)
 .planning/INBOX/bug-reports.md
+
+# Playwright MCP scratch directory (tool-generated)
+.playwright-mcp/
