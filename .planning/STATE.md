@@ -2,31 +2,33 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Launch Readiness
-status: phase_complete
-stopped_at: Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved; verification passed 9/9
-last_updated: "2026-05-26T14:51:54.295Z"
+status: ready_to_plan
+stopped_at: Phase 19 complete (4/4) — ready to discuss Phase 20
+last_updated: 2026-05-31T10:57:14.057Z
 progress:
   total_phases: 17
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 47
-  completed_plans: 43
-  percent: 53
+  completed_plans: 47
+  percent: 59
 ---
 
 ## Current Position
 
 Milestone: v1.3 Launch Readiness
-Phase: 19 (bug-report-widget) — EXECUTING
-Plan: 1 of 4
+Phase: 20
+Plan: Not started
 
-Next: Phase 19 (Bug-Report Widget) — now fully unblocked. UI-18-RUNTIME-01 resolved by Phase 18.1 (SSR theme injection); UI-18.1-HYDRATE-01 resolved by Phase 18.2 (cfg(hydrate) provide_context in App::App() reads <html data-theme> via web_sys before Routes — commit e67c7da; CompanionSigil prop refactor — commit 50c70a8; 19-test regression gate — commit ed82453). Resume command: `/gsd:plan-phase 19` (next milestone phase).
+Next: Phase 20 (Production Hardening) — env-driven site-addr; secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot. Resume command: `/gsd-discuss-phase 20` (or `/gsd-plan-phase 20`).
+
+Phase 19 (Bug-Report Widget) complete 2026-05-31: UAT 8/8 in-scope (SC-8 deferred to Phase 22 by design), security 5/5 threats closed (19-SECURITY.md, AR-19-01 accepted). 132 unit + 6 e2e tests green; cold-start boot + inbox export verified.
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-25)
+See: .planning/PROJECT.md (updated 2026-05-31)
 
 **Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 19 — bug-report-widget
+**Current focus:** Phase 20 — production hardening
 **v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
 
 ## Decisions
@@ -57,9 +59,9 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Session Continuity
 
-Last session: 2026-05-26T12:05:00.000Z
-Stopped at: Phase 18.2 complete — UI-18.1-HYDRATE-01 resolved; verification passed 9/9
-Resume file: .planning/phases/18.2-pandemonium-hydration-reconciliation-gap-closure-for-ui-18-1/18.2-VERIFICATION.md
+Last session: 2026-05-31T10:57:00.000Z
+Stopped at: Phase 19 complete (UAT + security verified) — ready to discuss/plan Phase 20
+Resume file: None
 Next command: `/gsd:plan-phase 19` (next milestone phase — Bug-Report Widget; both UI-18-RUNTIME-01 + UI-18.1-HYDRATE-01 now resolved, so all Phase 18 dependencies are clear).
 
 ## v1.3 Decisions (baked in pivot 2026-05-06)

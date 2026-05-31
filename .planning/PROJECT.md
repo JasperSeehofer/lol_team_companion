@@ -116,6 +116,9 @@ Remaining tech debt:
 | Opponent 5-role form with auto-fetch | Two-step create then fetch avoids transaction ambiguity | ✓ Good — reliable Riot API integration |
 | Rust-side HashMap aggregation for analytics | Avoids SurrealQL JOIN ambiguity; unit-testable | ✓ Good — clean separation |
 | serde(default) for backward compat | PostGameLearning and DraftAction fields default gracefully | ✓ Good — no migration needed |
+| Bug-report inbox export: synchronous warn-and-continue at boot | Server start decoupled from inbox-write success — FS failure logs via tracing::warn! and continues to serve (T-19-03) | ✓ Good — Phase 19, deterministic restart |
+| list_bug_reports server-fn returns Forbidden for all v1 callers | Export task reads db::list_open_bug_reports directly; admin-role gate deferred to Phase 22 (// TODO Phase 22 markers) | ✓ Good — Phase 19, no premature auth surface |
+| Inbox prompt-injection defense is layered, not absolute | HTML-escape + blockquote framing + CLAUDE.md untrusted-content instruction; residual LLM-injection risk accepted under closed-beta invite gate (AR-19-01) | ✓ Acceptable for v1 — Phase 19 |
 
 ## Constraints
 
@@ -143,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-26 after Phase 18.1 — SSR-authoritative theme injection landed; UI-18-RUNTIME-01 resolved; Phase 18 region-branching activates at runtime. New finding UI-18.1-HYDRATE-01 tracked for Phase 18.2 (hydrate bridge) before Phase 19. v1.3 Launch Readiness in progress.*
+*Last updated: 2026-05-31 after Phase 19 — Bug-Report Widget shipped and verified (UAT 8/8 in-scope, security 5/5 threats closed). Floating Report button on every authed page → select-mode capture → modal; bug_report table; auto-export to .planning/INBOX/bug-reports.md on every server start. SC-8 (DSE/Tier-A transparency table) deferred to Phase 22 by design. Next: Phase 20 — production hardening. v1.3 Launch Readiness in progress.*
