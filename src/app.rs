@@ -7,6 +7,7 @@ use leptos_router::{
 
 use crate::components::bug_report_widget::BugReportWidget;
 use crate::components::nav::Nav;
+use crate::components::room::QuickNav;
 use crate::components::ui::ToastProvider;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
@@ -25,6 +26,7 @@ use crate::pages::{
     personal_learnings::{NewLearningPage, PersonalLearningsPage},
     post_game::PostGamePage,
     profile::ProfilePage,
+    rooms::solo_journey::SoloJourneyRoom,
     solo_dashboard::SoloDashboardPage,
     stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
@@ -131,6 +133,7 @@ pub fn App() -> impl IntoView {
         <Router>
             <ToastProvider>
                 <Nav />
+                <QuickNav />
                 <main>
                     <Routes fallback=|| view! { <ErrorTemplate outside_errors=Errors::default() /> }>
                         <Route path=path!("/") view=HomePage />
@@ -150,6 +153,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/action-items") view=ActionItemsPage />
                         <Route path=path!("/analytics") view=AnalyticsPage />
                         <Route path=path!("/solo") view=SoloDashboardPage />
+                        <Route path=path!("/journey") view=SoloJourneyRoom />
                         <Route path=path!("/match/:id") view=MatchDetailPage />
                         <Route path=path!("/personal-learnings") view=PersonalLearningsPage />
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />

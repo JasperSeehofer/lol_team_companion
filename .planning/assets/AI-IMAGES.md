@@ -187,3 +187,64 @@ After regeneration, update each asset block above with:
 - `Seed: <integer fal.ai assigned>`
 - `Final size: <new bytes>`
 - Remove the `TODO: Regenerate via fal.ai` line.
+
+---
+
+## Immersive rooms — parallax atmosphere assets
+
+The "rooms" redesign (Solo Journey first) renders a 2.5D parallax environment
+from **layer-separated** art. Each room loads only the active region's assets
+(the page builds the src path from the `region` prop; CSS-hiding the other
+region would still trigger a fetch and blow the budget).
+
+**Naming convention** under `public/img/rooms/<room>/<region>/`:
+
+| File | Role | z-index | `--depth` | Alpha |
+|------|------|---------|-----------|-------|
+| `plane-sky.webp`     | furthest parallax plane | -40 | 6  | opaque |
+| `plane-mid.webp`     | mid parallax plane      | -30 | 16 | transparent |
+| `plane-near.webp`    | near/foreground plane   | -20 | 32 | transparent |
+| `overlay-banner.webp`| growth: ranked climb (lighting/banner) | -18 | — | transparent |
+| `overlay-lib.webp`   | growth: library (learnings + champ notes) | -17 | — | transparent |
+| `overlay-armory.webp`| growth: armory (champion pool) | -16 | — | transparent |
+
+Overlays fade in by **discrete tier** (opacity 0 → 0.34 → 0.67 → 1.0) driven by
+`data-{lib,armory,banner}-tier` on the room root; thresholds live in
+`src/models/growth.rs::GrowthState::from_counts`. The spike uses **one overlay
+per axis** modulated by opacity; production may split each into discrete
+per-tier art (`overlay-lib-{1,2,3}.webp`) for a richer "shelves filling" effect.
+
+### Current assets (placeholders)
+
+`public/img/rooms/solo-journey/{demacia,pandemonium}/` — 6 files each.
+- **Compute path:** ImageMagick 6.9 (`convert`), layered `gradient:` (sky) and
+  blurred `xc:none` rectangles (transparent planes/overlays), WebP q68.
+- **Sizes:** ~26 KB per region (12 files total ≈ 52 KB) — far under the 400 KB
+  budget, leaving ample headroom for FLUX replacements.
+- **Status:** `TODO: Regenerate via fal.ai` once `FAL_KEY` is available.
+- Reproducible from the script in the Phase commit (see `git log` for the
+  `gen_region` invocation), or regenerate per the FLUX recipe below.
+
+### FLUX prompts (locked, layer-separated)
+
+The key requirement vs. the flat hero backgrounds: prompt each plane for a
+**single depth band** with the rest transparent, so they stack with parallax.
+
+- **Solo Journey · Demacia · sky:** "Demacia training hall interior at dawn,
+  FAR background only — high vaulted stone ceiling, warm golden shafts of light,
+  heraldic banners in the distance, atmospheric haze, oil painting, League of
+  Legends splash art style. No foreground objects."
+- **Solo Journey · Demacia · mid:** "MIDGROUND only on transparent background —
+  stone pillars and an armory wall, warm torchlight, painterly. Transparent sky
+  and floor."
+- **Solo Journey · Demacia · near:** "FOREGROUND only on transparent background
+  — a desk edge / training rack in shadow, bottom of frame, painterly."
+- **Overlays:** isolated growth elements on transparent background — a banner of
+  victory (banner), a wall of books/scrolls (lib), a rack of champion weapons
+  (armory). Pandemonium variants swap warm gold → neon pink/cyan, brutalist
+  obsidian architecture, electric haze.
+
+Generate each like the hero recipe above but with `image_size: landscape_16_9`,
+then ensure transparency with a background-removal pass for the mid/near/overlay
+layers, and compress to WebP (`convert in.png -quality 80 out.webp`). Keep the
+per-region total under 400 KB.

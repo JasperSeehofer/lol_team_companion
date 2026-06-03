@@ -65,6 +65,30 @@ pub async fn get_solo_dashboard(
     })
 }
 
+/// Accumulation-driven growth state for the immersive Solo Journey room.
+/// Returns an empty (all-Seed) state on any data absence rather than erroring
+/// (rule 44 — an empty room is a valid state, not a failure).
+#[server]
+pub async fn get_growth_state() -> Result<crate::models::growth::GrowthState, ServerFnError> {
+    use crate::models::growth::GrowthState;
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    let counts = db::get_growth_counts(&surreal, &user.id)
+        .await
+        .unwrap_or_default();
+    Ok(GrowthState::from_counts(counts))
+}
+
 #[server]
 pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
     use crate::server::auth::AuthSession;
@@ -250,13 +274,13 @@ fn resolve_mode(stored: &str, region: &str) -> String {
 // Component
 // ---------------------------------------------------------------------------
 
+/// The Solo dashboard's content — header (sync + mode toggle) and the
+/// Suspense-gated rank/LP/matches/goals views. Extracted so both the standalone
+/// `/solo` page and the immersive Solo Journey room (`/journey`) can host the
+/// exact same surfaces over different chrome. `region` is passed in (read once
+/// at the page/room entry; never inside primitives, per the Phase 18 SPEC).
 #[component]
-pub fn SoloDashboardPage() -> impl IntoView {
-    // Region read ONCE at page entry — passed as prop to all sub-components.
-    // Per SPEC Constraints: InitialTheme context must NOT be read inside primitives.
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-
+pub fn SoloSurfaces(region: String) -> impl IntoView {
     // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -371,8 +395,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
     let region_for_toggle = region.clone();
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Solo dashboard">
-            <div class="max-w-3xl mx-auto flex flex-col gap-8">
+        <div class="max-w-3xl mx-auto flex flex-col gap-8">
 
                 // ── Solo-Constellation Header — region-aware ─────────────────────
                 <Card region=region_for_header.clone()
@@ -462,7 +485,19 @@ pub fn SoloDashboardPage() -> impl IntoView {
                         }
                     })}
                 </Suspense>
-            </div>
+        </div>
+    }
+}
+
+/// Standalone `/solo` page: the Solo surfaces over the flat themed chrome.
+#[component]
+pub fn SoloDashboardPage() -> impl IntoView {
+    // Region read ONCE at page entry — passed as prop to all sub-components.
+    // Per SPEC Constraints: InitialTheme context must NOT be read inside primitives.
+    let region = use_context::<InitialTheme>().unwrap_or_default().0;
+    view! {
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Solo dashboard">
+            <SoloSurfaces region=region />
         </div>
     }
 }

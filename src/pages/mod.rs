@@ -13,6 +13,7 @@ pub mod opponents;
 pub mod personal_learnings;
 pub mod post_game;
 pub mod profile;
+pub mod rooms;
 pub mod solo_dashboard;
 pub mod stats;
 pub mod team;

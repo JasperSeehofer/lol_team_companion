@@ -19,6 +19,7 @@ use crate::models::{
         DashboardSummary, GamePlan, GamePlanEffectiveness, PoolGapWarning, PostGameLearning,
         PostGamePreview, StrategyTagSummary,
     },
+    growth::GrowthCounts,
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     personal_learning::PersonalLearning,
@@ -4098,6 +4099,52 @@ pub async fn get_dashboard_summary(
         pool_gap_warnings,
         drafts_without_game_plan,
         game_plans_without_post_game,
+    })
+}
+
+/// Accumulation counts for a single user, used to drive the immersive room
+/// "growth" state (library fill, armory fill, banner lighting). Batches six
+/// `count() … GROUP ALL` statements in one round-trip; mirrors the shape of
+/// `get_dashboard_summary`. All tables are user-scoped (`user record<user>`).
+pub async fn get_growth_counts(db: &Surreal<Db>, user_id: &str) -> DbResult<GrowthCounts> {
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+
+    let mut result = db
+        .query(
+            "SELECT count() as n FROM personal_learning WHERE user = type::record('user', $user_key) GROUP ALL; \
+             SELECT count() as n FROM champion_pool WHERE user = type::record('user', $user_key) GROUP ALL; \
+             SELECT count() as n FROM champion_note WHERE user = type::record('user', $user_key) GROUP ALL; \
+             SELECT count() as n FROM personal_goal WHERE user = type::record('user', $user_key) GROUP ALL; \
+             SELECT count() as n FROM ranked_snapshot WHERE user = type::record('user', $user_key) GROUP ALL; \
+             SELECT count() as n FROM player_match WHERE user = type::record('user', $user_key) GROUP ALL",
+        )
+        .bind(("user_key", user_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    // Each statement returns at most one grouped row; absent → 0.
+    fn count_of(rows: Vec<CountResult>) -> u32 {
+        rows.first().map(|r| r.n.max(0) as u32).unwrap_or(0)
+    }
+
+    let personal_learning = count_of(result.take(0).unwrap_or_default());
+    let champion_pool = count_of(result.take(1).unwrap_or_default());
+    let champion_note = count_of(result.take(2).unwrap_or_default());
+    let personal_goal = count_of(result.take(3).unwrap_or_default());
+    let ranked_snapshot = count_of(result.take(4).unwrap_or_default());
+    let player_match = count_of(result.take(5).unwrap_or_default());
+
+    Ok(GrowthCounts {
+        personal_learning,
+        champion_pool,
+        champion_note,
+        personal_goal,
+        ranked_snapshot,
+        player_match,
     })
 }
 

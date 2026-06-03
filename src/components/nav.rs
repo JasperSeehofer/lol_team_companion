@@ -156,7 +156,8 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
 
 /// Hub-grouped sub-routes. Each hub maps to its sub-nav children.
 /// `live` hub omitted from sub-nav (single-page hub, deferred feature).
-const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
+/// `pub` so the QuickNav command palette can reuse the same destinations.
+pub const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
     (
         "strategy",
         &[
@@ -186,6 +187,7 @@ const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
             ("/team/roster", "Roster"),
             ("/team-builder", "Team builder"),
             ("/solo", "Solo"),
+            ("/journey", "Journey"),
         ],
     ),
 ];
@@ -212,6 +214,7 @@ fn hub_for_path(path: &str) -> &'static str {
     } else if path.starts_with("/profile")
         || path.starts_with("/team")
         || path.starts_with("/solo")
+        || path.starts_with("/journey")
     {
         "profile"
     } else if path.starts_with("/live") {

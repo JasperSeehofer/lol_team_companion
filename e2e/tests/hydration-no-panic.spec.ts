@@ -77,6 +77,11 @@ const SCOPED_ROUTES = [
   "/champion-pool",
   "/post-game",
   "/match/test-match-id",
+  // Immersive Solo Journey room — region-branching art + growth tier
+  // attributes are set with static markup + reactive `data-*` attributes
+  // (no structural `if`), so this is the canary that the room never
+  // reintroduces the HYDRATE-01 panic class.
+  "/journey",
 ] as const;
 
 /**
