@@ -59,7 +59,24 @@ Features talk to each other — stats inform drafts, drafts flow into game plans
 - ✓ Champion performance trends table with time-window toggle (Phase 15)
 - ✓ Phase 15 close-out: WR-01 refetch hoist, WR-02 dead code removal, 15-REVIEW.md reconciled (Phase 16)
 
-## Current Milestone: v1.3 Launch Readiness
+## v1.3 Launch Readiness (partially shipped — superseded by the v1.4 pivot)
+
+**Shipped:** Phase 17 UI consolidation · Phase 18/18.1/18.2 region themes (color-swap; 4 of 11 page-pairs designed) · Phase 19 bug-report widget.
+**Re-sequenced into v1.4 (not yet built):** production hardening, closed-beta gate, deploy infra, compliance/transparency, pre-launch review, soft launch, draft integration (former Phases 20–25).
+**Paused:** remaining Phase 18 region structural variants (superseded by the immersive rooms direction).
+
+## Current Milestone: v1.4 Immersive Companion
+
+**Goal:** Transform the flat themed UI into an explorable 2.5D "rooms" experience (League universe, Demacia first) whose environment grows as the player accumulates work — then ship to closed beta.
+
+**Target features:**
+- Reusable immersive room system (parallax atmosphere + data-driven growth tiers + summonable QuickNav) — **Solo Journey room shipped as the proving spike** (branch `feat/immersive-rooms-solo-journey`)
+- War Room (draft + tree-drafter + game-plan + opponents + ban-priority)
+- Hall of Records / Library (stats + match detail + analytics + post-game + learnings)
+- Throne / Home room (identity + team dashboard + solo progression)
+- IA healing: fold siloed features into their intent rooms (opponents → War Room, learnings → Library)
+- Layer-separated FLUX environment art (Demacia first, then Pandemonium)
+- Re-incorporated launch work: production hardening, closed-beta gate, deploy infra, compliance/transparency, pre-launch review, soft launch, draft integration
 
 **Future (deferred beyond v1.2):**
 - [ ] Match as launchpad: create draft → game plan → review chain

@@ -1,27 +1,24 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Launch Readiness
-status: ready_to_plan
-stopped_at: Phase 19 complete (4/4) — ready to discuss Phase 20
-last_updated: 2026-05-31T10:57:14.057Z
+milestone: v1.4
+milestone_name: Immersive Companion
+status: planning
+last_updated: "2026-06-03T21:53:50.578Z"
+last_activity: 2026-06-03
 progress:
-  total_phases: 17
-  completed_phases: 10
-  total_plans: 47
-  completed_plans: 47
-  percent: 59
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 ## Current Position
 
-Milestone: v1.3 Launch Readiness
-Phase: 20
-Plan: Not started
-
-Next: Phase 20 (Production Hardening) — env-driven site-addr; secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot. Resume command: `/gsd-discuss-phase 20` (or `/gsd-plan-phase 20`).
-
-Phase 19 (Bug-Report Widget) complete 2026-05-31: UAT 8/8 in-scope (SC-8 deferred to Phase 22 by design), security 5/5 threats closed (19-SECURITY.md, AR-19-01 accepted). 132 unit + 6 e2e tests green; cold-start boot + inbox export verified.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-03 — Milestone v1.4 started
 
 ## Project Reference
 
