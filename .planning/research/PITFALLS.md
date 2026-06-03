@@ -1,126 +1,257 @@
 # Pitfalls Research
 
-**Domain:** Adding solo player mode and match detail/timeline intelligence to an existing Leptos 0.8 / SurrealDB 3.x team companion app
-**Researched:** 2026-03-25
-**Confidence:** HIGH (all pitfalls verified against codebase or official Riot API documentation)
+**Domain:** Adding immersive 2.5D parallax rooms + AI-art pipeline + gamified growth to an existing Leptos 0.8 SSR/hydrate League companion app, then shipping to closed beta on Hetzner CAX11
+**Researched:** 2026-06-03
+**Confidence:** HIGH (all WASM/Leptos/performance pitfalls verified against codebase or official docs; Riot IP section is MEDIUM — policy is ambiguous and Riot has not published an explicit AI-art policy as of this date)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause data corruption, team-feature regressions, or hard-to-recover state.
+Mistakes that cause rewrites, legal exposure, or hard-to-recover regressions.
 
 ---
 
-### Pitfall 1: The `match` Table's `team_id` Assumption Breaks Solo Mode
+### Pitfall 1: The Riot IP / Fan-Content-Policy Question Is Unanswered and Cannot Be Deferred Past Soft Launch
 
-**What goes wrong:** Every `match` record stored today has `team_id TYPE option<record<team>>` (schema.surql line 39). The `store_matches()` function in `db.rs` does not set `team_id` at all — it is always NULL. However all existing query paths in `get_team_match_stats()`, `get_dashboard_summary()`, and the win-condition analytics functions filter by `team_id = type::record('team', $team_key)` or assume matches belong to a team context. When solo mode is added and users sync personal stats without a team, matches are stored with no `team_id` — which is already the current behaviour — but new solo queries and existing team queries must never mix results.
+**What goes wrong:**
 
-**Why it happens:** The schema was designed for team use but the `team_id` field was left optional without a clear invariant. "NULL team_id = solo match" and "NULL team_id = match not yet assigned" are indistinguishable without a separate `mode` discriminator field.
+This project generates AI art depicting "Demacia citadel", "Pandemonium harrowing", and "League of Legends splash art style" environments, serves them to users of an app that uses the Riot API, and is heading toward a closed beta that may become a paid product (subscriptions/donations are the permitted monetisation model under the Riot API Terms). Three policies intersect here, and they are in tension:
 
-**How to avoid:** Add a `context` field (`'team'` or `'solo'`) to the `match` table at schema design time, or add a `solo_owner` field of type `option<record<user>>`. Use this discriminator in all queries instead of relying on `team_id IS NULL`. The solo stats fetch function must explicitly set `solo_owner = type::record('user', $user_key)` and all team stat queries must explicitly filter `team_id != NONE`.
+1. **Riot Fan Content Policy** (last updated August 2018 — the policy has not been revised to address AI-generated content). It permits non-commercial fan projects but explicitly prohibits apps on commercial storefronts without a licence. The policy says fan art must "include original content" (your own unique and original ideas) — whether AI-generated art using League universe prompts qualifies as "original" is legally untested.
 
-**Warning signs:** The team stats page starts showing solo-queue games from a user who has no team. Or: a solo user syncs games but the team stats view counts them. Check by verifying that `get_team_match_stats()` returns 0 rows for a freshly-joined team member who has personally synced matches.
+2. **Riot API Terms** (current). Commercial use is permitted if a free tier exists and the product has a production key. The API Terms explicitly prohibit "creating alternative ranking systems like MMR calculators" and several other categories, but do not mention AI-generated visual assets.
 
-**Phase to address:** Data model phase — must be resolved before any solo sync endpoint is written. The schema change is additive (`IF NOT EXISTS`) so it does not require data migration.
+3. **Riot's public stance on AI art** is openly hostile. In August 2025 Riot published an AI-generated anniversary trailer for Wild Rift, faced severe community and internal backlash, deleted the video, and issued a public apology. A tool that openly describes its art as "League of Legends splash art style" AI-generated art may attract the same backlash — and potentially a DMCA or C&D even if the policy technically permits it, because the policy was written before generative AI existed.
 
----
+The specific risk is: the app uses explicit League universe visual identity (Demacia architecture, Pandemonium halos) in generated art and then sells/monetises access to the app via API Terms. This is the combination the policy was not written to address.
 
-### Pitfall 2: Sequential Riot API Fetch Loop Exhausts Rate Limit When Syncing 20 Matches Per User
+**Why it happens:**
 
-**What goes wrong:** The current `fetch_match_history()` in `riot.rs` does a serial for-loop: fetch list of match IDs → loop over each ID → call `get_match()` per ID. For 20 matches that is 21 API calls (1 list + 20 match fetches). The `riven` crate handles rate limits internally and will delay calls until the window resets, but a personal development key has a limit of 20 requests per second and 100 requests per 2 minutes (source: hextechdocs.dev). A single full sync for one user consumes 21% of the 2-minute window. If `sync_solo_stats` is user-triggered and the same user also triggers `sync_team_stats` in the same session, the combined 42-call burst will hit the 2-minute limit and block subsequent requests for 60–90 seconds.
-
-Adding the match timeline endpoint (`get_timeline()`) multiplies this: each timeline call is an additional API call per match. Fetching timelines for 20 matches = 21 (match list) + 20 (match detail) + 20 (timeline) = 61 API calls — 61% of the 2-minute window in a single operation. If a second user syncs concurrently, the shared per-key limit is breached immediately.
-
-**Why it happens:** Timeline data is not fetched today. Adding it to the same sequential loop is the natural first implementation. The rate limit impact is not obvious because `riven` silently queues rather than errors.
+AI-art pipelines have moved faster than platform IP policies. The FLUX prompts locked in `AI-IMAGES.md` were written before the Wild Rift AI controversy peaked. There is a temptation to defer the IP question because the art is "placeholder" — but once FLUX-generated assets replace the ImageMagick placeholders and the beta opens, the risk crystallises.
 
 **How to avoid:**
-- Never fetch timelines eagerly during a bulk sync. Only fetch a timeline on-demand when the user navigates to a specific match detail view.
-- Cache timeline data in the DB after first fetch. The `match` table should have a `timeline_json TYPE option<string>` field. Check it before calling the API; if present, return the cached value.
-- Keep the on-demand timeline fetch as a separate server function (`get_match_timeline`) so it does not block the bulk sync flow.
-- The bulk sync (`sync_solo_stats`) should fetch only match summaries (not timeline), mirroring the current `fetch_match_history` pattern.
 
-**Warning signs:** `riven` debug logs show `sleeping X ms for rate limit`. Server function responses take 30+ seconds. Users see "timeout" errors on the stats page.
+Two mutually exclusive paths:
 
-**Phase to address:** Match sync and match detail phases. The "fetch match summary only" vs "fetch timeline on demand" split must be established in the sync phase before the detail view is built.
+- **Path A (safe, slower):** Replace League universe imagery with original-world art. Invent a fictional faction (not Demacia/Pandemonium) with similar visual DNA (stone citadel + warm gold / brutalist neon). The parallax system, growth tiers, and everything else remain identical — only the FLUX prompt vocabulary changes. The reproducibility infrastructure in `AI-IMAGES.md` already supports this; update the prompts before running FLUX. This also sidesteps the community backlash risk entirely.
 
----
+- **Path B (risks accepted, faster):** Keep League universe art, add mandatory disclaimer per Fan Content Policy, keep the product free (closed beta, no paid tier yet), document the accepted risk in PROJECT.md, and plan to redo the art before any public paid launch. If taking Path B, do not describe the art as "League of Legends splash art style" in any external communication — describe it as "Runeterra-inspired" which is closer to the fan-creation framing.
 
-### Pitfall 3: Timeline JSON Payload Is ~1–3 MB Per Match — Storing Raw in SurrealDB Will Bloat the Database
+Do not build the production FLUX pipeline without first deciding which path to take. Running FLUX and committing the outputs is the point of no return for the IP question.
 
-**What goes wrong:** A League of Legends match timeline response from the Riot API contains per-minute frames for the entire game duration (typically 25–45 frames), each including position data, CS, gold, XP, and damage for all 10 participants, plus a complete event log (kills, objectives, item purchases, ward placements, etc.). Raw timeline JSON is approximately 80,000 LLM tokens (source: research.mdpi.com paper on LoL match data summarization), which translates to roughly 300–500 KB of JSON per match. Storing this verbatim in a SurrealDB `string` field is possible but means each timeline record consumes ~500 KB. For a user with 100 matches, that is ~50 MB of raw timeline blobs in the DB, plus SurrealDB's internal overhead for SCHEMALESS-adjacent storage.
+**Warning signs:**
+- FLUX prompts reference specific Riot champion names or lore locations by name (the current prompts reference "Demacia" and "Pandemonium" which are Riot-owned faction names).
+- The beta invitation page or any external description mentions "League of Legends art".
+- A team member asks "do we need permission from Riot for this?" and the answer is deferred.
 
-SurrealDB 3.x with SurrealKV stores data on-disk. A 50 MB blob store for one user's timelines is manageable, but the application only needs a small subset of the timeline: objective timestamps (dragon, baron, tower falls), team gold differential over time, and key kill events. Storing the full payload to query 5% of it is wasteful.
-
-**Why it happens:** The Riot API returns timeline as a single JSON blob. Storing it raw is the path of least resistance. Developers underestimate the data volume.
-
-**How to avoid:**
-- Do not store the raw timeline JSON in SurrealDB. Process it in Rust immediately after fetching: extract only the events and frames needed for the UI (objectives, gold diff snapshots, key kills) and store a compact derived struct.
-- Define a `MatchTimeline` model with only the fields the UI needs: `Vec<ObjectiveEvent>`, `Vec<GoldDiffSnapshot>`, and optionally `Vec<KillEvent>`. Serialize this compact struct to JSON (`serde_json::to_string`) and store it in `timeline_json`. This reduces storage by 80–90%.
-- If full raw data is needed in future, store it separately in a dedicated `match_timeline_raw` table with a clear note that it is a cache and may be purged.
-
-**Warning signs:** SurrealDB data directory grows by >1 MB per match fetched. Queries against the `match` table slow down as records grow (SurrealDB scans all fields for schemafull tables).
-
-**Phase to address:** Match detail view phase — the data model for timeline storage must be decided before the first timeline fetch is implemented.
+**Phase to address:** Art pipeline phase (immediately before the first FLUX generation run). This decision must be made and logged in PROJECT.md before any production art is generated. The roadmap phase that generates FLUX assets should have this as a blocking prerequisite.
 
 ---
 
-### Pitfall 4: Solo Toggle Scopes Team-Only Features Silently Instead of Hiding Them
+### Pitfall 2: Hydration Panic on Growth-Tier Branching in New Rooms
 
-**What goes wrong:** Features like draft planning, game plan creation, team notes, and opponent scouting are only meaningful in a team context. When a solo/team toggle is added to the nav or dashboard, the naive implementation hides the toggle state as a local signal. If the toggle state is not propagated globally (e.g. via a context provider), individual page components that have their own team-check logic (`get_current_user` → `get_user_team_id`) will still render their team-specific content for solo users who happen to also have a team.
+**What goes wrong:**
 
-The reverse is also a pitfall: if a user is in solo mode and navigates directly to `/draft`, the draft page's existing guard (`get_user_team_id` returns `None → empty state`) correctly shows an empty state — but the user sees "Create a team" CTA instead of a "Switch to team mode" prompt. The UX is broken even though the code is technically correct.
+The Solo Journey room currently avoids structural hydration branching correctly — all three growth overlays are always present in the DOM, with tier changes expressed via `data-*` attributes and pure CSS (the Phase 18.1/18.2 lesson). The risk reappears when the War Room, Hall of Records, and Throne rooms are built, because each room has different feature surfaces, different growth axes, and different conditional content. Developers building those rooms from scratch may not know the lesson and introduce `if tier >= 2 { view! { <img ...> } }` branches that produce structural DOM differences between SSR (which renders at the SSR-computed tier) and hydrate (which re-evaluates the signal after mount). The tachys "unwrap-on-None" panic documented in the milestone context is exactly this class of failure.
 
-**Why it happens:** The existing codebase has no concept of "current mode". All pages are implicitly team-mode. Adding a toggle without a shared mode signal means each page independently decides what to show.
+**Why it happens:**
+
+The defensive pattern (`always-present DOM + CSS data attributes`) is documented in the parallax.rs comments and `GrowthOverlay`'s doc comment, but it is not in `leptos-patterns.md` or `CLAUDE.md`, so it is invisible to any agent that only reads those files before building a new room. New room components will be built by agents reading CLAUDE.md, not by reading the parallax.rs source.
 
 **How to avoid:**
-- Store the current mode (`'solo'` or `'team'`) as a persistent user preference in the DB (a `mode` field on the `user` table, defaulting to `'team'`). The mode is not a local signal — it must survive page reload.
-- Expose the mode via a server function (`get_user_mode`) that is fetched once in the shell/root component and stored in a Leptos context (`provide_context`). All pages read from this context rather than each re-deriving from `get_user_team_id`.
-- Team-only nav links (Draft, Game Plan, Opponents, Team Notes) are conditionally rendered based on this context signal. They do not render in solo mode — do not just grey them out.
-- Empty-state messages on team-only pages should detect solo mode and show "Switch to team mode in the nav to access this feature" rather than the generic "Join or create a team" CTA.
 
-**Warning signs:** A solo-mode user navigates to `/draft` and sees a "Create a team" button. A team user switches to solo mode and still sees the Drafts nav link. The toggle state is lost on page reload.
+Add rule to `leptos-patterns.md` and `CLAUDE.md` (Critical Patterns): "Growth-tier branching in rooms MUST NOT use structural `if/match` inside `view!` that change whether an element exists. Use `data-*` attributes on a permanently-present container and drive visibility/opacity via CSS. See `parallax.rs::GrowthOverlay` and the Phase 18.1/18.2 post-mortem." Every new room component must have a `hydration-no-panic` e2e gate (the per-route gate pattern already established) before the room is considered shippable. The gate should navigate to the room, let WASM hydrate, then scroll/interact and confirm no panic in the console.
 
-**Phase to address:** Solo mode toggle phase (first phase). This is a foundational architectural decision that all other solo features depend on.
+**Warning signs:**
+- A new room file contains `if growth.get() >= 2 { view! { <img ... /> } }` at the top level of a view.
+- `cargo check --features hydrate --target wasm32-unknown-unknown` passes but `cargo leptos watch` produces a "panicked at 'tried to access None value'" in the browser console on first load.
+- The e2e smoke test for the new route passes at Tier 0 but fails if you seed Tier 2 data and reload.
+
+**Phase to address:** Each new room's implementation phase. Codify the anti-pattern in rules files during the Solo Journey spike close-out phase so it is in place before War Room and Hall of Records are built.
 
 ---
 
-### Pitfall 5: Schema Migration for New Solo Tables Breaks Existing `db.rs` Struct Names
+### Pitfall 3: Mousemove Listener Accumulation Across SPA Route Changes
 
-**What goes wrong:** The project adds new SurrealDB tables for solo features: `solo_goal`, `personal_learning`, `lp_history`, `practice_item`. Each new table requires a `Db*` struct in `db.rs` for deserialization. The existing `db.rs` already has 4,000+ lines and name collisions are a real risk. A `DbGoal` struct could conflict with a future team goal feature. A `DbLearning` struct would shadow the existing `PostGameLearning` model.
+**What goes wrong:**
 
-Additionally, `schema.surql` is re-applied on startup via `include_str!`. Any syntax error in the new schema definitions will prevent the server from starting at all — with no migration rollback mechanism.
+`AtmosphereRoot` registers a `mousemove` listener on `window` inside an `Effect` and removes it in `on_cleanup`. This is correct for a component that mounts and unmounts cleanly. However, Leptos 0.8's router does not guarantee that `on_cleanup` fires atomically with the route unmount — there is a known issue (leptos-rs/leptos#3665) where route cleanup does not fire until the second navigation under the same parent. If a user navigates: Solo Journey → War Room → Solo Journey, the first Solo Journey's `on_cleanup` may not fire until the War Room unmount, meaning two `mousemove` listeners are active simultaneously. The second listener also schedules a second RAF per frame, causing doubled RAF churn and CSS-var writes, which manifests as slightly jittery parallax or console noise but no hard error.
 
-**Why it happens:** `db.rs` grows by accretion. New developers add structs at the bottom without checking for name collisions. Schema errors only surface at startup.
+**Why it happens:**
+
+The current implementation is correctly written but relies on a Leptos cleanup timing guarantee that has a known edge case. The risk is masked during development because you typically navigate once and reload.
 
 **How to avoid:**
-- Prefix all solo-mode DB structs with `DbSolo*` (e.g. `DbSoloGoal`, `DbSoloLearning`, `DbLpHistory`). This makes it trivially obvious they are solo-context structs and prevents collision with future team features.
-- Test every new `schema.surql` addition by running `cargo leptos watch` and verifying the server starts cleanly before writing any query code.
-- Add the new tables to the integration test DB setup in `tests/common/mod.rs` so integration tests catch schema errors in CI before they reach startup.
-- Use `DEFINE TABLE IF NOT EXISTS` and `DEFINE FIELD IF NOT EXISTS` for all new solo tables — they are new additions, not modifications.
 
-**Warning signs:** Compile error "struct `DbGoal` is defined multiple times". Server fails to start with a SurrealDB schema parse error. Integration tests pass but the server crashes at startup.
+Add a belt-and-suspenders guard: before attaching the listener, check if `ATMOSPHERE_ROOT_ID` already has a non-zero `--px` CSS var set (indicates another instance is already active) and skip the second registration. Alternatively, use a `static AtomicBool` (via `std::sync::atomic` — WASM is single-threaded so this is sound) as a global "listener active" flag that `on_cleanup` clears. Write an e2e test that navigates Solo Journey → War Room → Solo Journey and asserts exactly one mousemove listener via `page.evaluate("window.__raf_count")` (expose a debug counter in debug builds only). The `on_cleanup` approach is correct as documented; the guard is insurance against the router timing edge case.
 
-**Phase to address:** Data model phase for each solo feature. Any schema addition must be tested by starting the server before proceeding.
+**Warning signs:**
+- Browser devtools Performance tab shows two RAF callbacks firing per frame during parallax.
+- `getEventListeners(window).mousemove.length` in the console returns 2 after navigating back to a room.
+- Parallax motion is doubled in magnitude after revisiting a room without a full page reload.
+
+**Phase to address:** During the second room implementation (War Room), when two rooms first coexist in the router tree. Add the guard and the nav-round-trip e2e test at that point.
 
 ---
 
-### Pitfall 6: The `match` Table's `UNIQUE` Index on `match_id` Breaks Multi-User Solo Sync
+### Pitfall 4: Too Many Composited Layers Blowing GPU Memory on Low-End or Mobile Machines
 
-**What goes wrong:** `schema.surql` defines `DEFINE INDEX IF NOT EXISTS match_id_unique ON match FIELDS match_id UNIQUE`. This means there can only be one `match` record per Riot match ID, regardless of how many users played in that match. The current team sync loop already handles this correctly (it reuses the existing `match` record if the `match_id` is already stored). However, when solo mode is added, a common case is: user A and user B both played in the same ranked game. User A syncs first, creating the `match` record. User B syncs second — the existing record is found and reused, then a `player_match` for user B is created. This works correctly.
+**What goes wrong:**
 
-The pitfall occurs if a developer tries to add per-user data directly to the `match` table (e.g. `SET solo_owner = $user`) when creating it. On the second user's sync, the `SELECT id FROM match WHERE match_id = $match_id` finds the existing record but does not update `solo_owner`. User B's match record points to user A's `solo_owner`. Any query filtered by `solo_owner` will miss user B's matches.
+Each `Plane` and `GrowthOverlay` is a full-bleed `position: fixed` (or `absolute`) image with `transform: translate3d(...)`. Every such element gets promoted to its own compositor layer. For one room: 3 planes + 3 overlays + 1 scrim = 7 layers. For three rooms simultaneously preloaded (if the router keeps them in the DOM): 21 layers. At 1920×1080 and RGBA, one layer is ~8 MB GPU texture. 7 layers = ~56 MB GPU VRAM, 21 layers = ~168 MB. Shared Hetzner CAX11 (ARM, 4 GB RAM, no discrete GPU) does not have a GPU at all — compositing falls back to the CPU and the "GPU memory" is system RAM. On end-user machines, integrated graphics on budget laptops have 128–512 MB VRAM shared with RAM.
 
-**Why it happens:** The natural instinct when adding solo context is to "tag" the match record. But the match record is shared across players.
+**Why it happens:**
+
+The parallax implementation correctly uses `transform3d` for GPU compositing on real GPU hardware. On CPU-composited environments (server rendering a headless browser, ARM VPS running e2e tests) or low-end integrated graphics, the layer count becomes a RAM consumer rather than a GPU consumer.
 
 **How to avoid:**
-- Never store per-user solo context on the shared `match` table. The `player_match` table is the per-user record — solo context (queue type, LP change, personal goal associations) must go on `player_match`, not `match`.
-- Add a `solo_context_json` or explicit typed fields (`lp_before`, `lp_after`, `personal_notes`) to the `player_match` table where per-user solo data belongs.
-- Add a `solo_owner` or `context` discriminator only to `player_match`, not `match`.
 
-**Warning signs:** User B syncs their stats and sees fewer matches than expected. Queries filtered by `solo_owner` on the `match` table return only user A's first-synced matches.
+Three mitigations: (1) Only ever mount the active room — never keep inactive rooms in the DOM. The router already unmounts on route change; verify no `<Show>` pattern keeps rooms mounted while hidden. (2) Add `will-change: transform` only to planes that are actively animating (i.e., only when the mousemove listener is active). Use a CSS class toggled at mount rather than inline `will-change` on all planes statically. (3) Cap planes at 3 per room. Growth overlays should share compositor layers by using `opacity` transitions on `<img>` elements that are already promoted — do not add `will-change: transform` to overlays. Test with `chrome://tracing` or the Layers panel in DevTools and confirm total layer count per room stays under 10. On the CI Hetzner box, run e2e tests with `--disable-gpu` in Playwright's Chromium flags to catch CPU-path regressions.
 
-**Phase to address:** Data model phase for solo sync — the `player_match` extension must be designed before solo sync is implemented.
+**Warning signs:**
+- DevTools Layers panel shows >10 layers for a room.
+- Frame rate drops below 60 fps during mousemove on a mid-range MacBook (M-series are fine; test on Intel/AMD).
+- Memory usage in DevTools Task Manager climbs by >100 MB when navigating between rooms.
+
+**Phase to address:** During the War Room implementation when you first have two rooms in the router. Add a Layers panel check as part of the phase's browser verification step.
+
+---
+
+### Pitfall 5: `prefers-reduced-motion` Runtime Toggle Is Not Handled — Only Mount-Time Check
+
+**What goes wrong:**
+
+The `AtmosphereRoot` component checks `prefers-reduced-motion` once at mount inside the `Effect` and bails early if set. It does not add a `MediaQueryList.addEventListener('change', ...)` listener. A user who enables "Reduce Motion" in their OS while the app is open (common: enabling in System Preferences during a migraine, then forgetting to re-check the app) will not have the listener removed — the parallax continues moving until they reload the page. This violates WCAG 2.3.3 (Animation from Interactions — AAA) and the intent of SC 2.2.2 (Pause, Stop, Hide). Both are listed in the project's accessibility standards (design system pointers in CLAUDE.md). More practically: a closed-beta user with vestibular disorder who experiences motion sickness mid-session cannot stop the parallax without reloading.
+
+**Why it happens:**
+
+Mount-time media query checks are the obvious first implementation. Runtime change listening requires a second `Closure` and cleanup that is easy to overlook when the belt-and-suspenders CSS fallback already handles the static case.
+
+**How to avoid:**
+
+Inside the `#[cfg(feature = "hydrate")]` block in `AtmosphereRoot`, after attaching the mousemove listener, also register a `MediaQueryList` change listener. On `change`, if `matches` is now true, call `remove_event_listener` to remove the mousemove listener and reset `--px`/`--py` to 0 on the root element. If `matches` is now false, re-register the mousemove listener. Store the MQL handle in a second `StoredValue` for cleanup. Additionally, add a user-visible "Pause atmosphere" toggle button in the room UI (a small button, not a setting buried in a menu) that writes a localStorage key and is respected on mount. This gives the user an in-app override that doesn't require OS settings knowledge.
+
+**Warning signs:**
+- Running the app with System Preferences > Accessibility > Reduce Motion enabled, enabling it mid-session, and observing parallax still moving.
+- No `MediaQueryList.addEventListener` call anywhere in the parallax source.
+- Accessibility audit (axe-core or wave) flags motion that cannot be paused.
+
+**Phase to address:** Solo Journey polish phase / accessibility pass. Must be resolved before closed-beta launch, not after.
+
+---
+
+### Pitfall 6: Contrast Failure Over Parallax Art — WCAG AA Text Contrast Is Unverifiable Against Dynamic Backgrounds
+
+**What goes wrong:**
+
+The surface layer (the actual UI — stats panels, draft board, form fields) floats at `z-index: 10` over parallax art. The current scrim (`radial-gradient(ellipse at center, transparent 0%, var(--color-base) 95%)`) fades the edges to base but leaves the center semi-transparent. Text over a semi-transparent scrim over a painting has unpredictable contrast — it depends on the specific art asset, the user's accent/theme, and the screen calibration. WCAG 1.4.3 requires 4.5:1 contrast for normal text. A cream-coloured UI panel over warm gold Demacia art may pass; the same panel over a bright sky band in the mid-plane may fail. Since the parallax moves, the contrast ratio changes dynamically — which means it is impossible to measure statically.
+
+**Why it happens:**
+
+Designers test contrast on a static screenshot of the room at rest (pointer centred). The parallax moves the bright sky band under the text block when the user moves the mouse to the upper-left.
+
+**How to avoid:**
+
+Two strategies: (1) The scrim must be opaque enough to guarantee contrast regardless of what art is behind it. The current `35% multiply` opacity is not sufficient — test at the worst-case art position (point the mouse to the corner so the brightest plane element moves under the text area) and verify contrast with a real asset (not a placeholder gradient). Increase scrim opacity until it passes at worst case. (2) Surface-layer panels (stat cards, form areas, code blocks) must use `bg-surface` (`--color-surface`) with no transparency — `bg-surface/50` (the semi-transparent pattern from CLAUDE.md) should NOT be used on panels over parallax art. Use `bg-surface` (fully opaque) for all panel backgrounds in rooms.
+
+**Warning signs:**
+- `bg-surface/50` or any `bg-*/opacity` classes appear on form inputs or text panels in a room component.
+- A contrast checker run on a screenshot at rest passes, but running it with the mouse at upper-left fails.
+- The scrim's gradient alpha is `<= 40%`.
+
+**Phase to address:** Each room's design implementation phase. Add a contrast verification step (test at worst-case mouse position with real FLUX art, not placeholders) to the phase's verification checklist.
+
+---
+
+### Pitfall 7: Focus Management Breaks When the QuickNav Overlay Summons Over Art
+
+**What goes wrong:**
+
+The QuickNav overlay (`src/components/room/quick_nav.rs`) summons over the parallax room. When it opens, focus must be trapped inside the overlay and returned to the trigger element when it closes. If focus is not trapped: keyboard users tab into the parallax planes (which are `aria-hidden="true"` but are real DOM elements), screen readers announce "image" for every plane, and the keyboard navigation path from the nav trigger through the overlay to a destination is non-linear. This is a WCAG 2.1 failure (SC 2.1.2 No Keyboard Trap, SC 2.4.3 Focus Order).
+
+**Why it happens:**
+
+Leptos has no built-in focus-trap primitive. It is easy to `show!` an overlay and forget to implement focus trapping. During development, sighted mouse users never notice.
+
+**How to avoid:**
+
+Implement focus trapping in `quick_nav.rs` using the web-sys DOM API: on open, find all focusable descendants, set focus to the first, and intercept `Tab`/`Shift+Tab` to cycle within the trap. On close, restore focus to the trigger element (stored in a `StoredValue<Option<web_sys::Element>>`). Additionally, the overlay must set `aria-modal="true"` and use `role="dialog"` with an `aria-labelledby` pointing to the nav title. Verify with keyboard-only navigation: Tab from the trigger, confirm focus enters the overlay, Tab through all items, confirm Tab on the last item wraps back to the first, confirm Escape returns focus to the trigger.
+
+**Warning signs:**
+- `quick_nav.rs` has no `set_focus` or `tabindex` manipulation.
+- Tab key during a keyboard test causes focus to disappear behind the overlay.
+- Screen reader announces the parallax image elements when the overlay is open.
+
+**Phase to address:** QuickNav implementation phase. Focus trapping is not a polish step — it must be part of the initial implementation.
+
+---
+
+### Pitfall 8: FOUC of the Atmosphere Before WASM Hydrates — Art Flashes In After Load
+
+**What goes wrong:**
+
+The SSR render sends the `AtmosphereRoot` div with `--px:0; --py:0` and the `<img>` planes in the HTML. However, the planes are `loading="lazy"`, and on first load the browser may not start fetching them until after the WASM bundle (which is the first render-blocking asset) finishes parsing. The sequence becomes: (1) HTML arrives with static painting — no planes visible yet (lazy); (2) WASM parses and hydrates; (3) planes enter viewport/viewport-adjacent and lazy-load fires; (4) planes fade in. This creates a visible "bare room then art appears" flash, especially on slower connections. For the growth overlays, the tiers are data-async: the `get_growth_state` resource resolves after hydration, causing a second flash where tier-0 state renders then jumps to the actual tier.
+
+**Why it happens:**
+
+`loading="lazy"` on fixed/absolute full-bleed images defers the fetch until after layout, but these images are always in the viewport — the lazy trigger fires immediately after layout, which is after WASM hydration on first load.
+
+**How to avoid:**
+
+For the primary sky plane (the largest, most visible layer): use `loading="eager"` or `fetchpriority="high"`. Only the mid and near planes (which are partially transparent and less visually prominent) benefit from lazy. Add `<link rel="preload" as="image" href="/img/rooms/solo-journey/{region}/plane-sky.webp">` in the page `<head>` via a Leptos `<Meta>` component — this starts the fetch in parallel with the WASM bundle. For growth overlays: accept the tier-0-then-real-tier flash as the cost of data-driven tiers, but minimise it by setting CSS `transition: opacity 0.6s` on the overlays so the transition is a smooth fade rather than a snap. Do not preload all 6 overlay assets — that would blow the 400 KB budget on assets that may not be needed.
+
+**Warning signs:**
+- Network throttled to "Fast 3G" in DevTools shows a visible frame where the room background is solid `bg-base` before planes appear.
+- Lighthouse "Largest Contentful Paint" identifies the sky plane as the LCP element with a fetch delay > 500ms.
+- Growth overlays snap between tiers rather than fading.
+
+**Phase to address:** Solo Journey polish phase and each subsequent room implementation phase. The preload `<Meta>` tag should be part of every room's template.
+
+---
+
+### Pitfall 9: Layer-Separation Artifacts in AI-Generated Parallax Planes Cause Halo Fringing
+
+**What goes wrong:**
+
+The FLUX prompts for mid and near planes request "transparent background, foreground only". FLUX does not natively generate transparent images — the workflow is: generate opaque image → run background removal pass → export WebP with alpha. Background removal tools (rembg, SAM-based models, service APIs) produce hard or soft edges that visually halos the subject against the background. When the mid plane (stone pillars) is composited over the sky plane with a parallax offset, white or grey halo fringing around the pillars is visible as a 1–3 px artifact ring that moves with parallax. This is especially visible against dark backgrounds. The artifact is often invisible at rest but appears during motion.
+
+**Why it happens:**
+
+Background removal from non-green-screen source images is inherently lossy. FLUX generates images with natural edge feathering that the background remover cannot cleanly isolate. The current placeholder WebPs (ImageMagick gradients with `xc:none` rectangles) do not exhibit this — so the problem is invisible until real FLUX assets replace placeholders.
+
+**How to avoid:**
+
+Three techniques, all should be applied: (1) Use **layer-by-layer generation** — do not generate a full scene and remove the background. Instead, generate each plane with `black background, isolated element, no other scene elements` and composite in image editing software. The sky plane is opaque so no background removal needed. The mid plane should be generated with explicit `isolated on pure black background` and converted using a luminance-key instead of an edge-detection-based background remover — luminance-key is cleaner for architectural elements. (2) Apply a 1px `erode` mask shrink before export to eat the halo fringe. (3) Export at slightly higher resolution than 1920×1080 (e.g. 2400×1350) and scale down in CSS — downsampling blends the artifact into the surrounding pixels. Test by running the parallax with motion on a dark background and inspecting plane edges at 2x zoom.
+
+**Warning signs:**
+- Mid or near plane WebPs show a visible white or grey ring around foreground elements when opened in an image viewer against a dark background.
+- During parallax motion, a 1–3 px light ring follows the pillar/architecture edges.
+- The background removal tool used is an online web UI (low control over edge parameters).
+
+**Phase to address:** Art generation phase. Every generated mid/near plane must pass a visual QA step: open in browser against `bg-base`, play parallax at max amplitude, confirm no halo ring visible at 1x zoom. This is a build-time check, not a runtime check.
+
+---
+
+### Pitfall 10: `format!()` in `Plane` and `GrowthOverlay` Allocates a New String Per Render
+
+**What goes wrong:**
+
+`Plane` constructs `style=format!("--depth:{depth}; z-index:{z};")` as a static `format!` call in the component body. Since `Plane` is called from the `SoloJourneyRoom` view body which re-runs on room mount, this allocation happens on every mount. That is acceptable. The risk comes if someone wraps plane rendering in a reactive closure: `{move || view! { <Plane src=dynamic_src.get() ... /> }}` — now the `format!` inside `Plane` runs on every signal update, which during mousemove (with RAF batching) means up to 60 times per second. Each call allocates a new `String` and a new DOM style string, causing garbage collection pressure in the WASM linear memory allocator.
+
+**Why it happens:**
+
+The component signature looks like it takes a static `depth: i32` and `z: i32` — developers wrapping it in a reactive closure do not realise the `format!` is inside.
+
+**How to avoid:**
+
+Make the style a `&'static str` or a `Cow<'static, str>` computed once. For the current implementation where `depth` and `z` are compile-time constants (they are passed as literals from `SoloJourneyRoom`), use a `const` or `static` style string per plane and pass it as `style=static_style`. Alternatively, annotate `Plane` with a doc comment: "Depth and z must be compile-time constants — do not wrap this component in a reactive closure." Add a lint note in `CLAUDE.md` for future room authors: parallax plane components are not reactive — depth/z are structural constants per room, not runtime signals.
+
+**Warning signs:**
+- A `Plane` or `GrowthOverlay` call appears inside `{move || ...}` in a room component.
+- Performance profiling in the browser shows repeated DOM style mutations on `room-plane` elements during mousemove (beyond the intended `--px`/`--py` writes on the root).
+
+**Phase to address:** War Room implementation phase when a second developer writes a room component. Add the doc comment now during Solo Journey cleanup.
 
 ---
 
@@ -128,92 +259,100 @@ The pitfall occurs if a developer tries to add per-user data directly to the `ma
 
 ---
 
-### Pitfall 7: The Region Is Hardcoded to `EUROPE` and `EUW1` — Solo Mode Users May Be on Other Servers
+### Pitfall 11: The Growth Gamification Layer Interrupts Task Flow for Power Users
 
-**What goes wrong:** Every Riot API call in `riot.rs` hardcodes `RegionalRoute::EUROPE` and `PlatformRoute::EUW1`. This was acceptable for a private team tool where the team plays on EUW. Solo mode opens the app to individual players who may be on NA, KR, EUNE, or other servers. A NA player who links their Riot account and tries to sync solo stats will get `Account not found` errors because the PUUID lookup and match history fetch both hit the wrong regional route.
+**What goes wrong:**
 
-**Why it happens:** Hardcoding the region was a pragmatic decision for the team use case. Solo mode implicitly expands the user base beyond a single region.
+Growth tiers are the "your time shows" feedback mechanism — a good fit for exploration and motivation. The risk: if the tier-up transition (overlay fade-in, visual change) fires while the user is mid-task (filling in a game plan, editing a draft pick), the animation draws the eye, interrupts focus, and may cause form submission errors or misclicks. A power user who has memorised the keyboard flow for draft entry does not want the room to visually change when they hit 50 champion pool entries mid-session.
+
+**Why it happens:**
+
+Tier updates are driven by a resource that refetches periodically or after mutations. If the resource refetches too eagerly, the overlay transition fires at unpredictable times during the session.
 
 **How to avoid:**
-- Add a `region` field to the `user` table (default: `'EUW'`) and a region selector to the Riot account linking UI.
-- Map the stored region string to the correct `RegionalRoute` and `PlatformRoute` in `riot.rs`. For `match-v5` and account lookups, use `RegionalRoute` (EUROPE/AMERICAS/ASIA). For champion mastery, use `PlatformRoute` (EUW1/NA1/KR etc).
-- Do not add region-specific logic inside server functions — centralize it in `riot.rs` so there is one place to update when Riot changes routing.
 
-**Warning signs:** A non-EUW user links their Riot ID and sees "Account not found". Match sync returns 0 matches for a user who has recent games.
+Tier changes should only be evaluated at page load / room mount, not mid-session. The `get_growth_state` resource should not auto-refetch on every mutation — it should refetch once at mount and once when the user explicitly "returns to the room" (i.e. navigates back to it, not mid-flow). Specifically: do not call `growth_resource.refetch()` inside the mutation success handlers for champion pool saves, learning journal saves, etc. Let the tier update be visible on the *next* visit to the room after the milestone is crossed.
 
-**Phase to address:** Riot account linking phase — add region selection before any solo sync is implemented.
+**Warning signs:**
+- `growth_resource.refetch()` appears in the spawn_local success branch of any form-submit server function on a room surface.
+- A user can observe the overlay opacity transition while actively typing in a form field.
+
+**Phase to address:** Growth system integration phase (whichever phase wires up tier thresholds to real data).
 
 ---
 
-### Pitfall 8: `sync_team_stats` Requires a Team — `sync_solo_stats` Must Not
+### Pitfall 12: Room Scope Creep — Each Room Grows to Hold Its Own Navigation Logic
 
-**What goes wrong:** The existing `sync_team_stats` server function returns an explicit `Err` if the user has no team (lines 107–111 in `stats.rs`). This is correct for team sync. A solo sync function copied from this template will replicate the error-on-no-team behaviour. But for solo mode, no team is the expected and valid state. Returning `Err("You need to join a team first")` from a solo sync function would be a regression.
+**What goes wrong:**
 
-**Why it happens:** Copy-paste from `sync_team_stats` without auditing the team guard.
+The War Room is supposed to contain draft + tree-drafter + game-plan + opponents + ban-priority. In practice, each of those surfaces has its own complex state, navigation, and server functions. Without a clear boundary, the War Room component file grows to 1,000+ lines trying to orchestrate all surfaces, and the existing page components (`draft.rs`, `game_plan.rs`) get forked into room-specific versions rather than reused. The result is duplicated server functions (drift in query logic) and a maintenance burden.
 
 **How to avoid:**
-- Write `sync_solo_stats` from scratch rather than copying `sync_team_stats`. The solo function reads the current user's `riot_puuid` directly from the user record, bypasses any team lookup, and calls `riot::fetch_match_history` for just that user.
-- Apply rule 44 (return `Ok(...)` not `Err` when an optional entity is absent): if `riot_puuid` is `None`, return `Ok("Link your Riot account first to enable sync.")` — not an error.
 
-**Warning signs:** A solo-mode user without a team clicks "Sync Solo Stats" and sees a red error banner saying "You need to join a team first."
+The room is purely a shell: `AtmosphereRoot` + `Plane`/`GrowthOverlay` layout + `QuickNav` + a `<Outlet>` or explicit sub-route for the active surface. The existing page components (`DraftPage`, `GamePlanPage`, etc.) render unchanged inside the room's content `<div class="relative z-10">`. The room does NOT own the surface state — it only owns the atmosphere. Each room maps to a set of routes, not a set of embedded components.
 
-**Phase to address:** Solo sync phase.
+**Warning signs:**
+- A room file contains `#[server]` functions for surface-level operations (saving a draft, fetching game plan).
+- The room file is >200 lines of view code.
+- Existing page components are duplicated with a `_room` suffix.
+
+**Phase to address:** Architectural decision in the War Room planning phase. Define the room-as-shell pattern explicitly before implementation begins.
 
 ---
 
-### Pitfall 9: LP History Requires Calling a Separate Riot Endpoint That Is Rate-Limited Differently
+### Pitfall 13: Stale SSR HTML Served During WASM Bundle + CSS Rebuild Window
 
-**What goes wrong:** LP and rank data comes from `league-v4` (`getLeagueEntriesForSummoner`), not `match-v5`. This endpoint uses the platform route (EUW1) not the regional route (EUROPE). It returns the current rank/LP, not historical LP per game. There is no Riot API endpoint that returns LP change per match — it must be inferred by calling `getLeagueEntries` before and after each game, or by the user manually recording LP.
+**What goes wrong:**
 
-A common mistake is to assume the match data contains LP or rank tier information. It does not. The `MatchInfoDto` only contains game mode and queue type.
-
-**Why it happens:** Developers assume the Riot match API contains full performance metadata including LP changes. The documentation is not prominent about this limitation.
+`cargo leptos watch` rebuilds the SSR binary and the WASM/CSS bundle separately. The SSR binary restarts first (it is faster to compile). During the window between SSR restart and WASM/CSS bundle write, the SSR server serves HTML that references the new binary's asset hashes but serves the old WASM bundle and old CSS. A browser that fetches during this window gets a hydration mismatch (new HTML structure, old WASM client code) or gets no parallax styles (CSS not yet updated). This was noted in the milestone context. On the production Hetzner box, the same window exists during `cargo leptos build --release` deployments.
 
 **How to avoid:**
-- LP tracking must be user-entered (record LP before and after each session) or estimated (snapshot rank at sync time, track changes between syncs).
-- On-sync rank snapshot: call `league-v4` once at the start of each sync and store the current LP tier/rank in a `lp_snapshot` record. Over time, a series of snapshots provides a rough LP history.
-- Be explicit in the UI that LP history shows rank snapshots at sync time, not per-game LP changes.
-- Do not call `league-v4` in a loop per-match (it would exceed rate limits and the endpoint does not provide that data anyway).
 
-**Warning signs:** Developer discovers that `MatchInfoDto` has no `lp_change` field and tries to work around it with per-match API calls. Rate limit errors appear when looping through matches.
+For development: accept the ~5–10 second window — it resolves on the next reload. For production deployment: use a blue-green swap. Build the release binary and CSS bundle fully before stopping the old process. Use a simple approach: build to a `next/` directory, health-check it, then `mv next current && systemctl restart lol-companion`. Never restart the running binary until both the SSR binary and the `site/` directory (WASM + CSS) are fully written. Document this in the deployment runbook.
 
-**Phase to address:** Ranked climb tracker phase — set correct expectations in design before implementation begins.
+**Warning signs:**
+- After `git push && deploy.sh`, users report broken styles or JS errors for ~30 seconds.
+- The deploy script does `systemctl restart` before `cargo leptos build` completes.
+
+**Phase to address:** Deployment / production hardening phase (Phase 20).
 
 ---
 
-### Pitfall 10: Match Detail View for 10-Player Data Requires Extracting All Participants, Not Just the Tracked User
+### Pitfall 14: Oversized Asset Budget — Individual FLUX Planes Exceed 400 KB Total-Per-Room Budget
 
-**What goes wrong:** The current `fetch_match_history` only extracts the `participant` entry matching the user's `puuid`. The rest of the 10-player data is discarded. For a match detail view showing all participants (items, damage, gold), the full `participants` array must be preserved. If the detail view is implemented by re-fetching the match from the Riot API on demand, it costs another API call per detail view — and will burn rate limit if users scroll through many matches.
+**What goes wrong:**
 
-**Why it happens:** The current code was designed for personal stats only, not full-match detail. Extending it to show 10-player data requires either re-fetching or storing more data upfront.
+The 400 KB total budget per room is documented in `AI-IMAGES.md` and inherited from UI-SPEC. The current ImageMagick placeholder files total ~52 KB for 12 files — well under budget. FLUX generates at higher quality and detail. A single `plane-sky.webp` from FLUX at 1920×1080 with WebP quality 80 can be 150–300 KB depending on scene complexity. Three planes + three overlays at those sizes = 900 KB–1.8 MB per room, 4–6x over budget. If three rooms are built (Solo Journey + War Room + Hall of Records), the total asset download for a user who visits all three rooms is 2.7–5.4 MB of room art on top of the WASM bundle (~1–2 MB compressed) and HTML.
 
 **How to avoid:**
-- Add a `full_match_json TYPE option<string>` field (or better: a structured `match_detail` table) to store all 10 participants' stats at sync time. The `MatchDto` from the Riot API already contains all participant data — extract and store it during the initial sync rather than discarding it.
-- Define a compact `MatchParticipantSummary` struct with the fields needed for the detail view (champion, items, damage dealt/taken, gold, role, win) and store a `Vec<MatchParticipantSummary>` as a JSON column on `player_match` or as child records.
-- The detail view then reads from the DB rather than re-fetching. This is important: do not add a per-match-detail Riot API call path, as it makes the detail view slow and burns rate limit on every navigation.
 
-**Warning signs:** The match detail server function calls `riot::get_match()` directly. Network tab shows a Riot API call each time the user clicks a match. Rate limit warnings appear after viewing several match details.
+Set per-file budgets before running FLUX: sky plane ≤ 100 KB, mid plane ≤ 80 KB, near plane ≤ 60 KB, each overlay ≤ 50 KB. Total per room ≤ 400 KB. Enforce via a CI check: `find public/img/rooms -name "*.webp" -size +100k` should produce zero output. If FLUX output exceeds budget, re-run with lower inference steps (24 instead of 28), resize to 1600×900 (rooms are full-bleed but CSS `object-cover` handles the scale), and compress to WebP quality 65. The parallax motion means users rarely scrutinise static detail — lower quality is visually acceptable for background art.
 
-**Phase to address:** Match detail view phase. The data stored during sync must be expanded before the detail view is built — backfilling for already-stored matches will require a one-time re-sync.
+**Warning signs:**
+- `ls -lh public/img/rooms/` shows files > 100 KB.
+- Lighthouse reports "Avoid enormous network payloads" on a room page.
+- Total room assets for one region exceed 400 KB.
+
+**Phase to address:** Art generation phase (same as Pitfall 9). Budget check must be a gate before any FLUX asset is committed.
 
 ---
 
-### Pitfall 11: Personal Learnings Journal Conflicts With Existing `post_game_learning` Team Table
+### Pitfall 15: Launch Work Squeezed by Immersive UI Scope Creep
 
-**What goes wrong:** The app already has a `post_game_learning` table scoped to a team (`team ON post_game_learning TYPE record<team>`). The solo "personal learnings journal" is conceptually similar but is per-user, not per-team, and may not have an associated team game. If solo learnings are stored in the same `post_game_learning` table (with `team = NULL`), all existing team-scoped queries that do `WHERE team = type::record('team', $team_key)` will correctly exclude solo entries — but queries that list all of a user's learnings for cross-feature use (e.g. "surface relevant learnings when picking a champion") will need to query both team and solo contexts.
+**What goes wrong:**
 
-Alternatively, if a separate `solo_learning` table is created, the champion-pool notes integration must query both tables to surface matchup notes for draft.
-
-**Why it happens:** The feature description uses similar language to the existing post-game review. Developers merge them to avoid a new table.
+The v1.4 milestone explicitly re-incorporates the deferred v1.3 launch work: production hardening, closed-beta gate, deploy infra, compliance/transparency, pre-launch review, soft launch. These are not optional — without them, "closed beta" means an unguarded URL on an unmonitored server with no rate limiting. The immersive rooms work is visually rewarding; the hardening work is not. The risk is that the rooms scope expands (three rooms with full FLUX art, plus the QuickNav, plus IA healing for opponents/learnings) and the launch-infra phases get pushed to "after the beta opens" — at which point they are under time pressure with beta users already on the server.
 
 **How to avoid:**
-- Create a separate `solo_learning` table (`user ON solo_learning TYPE record<user>`, `champion ON solo_learning TYPE option<string>`, `matchup ON solo_learning TYPE option<string>`, `tags ON solo_learning TYPE array<string>`). Keep it distinct from team post-game reviews.
-- The champion pool / draft integration can query `solo_learning WHERE user = $user AND (champion = $champ OR matchup = $champ)` separately from team game plan notes. Union the results in Rust rather than adding a cross-table SurrealQL JOIN.
-- This also prevents a future migration if team post-game reviews gain team-specific fields that should not appear in personal learnings.
 
-**Warning signs:** A solo user's personal notes appear in the team's post-game review list. Queries for `post_game_learning` return `None` for solo users and show an error banner instead of an empty state.
+Sequence the roadmap so the minimum viable room (Solo Journey spike, already done) unlocks the closed-beta gate and deploy infra phases next, before War Room and Hall of Records. The beta opens with one immersive room and locked-down infra. Additional rooms ship as beta updates. This also reduces the FLUX art budget risk — you only need one region's art set for launch.
 
-**Phase to address:** Personal learnings journal phase.
+**Warning signs:**
+- The roadmap shows War Room and Hall of Records before Phase 20 (production hardening).
+- No beta invite gate exists in the running server.
+- There is no rollback procedure documented for the Hetzner deployment.
+
+**Phase to address:** Roadmap sequencing decision. Production hardening (Phase 20) must come before any additional rooms.
 
 ---
 
@@ -223,12 +362,12 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Storing raw Riot timeline JSON as a string field | No Rust struct needed upfront | 300–500 KB per match, slow queries as data grows, no type safety | Never — process to compact struct before storing |
-| Reusing `post_game_learning` for solo notes | One table instead of two | Team-scoped queries silently exclude solo data; cross-feature joins become complex | Never — scope is fundamentally different |
-| Hardcoding `EUROPE`/`EUW1` in all Riot calls | Works for current EUW team | All non-EUW solo users get API errors; fix later requires touching every riot.rs call | Only if explicitly scoping to EUW-only in v1.2 |
-| Fetching timelines eagerly in the bulk sync loop | Simpler code path | Exhausts rate limit for 20+ matches; blocks server for 60–120 seconds | Never — must be on-demand only |
-| Using `team_id IS NULL` as the solo discriminator | No schema change needed | Ambiguous (NULL = solo OR NULL = unassigned team); team queries silently include orphan matches | Never — add an explicit `context` or `solo_owner` field |
-| Copying `sync_team_stats` as the base for `sync_solo_stats` | Fast to write | Team guard error is copied verbatim; solo users without a team see error banners | Never — write solo sync from scratch |
+| Using League universe faction names in FLUX prompts ("Demacia", "Pandemonium") | Art is immediately recognisable to target users | IP risk crystallises when product monetises; may require full art redo | Only if Path B (accepted IP risk) is explicitly logged in PROJECT.md |
+| `loading="lazy"` on the sky plane | No extra preload config | Visible FOUC on first room visit; Lighthouse LCP regression | Never for the sky plane — use eager or preload |
+| `bg-surface/50` on form inputs over parallax art | Visually "blends" into atmosphere | Contrast failure at worst-case art position | Never in rooms — use `bg-surface` (fully opaque) |
+| Refetching growth state on every mutation success | Tiers update immediately | Animation fires mid-task; disrupts power user flow | Never — fetch only at room mount |
+| Building each room as a monolith component | Simpler single file | Server functions duplicated; 1000+ line files; query drift | Never — rooms are shells over existing page components |
+| Running FLUX at `num_inference_steps: 28` without budget check | Higher quality output | Files routinely exceed 100 KB; total budget blown | Acceptable if immediately followed by compression + budget CI check |
 
 ---
 
@@ -238,12 +377,10 @@ Common mistakes when connecting to external services.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Riot match-v5 `get_match` | Loop 20 `get_match` calls sequentially in bulk sync path | Already the current pattern — acceptable for summaries; never extend to also call `get_timeline` in the same loop |
-| Riot match-v5 `get_timeline` | Call on every match during bulk sync | Call on-demand only, cache in DB after first fetch |
-| Riot league-v4 rank endpoint | Assume it returns LP per game | Returns current snapshot only; use for periodic snapshots, not per-game LP |
-| Riot account-v1 PUUID lookup | Re-fetch PUUID on every sync | Fetch once on account linking, store in `user.riot_puuid`, never refetch unless user re-links |
-| `riven` rate limit handling | Treat silently-blocked requests as success | Monitor server function response time; >10s for a 20-match sync means rate limit is being hit — reduce concurrency or fetch count |
-| SurrealDB `match_id_unique` index | Try to create two `match` records for the same game (one per user) | Reuse the shared `match` record; put per-user data on `player_match` |
+| fal.ai FLUX API | Generate mid/near planes as full scene then remove background | Generate each plane isolated (`isolated on black`, `no other elements`) — luminance-key extraction is cleaner than edge-based background removal |
+| fal.ai FLUX API | Re-use the same seed across rooms and regions | Use documented per-asset seeds (see `AI-IMAGES.md` schema); regenerating with wrong seed breaks reproducibility contract |
+| fal.ai FLUX API | Call the API inside a Rust build script or server startup | Call offline (human in the loop) and commit the WebP outputs; never call generation APIs from server runtime |
+| Riot API (existing) | None — existing integration is solid | No new Riot API surfaces needed for rooms; do not add API calls for atmosphere/growth features |
 
 ---
 
@@ -253,10 +390,10 @@ Patterns that work at small scale but fail as usage grows.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| No-cache timeline fetch on detail view load | Each match detail view triggers a Riot API call; slow page, rate limit burns | Cache timeline in DB on first fetch; serve from DB on subsequent loads | After first use — every re-visit to a detail view costs an API call |
-| Full `player_match SELECT *` for analytics | Works for 50 matches; scans all records as history grows | Add partial SELECTs with WHERE clauses filtering by user + date range | 200+ matches per user |
-| Storing champion performance trends in Rust HashMap at query time | Fast at 50 matches; re-computed on every page load | Cache the aggregated trend as a periodic background compute or as a materialized field on `player_match` | 500+ matches per user |
-| `db.rs` solo queries appended without grouping | Hard to find and audit; name collisions with team query structs | Group all solo functions under `// === SOLO MODE ===` section with `DbSolo*` struct naming | Any time — prevents future maintenance |
+| All 6 room planes preloaded for all rooms | Preload covers 3 rooms = 1.2 MB of blocking prefetch | Only preload sky plane for the active room; lazy-load everything else | Any second room built |
+| `will-change: transform` on all planes statically via CSS | 7+ compositor layers always promoted even without active mousemove | Apply `will-change` only while mousemove listener is active (CSS class toggled at mount) | Immediately on mobile / integrated GPU machines |
+| Tier threshold computed in the view (client-side signal math) | Works in dev; passes tests | Computed on every render; for complex tier formulas this re-runs on unrelated signal changes | Any tier formula more complex than a simple comparison |
+| Room art not served with far-future cache headers | Every navigation re-fetches 400 KB of art | Set `Cache-Control: public, max-age=31536000, immutable` for all `/img/rooms/` assets; use content-hash filenames for cache-busting on updates | First beta user after an art update |
 
 ---
 
@@ -266,24 +403,23 @@ Domain-specific security issues.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Exposing another user's match detail via match ID | Match records are shared by ID; a user who knows a match ID can view all 10 participants' data if the detail view is not user-scoped | Verify that the requesting user has a `player_match` record for that match before returning detail data |
-| Storing Riot API key without rotation | Key compromise exposes all team members' Riot data | API key is already loaded from env var via `dotenvy`; document key rotation procedure in CLAUDE.md |
-| Solo goals/LP data visible to teammates | Personal rank and goal data is sensitive; should not appear in team views | All solo tables use `record<user>` (not `record<team>`) as the scope; server functions must enforce user ownership |
+| Serving room art from a path controlled by user input (e.g. `region` prop derived from untrusted data) | Path traversal — serve arbitrary files from `public/` | The `region` value used to construct image paths must come from the validated `InitialTheme` context (server-set), not from a URL query param or user-supplied string |
+| Growth tier exposed as a publicly readable endpoint without auth | Leaks user activity data to unauthenticated callers | `get_growth_state` server fn must enforce `get_current_user()` check before returning tier data (confirm this is already enforced in `solo_dashboard.rs`) |
+| FLUX-generated art committed to the repo without licence metadata | Ambiguous IP status at audit time | Each asset committed to `public/img/rooms/` must have a corresponding entry in `AI-IMAGES.md` with prompt, seed, and generation date; add a CI check that counts entries |
 
 ---
 
 ## UX Pitfalls
 
-Common user experience mistakes in dual-mode applications.
+Common user experience mistakes in this domain.
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Mode toggle is a local signal — resets on page reload | User sets solo mode, navigates away, returns to team mode unexpectedly; confusing state | Persist mode in user DB record; read from server on mount |
-| Hiding team nav links without explaining why | Solo user sees empty nav, thinks features are broken | Show team nav links as greyed-out with tooltip "Switch to team mode to use this feature" OR hide entirely but show a persistent mode indicator |
-| "Sync Stats" button triggers both solo and team sync | Rate limit doubles; team sync includes solo games if discriminator is missing | Separate "Sync Solo Stats" and "Sync Team Stats" actions; in team mode, only show team sync |
-| Match detail view shows all 10 participants with no user highlight | User cannot identify themselves in the scoreboard | Highlight the tracked user's row; sort by role (TOP/JGL/MID/BOT/SUP) for readability |
-| Personal learnings journal surfaces globally in team view | Teammate sees another player's private notes about their ranked games | Personal learning records must never appear in team post-game review lists; enforce with `user = $me` clause in all personal learning queries |
-| Solo dashboard shows team widgets when user has no team | "No team yet" empty states fill the solo dashboard | Solo dashboard should not render team-only widgets at all; design two distinct dashboard layouts |
+| No way to disable atmosphere in-app | Users who find parallax distracting or cognitively heavy must dig into OS accessibility settings | Add an "Atmosphere" toggle in the user preferences or as a persistent button in the room (stores preference in DB, not localStorage, so it persists across devices) |
+| Growth overlays animate at the same moment the user is focused on a form | Distraction causes misclicks or lost form state | Evaluate tier only at room mount; never refetch mid-session |
+| QuickNav is the only way to navigate within a room | Keyboard users cannot navigate without the overlay (if QuickNav requires mouse to open) | QuickNav must have a keyboard shortcut (e.g. `?` or `/`) that works from any focused element within the room; document it in a visible affordance |
+| "Rooms" framing confuses returning users who know where features are | Users who memorised `/draft` now navigate through rooms to find it | Keep existing direct URLs (`/draft`, `/stats`) active and redirecting into the correct room's active surface — do not break bookmark-able deep links |
+| Power user skips room entirely and navigates directly to `/draft` | Bypasses all atmosphere features — which is fine, but growth tiers may not update | Growth tier computation must work from direct-URL access, not only from room mount |
 
 ---
 
@@ -291,14 +427,18 @@ Common user experience mistakes in dual-mode applications.
 
 Things that appear complete but are missing critical pieces.
 
-- [ ] **Solo mode toggle:** Does the mode persist across page reload? Verify by toggling, reloading, confirming mode unchanged.
-- [ ] **Solo stats sync:** Does it work for a user with no team? Verify by creating a fresh user with no team, linking Riot account, clicking sync.
-- [ ] **Match detail view:** Are all 10 participants shown, or just the tracked user? Navigate to a match detail and count rows.
-- [ ] **Timeline fetch:** Does it serve from DB cache on second load? Call the detail server function twice for the same match and verify only one Riot API call fires.
-- [ ] **LP history:** Does the UI clearly indicate these are snapshots, not per-game LP? Check for misleading axis labels.
-- [ ] **Personal learnings:** Do they appear in the team post-game review list? Add a solo learning, navigate to team post-game page, verify it is absent.
-- [ ] **Champion performance trends:** Are data points from team games mixed with solo queue games? Verify a team-game match does not inflate the solo champion trend numbers.
-- [ ] **Region support:** Does a hypothetical NA user get an error on account linking? Check `riot.rs` for hardcoded `EUROPE`/`EUW1`.
+- [ ] **Riot IP decision:** Has Path A or Path B been explicitly logged in PROJECT.md before FLUX is run? Verify by checking PROJECT.md Key Decisions for an "AI art IP" entry.
+- [ ] **Hydration-no-panic gate:** Does every room route have an e2e test that seeds Tier 2+ data, navigates to the room, hydrates, interacts, and confirms no panic in the console? Verify by running `npx playwright test` with Tier 2 seed data.
+- [ ] **Mousemove listener count:** After navigating Solo Journey → War Room → Solo Journey, does `getEventListeners(window).mousemove.length` return 1 (not 2)? Verify in DevTools.
+- [ ] **prefers-reduced-motion runtime toggle:** Enable Reduce Motion in OS while the app is running and confirm parallax stops without a page reload. Verify by toggling OS setting mid-session.
+- [ ] **Contrast over art:** At worst-case mouse position (corner, brightest art band under text), does text on surface panels pass WCAG 4.5:1? Verify with a real FLUX asset (not the ImageMagick placeholder).
+- [ ] **Focus trap in QuickNav:** Tab from the room page into the QuickNav overlay, then Tab through all items — does focus cycle within the overlay? Press Escape — does focus return to the trigger? Verify with keyboard only, no mouse.
+- [ ] **Asset budget:** Does `find public/img/rooms -name "*.webp" -size +100k` return zero files? Verify after every FLUX generation run.
+- [ ] **Layer separation QA:** Does each mid/near plane WebP show no visible halo fringe when opened in a browser against `background: #070912` and played with parallax at full amplitude?
+- [ ] **Growth timing:** Does the growth overlay animate while a user is mid-form in the draft input? Verify by starting a form, triggering a tier threshold crossing server-side, and confirming no animation fires.
+- [ ] **Deep link preservation:** Does `/draft` still navigate to the draft surface after rooms are implemented? Verify that the existing route still works and returns 200.
+- [ ] **Production deploy window:** Is there a documented blue-green procedure for the Hetzner deployment that prevents the stale-HTML window? Verify by reading the deploy runbook before the first beta deploy.
+- [ ] **Beta gate:** Is there a closed-beta invite check before production hardening is merged? Verify that `/closed-beta` exists and unauthenticated users cannot access any room route.
 
 ---
 
@@ -308,11 +448,13 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| `match` table has no context discriminator — solo and team matches are mixed | HIGH | Add `context` field with `DEFINE FIELD OVERWRITE`; write a one-time Rust migration script that sets `context = 'team'` for matches where any linked `player_match` user is a team member, else `context = 'solo'`; verify with integration test |
-| Raw timeline JSON stored — DB bloated | MEDIUM | Add `DEFINE FIELD OVERWRITE timeline_json TYPE option<string>` (already a string); write a background migration that re-processes raw JSON to compact struct JSON; no schema downtime needed since it is an in-place update |
-| Region hardcoded — non-EUW users can't sync | LOW | Add `region` field to user table; update `riot.rs` to accept region param; existing EUW users default to `'EUW'` — no data migration needed |
-| `sync_solo_stats` copied from team version — errors for no-team users | LOW | Remove team guard from solo function; replace with user PUUID check |
-| Solo learnings mixed into `post_game_learning` | MEDIUM | Add `is_solo TYPE bool DEFAULT false` field to `post_game_learning`; filter all team queries with `is_solo = false`; long-term migrate to separate `solo_learning` table |
+| FLUX art uses Riot IP and a C&D arrives | HIGH | Switch to Path A: re-run FLUX with original-faction prompts (the pipeline is intact, only prompts change); swap WebP files in `public/img/rooms/`; update `AI-IMAGES.md`; one deploy cycle |
+| Hydration panic discovered in a new room post-launch | MEDIUM | Apply the static-markup + `data-*` pattern; SSR renders the static fallback immediately; WASM hydration panic is non-blocking if the CSS fallback renders the correct tier visually |
+| Mousemove listener stacking causing doubled RAF | LOW | Add the global-flag guard in `AtmosphereRoot` and redeploy; no data migration needed |
+| FLUX assets exceed 400 KB budget already committed | MEDIUM | Recompress with `magick` at quality 55–65 + resize to 1600×900; update `AI-IMAGES.md` sizes; verify visual acceptability; redeploy |
+| Layer separation halo visible in production with real assets | MEDIUM | Apply erode mask + luminance-key re-export offline; swap WebP; one deploy cycle |
+| prefers-reduced-motion runtime toggle missing | LOW | Add MQL change listener to `AtmosphereRoot` + redeploy; no user data affected |
+| QuickNav focus trap missing discovered in accessibility audit | MEDIUM | Implement focus trap in `quick_nav.rs`; re-test; redeploy; update test suite |
 
 ---
 
@@ -322,34 +464,42 @@ How roadmap phases should address these pitfalls.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| `match` table context ambiguity (Pitfall 1) | Data model phase — first phase of v1.2 | Integration test: solo user match does not appear in team stats query |
-| Rate limit exhaustion from timeline fetching (Pitfall 2) | Match sync phase — establish on-demand-only timeline pattern | Verify no timeline call in `sync_solo_stats`; verify timeline is fetched only in match detail server fn |
-| Timeline JSON storage bloat (Pitfall 3) | Match detail view phase — before first timeline fetch | DB size check: single timeline stored < 5 KB (compact) vs 300+ KB (raw) |
-| Solo toggle without global context (Pitfall 4) | Solo mode toggle phase — first phase | Page reload test: mode persists; team nav absent in solo mode |
-| Schema migration naming collisions (Pitfall 5) | Data model phase and every subsequent phase | CI: `cargo check --features ssr` passes; server starts cleanly after schema re-apply |
-| Per-user data on shared `match` table (Pitfall 6) | Data model phase — before solo sync | Multi-user test: two users play same game; both see correct solo stats |
-| Hardcoded region (Pitfall 7) | Riot account linking phase | Manual test: verify `riot.rs` uses passed-in region, not hardcoded constant |
-| Team guard copied to solo sync (Pitfall 8) | Solo sync phase | Smoke test: user with no team can sync solo stats successfully |
-| LP history from match data (Pitfall 9) | Ranked climb tracker phase | Verify `league-v4` is used for rank snapshots, not `match-v5` metadata |
-| Match detail re-fetch on view (Pitfall 10) | Match detail view phase | Network test: second visit to a match detail view shows 0 Riot API calls |
-| Personal learnings in team table (Pitfall 11) | Personal learnings journal phase | Data isolation test: solo learning absent from team post-game review list |
+| Riot IP / fan-content-policy (Pitfall 1) | Art pipeline planning phase — before any FLUX run | PROJECT.md Key Decisions has "AI art IP path" entry with Path A or Path B explicitly chosen |
+| Hydration panic on tier branching (Pitfall 2) | Solo Journey polish / rules codification phase | `leptos-patterns.md` updated; every room has hydration-no-panic e2e gate at Tier 2 seed |
+| Mousemove listener accumulation (Pitfall 3) | War Room implementation phase (first time two rooms coexist) | DevTools `getEventListeners(window).mousemove.length === 1` after nav round-trip |
+| GPU layer overload (Pitfall 4) | War Room implementation phase | DevTools Layers panel shows ≤ 10 layers per room; no `will-change` on overlays statically |
+| prefers-reduced-motion runtime toggle (Pitfall 5) | Solo Journey polish / accessibility pass | MQL change listener present; mid-session OS toggle stops parallax without reload |
+| Contrast failure over art (Pitfall 6) | Each room's design phase (requires real FLUX asset, not placeholder) | Contrast checker at worst-case mouse position passes WCAG 4.5:1 |
+| Focus trap in QuickNav (Pitfall 7) | QuickNav implementation phase | Keyboard-only nav test passes full Tab-cycle and Escape-returns-focus |
+| Atmosphere FOUC (Pitfall 8) | Solo Journey polish phase | Sky plane has `loading="eager"` or preload `<link>`; Lighthouse LCP ≤ 2.5s on Fast 3G |
+| AI art halo artifacts (Pitfall 9) | Art generation phase | Visual QA checklist item before committing each WebP |
+| Reactive closure around Plane (Pitfall 10) | War Room implementation phase | Code review: no `{move || view! { <Plane ...> }}` in any room file |
+| Growth animation mid-task (Pitfall 11) | Growth system integration phase | Confirm no `growth_resource.refetch()` in form mutation success handlers |
+| Room scope creep (Pitfall 12) | War Room planning phase (architectural decision) | War Room file ≤ 200 lines; no `#[server]` functions in room files |
+| Stale SSR during deploy window (Pitfall 13) | Production hardening phase (Phase 20) | Deploy runbook includes blue-green procedure; verified with test deploy |
+| Asset budget overrun (Pitfall 14) | Art generation phase | `find public/img/rooms -name "*.webp" -size +100k` returns 0; CI check added |
+| Launch work squeezed by rooms scope (Pitfall 15) | Roadmap sequencing — Phase 20 before War Room phase | Phase 20 (production hardening) is ordered before any second room implementation |
 
 ---
 
 ## Sources
 
-- Codebase analysis: `/home/jasper/Repositories/lol_team_companion/src/server/riot.rs` (all current Riot API calls, hardcoded routes, sequential loop pattern)
-- Codebase analysis: `/home/jasper/Repositories/lol_team_companion/schema.surql` (table definitions, `team_id` on match table, `match_id_unique` index)
-- Codebase analysis: `/home/jasper/Repositories/lol_team_companion/src/server/db.rs` lines 1454–1530 (`store_matches` implementation, team_id not set)
-- Codebase analysis: `/home/jasper/Repositories/lol_team_companion/src/pages/stats.rs` (team guard pattern in `sync_team_stats`)
-- Riot API rate limits: [hextechdocs.dev/rate-limiting](https://hextechdocs.dev/rate-limiting/) — development key: 20 req/s, 100 req/2-min; per-key limits shared across all endpoints
-- Riot API data retention: [riot-api-libraries.readthedocs.io](https://riot-api-libraries.readthedocs.io/en/latest/specifics.html) — timelines retained 1 year (vs 2 years for matches)
-- Timeline data size: [MDPI Applied Sciences paper on LoL match data summarization](https://www.mdpi.com/2076-3417/15/13/7190) — raw match JSON ~80,000 tokens, reducible to <2,000 tokens while retaining analytical value; estimated ~300–500 KB raw per match
-- Timeline frame structure: [riot-api-libraries.readthedocs.io](https://riot-api-libraries.readthedocs.io/en/latest/specifics.html) — 1-minute frame intervals; events include kills, objectives, item purchases
-- riven crate rate limiting: [crates.io/crates/riven](https://crates.io/crates/riven/2.24.0) — handles dynamic rate limits from response headers; silently delays rather than errors; can reach full rate limit throughput without 429s
-- CLAUDE.md rules 1–5 (SurrealDB patterns), 7–11 (Leptos server fn patterns), 44 (Ok vs Err for empty state), 57 (server fn URL patterns)
-- Previous PITFALLS.md for v1.1 milestone (cross-feature intelligence pitfalls, champion name normalization, db.rs growth)
+- Codebase: `src/components/room/parallax.rs` — current RAF pattern, cleanup implementation, reduced-motion mount-time check
+- Codebase: `src/pages/rooms/solo_journey.rs` — room shell pattern, asset path construction from region
+- Codebase: `.planning/assets/AI-IMAGES.md` — FLUX prompts, asset budget (400 KB), placeholder pipeline
+- Codebase: `.planning/PROJECT.md` — milestone context, constraints, v1.3 deferred work now in v1.4
+- Codebase: `.claude/rules/leptos-patterns.md` — rules 19 (into_any for divergent branches), 22 (StoredValue), 23 (refetch), 54 (eager capture in Effects)
+- Codebase: `.claude/rules/wasm-patterns.md` — rules 35 (no unwrap), 42 (cancellable timer), 43 (allow unused_variables)
+- Riot Fan Content Policy: [riotgames.com/en/legal](https://www.riotgames.com/en/legal) — MEDIUM confidence; policy last updated August 2018; does not address AI-generated art
+- Riot API Terms: [developer.riotgames.com/policies/general](https://developer.riotgames.com/policies/general) — commercial use permitted with free tier; AI art not addressed
+- Riot AI art controversy: [pcgamesn.com/league-of-legends/wild-rift-trailer-backlash](https://www.pcgamesn.com/league-of-legends/wild-rift-trailer-backlash) — August 2025 Wild Rift AI trailer backlash and apology
+- WCAG 2.3.3 Animation from Interactions: [w3.org/WAI/WCAG21/Understanding/animation-from-interactions.html](https://www.w3.org/WAI/WCAG21/Understanding/animation-from-interactions.html) — prefers-reduced-motion applies to runtime changes, not only mount-time
+- Leptos router cleanup timing: [github.com/leptos-rs/leptos/issues/3665](https://github.com/leptos-rs/leptos/issues/3665) — route cleanup does not always fire on first navigation under same parent
+- Chrome GPU compositing: [developer.chrome.com/blog/performant-parallaxing](https://developer.chrome.com/blog/performant-parallaxing) — transform-only parallax keeps work on compositor thread; `will-change` promotes to layer
+- AI background removal halo artifacts: [alibaba.com/product-insights/why-is-my-ai-art-app-adding-halos](https://www.alibaba.com/product-insights/why-is-my-ai-art-app-adding-halos-to-every-subject-i-upload.html) — edge-detection background removal produces halo fringe
+- Hetzner CAX11 specs: [sparecores.com/server/hcloud/cax11](https://sparecores.com/server/hcloud/cax11) — 2 vCPU ARM Ampere, 4 GB RAM, no discrete GPU; compositing is CPU-side
 
 ---
-*Pitfalls research for: solo player mode and match intelligence — v1.2 milestone*
-*Researched: 2026-03-25*
+
+*Pitfalls research for: v1.4 Immersive Companion — parallax rooms + AI-art pipeline + gamified growth*
+*Researched: 2026-06-03*

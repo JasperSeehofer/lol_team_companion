@@ -1,274 +1,255 @@
-# Technology Stack
+# Stack Research — v1.4 Immersive Companion: Room Rollout + AI Art Pipeline
 
-**Domain:** LoL Team Companion v1.2 — Solo Mode & Match Intelligence additions
-**Researched:** 2026-03-25
-**Confidence:** HIGH (all key findings verified against official docs and crates.io)
-
----
-
-## Context
-
-The stack is locked: Rust nightly, Leptos 0.8, Axum 0.8, SurrealDB 3.x, Tailwind CSS v4.
-This research answers: "what additions or new API surfaces does the solo mode & match
-intelligence milestone require?" Do not re-evaluate the core stack.
+**Domain:** Immersive 2.5D parallax rooms UI + layer-separated AI environment art pipeline
+**Researched:** 2026-06-03
+**Confidence:** HIGH (core findings verified via official docs/APIs; pricing details MEDIUM)
 
 ---
 
-## Existing Stack — Unchanged
+## Verdict: No Rust/Cargo dependency changes required
 
-| Technology | Cargo.toml Version | Status |
-|------------|-------------------|--------|
-| Leptos | 0.8 | Unchanged |
-| Axum | 0.8 | Unchanged |
-| SurrealDB | 3 (SurrealKV) | Unchanged |
-| Tailwind CSS | v4 standalone | Unchanged |
-| riven | ^2 (resolves 2.78.0) | **Gains new endpoints — no version bump needed** |
-| reqwest | 0.12 | Unchanged |
-| chrono | 0.4 | Unchanged |
-| serde / serde_json | 1 | Unchanged |
+The proven Solo Journey room system rolls out to War Room, Hall of Records, and Throne using
+zero new Rust crates. All needed web-sys types are already declared or pulled in transitively.
+The only additions are **external tooling** (CLI tools for the art pipeline) and a **new
+environment variable** (`BFL_KEY`). The Cargo.toml is untouched.
 
 ---
 
-## Recommended Stack
+## Recommended Stack (additions only — existing stack unchanged)
 
-### Core Technologies
+### Core Technologies (unchanged)
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| leptos-chartistry | 0.2.3 | SVG line/bar charts in Leptos components | Only charting library targeting Leptos 0.8 directly with an `ssr` feature flag. Renders pure SVG (no canvas, no JS runtime). Supports line charts with a `Timestamps` axis for time-series (CS/gold/XP over game minutes). 0.2.3 released 2026-01-23, no open SSR compatibility issues. Zero npm dependency — matches project constraint. |
-
-This is the **only new crate** needed for the milestone. Ranked data, match detail, and timeline
-data are all accessible through the already-pinned `riven = { version = "2" }` at its current
-2.78.0 resolved version.
-
-### Supporting Libraries
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| riven (existing) | ^2 | Riot API — now also ranked data and match timeline | Use `league_v4().get_league_entries_by_puuid()` for ranked; `match_v5().get_timeline()` for timeline. Both new to v1.2 but the crate is already in Cargo.toml. |
-
-### Development Tools
-
-No new tools needed. Existing `cargo leptos watch`, `just`, and Playwright suite are sufficient.
+The full Rust nightly / Leptos 0.8 / Axum 0.8 / SurrealDB 3.x / Tailwind CSS v4 stack is
+already validated. See PROJECT.md. No changes.
 
 ---
 
-## Riot API Endpoints — Full Reference for v1.2
+### AI Image Generation
 
-### Ranked Data: `league_v4`
+| Technology | Version / Endpoint | Purpose | Why Recommended |
+|---|---|---|---|
+| **Black Forest Labs FLUX API** | FLUX.2 [pro] via `api.eu.bfl.ai` | Generate Arcane-style environment art layers | German company (Freiburg), explicit EU endpoint (`api.eu.bfl.ai`), GDPR-compliant, ~$0.045/image at 1920x1080. The model behind every locked FLUX prompt in `AI-IMAGES.md`. |
+| **fal.ai** (fallback runner) | `fal-ai/flux-pro` | Alternative FLUX runner if BFL direct has availability issues | Already referenced in `AI-IMAGES.md`; faster cold-start than BFL direct; ~$0.05/image. US-hosted — prefer BFL for primary generation (see EU note). |
 
-```rust
-// Get ranked entries for all queues by PUUID (available in riven 2.78.0)
-api.league_v4()
-    .get_league_entries_by_puuid(PlatformRoute::EUW1, puuid)
-    .await?
-// Returns: Vec<LeagueEntry>
+**EU note on fal.ai:** fal.ai is US-domiciled and processes data on US servers per its privacy
+policy. For a project that values EU-tool preference, **prefer the BFL direct EU endpoint**
+(`api.eu.bfl.ai`) for all primary generation. fal.ai is acceptable as a development fallback
+because the parallax plane images are not personal data. Enterprise EU-residency on fal.ai
+requires a custom arrangement — not worth pursuing for this use case.
+
+**FLUX model selection:** Use `flux-2-pro` (FLUX.2 [pro]). It supersedes the older `flux-pro`
+(FLUX.1 [pro]) referenced in `AI-IMAGES.md` with improved quality at the same price point.
+The `AI-IMAGES.md` prompts are model-agnostic and transfer directly. `flux-dev` saves ~50% on
+cost but is licensed for non-commercial use only — do not use for production assets.
+
+**BFL API call pattern** (async polling, EU endpoint):
+```bash
+# 1. Submit generation
+RESPONSE=$(curl -s -X POST https://api.eu.bfl.ai/v1/flux-2-pro \
+  -H "x-key: $BFL_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "...",
+    "width": 1920, "height": 1080,
+    "steps": 28, "seed": 7421337
+  }')
+POLLING_URL=$(echo $RESPONSE | jq -r '.polling_url')
+
+# 2. Poll until Ready (use the returned polling_url, not a hardcoded endpoint)
+until [ "$(curl -s -H "x-key: $BFL_KEY" "$POLLING_URL" | jq -r '.status')" = "Ready" ]; do
+  sleep 2
+done
+
+# 3. Download result
+curl -s -H "x-key: $BFL_KEY" "$POLLING_URL" | jq -r '.result.sample' | xargs curl -L -o out.png
 ```
 
-**LeagueEntry fields:**
+---
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `queue_type` | `String` | `"RANKED_SOLO_5x5"` or `"RANKED_FLEX_SR"` |
-| `tier` | `Option<Tier>` | IRON through CHALLENGER |
-| `rank` | `Option<Division>` | I, II, III, IV |
-| `league_points` | `i32` | Current LP |
-| `wins` | `i32` | Season wins |
-| `losses` | `i32` | Season losses |
-| `hot_streak` | `bool` | Win streak in progress |
-| `veteran` | `bool` | Long time in current tier |
-| `fresh_blood` | `bool` | Recently promoted |
-| `inactive` | `bool` | Ranked decay warning |
-| `mini_series` | `Option<MiniSeries>` | Promotion series data |
+### Background Removal / Layer Separation
 
-**LP history gap:** Riot does not expose historical LP over time. Snapshot it yourself:
-after each ranked fetch, persist `(user_id, timestamp, lp, tier, division, wins, losses)`
-to a new `ranked_snapshot` SurrealDB table. Derive LP delta from successive snapshots.
-LP trend chart becomes available after the second stored snapshot.
+| Technology | Endpoint | Purpose | Why Recommended |
+|---|---|---|---|
+| **fal.ai BiRefNet v2** | `fal-ai/birefnet/v2` | Remove background from mid/near/overlay planes to produce transparent PNG | State-of-art dual-pathway segmentation; returns PNG with alpha channel; handles complex painterly edges better than rembg/U2Net; available as fal.ai API, no local GPU needed. |
+| **ImageMagick** (existing) | `magick` CLI | Post-process: crop, level, convert to WebP | Already installed and used; handles the PNG → WebP step after BiRefNet output. |
 
-**Route note:** `league_v4` uses `PlatformRoute` (e.g. `EUW1`), not `RegionalRoute`.
-Consistent with the existing `champion_mastery_v4` call pattern in `riot.rs`.
+**Layer separation workflow** for mid/near/overlay planes:
 
-### Match Detail: `match_v5().get_match()` (already used)
+1. Generate each plane as a full-frame image from FLUX (sky plane: opaque; mid/near/overlays:
+   prompt only the depth band of interest — see locked prompts in `AI-IMAGES.md`).
+2. Run the non-sky outputs through `fal-ai/birefnet/v2` to cut the subject from the generated
+   background, producing a transparent PNG. Use `model: "heavy"` for complex edges.
+3. Verify alpha mask quality visually. Re-run with `model: "heavy"` variant if edges are muddy.
+4. Convert to WebP: `magick in.png -quality 80 -define webp:alpha-quality=100 out.webp`.
+5. Check per-region total stays under 400 KB budget.
 
-The existing `fetch_match_history()` in `riot.rs` only stores one participant's stats.
-For the full 10-player match detail view, iterate `m.info.participants` (already fetched).
-
-**Participant fields relevant to v1.2 (beyond what MatchData already captures):**
-
-| Field | Notes |
-|-------|-------|
-| `team_id` | 100 = blue, 200 = red |
-| `team_position` | `"TOP"`, `"JUNGLE"`, `"MIDDLE"`, `"BOTTOM"`, `"UTILITY"` |
-| `item0`–`item6` | Item IDs; look up icons via Data Dragon CDN (already integrated) |
-| `gold_earned`, `gold_spent` | For gold share breakdown |
-| `total_damage_dealt_to_champions` | Already captured in MatchData |
-| `total_damage_taken` | Tank performance metric |
-| `total_time_cc_dealt` | CC contribution |
-| `wards_placed`, `wards_killed`, `detector_wards_placed` | Vision breakdown |
-| `total_minions_killed`, `neutral_minions_killed` | CS (already captured combined) |
-| `champ_level` | Final level at game end |
-| `summoner1Id`, `summoner2Id` | Summoner spell IDs |
-
-**No extra API call needed:** full 10-player data is already in the `get_match` response.
-The v1.2 work is extracting and storing/displaying it, not adding new API calls.
-
-### Match Timeline: `match_v5().get_timeline()`
-
-```rust
-// Returns: Option<MatchTimeline> — ~200KB per game
-api.match_v5()
-    .get_timeline(RegionalRoute::EUROPE, match_id)
-    .await?
+**fal.ai BiRefNet call pattern:**
+```bash
+RESULT=$(curl -s -X POST https://fal.run/fal-ai/birefnet/v2 \
+  -H "Authorization: Key $FAL_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"image_url": "https://...", "model": "heavy"}')
+echo $RESULT | jq -r '.image.url' | xargs curl -L -o plane-mid-transparent.png
 ```
 
-**Structure:**
-```
-MatchTimeline.info
-  ├─ frame_interval: i32          (60000ms = 1 minute between frames)
-  ├─ frames: Vec<MatchTimelineInfoFrame>
-  │    ├─ timestamp: i32
-  │    ├─ participant_frames      (per-minute: gold, xp, cs, position per player)
-  │    └─ events: Vec<MatchTimelineInfoFrameEvent>
-  └─ participants: Option<Vec<...>>
-```
+**Why not depth-map plane cutting?** Monocular depth estimation (MiDaS, ZoeDepth) generates a
+continuous depth field, not clean layer masks. For stylized painterly art the sharp alpha cut
+from BiRefNet composites more cleanly than a soft depth gradient. The prompt already encodes
+depth intent (sky / midground / foreground), so the segmentation step just removes the
+generated background — it does not need to reconstruct 3D.
 
-**Event types available in `MatchTimelineInfoFrameEvent.type` (String):**
-
-| Event | Key Fields | v1.2 Use |
-|-------|-----------|---------|
-| `ELITE_MONSTER_KILL` | `monster_type`, `monster_sub_type`, `killer_team_id`, `timestamp` | Objectives timeline (dragon, baron, herald) |
-| `BUILDING_KILL` | `building_type`, `tower_type`, `lane_type`, `team_id`, `timestamp` | Structures timeline |
-| `DRAGON_SOUL_GIVEN` | `name`, `team_id` | Dragon soul event marker |
-| `TURRET_PLATE_DESTROYED` | `lane_type`, `team_id` | Early-game pressure |
-| `CHAMPION_KILL` | `killer_id`, `victim_id`, `assisting_participant_ids`, `position`, `bounty`, `shutdown_bounty` | Kill timeline |
-| `CHAMPION_SPECIAL_KILL` | `kill_type`, `multi_kill_length`, `kill_streak_length` | Multi-kills, first blood |
-| `ITEM_PURCHASED` | `participant_id`, `item_id`, `timestamp` | Build path reconstruction |
-| `LEVEL_UP` | `participant_id`, `level` | Level timing |
-| `WARD_PLACED` / `WARD_KILL` | `creator_id`, `ward_type` | Vision control |
-| `GAME_END` | `winning_team` | Match conclusion |
-
-**`participant_frames` at each minute provides:**
-- `current_gold`, `total_gold`, `xp`, `level`
-- `minions_killed`, `jungle_minions_killed` (CS-per-minute derivation)
-- `position: {x, y}` (heatmap data if desired in future)
-- `damage_stats.total_damage_done_to_champions` (damage over time)
-
-**Critical:** Fetch timeline on-demand only (when user opens a specific match detail view).
-Do NOT batch-fetch timelines during match list loading — at ~200KB each, 20 matches = 4MB
-plus 20 extra API calls, hitting rate limits instantly.
+**Why not rembg locally?** It requires adding a Python dependency chain to a pure Rust project.
+fal.ai BiRefNet calls over HTTP from a shell script (same pattern as generation) with no local
+installation. For ~36 total planes (6 planes × 3 rooms × 2 regions) the API cost is negligible.
 
 ---
 
-## Charting — leptos-chartistry
+### Image Optimization / Encoding
 
-**Use for:** CS/min over time, gold diff over time, LP trend, win rate trend per champion.
+| Tool | When to Use | Why |
+|---|---|---|
+| **ImageMagick** (`magick`) | All encoding: PNG → WebP, PNG → JPEG | Already present; supports lossless and lossy WebP with alpha channel via `-define webp:alpha-quality=100`; sufficient quality for this use case. |
+| **cwebp** (standalone) | NOT needed | Marginally better compression than ImageMagick's WebP encoder (<5% at q80) — not meaningful given the 400 KB budget has ample headroom (current 12 placeholders total ~52 KB). Adding a second encoder adds setup steps with no measurable benefit. |
+| **avifenc** / AVIF format | NOT needed for this milestone | AVIF is 20-30% smaller than WebP at equivalent quality — useful for large photo sets. But: (a) AVIF encodes ~47x slower than WebP, (b) the `<Plane>` component uses `<img loading="lazy">` which benefits from fast WebP decoding in the compositor, (c) WebP already hits budget with headroom. Revisit only if per-room budget tightens below ~100 KB. |
 
-**Chart types available (v0.2.3):**
-- Line charts with multiple series, linear/step interpolation, point markers
-- Bar charts
-- Stacked lines
-- `Timestamps` struct for time-series X-axis (maps to game minutes in timeline data)
-- Interactive tooltips on hover (WASM only; static SVG renders on SSR)
+**WebP encoding command for transparent planes/overlays** (lossless alpha, lossy RGB):
+```bash
+magick in.png -quality 80 -define webp:alpha-quality=100 out.webp
+```
 
-**Integration:** Add as shared dep (not SSR-only) so SSR renders the static SVG. The `ssr`
-feature must be enabled for server-side rendering path.
-
-**Where NOT to use:** The existing hand-rolled SVG tree graph in `tree_graph.rs`, simple
-CSS-width bar rows in `analytics.rs` stats tables. Those are simpler as inline SVG/CSS.
-Chartistry is worth adding only for multi-series time-series charts with tooltips.
+**WebP encoding command for sky plane** (opaque, fully lossy):
+```bash
+magick in.png -quality 80 out.webp
+```
 
 ---
 
-## Installation
+### Rust / WASM — No New Dependencies
 
-```toml
-# Cargo.toml [dependencies] — add as shared (both SSR and hydrate targets)
-leptos-chartistry = { version = "0.2", features = ["ssr"] }
+**Verdict: Cargo.toml is unchanged.** All web-sys types used by the room system are already
+declared or pulled in transitively via Leptos.
+
+**Current web-sys features in Cargo.toml** (already sufficient for all three new rooms):
+```
+Window, Document, HtmlDocument, Element, HtmlElement, Node,
+Storage, Navigator, Clipboard, SvgsvgElement, SvgGraphicsElement,
+DomRect, MediaQueryList, CssStyleDeclaration,
+DragEvent, DataTransfer
 ```
 
-No changes to `[features]` sections required — the dep is shared, not gated.
+**Types used by room components and their coverage:**
 
-No new `web-sys` features needed (chartistry renders SVG, not canvas).
+| Type | Used In | Coverage |
+|---|---|---|
+| `web_sys::Window` | parallax.rs — RAF, matchMedia, innerWidth/Height, addEventListener/removeEventListener | Declared: `Window` feature covers all these methods. |
+| `web_sys::HtmlElement` | parallax.rs — `style.set_property` for `--px`/`--py` | Declared: `HtmlElement`. |
+| `web_sys::Element` | parallax.rs — `get_element_by_id` return type | Declared: `Element`. |
+| `web_sys::CssStyleDeclaration` | parallax.rs — `set_property("--px", ...)` | Declared: `CssStyleDeclaration`. |
+| `web_sys::MediaQueryList` | parallax.rs — prefers-reduced-motion gate | Declared: `MediaQueryList`. |
+| `web_sys::MouseEvent` | parallax.rs — mousemove handler | Transitively provided by Leptos event system; WASM build succeeds without explicit declaration (verified via `cargo check --features hydrate --target wasm32-unknown-unknown`). |
+| `web_sys::KeyboardEvent` | quick_nav.rs — Cmd+K / Escape handler | Transitively provided by Leptos; same verification. |
+
+**No additional web-sys features are needed for the three remaining rooms.** War Room, Hall of
+Records, and Throne use the same `AtmosphereRoot` / `Plane` / `GrowthOverlay` primitives as
+Solo Journey. If a future room adds a novel browser API (e.g. `IntersectionObserver` for
+lazy-loading, `TouchEvent` for mobile), add the corresponding feature at that point.
+
+---
+
+### JavaScript / Animation — No New Dependencies
+
+**Verdict: No JS additions.** The parallax engine is pure CSS + web-sys (single RAF-batched
+mousemove → `--px`/`--py` CSS vars → GPU-composited transforms). This architecture extends
+directly to all new rooms with no modification. The QuickNav Cmd+K palette is pure Leptos +
+web-sys keyboard listener — no JS library needed.
+
+**Explicitly rejected additions:**
+
+| Rejected | Why | What We Use Instead |
+|---|---|---|
+| GSAP Club plugins | Project guardrail — commercial license; explicitly banned | Pure CSS transitions/transforms |
+| GSAP core (free) | Team preference: no heavy JS deps; adds ~70 KB gzipped; the RAF+CSS approach is already GPU-optimal for this use case | web-sys RAF + CSS `--px`/`--py` custom properties |
+| Framer Motion / Motion One | React-ecosystem or JS runtime weight | Pure CSS |
+| Three.js / Pixi.js | Full 3D/WebGL stack; 2.5D parallax does not need a canvas renderer; >300 KB | CSS `transform: translate3d()` on `<img>` planes |
+| WASM physics crates (rapier, etc.) | No physics simulation; parallax is purely cosmetic | N/A |
+
+---
+
+### New Environment Variables
+
+| Variable | Purpose | Where to Add |
+|---|---|---|
+| `BFL_KEY` | Black Forest Labs API key for FLUX.2 [pro] generation via `api.eu.bfl.ai` | `.env` (never committed); add to `.env.example` with a placeholder |
+| `FAL_KEY` | fal.ai API key (already documented in `AI-IMAGES.md`, for BiRefNet + fallback FLUX runner) | `.env` (already in `.env.example`) |
+
+Both are used only in offline art-generation shell scripts — never loaded by the server binary.
+No changes to `src/main.rs`, `Cargo.toml`, or any Rust source.
+
+---
+
+## Art Pipeline Scripts (shell — not Rust)
+
+The art generation pipeline lives outside Cargo entirely. Recommended structure under `scripts/`:
+
+```
+scripts/
+├── gen-room-art.sh        # POST to BFL API, poll, download raw PNG per layer
+├── remove-bg.sh           # POST to fal-ai/birefnet/v2, download transparent PNG
+├── encode-webp.sh         # magick PNG → WebP at target quality/alpha settings
+└── verify-budget.sh       # sum per-region file sizes, fail if >400 KB
+```
+
+Each script is independently runnable so a single-plane regeneration (prompt tweak, seed
+change) does not re-run the full pipeline. This mirrors the "one-line binary swap" principle
+documented in `AI-IMAGES.md`.
+
+After generating real FLUX art, update each asset block in `AI-IMAGES.md` per the existing
+instructions: record the assigned seed integer, update compute path, update final size, remove
+the `TODO: Regenerate` line.
 
 ---
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| leptos-chartistry | apexcharts-rs (JS wrapper) | Never in this project — pulls in a JS runtime, conflicts with no-npm constraint |
-| leptos-chartistry | plotters | If you need bitmap/PNG output — not applicable here; plotters has no Leptos SSR path |
-| leptos-chartistry | leptos_charts (Panaetius) | Only bar and pie charts; acceptable if time-series line charts are not needed |
-| leptos-chartistry | Hand-rolled SVG | Acceptable for simple single-metric bars (CS% row = CSS width); use chartistry only for multi-line time-series |
-| `get_league_entries_by_puuid` | `get_league_entries_for_summoner` | Never — requires an extra `summoner_v4` round-trip to convert PUUID to summoner_id; PUUID method is direct |
-
----
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| D3.js / Chart.js via WASM bindings | JS interop bloats WASM bundle, breaks SSR path, adds npm dependency | leptos-chartistry pure-Rust SVG |
-| Background/polling LP sync | Riot API rate limits (dev: 100 req/2min); no background jobs in single-binary architecture | On-demand fetch triggered by user action (match refresh button) |
-| Fetching timeline for every match in list | ~200KB per call; 20 matches = 4MB + 20 extra API calls = rate-limit abuse | Lazy per-match fetch when user clicks "view detail" |
-| Storing raw timeline JSON in SurrealDB | Too large; schema drift risk if Riot changes the structure | Cache only derived data (objectives list, per-minute gold/CS arrays) after first parse |
-| `get_league_entries_for_summoner` | Extra API call to resolve summoner_id from PUUID | `get_league_entries_by_puuid` |
-| A separate `riot_cache.rs` caching layer for v1.2 | Premature; existing on-demand fetch + SurrealDB persistence is sufficient | Store fetched data in SurrealDB records with `fetched_at` timestamp; re-fetch when stale |
-
----
-
-## Stack Patterns by Variant
-
-**For CS/gold-over-time line charts (performance breakdown):**
-- Fetch `get_timeline()` on demand when user opens match detail
-- Extract `participant_frames` at each frame timestamp → `Vec<(f64, f64)>` (minute, value)
-- Pass to leptos-chartistry `Series` with `Timestamps` X-axis
-- Gate interactive tooltips with `#[cfg(feature = "hydrate")]`; static SVG renders on SSR
-
-**For LP history trend chart:**
-- Riot does not expose LP history
-- After each `get_league_entries_by_puuid()` call, persist snapshot to `ranked_snapshot` table
-- Query `SELECT * FROM ranked_snapshot WHERE user = $user ORDER BY timestamp ASC`
-- Derive `lp_delta = current_lp - previous_lp` per game; render as line chart over time
-- On first use (no history), show only current rank badge; chart appears after ≥2 snapshots
-
-**For champion performance trends (win rate, KDA over N games):**
-- No new API calls: aggregate from already-stored `player_match` table records
-- Use Rust-side `HashMap<champion, Stats>` aggregation (same pattern as `analytics.rs`)
-- Return as `Vec<ChampionTrendEntry>` from a server function
-
-**For objectives timeline display:**
-- Filter timeline events for `ELITE_MONSTER_KILL`, `BUILDING_KILL`, `DRAGON_SOUL_GIVEN`
-- Map to a `Vec<ObjectiveEvent> { timestamp_secs, team, event_type, description }` struct
-- Render as a horizontal timeline SVG (custom or chartistry guide-line markers)
+| Recommended | Alternative | Why Not |
+|---|---|---|
+| BFL direct EU endpoint (`api.eu.bfl.ai`) | fal.ai FLUX runner as primary | fal.ai is US-domiciled; EU preference per project values. BFL is the model author and offers explicit EU endpoint. |
+| FLUX.2 [pro] | FLUX.1 [pro] (as in current `AI-IMAGES.md`) | FLUX.2 supersedes FLUX.1 at the same price; locked prompts transfer directly with no changes. |
+| FLUX.2 [pro] | `flux-dev` | Non-commercial license only; cannot ship in a closed-beta product. |
+| fal.ai BiRefNet v2 | Local rembg (Python) | Adds Python dependency chain to a pure Rust project; API call is sufficient for ~36 total planes. |
+| fal.ai BiRefNet v2 | Depth-map cutting (MiDaS/ZoeDepth) | Continuous depth fields composite poorly with stylized painterly art; BiRefNet alpha masks are cleaner when the prompt already encodes depth intent. |
+| ImageMagick (existing) | cwebp standalone | <5% size difference at q80; cwebp adds a second installed tool with no meaningful benefit given budget headroom. |
+| ImageMagick (existing) | avifenc / AVIF | 47x slower encode; WebP already within budget; revisit only if budget tightens significantly. |
+| Pure CSS + web-sys RAF | GSAP / Three.js | Project guardrails (GSAP Club banned, no heavy JS deps); GPU-composited CSS transforms are already optimal for this use case. |
+| Existing web-sys features | Add `MouseEvent` / `KeyboardEvent` explicitly | Not needed — transitively provided by Leptos; WASM build verified passing without explicit declaration. |
 
 ---
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| leptos-chartistry 0.2.3 | leptos 0.8 | Verified — depends on `leptos = "0.8"`; ssr feature confirmed |
-| riven ^2 (2.78.0) | reqwest 0.12, tokio 1 | Already in use; `get_league_entries_by_puuid` available in latest 2.x |
-| `get_timeline` | `RegionalRoute::EUROPE` | Same route as existing `get_match` calls — no change |
-| `get_league_entries_by_puuid` | `PlatformRoute::EUW1` | Same route as existing `champion_mastery_v4` calls — no change |
+| Component | Current Version | Notes |
+|---|---|---|
+| web-sys | 0.3 | All room APIs covered by features already in Cargo.toml. No additions needed. |
+| wasm-bindgen | 0.2 | `Closure::once`, `JsCast` patterns in parallax.rs stable with current version. |
+| FLUX.2 [pro] (BFL API) | Production | EU endpoint: `https://api.eu.bfl.ai/v1/flux-2-pro`. Requires `x-key` header, async polling via returned `polling_url`. |
+| fal.ai BiRefNet | v2 (`fal-ai/birefnet/v2`) | Returns PNG with alpha. Input: JPEG/PNG/WebP/AVIF up to 2048x2048. |
+| ImageMagick | 6.9+ (system-installed) | WebP lossless alpha: `-quality 80 -define webp:alpha-quality=100`. Already installed (used for all placeholder generation). |
 
 ---
 
 ## Sources
 
-- https://docs.rs/riven/latest/riven/ — version 2.78.0 confirmed; `get_league_entries_by_puuid` confirmed — HIGH confidence
-- https://docs.rs/riven/latest/riven/endpoints/struct.LeagueV4.html — all LeagueV4 methods including `get_league_entries_by_puuid` — HIGH confidence
-- https://docs.rs/riven/2.24.0/riven/models/league_v4/struct.LeagueEntry.html — LeagueEntry fields verified — HIGH confidence
-- https://docs.rs/riven/latest/riven/endpoints/struct.MatchV5.html — `get_timeline` signature confirmed — HIGH confidence
-- https://docs.rs/riven/2.24.0/riven/models/match_v5/struct.MatchTimelineInfoFrameEvent.html — all 20 event types verified — HIGH confidence
-- https://docs.rs/riven/2.24.0/riven/models/match_v5/struct.MatchTimelineInfoFrame.html — frame structure (participant_frames, events, timestamp) — HIGH confidence
-- https://lib.rs/crates/leptos-chartistry — version 0.2.3, January 2026, leptos 0.8 dependency — HIGH confidence
-- https://docs.rs/leptos-chartistry/latest/leptos_chartistry/ — chart types, Timestamps struct, SSR feature confirmed — HIGH confidence
-- https://github.com/feral-dot-io/leptos-chartistry/issues — no open SSR or Leptos 0.8 compatibility issues — MEDIUM confidence
-- Codebase: `src/server/riot.rs`, `Cargo.toml` — direct source of truth for existing patterns — HIGH confidence
+- [Black Forest Labs API integration docs](https://docs.bfl.ml/api_integration/integration_guidelines) — EU endpoint (`api.eu.bfl.ai`), GDPR-compliant claim, polling pattern, model names — HIGH confidence
+- [Black Forest Labs EU-Startups profile](https://www.eu-startups.com/2025/12/used-by-adobe-canva-and-meta-germanys-black-forest-labs-lands-e258-million-to-scale-its-visual-ai-platform/) — Freiburg HQ, German company, $300M round — HIGH confidence
+- [fal.ai BiRefNet model page](https://fal.ai/models/fal-ai/birefnet) — endpoint `fal-ai/birefnet`, PNG+alpha output, v2 available — HIGH confidence
+- [fal.ai FLUX model hub](https://fal.ai/flux) — FLUX Dev/Pro/Schnell/Kontext/1.1 availability, pricing context — MEDIUM confidence (verify endpoints via API docs before use)
+- [fal.ai privacy policy](https://fal.ai/legal/privacy-policy) — US-domiciled data processing confirmed — HIGH confidence
+- [web-sys Window struct docs](https://docs.rs/web-sys/latest/web_sys/struct.Window.html) — `Window` feature covers requestAnimationFrame, matchMedia, innerWidth/Height, addEventListener — HIGH confidence
+- [ImageMagick WebP encoding options](https://imagemagick.org/script/webp.php) — lossless + alpha-quality support confirmed — HIGH confidence
+- [WebP vs AVIF 2026 benchmark (pixotter)](https://pixotter.com/blog/webp-vs-avif/) — AVIF ~47x slower encode, 20-30% smaller files — MEDIUM confidence (third-party benchmark)
+- [BiRefNet vs rembg production comparison (DEV Community)](https://dev.to/om_prakash_3311f8a4576605/birefnet-vs-rembg-vs-u2net-which-background-removal-model-actually-works-in-production-4830) — BiRefNet edge quality advantage in production — MEDIUM confidence
 
 ---
-*Stack research for: LoL Team Companion v1.2 — Solo Mode & Match Intelligence*
-*Researched: 2026-03-25*
+
+*Stack research for: v1.4 Immersive Companion — room rollout + AI art pipeline*
+*Researched: 2026-06-03*
