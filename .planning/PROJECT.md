@@ -136,6 +136,7 @@ Remaining tech debt:
 | Bug-report inbox export: synchronous warn-and-continue at boot | Server start decoupled from inbox-write success — FS failure logs via tracing::warn! and continues to serve (T-19-03) | ✓ Good — Phase 19, deterministic restart |
 | list_bug_reports server-fn returns Forbidden for all v1 callers | Export task reads db::list_open_bug_reports directly; admin-role gate deferred to Phase 22 (// TODO Phase 22 markers) | ✓ Good — Phase 19, no premature auth surface |
 | Inbox prompt-injection defense is layered, not absolute | HTML-escape + blockquote framing + CLAUDE.md untrusted-content instruction; residual LLM-injection risk accepted under closed-beta invite gate (AR-19-01) | ✓ Acceptable for v1 — Phase 19 |
+| Room art = original world, LoL-region- & Arcane-INSPIRED (not Riot IP) | Riot Fan Content Policy (2018) is silent on AI art and Riot's Aug-2025 stance is hostile; committed AI assets avoid trademarked place-names and "in the style of [Riot product]" prompts while keeping the evocative mood. Champion data via Data Dragon stays (sanctioned). `/consult legal` gates the first real generation run | — Pending — v1.4 art phase (AI-IMAGES.md prompts to be revised) |
 
 ## Constraints
 

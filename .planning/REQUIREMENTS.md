@@ -1,117 +1,78 @@
-# Requirements: LoL Team Companion
+# Requirements: LoL Team Companion — v1.4 Immersive Companion
 
-**Defined:** 2026-03-25
-**Core Value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
+**Defined:** 2026-06-04
+**Core Value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
 
-## v1.2 Requirements
+> Prior-milestone requirements (v1.0–v1.3) are recorded as Validated in PROJECT.md
+> and preserved in git history. This file scopes the **v1.4** milestone only.
 
-Requirements for Solo Mode & Match Intelligence milestone. Each maps to roadmap phases.
+## v1.4 Requirements
 
-### Solo Mode
+### Room System Foundations
 
-- [ ] **SOLO-01**: User can toggle between team mode and solo mode, persisted across sessions
-- [x] **SOLO-02**: User can sync solo queue match history without being on a team
-- [x] **SOLO-03**: User can filter match history by queue type (solo queue, flex, all)
-- [x] **SOLO-04**: User sees a personal solo dashboard with recent matches, ranked badge, learnings, and goal status
-- [x] **SOLO-05**: User can select their region during Riot account linking (EUW, NA, KR, etc.)
+- [ ] **ROOM-01**: Team-scoped growth state — `get_team_growth_counts` + `TeamGrowthState` (mirrors the user-scoped pair) drives team-room environments by tier
+- [ ] **ROOM-02**: `AtmosphereRoot` generalized to arbitrary named growth axes, plus a reusable `RoomSurface` tab component (signal + `<Show>`, ARIA tablist, deep-linkable `?tab=`, instant switch with no atmosphere remount)
+- [ ] **ROOM-03**: Anti-structural-branching hydration rule documented in `CLAUDE.md` + `.claude/rules/leptos-patterns.md` before any new room is built
 
-### Ranked Tracking
+### Rooms
 
-- [x] **RANK-01**: User can see their current ranked tier, division, and LP
-- [ ] **RANK-02**: User can view LP history over time as a trend graph
-- [x] **RANK-03**: System snapshots LP on each stats sync for history tracking
+- [ ] **ROOM-04**: War Room hosts draft, tree-drafter, game-plan, opponents, and ban-priority as surfaces under one parallax atmosphere
+- [ ] **ROOM-05**: Hall of Records / Library hosts stats, match detail, analytics, post-game, and team learnings as surfaces
+- [ ] **ROOM-06**: Throne / Home room hosts identity, team dashboard, and solo progression
+- [ ] **ROOM-07**: IA healing — previously-siloed features are reachable in their intent room (opponents in War Room, learnings in Library); legacy flat routes still resolve as deep links
+- [ ] **ROOM-08**: QuickNav command palette available app-wide (every room + flat route) with a proper focus trap; nav IA reflects the rooms
 
-### Match Detail
+### Accessibility (closed-beta blockers)
 
-- [x] **MATCH-01**: User can view all 10 participants in a match (KDA, items, damage, gold, vision)
-- [x] **MATCH-02**: User can view match timeline events (dragons, barons, towers, kills)
-- [x] **MATCH-03**: User can see personal performance breakdown (damage share, vision score, CS vs game average)
-- [x] **MATCH-04**: Match detail loads on-demand (not during sync) and caches in DB after first fetch
+- [ ] **A11Y-01**: A runtime `prefers-reduced-motion` change-listener freezes/restores parallax without a page reload (not just a mount-time check)
+- [ ] **A11Y-02**: Every room passes the per-route hydration-no-panic canary in both regions, keeps `focus-visible` rings, and holds WCAG AA text contrast over the art (scrims)
 
-### Personal Improvement
+### Art Production
 
-- [x] **LEARN-01**: User can write personal learnings tagged by champion and matchup
-- [x] **LEARN-02**: User can create a learning from match detail with one click (pre-fills champion/matchup)
-- [x] **LEARN-03**: User can browse and filter learnings by champion, matchup, or tag
-- [ ] **LEARN-04**: User can set goals (rank target, CS/min threshold, death limit)
-- [ ] **LEARN-05**: User can see goal progress auto-tracked from match history
-- [ ] **LEARN-06**: User can view champion performance trends (win rate, KDA, CS/min per champion over time)
+- [ ] **ART-01**: Original world & art identity — Arcane-inspired and evocative of LoL's regions but our own, with NO trademarked place-names or "in the style of [Riot product]" in committed assets; `AI-IMAGES.md` prompts revised; `/consult legal` check gates the first real generation run
+- [ ] **ART-02**: Layer-separated environment art produced per room (first region) via the Black Forest Labs EU FLUX endpoint + BiRefNet layer separation, under a CI-enforced ~400 KB/room/region budget
+- [ ] **ART-03**: Second region art produced for all rooms once the first region is locked
 
-### Cross-Feature
+### Re-incorporated Launch Work (absorbed from v1.3)
 
-- [ ] **XFEAT-03**: User sees personal matchup notes in the draft Intel sidebar when picking a champion
-- [ ] **XFEAT-04**: User sees champion win rate badges on champion pool cards from solo match history
+- [ ] **LNCH-01**: Production hardening — env-driven site address, secure cookies behind HTTPS, prod log config + rotation, Riot API timeout/retry/cache, dynamic Data Dragon patch resolution, graceful shutdown, nightly SurrealKV snapshot
+- [ ] **LNCH-02**: Closed-beta access gate (invite-only)
+- [ ] **LNCH-03**: Deploy infrastructure on the shared Hetzner CAX11
+- [ ] **LNCH-04**: Compliance & transparency — data-processing + AI-art disclosure / transparency table (the deferred Phase-19 SC-8)
+- [ ] **LNCH-05**: Pre-launch full review (security, a11y, performance, regression)
+- [ ] **LNCH-06**: Soft launch + feedback loop
+- [ ] **LNCH-07**: Draft integration — match → draft → game-plan → review chain (deferred XFEAT-03/04)
 
-## Future Requirements
+## Future Requirements (deferred beyond v1.4)
 
-Deferred to v1.3+. Tracked but not in current roadmap.
-
-### Practice & Automation
-
-- **PRAC-01**: User can maintain a practice list of champions to learn
-- **PRAC-02**: Practice list auto-tracks progress from match history
-- **AUTO-01**: LP auto-sync polling without manual trigger
-- **POOL-01**: Champion pool gap detection from solo match history
-
-### Intelligence (carried from v1.1)
-
-- **INTL-03**: Ban recommendations based on team champion win rate data
-- **INTL-04**: Stats-informed draft pick scoring using match history
-- **INTL-05**: Post-game lesson recall when facing previously-seen opponent
-- **INTL-06**: Draft outcome correlation ("your team wins 70% with engage comps")
-
-### Workflow
-
-- **FLOW-01**: Game day guided wizard flow
-- **FLOW-02**: Match as launchpad: create draft → game plan → review chain
-- **VIEW-01**: Series view, champion pool health check, action item completion rate
+- **ROOM-F1**: Discrete per-tier art swaps (distinct images per growth tier) instead of single-overlay opacity ramps
+- **ROOM-F2**: Room-to-room View Transitions and per-region ambient motion
+- **ROOM-F3**: Mobile-responsive room variants (desktop-first holds for v1.4)
+- **INTL-03–06 / FLOW-01**: ban recommendations, stats-informed pick scoring, opponent lesson recall, draft-outcome correlation, game-day wizard
 
 ## Out of Scope
 
-Explicitly excluded. Documented to prevent scope creep.
-
 | Feature | Reason |
 |---------|--------|
-| Practice list auto-progress | Requires stable match aggregation first; defer to v1.3 |
-| Auto LP polling | Rate limit management complexity; manual sync sufficient for v1.2 |
-| Per-minute timeline frames storage | 300 rows/game storage bloat; extract only objective/kill events |
-| Raw timeline JSON storage | 300-500KB per match; extract and discard |
-| Real-time collaborative editing | WebSocket complexity without proportional value |
-| AI/LLM-generated draft picks | No comparable data corpus |
-| Mobile responsive redesign | Desktop-first |
+| Literal Riot IP in AI art (faction names, "splash-art style" prompts) | Legal/IP risk; Riot stance hostile to AI art — original-but-inspired identity instead (ART-01) |
+| Ambient audio / music in rooms | Scope; revisit post-launch |
+| Forced spatial navigation (click art objects to move) | Anti-feature — kills power-user speed; QuickNav + tabs are the fast path |
+| Explicit XP bars / streaks / login rewards on rooms | Gimmicky gamification; growth maps to real work only |
+| 3D / WebGL engine (Three.js etc.) | CSS+web-sys parallax is sufficient; no heavy JS dep |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Filled during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SOLO-01 | Phase 12 | Pending |
-| SOLO-02 | Phase 12 | Complete |
-| SOLO-03 | Phase 12 | Complete |
-| SOLO-04 | Phase 12 | Complete |
-| SOLO-05 | Phase 12 | Complete |
-| RANK-01 | Phase 12 | Complete |
-| RANK-03 | Phase 12 | Complete |
-| MATCH-01 | Phase 13 | Complete |
-| MATCH-02 | Phase 13 | Complete |
-| MATCH-03 | Phase 13 | Complete |
-| MATCH-04 | Phase 13 | Complete |
-| LEARN-01 | Phase 14 | Complete |
-| LEARN-02 | Phase 14 | Complete |
-| LEARN-03 | Phase 14 | Complete |
-| RANK-02 | Phase 15 | Pending |
-| LEARN-04 | Phase 15 | Pending |
-| LEARN-05 | Phase 15 | Pending |
-| LEARN-06 | Phase 15 | Pending |
-| XFEAT-03 | Phase 16 | Pending |
-| XFEAT-04 | Phase 16 | Pending |
+| (pending roadmap) | — | Pending |
 
 **Coverage:**
-- v1.2 requirements: 20 total
-- Mapped to phases: 20
-- Unmapped: 0
+- v1.4 requirements: 18 total
+- Mapped to phases: (pending)
+- Unmapped: (pending)
 
 ---
-*Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after roadmap creation (traceability complete)*
+*Requirements defined: 2026-06-04*
+*Last updated: 2026-06-04 — v1.4 Immersive Companion milestone*
