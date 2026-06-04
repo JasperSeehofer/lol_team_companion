@@ -172,6 +172,16 @@ Path-specific patterns live in `.claude/rules/` and load automatically:
 
 41. **Tree assembly: use `children_of` map, not reversal heuristic** — Building a `HashMap<String, Vec<String>>` of parent→child IDs and doing a recursive DFS is correct regardless of DB return order. The old reverse-child_ids heuristic failed when sibling nodes shared the same `sort_order`.
 
+58. **Room components: read `InitialTheme`/region ONCE at room top level — never inside reactive primitives** — Reading `use_context::<InitialTheme>()` inside a `Signal::derive()`, `Effect`, `move || {}` view block, `view!` branch, or child component causes an SSR/hydrate structural mismatch: the tachys reconciler panics at `html/mod.rs:217` with `Option::unwrap()`, silently killing all WASM event handlers (the Phase 18.2 incident). The fix: read region ONCE at the room component's top level (`SoloJourneyRoom`, `WarRoomRoom`, etc.), bind it to a local `String`, and pass it as a plain `region: String` prop to every child. Children use the prop; they never call `use_context`. Worked example: `src/pages/rooms/solo_journey.rs:18`.
+    ```rust
+    // CORRECT — region read once, passed as prop
+    let region = use_context::<InitialTheme>().unwrap_or_default().0;
+    view! { <SoloSurfaces region=region.clone() /> }
+
+    // WRONG — context read inside a reactive closure → panics at html/mod.rs:217 on non-default region
+    let region = Signal::derive(|| use_context::<InitialTheme>().unwrap_or_default().0);
+    ```
+
 ## Claude Code Dev Workflow
 
 > These guidelines are for interactive Claude Code sessions. GSD agents follow plan-specific verification.
