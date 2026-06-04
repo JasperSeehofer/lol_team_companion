@@ -98,6 +98,62 @@ impl Default for GrowthState {
     }
 }
 
+/// Raw per-team accumulation counts driving the War Room growth atmosphere.
+/// All six tables carry `team record<team>` in `schema.surql` (draft,
+/// draft_tree, opponent, ban_priority, post_game_learning, team_note);
+/// `player_match` is user-scoped and deliberately excluded (D-05). Library
+/// (records/tomes/analysis) and Throne (roster/progression/crown) axis
+/// derivations are deferred to Phases 28/29 — this module ships only the War
+/// Room derivation as the proven template (D-03).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeamGrowthCounts {
+    pub draft: u32,
+    pub draft_tree: u32,
+    pub opponent: u32,
+    pub ban_priority: u32,
+    pub post_game_learning: u32,
+    pub team_note: u32,
+}
+
+/// Derived War Room growth state. Only the War Room axes (tactics/intel/command)
+/// are derived here (D-03); Library and Throne axes are deferred to Phases 28/29.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeamGrowthState {
+    pub counts: TeamGrowthCounts,
+    /// Tactics — drafting depth (drafts + draft trees).
+    pub tactics_tier: u8,
+    /// Intel — opponents scouted.
+    pub intel_tier: u8,
+    /// Command — ban priorities + post-game learnings (team direction).
+    pub command_tier: u8,
+}
+
+impl TeamGrowthState {
+    /// Derive War Room tiers from raw team counts. The thresholds below are
+    /// D-09 calibration *hypotheses* flagged for beta tuning — not blocking.
+    pub fn from_counts(counts: TeamGrowthCounts) -> Self {
+        // D-06: tactics from drafts + draft trees.
+        let tactics = tier_for(counts.draft + counts.draft_tree, [1, 5, 20]);
+        // D-07: intel from opponents scouted.
+        let intel = tier_for(counts.opponent, [1, 3, 10]);
+        // D-08: command from ban priorities + post-game learnings.
+        let command = tier_for(counts.ban_priority + counts.post_game_learning, [1, 5, 15]);
+        TeamGrowthState {
+            counts,
+            tactics_tier: tactics.level(),
+            intel_tier: intel.level(),
+            command_tier: command.level(),
+        }
+    }
+}
+
+impl Default for TeamGrowthState {
+    /// An empty team (all Seed) — the safe fallback before any team activity.
+    fn default() -> Self {
+        TeamGrowthState::from_counts(TeamGrowthCounts::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,6 +222,61 @@ mod tests {
         });
         let json = serde_json::to_string(&g).unwrap();
         let back: GrowthState = serde_json::from_str(&json).unwrap();
+        assert_eq!(g, back);
+    }
+
+    // --- Team-scoped (War Room) growth ---
+
+    #[test]
+    fn team_empty_counts_are_all_seed() {
+        let g = TeamGrowthState::default();
+        assert_eq!(g.tactics_tier, 0);
+        assert_eq!(g.intel_tier, 0);
+        assert_eq!(g.command_tier, 0);
+    }
+
+    #[test]
+    fn team_tactics_combines_draft_and_tree() {
+        // 3 drafts + 2 draft trees = 5 → crosses the tier-2 bound (5).
+        let g = TeamGrowthState::from_counts(TeamGrowthCounts {
+            draft: 3,
+            draft_tree: 2,
+            ..Default::default()
+        });
+        assert_eq!(g.tactics_tier, 2);
+    }
+
+    #[test]
+    fn team_intel_tracks_opponents() {
+        // 10 opponents → tier-3 bound (10).
+        let g = TeamGrowthState::from_counts(TeamGrowthCounts {
+            opponent: 10,
+            ..Default::default()
+        });
+        assert_eq!(g.intel_tier, 3);
+    }
+
+    #[test]
+    fn team_command_combines_bans_and_learnings() {
+        // 3 ban priorities + 12 post-game learnings = 15 → tier-3 bound (15).
+        let g = TeamGrowthState::from_counts(TeamGrowthCounts {
+            ban_priority: 3,
+            post_game_learning: 12,
+            ..Default::default()
+        });
+        assert_eq!(g.command_tier, 3);
+    }
+
+    #[test]
+    fn team_growth_state_round_trips_json() {
+        let g = TeamGrowthState::from_counts(TeamGrowthCounts {
+            draft: 4,
+            opponent: 5,
+            post_game_learning: 8,
+            ..Default::default()
+        });
+        let json = serde_json::to_string(&g).unwrap();
+        let back: TeamGrowthState = serde_json::from_str(&json).unwrap();
         assert_eq!(g, back);
     }
 }
