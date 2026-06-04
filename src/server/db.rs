@@ -19,7 +19,7 @@ use crate::models::{
         DashboardSummary, GamePlan, GamePlanEffectiveness, PoolGapWarning, PostGameLearning,
         PostGamePreview, StrategyTagSummary,
     },
-    growth::GrowthCounts,
+    growth::{GrowthCounts, TeamGrowthCounts},
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     personal_learning::PersonalLearning,
@@ -4145,6 +4145,64 @@ pub async fn get_growth_counts(db: &Surreal<Db>, user_id: &str) -> DbResult<Grow
         personal_goal,
         ranked_snapshot,
         player_match,
+    })
+}
+
+/// Accumulation counts for a single team, used to drive the War Room (and later
+/// Library / Throne) immersive "growth" atmosphere. Batches six
+/// `count() … GROUP ALL` statements in one round-trip; mirrors
+/// `get_growth_counts`. All six tables are directly team-scoped
+/// (`team record<team>` in `schema.surql`). `player_match` is user-scoped and
+/// deliberately excluded (D-05).
+///
+/// Caller contract: `team_id` MUST be a team the authenticated principal is
+/// already authorized to read. This function scopes the query solely by the
+/// supplied `team_key` and performs no membership check of its own — the
+/// team-membership authorization is enforced at the server-fn boundary
+/// (Phase 27), which must pass a pre-authorized team id. Never call this with
+/// raw client-supplied team input that has not been authorized upstream.
+pub async fn get_team_growth_counts(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<TeamGrowthCounts> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    let mut result = db
+        .query(
+            "SELECT count() as n FROM draft WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM draft_tree WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM opponent WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM ban_priority WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM post_game_learning WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM team_note WHERE team = type::record('team', $team_key) GROUP ALL",
+        )
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    // Each statement returns at most one grouped row; absent → 0.
+    fn count_of(rows: Vec<CountResult>) -> u32 {
+        rows.first().map(|r| r.n.max(0) as u32).unwrap_or(0)
+    }
+
+    let draft = count_of(result.take(0).unwrap_or_default());
+    let draft_tree = count_of(result.take(1).unwrap_or_default());
+    let opponent = count_of(result.take(2).unwrap_or_default());
+    let ban_priority = count_of(result.take(3).unwrap_or_default());
+    let post_game_learning = count_of(result.take(4).unwrap_or_default());
+    let team_note = count_of(result.take(5).unwrap_or_default());
+
+    Ok(TeamGrowthCounts {
+        draft,
+        draft_tree,
+        opponent,
+        ban_priority,
+        post_game_learning,
+        team_note,
     })
 }
 
