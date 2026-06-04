@@ -87,6 +87,25 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 55. **Suppress auto-save during batch signal updates** — When switching nodes/trees, multiple signals update in sequence. Use a `suppress_autosave: RwSignal<bool>` guard: set `true` before batch updates, re-enable after a `setTimeout(0)` microtask.
 
+58. **Room components: read context ONCE at room top level — never inside reactive primitives** — Reading `use_context::<InitialTheme>()` (or any context) inside a reactive closure, `Signal::derive()`, `Effect`, `move || {}`, structural branch, or child component during SSR causes the tachys reconciler to see different DOM structure on hydration, panicking at `html/mod.rs:217` with `Option::unwrap()` and silently killing all WASM event handlers. This is the **Phase 18.2 incident root cause** (see `.planning/phases/18.2-pandemonium-hydration-reconciliation-gap-closure-for-ui-18-1/18.2-CONTEXT.md`).
+
+    **Rule:** In every `<Room>Room` component, read `InitialTheme` exactly once at the function top level. Pass the result as a plain `region: String` prop to all children. A `region` value may only be used for: string-interpolated `src`/`href` attributes, `data-*` attribute values, or passing to child component props. It must never appear in a reactive closure, `Signal::derive()`, `move || {}`, or structural branch.
+
+    ```rust
+    // CORRECT — read once, passed as plain prop
+    pub fn SoloJourneyRoom() -> impl IntoView {
+        let region = use_context::<InitialTheme>().unwrap_or_default().0; // solo_journey.rs:18
+        view! { <SoloSurfaces region=region.clone() /> }
+    }
+
+    // WRONG — context read inside reactive closure → hydration panic on non-default region
+    let region = Signal::derive(|| use_context::<InitialTheme>().unwrap_or_default().0);
+    // WRONG — context read inside a child component
+    #[component] fn MyChild() -> impl IntoView {
+        let region = use_context::<InitialTheme>().unwrap_or_default().0; // PANIC at html/mod.rs:217
+    }
+    ```
+
 ## Auth / Routing
 
 49. **Logout hard-navigates to `/`** — Both `nav.rs` and `profile.rs` watch `logout_action.value()` and call `window.location().set_href("/")` on success (same pattern as login, rule 8).
