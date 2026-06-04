@@ -5,8 +5,10 @@
 - ✅ **v1.0 Cross-Feature Intelligence** — Phases 1-5 (shipped 2026-03-18)
 - ✅ **v1.1 Polish, Draft & Opponents Rework** — Phases 6-11 (shipped 2026-03-24)
 - ✅ **v1.2 Solo Mode & Match Intelligence** — Phases 12-16 (shipped 2026-05-07)
-- 🚧 **v1.3 Launch Readiness** — Phases 16-23 (in progress, started 2026-05-06)
-- 🔜 **v1.4 Draft Integration & Post-Launch Backlog** — Phase 24+ (deferred Draft Integration + bug-report inbox graduates)
+- ✅ **v1.3 Launch Readiness (partial)** — Phases 16-19 shipped; Phases 20-24 SUPERSEDED by v1.4 (see note below)
+- 🚧 **v1.4 Immersive Companion** — Phases 26-34 (in progress, started 2026-06-04)
+
+> **v1.3 → v1.4 supersession note:** The v1.3 launch phases that were planned but never built (old Phases 20, 20.1, 21, 22, 23, 24) and the deferred Phase 25 (Draft Integration) are re-absorbed into v1.4 as requirements LNCH-01..07. Their ROADMAP detail sections below are preserved for audit history but are superseded — the canonical plan is in the v1.4 phase details (Phases 31-34). Phase numbers 20, 20.1, 21, 22, 23, 24, 25 are retired.
 
 ## Phases
 
@@ -48,37 +50,42 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - [x] **Phase 15: Goals & LP History** - LP trend graph, rank goal setting, goal auto-tracking against match history, champion performance trends (UAT passed 2026-05-06; close-out via Phase 16)
 - ↪ **Phase 16 (old): Draft Integration** — DEFERRED to v1.4 (was: personal matchup notes in draft Intel sidebar, champion win rate badges on pool cards). Pivot rationale: launch-readiness takes priority over draft integration; the integration's value depends on having real users producing match data.
 
-### 🚧 v1.3 Launch Readiness (In Progress, started 2026-05-06)
+### 🚧 v1.3 Launch Readiness — Partially Shipped (started 2026-05-06)
 
 **Milestone Goal:** Get a polished, production-deployed v1 in front of a closed-beta of named friends, with a built-in bug-report widget that auto-exports to a Claude-readable inbox so reports flow into the next coding session without manual triage.
 
-**Decisions baked in (from pivot plan, see `.planning/phases/16..23/`):**
-- Phase 15 critical bugs (CR-01 WASM hover, CR-02 Rule 40) become Phase 16 close-out, not pre-pivot inline fixes.
-- Hetzner deployment reuses feynman-lookup's CAX11 (same VPS, new Caddy stanza, port 3001).
-- Domain TLD finalised in Phase 21 (e.g. `lol-companion.gg` placeholder; flag EU-tools value charter for non-EU TLD).
-- Bug-report widget captures page URL + semantic element label + free text + bug/wishlist toggle (no screenshots, no CSS selectors — selectors don't survive recompile).
-- Launch shape: closed beta via named-friends invite list (no public self-serve registration in v1.3).
-
-- [x] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81` (15-REVIEW.md was not updated). Remaining: clear WR-01 (refetch lp_history + goal_progress resources after sync) + WR-02 (orphan get_personal_goals — wire or remove); secondary code review + verification; mark v1.2 fully closed. (completed 2026-05-07)
+**Shipped in v1.3:**
+- [x] **Phase 16: Phase 15 Close-out** - CR-01 + CR-02 already fixed in `5902a81`. Clear WR-01 (lp_history + goal_progress refetch) + WR-02 (orphan get_personal_goals removed); secondary code review + verification; mark v1.2 fully closed. (completed 2026-05-07)
 - [x] **Phase 17: UI Consolidation** - Claude Design primary pass + Open-Design utility surfaces; 22 visual-regression baselines; 6-pillar audit PASS-with-deferred. (completed 2026-05-11)
-- [x] **Phase 18: Region Variants (INSERTED 2026-05-11)** - Demacia + Pandemonium structural component branches per Open-Design mockups: shared region-variant primitives (RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone/oil-spill backgrounds, glitch text-shadow util), then port hero pages (War Table, Solo Dashboard, Game Plan, Post Game, Team Dashboard, Profile, Champion Pool, Tree Drafter, Closed-Beta) to genuinely different per-region layouts (not color-only swap), then regenerate visual baselines per theme. (completed 2026-05-22 — but **structural branching never activates at runtime; blocked on UI-18-RUNTIME-01; gap-closure in Phase 18.1**)
-- [x] **Phase 18.1: SSR Theme Injection (gap closure for UI-18-RUNTIME-01)** - Close the Phase-17-deferred SSR theme-injection gap that blocks every Phase 18 structural region branch from activating at runtime. Axum middleware extracts theme from session cookie + `auth.user.theme`; `theme_toggle.rs` writes the cookie alongside the existing DB persist (so unauthenticated reloads persist); `main.rs:88` `provide_context(InitialTheme::default())` replaced with the per-request value. Re-run all 11 scoped pages × 2 regions × N modes in agent-browser to confirm structural branches activate; re-baseline 18-09's region-diff threshold (expect 5–15% pixel diff now, vs 0.5–2.5% pre-fix). (completed 2026-05-25)
-- [x] **Phase 18.2: Pandemonium Hydration Reconciliation (gap closure for UI-18.1-HYDRATE-01)** - Diagnose and fix the SSR/hydrate hash mismatch in a Pandemonium structural primitive that causes `tachys-0.2.14/src/html/mod.rs:217` `Option::unwrap()` on `None` for every Pandemonium page. SSR HTML is correct (Phase 18.1 proved that); client-side hydration panics, killing all WASM event handlers (mode toggle, theme toggle, drag-drop). Bisect Pandemonium structural primitives (RiotTape, ToxicSticker, WaxSeal, Card, halftone/oil-spill backgrounds, glitch text-shadow util) and per-page Pandemonium views (DraftLedgerView, TeamGameDayBriefView, SoloForge, SoloJournal, 7-section team-dashboard) to find which one emits SSR markup that diverges from its WASM render; fix the SSR/hydrate divergence; re-run the 18.1-03 agent-browser sweep with WASM event handlers exercised to verify interactivity restored on Pandemonium. (completed 2026-05-26)
-- [x] **Phase 19: Bug-Report Widget (renumbered from 18)** - Element-click → modal (URL + semantic label + text + bug/wishlist); SurrealDB `bug_report` table; auto-export task writes `.planning/INBOX/bug-reports.md` on every server start. (completed 2026-05-31)
-- [ ] **Phase 20: Production Hardening (renumbered from 19)** - Externalize site-addr (env-driven); secure cookies behind HTTPS; prod log config + rotation; Riot API timeout/retry/cache; dynamic Data Dragon patch; graceful shutdown; nightly SurrealKV snapshot.
-- [ ] **Phase 20.1: Closed-Beta Access Gate (renumbered from 19.1)** - Gate registration behind an invite mechanism so the deployed binary is URL-reachable but only the named-friends list can sign up. Login + legal pages remain public.
-- [ ] **Phase 21: Deploy Infra (shared CAX11) (renumbered from 20)** - Cross-compile via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36`; new systemd unit at port 3001; Caddyfile stanza; `just deploy` recipe; pre-deploy smoke + post-deploy WASM-200 + server-fn check (per feynman 2026-04-16 incident).
-- [ ] **Phase 22: Compliance & Transparency (renumbered from 21)** - Pick + register TLD (flag values charter for non-EU); DSE + Impressum (§5 DDG, no Steuernummer); Tier-A transparency in `[[lol-team-companion]]` vault entity; G-01..G-13 CI sweep; Riot Developer Portal application.
-- [ ] **Phase 23: Pre-Launch Full Review (renumbered from 22)** - `/gsd-audit-milestone v1.3` + full `/gsd-code-review` + `/gsd-secure-phase` + `/gsd-ui-review` + `/ultrareview` + `/consult security`; fix HIGH findings; produce `.planning/LAUNCH-GATE.md`.
-- [ ] **Phase 24: Soft Launch + Feedback Loop (renumbered from 23)** - Deploy; named-friends invite list; monitor `bug_report` for 1 week; weekly `/gsd-inbox` triage; backlog grooming feeds v1.4.
+- [x] **Phase 18: Region Variants (INSERTED 2026-05-11)** - Demacia + Pandemonium structural component branches per Open-Design mockups: shared region-variant primitives (RiotTape, ToxicSticker, WaxSeal, Card with region+variant props, halftone/oil-spill backgrounds, glitch text-shadow util), then port hero pages to genuinely different per-region layouts, then regenerate visual baselines per theme. (completed 2026-05-22)
+- [x] **Phase 18.1: SSR Theme Injection (gap closure for UI-18-RUNTIME-01)** - Axum middleware extracts theme from session cookie + auth.user.theme; theme_toggle.rs writes cookie; main.rs per-request InitialTheme injection. (completed 2026-05-25)
+- [x] **Phase 18.2: Pandemonium Hydration Reconciliation (gap closure for UI-18.1-HYDRATE-01)** - Diagnose + fix SSR/hydrate structural mismatch; new hydration-no-panic.spec.ts regression gate; UI-18.1-HYDRATE-01 resolved. (completed 2026-05-26)
+- [x] **Phase 19: Bug-Report Widget** - Floating Report button on every authed page → select-mode capture → modal; bug_report table; auto-export to .planning/INBOX/bug-reports.md on every server start. (completed 2026-05-31)
 
-### 🔜 v1.4 Draft Integration & Post-Launch Backlog (Deferred)
+**Superseded by v1.4 (never built under v1.3 numbering):**
+- ~~**Phase 20: Production Hardening**~~ → superseded by Phase 31 (LNCH-01)
+- ~~**Phase 20.1: Closed-Beta Access Gate**~~ → superseded by Phase 31 (LNCH-02)
+- ~~**Phase 21: Deploy Infrastructure**~~ → superseded by Phase 32 (LNCH-03)
+- ~~**Phase 22: Compliance & Transparency**~~ → superseded by Phase 33 (LNCH-04)
+- ~~**Phase 23: Pre-Launch Full Review**~~ → superseded by Phase 33 (LNCH-05)
+- ~~**Phase 24: Soft Launch + Feedback Loop**~~ → superseded by Phase 34 (LNCH-06)
+- ~~**Phase 25: Draft Integration**~~ → superseded by Phase 34 (LNCH-07)
 
-**Milestone Goal:** Once v1.3 is shipped and producing real-user match data, ship the deferred Draft Integration alongside the highest-priority items surfaced from the launch bug-report inbox.
+### 🚧 v1.4 Immersive Companion (In Progress, started 2026-06-04)
 
-- [ ] **Phase 25: Draft Integration** (was old Phase 16, then renumbered Phase 24, now Phase 25 after Region Variants insertion) - Personal matchup notes surface in draft Intel sidebar; champion pool cards display solo-history win rate badges. Depends on Phase 14 + Phase 15 — both already complete.
-- [ ] **Phase 26: Riot PUUID Migration** (captured 2026-05-28 from Phase 19 verification session) - Riot deprecated the old key-encrypted PUUID format; stored PUUIDs from the legacy format now 400 with `"Exception decrypting <puuid>"` on `/match/v5/by-puuid/{puuid}/ids`. Write a one-shot migration: for every `user` row, re-resolve `puuid` via `account-v1 /by-riot-id/{game_name}/{tag_line}` and update the field. Add a 400-decrypt detection log so we know when this happens again. Not launch-blocking — affected users can re-link on `/profile` as a workaround.
-- [ ] Phase 27+: Inbox-driven backlog from v1.3 launch (defined post-launch).
+**Milestone Goal:** Transform the flat themed UI into an explorable 2.5D "rooms" experience whose environment grows as the player accumulates work — then ship to closed beta. Solo Journey room is already built (proving spike). v1.4 builds the three remaining rooms, heals IA, ships original-world art, and completes the absorbed launch work.
+
+**Note on build order:** Phases 26 (foundations) gates all rooms. Phases 27-29 (rooms) run after 26 and may be partially parallelized. Phase 30 (art) is calendar-parallel with 27-29 — rooms ship with placeholder assets; art swaps in at the same file paths. Phases 31-34 (launch) follow all room work, with Phase 31 (hardening + beta gate) mandatory before deploy.
+
+- [ ] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases)
+- [ ] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern
+- [ ] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links
+- [ ] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions
+- [ ] **Phase 30: Art Production** - Original-world art identity established; FLUX layer-separated art for all rooms (first region) and second region; CI-enforced 400 KB/room/region budget
+- [ ] **Phase 31: Production Hardening & Beta Gate** - Production binary hardened for HTTPS deploy; closed-beta invite gate on registration
+- [ ] **Phase 32: Deploy Infrastructure** - Binary running on Hetzner CAX11 at chosen domain via Caddy; `just deploy` recipe
+- [ ] **Phase 33: Compliance & Pre-Launch Review** - EU compliance artifacts in place; comprehensive multi-tool pre-launch review produces LAUNCH-GATE.md
+- [ ] **Phase 34: Soft Launch & Draft Integration** - Named-friends beta live; match → draft → game-plan → review chain shipped
 
 ## Phase Details
 
@@ -282,16 +289,6 @@ Plans:
 **Goal**: Restore client-side interactivity on every Pandemonium-themed page by eliminating the SSR/hydrate divergence in a Pandemonium structural primitive that causes the `tachys-0.2.14/src/html/mod.rs:217` `Option::unwrap()` on `None` during hydration. SSR HTML continues to render correctly post-fix; the WASM client successfully reconciles against it and attaches event handlers (mode toggle, theme toggle, drag-drop) on Pandemonium pages.
 **Depends on**: Phase 18.1
 **Why this phase exists**: Phase 18.1's SSR theme-injection fix made the Pandemonium structural branches reachable at runtime for the first time. The Phase 18.1-03 agent-browser sweep (2026-05-25) found that every Pandemonium-themed page panics during WASM hydration with `panicked at /home/jasper/.cargo/registry/.../tachys-0.2.14/src/html/mod.rs:217:14: called Option::unwrap() on a None value`. Demacia pages hydrate cleanly; the divergence is specific to a Pandemonium structural primitive (or per-page Pandemonium view) whose SSR-rendered markup tree does not match the WASM render of the same component. Pre-18.1 this was hidden because SSR always rendered the Demacia branch — both sides agreed. Recorded as UI-18.1-HYDRATE-01 (severity: bug) in `.planning/phases/18-region-variants/18-HUMAN-UAT.md`. Evidence in `.planning/phases/18.1-ssr-theme-injection-gap-closure-for-ui-18-runtime-01/18.1-03-EVIDENCE.md` (Investigation Flag 1). Without this fix, Phase 18's structural region work is visible but inert under Pandemonium — and Phase 19's Bug-Report Widget (which needs WASM event handlers on every authenticated page) cannot ship cleanly on Pandemonium until hydration is restored.
-**Likely scope**:
-  - **Bisect** the Pandemonium structural primitives (RiotTape, ToxicSticker, WaxSeal, Card region+variant, halftone/oil-spill backgrounds, glitch text-shadow util) and per-page Pandemonium views (DraftLedgerView Pandemonium arm, 7-section team-dashboard Pandemonium rebuild, SoloForge, SoloJournal, TeamGameDayBriefView) to identify which component(s) emit SSR markup that diverges from the WASM render. Strategy: short-circuit each Pandemonium primitive in turn (return empty `view! { <></> }` or the Demacia branch), reload a representative Pandemonium page (`/solo` or `/draft` with `lol_companion_theme=pandemonium`), watch the console for the panic. The component whose removal eliminates the panic is the culprit (or one of several).
-  - **Diagnose** the SSR/hydrate divergence in the culprit(s). Common Leptos 0.8 + tachys patterns that produce this panic: `{move || ...}` reactive blocks rendering different node-count branches between SSR (no JS, signals at initial value) and hydrate (signals at restored value); `Suspense` boundaries with stale state; conditional rendering using `if region == "pandemonium" { ... } else { ... }` where one branch has fewer children than the SSR generator placeholder anchors expected; mismatched `Show`/`For`/`Suspense` keying.
-  - **Fix** the divergence. Likely shapes: (a) move conditional Pandemonium structural primitives behind `{move || ...}` so they hydrate identically; (b) ensure both region branches return the same node-count skeleton at SSR; (c) replace dynamic markup that only renders post-hydration with `Show fallback=...` so SSR placeholder anchors are emitted.
-  - **Verify** with the Phase 18.1-03 agent-browser sweep extended to assert: (1) no `tachys` panic in console on any Pandemonium page; (2) mode-toggle click on `/draft`/`/solo`/`/team/dashboard` Pandemonium switches the visible view; (3) theme-toggle click on a Pandemonium page reaches Demacia and back without panic; (4) at least one drag-drop or other rich interaction (e.g. draft slot drag) fires on a Pandemonium page.
-**Decisions to lock in plan-phase**:
-  - **Bisection method**: leaning short-circuit-and-reload (manual agent-browser per-primitive). Alternative: WASM-side `console::log` instrumentation that prints the component being rendered at hydrate time, walk the tree to find where reconciliation fails. Plan-phase picks the cheaper one based on Wave-1 cost estimate.
-  - **Reproduction harness**: leaning a new Playwright spec `e2e/tests/hydration-no-panic.spec.ts` that visits each scoped Pandemonium page, listens for `page.on('pageerror')` and console errors, and fails on any `Option::unwrap()` text. Becomes the regression gate (runs in CI from this phase forward).
-  - **Fix-vs-defer trade-off if the divergent component is structurally hard to refactor**: as a last resort, gate the SSR markup of the culprit behind `cfg(feature = "ssr")` to emit an identical placeholder to what the WASM client first renders. Plan-phase locks the trade-off rule (preferred: real fix; fallback: SSR-side placeholder).
-  - **Interactivity assertion list**: lock the exact set of "WASM event handlers must fire on Pandemonium" assertions in plan-phase — at minimum mode-toggle on `/draft`+`/solo`+`/team/dashboard`, theme-toggle on `/profile`, and one drag-drop on `/draft`. Each becomes a Playwright assertion.
 **Success Criteria**:
   1. No `tachys-0.2.14/src/html/mod.rs:217` `Option::unwrap()` on `None` panic in the JS console on any scoped page × Pandemonium configuration
   2. The culprit component(s) documented in a phase-local diagnosis file (which primitive, which kind of SSR/hydrate divergence, why the fix works)
@@ -341,134 +338,137 @@ Plans:
 **Wave 3** *(rollout + e2e regression — has manual checkpoint)*
 - [x] 19-04-PLAN.md — data-feedback-label rollout to 7 first-priority pages (draft, solo_dashboard, team/dashboard, stats, champion_pool, game_plan, post_game) + e2e/tests/bug-report.spec.ts (5 tests via authedPage fixture) + human-verify checkpoint sweeping all 7 pages via agent-browser and inspecting inbox file after server restart; hydration-no-panic regression gate
 
-### Phase 20: Production Hardening (renumbered from Phase 19)
-**Goal**: Close all production-readiness gaps surfaced by the audit so the binary is safe to deploy behind HTTPS on Hetzner
-**Depends on**: Phase 16
-**Hard blockers to close**:
-  1. Externalize `site-addr` from `Cargo.toml` metadata to runtime env (`LEPTOS_SITE_ADDR` or equivalent)
-  2. Flip `cookies.with_secure(false)` to `with_secure(true)` (env-conditional for local dev)
-  3. Riot API: add timeout, retry-with-backoff, in-memory cache for Data Dragon, graceful degradation if Riot API down
-  4. Dynamic Data Dragon patch fetch (replaces hardcoded `15.6.1`)
-  5. Graceful shutdown hook (flush SurrealDB, drain in-flight requests)
-  6. Nightly SurrealKV snapshot script (cron + restic or simple tar+rotate)
-  7. Production log config: structured fields, rotation, sane defaults at `info` level
-**Success Criteria**:
-  1. Same binary runs locally (`cargo leptos watch`) and on prod (different env vars only)
-  2. Riot API outage produces graceful UI fallback, not a 500
-  3. Data Dragon version is fetched at startup (cached for the process lifetime, refreshed on next boot)
-  4. Backup script tested locally — restoring a snapshot rebuilds the SurrealKV directory cleanly
-  5. Server processes SIGTERM and exits within 30s with no in-flight request loss
-**Plans**: TBD
-**UI hint**: no (backend-only)
+---
 
-### Phase 20.1: Closed-Beta Access Gate (renumbered from Phase 19.1)
-**Goal**: Public registration is gated by an invite mechanism so that the deployed v1.3 binary is reachable by URL but only the named-friends list can complete account creation
-**Depends on**: Phase 20
-**Decisions to lock in plan-phase**:
-  - **Gate model**: choose one of (A) single shared `BETA_INVITE_CODE` env var, (B) per-user `invite_code` SurrealDB table minted by an admin, or (C) email allow-list. Leaning (B) because it gives per-friend revocation, tracks who consumed which code, and surfaces a real "X of N invites used" signal during the beta. Plan-phase locks the choice.
-  - **Gate location**: registration server fn only. Login still works for already-registered users; homepage and `/legal/impressum` + `/legal/datenschutz` (per Phase 22) stay reachable without a code so the legal pages can be cited externally.
-  - **Admin role**: a single admin user (first registered, or flagged via `ADMIN_USER_EMAIL` env) sees an admin-only "Mint invite" page listing issued codes and their consumed status. Non-admin users get a 404 on the route, not a 403, to avoid leaking the route's existence.
-  - **Removal path**: when the gate is dropped (likely v1.4 or post-beta), the `invite_code` table can stay (audit trail) but the registration fn check becomes feature-flag-controlled. No migrations needed to drop the gate.
-  - **No anti-bot beyond the code**: a 6-12 char alphanumeric code from a CSPRNG is sufficient for ≤ 30-account beta. No CAPTCHA, no rate-limiting work in this phase (Phase 20 already adds Riot-side timeouts; abuse handling for registration deferred to v1.4 if needed).
-**Success Criteria**:
-  1. Registration server fn rejects sign-ups without a valid, unconsumed invite code and returns a clean form-level error
-  2. Admin can mint invite codes via an admin-only route; on consumption each code is marked with the consuming `user_id` and timestamp
-  3. Login, homepage, and `/legal/*` routes remain reachable without an invite code
-  4. New `invite_code` table appears in `schema.surql` (or chosen alternative is documented) with appropriate field constraints
-  5. e2e smoke test covers: invalid code → reject; valid code → registration succeeds and code is marked consumed; reuse of consumed code → reject
-  6. Bug-report widget (Phase 19) still functions for invited users — no regression on already-shipped surfaces
-**Plans**: TBD
-**UI hint**: yes (registration form change + minimal admin-mint page)
+## v1.4 Immersive Companion — Phase Details
 
-### Phase 21: Deploy Infrastructure (Shared CAX11) (renumbered from Phase 20)
-**Goal**: Get the production binary running on feynman-lookup's existing Hetzner CAX11 alongside the existing service, served via Caddy at the new domain
-**Depends on**: Phase 20, Phase 20.1
-**Decisions baked in**:
-  - Same CAX11, no new VPS provisioning (`cloud-init.yml` already applied)
-  - Cross-compile locally via `cargo zigbuild --target aarch64-unknown-linux-gnu.2.36` (Debian 12 glibc pin per `[[cross-project-memory]]`)
-  - New systemd unit `lol_team_companion.service` (user `lol`); listens on `127.0.0.1:3001`
-  - New Caddyfile stanza for `lol-companion.<tld>` → `127.0.0.1:3001`
-  - Caddy on 80/443 already exposed — no firewall changes needed (two-layer firewall caveat applies if changed)
-  - Manual deploy via `just deploy` (no CI/CD push; matches feynman-lookup pattern)
-  - `EnvironmentFile=/etc/lol_team_companion.env` populated post-deploy via SSH heredoc (never in git, never in shell history)
-**Success Criteria**:
-  1. `just deploy` cross-compiles, rsyncs binary + WASM + assets, restarts service
-  2. New domain serves over HTTPS with Let's Encrypt cert auto-provisioned by Caddy
-  3. `cargo-leptos` `_bg.wasm` rename handled in deploy recipe (`cp crate.wasm crate_bg.wasm`)
-  4. Pre-deploy smoke: `cargo check --features ssr` + `cargo check --features hydrate` both pass
-  5. Post-deploy smoke (per feynman 2026-04-16 incident): hits `/healthz` AND a server-fn endpoint AND `curl -sI https://host/pkg/lol_team_companion_bg.wasm | grep "200 OK"` — pure SSR HTML 200 hides binary-arch mismatch and broken WASM hydrate
-  6. CSP via Caddy permits Leptos 0.8 per-request script nonces with documented `'unsafe-inline'` TODO
+> **Supersession note:** v1.4 Phases 31-34 supersede the v1.3 phases that were planned but never built (old Phases 20, 20.1, 21, 22, 23, 24, 25). The old phase detail sections above are preserved for audit history. The canonical launch work is here, re-scoped around the immersive rooms milestone.
+>
+> **Phase numbering:** v1.4 starts at Phase 26 (highest prior phase was 25). Phase numbers 20, 20.1, 21, 22, 23, 24, 25 are retired.
+
+### Phase 26: Room System Foundations
+**Goal**: The data model, component contracts, and documented rules that all three new rooms depend on are in place — team growth state is queryable, `AtmosphereRoot` accepts arbitrary axis names, the anti-structural-branching hydration rule is codified, and the prefers-reduced-motion runtime listener is fixed
+**Depends on**: Phase 19 (Solo Journey room already built on branch `feat/immersive-rooms-solo-journey`)
+**Requirements**: ROOM-01, ROOM-02, ROOM-03, A11Y-01
+**Success Criteria** (what must be TRUE):
+  1. A user with a team can load any new room and the atmosphere growth overlays reflect team activity (drafts, opponents, etc.) — `get_team_growth_counts` + `TeamGrowthState` round-trip is functional and unit-tested
+  2. `AtmosphereRoot` accepts optional tier props for all four rooms' axis names (War Room: tactics/intel/command; Library: records/tomes/analysis; Throne: roster/progression/crown) without breaking Solo Journey
+  3. A developer reading `CLAUDE.md` and `.claude/rules/leptos-patterns.md` can find the anti-structural-branching hydration rule before building any room — the rule is explicitly stated with a reference to the Phase 18.2 incident
+  4. A user who enables "Reduce Motion" in their OS mid-session (without reloading) sees the parallax stop immediately — the runtime `MediaQueryList` change-listener is active in `AtmosphereRoot`
+**Plans**: TBD
+**UI hint**: no (model, DB, documentation, and component internals — no new visible UI surfaces)
+
+### Phase 27: War Room
+**Goal**: Users can reach the War Room at `/war-room` and access draft planning, tree-drafter, game-plan creation, opponent scouting, and ban-priority as tabbed surfaces under a single parallax atmosphere — the room's environment grows visibly as the team accumulates strategy work
+**Depends on**: Phase 26
+**Requirements**: ROOM-04
+**Success Criteria** (what must be TRUE):
+  1. User can navigate to `/war-room` and see a parallax atmosphere with placeholder art; switching between Draft, Tree-Drafter, Game Plan, Opponents, and Ban Priority tabs does not cause the atmosphere to flash or remount
+  2. The tab bar uses `role="tablist"` / `role="tab"` / `aria-selected` / `aria-controls` so screen readers identify it as a tab panel group distinct from the global nav
+  3. A team with saved drafts and scouted opponents sees more atmospheric detail than a fresh team (growth overlays advance through tiers based on actual team data)
+  4. Round-trip from `/draft` (flat route) to `/war-room` and back does not accumulate duplicate `mousemove` listeners — parallax amplitude is unchanged after the round-trip
+  5. `/war-room` appears in the e2e smoke suite and passes the hydration-no-panic canary in both demacia and pandemonium themes
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 28: Library & IA Healing
+**Goal**: Users can reach the Library at `/library` and access stats, match detail, analytics, post-game review, and team learnings as tabbed surfaces under a hall-of-records atmosphere; previously siloed features (personal learnings, opponents) are now reachable inside their intent rooms while their legacy flat routes remain valid deep-link targets
+**Depends on**: Phase 26 (Phase 27 recommended but not strictly required)
+**Requirements**: ROOM-05, ROOM-07
+**Success Criteria** (what must be TRUE):
+  1. User can navigate to `/library` and browse stats, match detail, analytics, post-game, and team learnings as surfaces without the atmosphere remounting between tabs
+  2. A user who follows a link to `/personal-learnings` (the old flat route) arrives at the learnings surface within the Library — the route resolves rather than 404ing
+  3. A user who follows a link to `/opponents` (the old flat route) arrives at the Opponents surface within the War Room — flat routes for IA-healed features redirect into their intent room
+  4. A team with post-game reviews, team notebook entries, and match syncs sees more atmospheric detail than a fresh team (Library growth axes: records, tomes, analysis)
+  5. `/library` appears in the e2e smoke suite and passes the hydration-no-panic canary in both regions
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 29: Throne, QuickNav & Room A11Y
+**Goal**: The Throne room hosts identity and progression at `/throne`; QuickNav (Cmd+K) works from every page in the app with a proper focus trap; and every room passes the per-route hydration-no-panic canary in both regions with WCAG AA text contrast and visible focus rings throughout
+**Depends on**: Phase 27, Phase 28
+**Requirements**: ROOM-06, ROOM-08, A11Y-02
+**Success Criteria** (what must be TRUE):
+  1. User can navigate to `/throne` and see team identity, team dashboard summary, and solo progression surfaces under a parallax atmosphere; the room's environment reflects roster size, LP milestones, and combined team record
+  2. Pressing Cmd+K (or Ctrl+K) from any page — including `/war-room`, `/library`, `/throne`, and all flat routes — opens the QuickNav palette; pressing Escape closes it and returns focus to the element that triggered it
+  3. While the QuickNav overlay is open, keyboard Tab does not reach parallax plane elements behind it — the focus trap is effective
+  4. Every room (`/war-room`, `/library`, `/throne`) passes the hydration-no-panic canary in both demacia and pandemonium themes: no `tachys` `Option::unwrap()` panic appears in the console, and at least one interactive element (tab switch, growth state display) responds to user input
+  5. Text on the surface layer of every room holds WCAG AA contrast (4.5:1 minimum) over the art planes — the contrast scrim at z-8 is verified per room
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 30: Art Production
+**Goal**: Original-world, legally-safe FLUX art is in place for all three new rooms in both regions — the project establishes its own visual identity (Arcane-inspired but not Riot IP), and every room's atmosphere looks like a real place rather than a placeholder gradient
+**Depends on**: Phase 26 (art pipeline scripts need confirmed asset paths; rooms may be in progress or complete — art swaps in at existing file paths with no code changes)
+**Requirements**: ART-01, ART-02, ART-03
+**Success Criteria** (what must be TRUE):
+  1. The Riot IP go/no-go decision is logged in PROJECT.md Key Decisions before the first FLUX generation run — original-world identity (Path A) or accepted-risk LoL-names (Path B) is explicit and the art prompts in `AI-IMAGES.md` reflect the chosen path; `/consult legal` was run before committing any generated outputs
+  2. All three rooms have layer-separated WebP art for the first region (war-room, library, throne — 3 planes + 3 overlays each = 18 files); each file is within budget (sky/mid ≤ 80 KB, near ≤ 60 KB, each overlay ≤ 30 KB, total ≤ 400 KB/room/region); the CI `find public/img/rooms -name "*.webp" -size +100k` check returns 0
+  3. BiRefNet layer separation was validated on one test plane for halo-fringe artifacts before the full 18-asset run; `AI-IMAGES.md` records the seed, compute path, and final file size for every asset
+  4. All three rooms have second-region art for both regions (18 more files, same budget constraints); all rooms' atmosphere is visually distinct between regions
+**Plans**: TBD
+**UI hint**: yes (asset production; no code changes, but requires room routes to be reachable for visual verification)
+
+### Phase 31: Production Hardening & Beta Gate
+**Goal**: The binary is safe to deploy behind HTTPS — all production-readiness gaps closed — and registration is gated by an invite mechanism so only named friends can sign up during the closed beta
+**Depends on**: Phase 29 (all rooms complete; art in Phase 30 can trail but rooms must be functional)
+**Requirements**: LNCH-01, LNCH-02
+**Note**: This phase supersedes old v1.3 Phases 20 and 20.1. All detail from those planning stubs is carried forward here.
+**Success Criteria** (what must be TRUE):
+  1. The same binary runs locally (via `cargo leptos watch`) and on production — the only difference is environment variables; `LEPTOS_SITE_ADDR`, cookie security, and log level are all env-driven
+  2. A Riot API outage produces a graceful UI fallback (empty state or cached data), not a 500 error; Data Dragon patch version is fetched dynamically at startup rather than hardcoded
+  3. A nightly SurrealKV snapshot script runs, and restoring a snapshot locally rebuilds the database directory cleanly
+  4. Registration is rejected for any request that does not present a valid, unconsumed invite code — existing users can still log in; `/legal/*` and the homepage remain reachable without a code
+  5. An admin user can mint invite codes via an admin-only route; each code records which user consumed it and when
+**Plans**: TBD
+**UI hint**: yes (registration form change + admin invite page — LNCH-02 surface)
+
+### Phase 32: Deploy Infrastructure
+**Goal**: The production binary is running on the shared Hetzner CAX11 at the chosen domain, served via Caddy with HTTPS — `just deploy` is the single command to ship a new version
+**Depends on**: Phase 31
+**Requirements**: LNCH-03
+**Note**: This phase supersedes old v1.3 Phase 21.
+**Success Criteria** (what must be TRUE):
+  1. `just deploy` cross-compiles the binary for aarch64, rsyncs binary + WASM bundle + public assets, and restarts the systemd service
+  2. The chosen domain serves over HTTPS with a Let's Encrypt certificate auto-provisioned by Caddy; the `_bg.wasm` rename is handled in the deploy recipe
+  3. Post-deploy smoke passes three checks: `/healthz` returns 200, a server function endpoint responds, and `curl -sI https://<host>/pkg/lol_team_companion_bg.wasm` returns 200 OK — pure SSR HTML 200 is not sufficient to confirm WASM delivery
 **Plans**: TBD
 **UI hint**: no
 
-### Phase 22: Compliance & Transparency (renumbered from Phase 21)
-**Goal**: All EU-compliance artifacts in place before any external user touches the deployed app — Impressum, Datenschutzerklärung, vault Tier-A section, Riot API approval status, and a CI sweep for the project's hard-NO guardrails
-**Depends on**: Phase 16
-**Hard blockers (from vault `[[guardrails]]` and `[[values-charter]]`)**:
-  1. Pick TLD (e.g. `lol-companion.gg` placeholder) — flag `[[values-charter#2]]` "EU tools preferred" if non-EU TLD chosen; document the justification
-  2. Register the domain
-  3. **Impressum**: cite §5 DDG (NOT §5 TMG, repealed 2024-05-14 per `[[guardrails#G-03]]`); no Steuernummer (per `[[guardrails#G-04]]`)
-  4. **Datenschutzerklärung** (4 sections per `[[cross-project-memory]]` "German Kleinunternehmer Impressum"):
-     - Server-Logfiles → Art. 6 Abs. 1 lit. f
-     - Registration / user account → Art. 6 Abs. 1 lit. b
-     - Hosting → Hetzner named subprocessor + AVV reference
-     - Betroffenenrechte → LfDI Baden-Württemberg link
-  5. **Riot API personal-data flow**: Riot puuid → US-headquartered processor must appear in DSE Tier-A table with legal basis
-  6. **Vault Tier-A transparency section** in `wiki/entities/lol-team-companion.md` (currently absent — `[[guardrails#G-13]]` hard NO)
-  7. **G-01..G-13 CI sweep**: rendered HTML must NOT contain `fonts.googleapis.com`, `fonts.gstatic.com`, "TMG", "Musterstraße", `outline:none` without ring; CI fails on hits
-  8. **Riot Developer Portal**: confirm application status (Approved/Acknowledged); submit if not done
-**Success Criteria**:
-  1. `/legal/impressum` and `/legal/datenschutz` routes live with all required clauses
-  2. Vault `[[lol-team-companion]]` Tier-A section exists with data flows, legal basis, retention, third parties
-  3. CI workflow includes a guardrails sweep that fails on any hit
-  4. Riot Developer Portal application status documented in `.planning/phases/22-compliance-transparency/22-RIOT-STATUS.md`
+### Phase 33: Compliance & Pre-Launch Review
+**Goal**: All EU-compliance artifacts are in place and a comprehensive multi-tool review of the v1.4 milestone produces a go/no-go `LAUNCH-GATE.md` — no external user touches the app before both gates pass
+**Depends on**: Phase 32
+**Requirements**: LNCH-04, LNCH-05
+**Note**: This phase supersedes old v1.3 Phases 22 and 23.
+**Success Criteria** (what must be TRUE):
+  1. `/legal/impressum` and `/legal/datenschutz` are live with all required clauses (§5 DDG Impressum, 4-section DSE including Hetzner as named subprocessor and Riot puuid as a US-processor data flow with legal basis)
+  2. The vault `[[lol-team-companion]]` Tier-A transparency section exists with data flows, legal basis, retention, and third parties; AI-art disclosure is included per ART-01's original-world decision
+  3. `.planning/LAUNCH-GATE.md` exists with one row per review check (PASS/FAIL/WAIVED with rationale); all HIGH findings from `/gsd-secure-phase`, `/gsd-ui-review`, and `/gsd-code-review` are fixed before Phase 34
+  4. Post-deploy smoke commands are documented and dry-run on the production server before any beta invite is sent
 **Plans**: TBD
 **UI hint**: minimal (legal pages only)
 
-### Phase 23: Pre-Launch Full Review (renumbered from Phase 22)
-**Goal**: A comprehensive multi-tool review of the entire v1.3 milestone before any public-facing deploy, producing a single LAUNCH-GATE.md that is the go/no-go document
-**Depends on**: Phase 17, 18, 19, 20, 21, 22
-**Review chain**:
-  1. `/gsd-audit-milestone v1.3` — does v1.3 deliver on its goal?
-  2. `/gsd-code-review` (full repo, not just diff) — bugs, security, quality
-  3. `/gsd-secure-phase` — threat model verification
-  4. `/gsd-ui-review` — 6-pillar visual audit on production build
-  5. `/ultrareview` — multi-agent cloud review of the launch branch
-  6. `/consult security "v1.3 launch checklist"` — vault security advisor pass
-**Success Criteria**:
-  1. All HIGH findings from any tool are fixed before Phase 24
-  2. `.planning/LAUNCH-GATE.md` exists with one row per check (PASS/FAIL/WAIVED with rationale)
-  3. Post-deploy smoke commands documented and dry-run on staging
-**Plans**: TBD
-**UI hint**: no
-
-### Phase 24: Soft Launch + Feedback Loop (renumbered from Phase 23)
-**Goal**: Real users on real traffic, with the bug-report inbox driving the v1.4 backlog
-**Depends on**: Phase 23
-**Success Criteria**:
-  1. Production deploy live at chosen domain
-  2. Named-friends invite list (5-15 people) onboarded with personal invite links
-  3. Bug-report widget exercised by at least 3 users in the first week
-  4. `.planning/INBOX/bug-reports.md` populated and read by the next Claude session
-  5. Weekly `/gsd-inbox` triage produces a graded backlog seeding v1.4 phases
-  6. No HIGH-severity production incidents in the first 7 days
-**Plans**: TBD
-**UI hint**: no
-
-### Phase 25: Draft Integration (deferred from old Phase 16, then Phase 24, now Phase 25 after Region Variants insertion)
-**Goal**: Personal game experience feeds back into draft decisions — matchup notes surface in the draft Intel sidebar and solo match history win rates appear as badges on champion pool cards
-**Depends on**: Phase 14, Phase 15
-**Requirements**: XFEAT-03, XFEAT-04
+### Phase 34: Soft Launch & Draft Integration
+**Goal**: Named-friend beta is live with real users on real traffic; the match → draft → game-plan → review chain is shipped so the app's connected-features promise is complete; the bug-report inbox drives the post-beta backlog
+**Depends on**: Phase 33
+**Requirements**: LNCH-06, LNCH-07
+**Note**: This phase supersedes old v1.3 Phase 24 (Soft Launch) and the deferred v1.3/v1.4 Phase 25 (Draft Integration / XFEAT-03/04).
 **Success Criteria** (what must be TRUE):
-  1. When a champion is highlighted in the draft Intel sidebar, any personal matchup notes for that champion are visible in the sidebar panel
-  2. Champion pool cards display a win rate badge sourced from solo match history when the user has played that champion in recent matches
-**Plans**: TBD (post-launch, scoped after real-user data is in)
-**UI hint**: yes
+  1. Named-friends invite list (5-15 people) is onboarded with personal invite links; production deploy is live at the chosen domain
+  2. When a champion appears in the draft Intel sidebar, any personal matchup notes the user has for that champion are visible in the sidebar panel — matchup intelligence flows from personal learnings into draft decisions
+  3. Champion pool cards display a win rate badge sourced from solo match history when the user has played that champion in recent matches
+  4. The bug-report widget is exercised by at least 3 beta users in the first week and `.planning/INBOX/bug-reports.md` is populated; the next Claude session reads it for backlog seeding
+  5. No HIGH-severity production incidents in the first 7 days; any incidents are triaged via the bug-report inbox
+**Plans**: TBD
+**UI hint**: yes (LNCH-07 draft intel integration)
+
+---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, inserted 2026-05-11) → 19 → 20 → 20.1 → 21 → 22 → 23 → 24. v1.4 starts at 25 post-launch.
+v1.3 shipped: 16 → 17 → 18 → 18.1 → 18.2 → 19. v1.3 unbuilt phases (20–25) superseded by v1.4.
+v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + QuickNav + A11Y) → 30 (art, calendar-parallel with 27-29) → 31 (hardening + beta gate) → 32 (deploy) → 33 (compliance + review) → 34 (soft launch + draft integration).
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -484,19 +484,29 @@ Phases execute in numeric order. v1.3: 16 → 17 → 18 (Region Variants, insert
 | 9. Draft & Game Plan | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 10. Opponents Redesign | v1.1 | 3/3 | Complete | 2026-03-23 |
 | 11. Cross-Feature & Testing | v1.1 | 4/4 | Complete | 2026-03-24 |
-| 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete    | 2026-03-25 |
-| 13. Match Detail View | v1.2 | 3/3 | Complete    | 2026-03-27 |
-| 14. Personal Learnings Journal | v1.2 | 3/3 | Complete   | 2026-03-27 |
+| 12. Solo Mode Infrastructure | v1.2 | 3/3 | Complete | 2026-03-25 |
+| 13. Match Detail View | v1.2 | 3/3 | Complete | 2026-03-27 |
+| 14. Personal Learnings Journal | v1.2 | 3/3 | Complete | 2026-03-27 |
 | 15. Goals & LP History | v1.2 | 3/3 | Complete (close-out via P16) | 2026-05-06 |
-| 16. Phase 15 Close-out | v1.3 | 3/3 | Complete    | 2026-05-07 |
+| 16. Phase 15 Close-out | v1.3 | 3/3 | Complete | 2026-05-07 |
 | 17. UI Consolidation | v1.3 | 10/10 | Complete | 2026-05-11 |
-| 18. Region Variants | v1.3 | 10/10 | Complete    | 2026-05-22 |
-| 18.1 SSR Theme Injection (gap closure) | v1.3 | 3/3 | Complete    | 2026-05-25 |
-| 19. Bug-Report Widget | v1.3 | 4/4 | Complete    | 2026-05-31 |
-| 20. Production Hardening | v1.3 | 0/? | Not started (renumbered from 19) | - |
-| 20.1 Closed-Beta Access Gate | v1.3 | 0/? | Not started (renumbered from 19.1) | - |
-| 21. Deploy Infra (CAX11) | v1.3 | 0/? | Not started (renumbered from 20) | - |
-| 22. Compliance & Transparency | v1.3 | 0/? | Not started (renumbered from 21) | - |
-| 23. Pre-Launch Full Review | v1.3 | 0/? | Not started (renumbered from 22) | - |
-| 24. Soft Launch + Feedback Loop | v1.3 | 0/? | Not started (renumbered from 23) | - |
-| 25. Draft Integration (deferred) | v1.4 | 0/? | Deferred (renumbered from 24) | - |
+| 18. Region Variants | v1.3 | 10/10 | Complete | 2026-05-22 |
+| 18.1 SSR Theme Injection (gap closure) | v1.3 | 3/3 | Complete | 2026-05-25 |
+| 18.2 Pandemonium Hydration Reconciliation | v1.3 | 5/5 | Complete | 2026-05-26 |
+| 19. Bug-Report Widget | v1.3 | 4/4 | Complete | 2026-05-31 |
+| ~~20. Production Hardening~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 31 | — |
+| ~~20.1 Closed-Beta Access Gate~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 31 | — |
+| ~~21. Deploy Infrastructure~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 32 | — |
+| ~~22. Compliance & Transparency~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 33 | — |
+| ~~23. Pre-Launch Full Review~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 33 | — |
+| ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
+| ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
+| 26. Room System Foundations | v1.4 | 0/? | Not started | — |
+| 27. War Room | v1.4 | 0/? | Not started | — |
+| 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
+| 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
+| 30. Art Production | v1.4 | 0/? | Not started | — |
+| 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
+| 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
+| 33. Compliance & Pre-Launch Review | v1.4 | 0/? | Not started | — |
+| 34. Soft Launch & Draft Integration | v1.4 | 0/? | Not started | — |

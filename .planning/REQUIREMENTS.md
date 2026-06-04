@@ -62,17 +62,38 @@
 
 ## Traceability
 
-Filled during roadmap creation.
+Filled during roadmap creation (2026-06-04).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | Pending |
+| ROOM-01 | Phase 26 — Room System Foundations | Pending |
+| ROOM-02 | Phase 26 — Room System Foundations | Pending |
+| ROOM-03 | Phase 26 — Room System Foundations | Pending |
+| A11Y-01 | Phase 26 — Room System Foundations | Pending |
+| ROOM-04 | Phase 27 — War Room | Pending |
+| ROOM-05 | Phase 28 — Library & IA Healing | Pending |
+| ROOM-07 | Phase 28 — Library & IA Healing | Pending |
+| ROOM-06 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
+| ROOM-08 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
+| A11Y-02 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
+| ART-01 | Phase 30 — Art Production | Pending |
+| ART-02 | Phase 30 — Art Production | Pending |
+| ART-03 | Phase 30 — Art Production | Pending |
+| LNCH-01 | Phase 31 — Production Hardening & Beta Gate | Pending |
+| LNCH-02 | Phase 31 — Production Hardening & Beta Gate | Pending |
+| LNCH-03 | Phase 32 — Deploy Infrastructure | Pending |
+| LNCH-04 | Phase 33 — Compliance & Pre-Launch Review | Pending |
+| LNCH-05 | Phase 33 — Compliance & Pre-Launch Review | Pending |
+| LNCH-06 | Phase 34 — Soft Launch & Draft Integration | Pending |
+| LNCH-07 | Phase 34 — Soft Launch & Draft Integration | Pending |
 
 **Coverage:**
-- v1.4 requirements: 18 total
-- Mapped to phases: (pending)
-- Unmapped: (pending)
+- v1.4 requirements: 20 total (8 ROOM + 2 A11Y + 3 ART + 7 LNCH)
+- Mapped to phases: 20/20
+- Unmapped: 0
+
+> **Coverage note:** The requirements document header states "18 total" but the actual count is 20 (ROOM-01..08 = 8, A11Y-01..02 = 2, ART-01..03 = 3, LNCH-01..07 = 7). All 20 are mapped. The "18" figure should be corrected to "20" in a future update.
 
 ---
 *Requirements defined: 2026-06-04*
-*Last updated: 2026-06-04 — v1.4 Immersive Companion milestone*
+*Last updated: 2026-06-04 — traceability filled during roadmap creation (Phases 26-34)*

@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
 status: planning
-last_updated: "2026-06-03T21:53:50.578Z"
-last_activity: 2026-06-03
+last_updated: "2026-06-04"
+last_activity: 2026-06-04
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -15,75 +15,47 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-06-03 — Milestone v1.4 started
+Phase: 26 of 34 — Room System Foundations (first v1.4 phase)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-06-04 — v1.4 roadmap created (Phases 26-34); old v1.3 Phases 20-25 superseded
+
+Progress: [░░░░░░░░░░] 0% (v1.4 phases only)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-31)
 
-**Core value:** Features talk to each other — stats inform drafts, drafts flow into game plans, post-game lessons surface when preparing the next game.
-**Current focus:** Phase 20 — production hardening
-**v1.3 launch goal:** Closed-beta deploy on shared Hetzner CAX11 with in-app bug-report widget that auto-exports to a Claude-readable inbox.
+**Core value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
+**Current focus:** Phase 26 — Room System Foundations
 
 ## Decisions
 
-- [Roadmap]: Phase 12 must establish `synced_by` on `match` table and `mode` on `user` table before any other solo work — data model correctness gates all subsequent phases
-- [Roadmap]: Match timeline fetch is on-demand + DB-cached only (never eager during sync) — rate limit protection
-- [Roadmap]: `personal_learning` is a separate table from `post_game_learning` — solo learnings must not mix with team-scoped records
-- [Roadmap]: Mode toggle persisted in DB user record, not WASM signal — survives hard navigation on login/logout
-- [Roadmap]: Phase 15 (Goals & LP History) depends on Phase 12 only, not Phase 13 or 14 — can be sequenced after either
-- [Phase 12]: EUW fallback for opponent Riot API calls: opponent players have no associated user region, hardcode EUW as safe fallback for get_puuid/fetch_player_intel/fetch_player_champions
-- [Phase 12]: store_matches_with_synced_by wrapper: preserved backward-compatible store_matches() API; solo sync calls store_matches_with_synced_by directly with user ID
-- [Phase 12]: PlayerMatchStats lacks queue_id/game_duration: match rows show champion+KDA+CS only; queue filter works via DB WHERE clause
-- [Phase 13-match-detail-view]: Store participants as single JSON string in match_detail table — avoids 10-row JOIN with no query benefits
-- [Phase 13-match-detail-view]: Timeline event markers use index into full timeline_events vec as stable key to avoid index drift when filters toggle
-- [Phase 14-personal-learnings-journal]: personal_learning is user-scoped (not team-scoped) — matches D-01 design decision; created_at deserialized as Option<String> consistent with other models
-- [Phase 14]: Pre-clone Strings before view! macro when same String is moved into a closure AND also needed by a later component prop
-- [Phase 14]: Resource<Result<Vec<...>>> type used for LearningCard prop to match Leptos resource typing
-- [Phase 14]: current_date_short() returns static Today — auto-title is user-editable so approximate is acceptable
-- [Phase 16]: v1.2 Solo Mode & Match Intelligence shipped 2026-05-07; close-out resolved WR-01 (refetch hoisting) and WR-02 (dead get_personal_goals removed); 15-REVIEW.md fully reconciled; second-pass review found 0 new HIGH/Critical
-- [Phase 17]: UI consolidation complete 2026-05-11; demacia/pandemonium themes adopted (color-only swap — structural variants scoped as new Phase 18); self-hosted fonts (G-01 zero hits); 4-hub IA; 22 visual-regression baselines committed; 6-pillar audit PASS-with-deferred; FLUX placeholder backgrounds with AI-IMAGES.md reproducibility log; Open-Design seeded as cross-repo design system
-- [Phase 18.1]: UI-18-RUNTIME-01 resolved 2026-05-25 by SSR theme injection middleware (axum middleware + cookie write + per-request InitialTheme context). Runtime sweep proved Pandemonium structural branches activate at SSR (28 markers across 7 routes; 18 Demacia negative-space markers; 3/3 utility REQ-7 PASS; 3/3 mode-toggle D-04 PASS). New finding UI-18.1-HYDRATE-01 (WASM hydration panic on Pandemonium pages, tachys mod.rs:217 unwrap on None) recommended for Phase 18.2.
-- [Phase 18.2]: UI-18.1-HYDRATE-01 resolved 2026-05-26. Root cause: SSR provided `InitialTheme` via `leptos_routes_with_context` but the hydrate path had no equivalent — `use_context::<InitialTheme>()` returned `None` on WASM → demacia fallback → SSR/WASM structural prop divergence at every region-branching descendant. Fix: `cfg(feature="hydrate")` `provide_context(InitialTheme)` block in `App::App()` reading `<html data-theme>` via `web_sys` BEFORE `view!` instantiates `<Routes>` (commit e67c7da). Anti-pattern fix: CompanionSigil refactored to take `region: String` prop, removing internal `use_context` read (commit 50c70a8). Regression gate: `e2e/tests/hydration-no-panic.spec.ts` — 19 tests (14-row panic-sweep matrix × 7 routes × 2 regions + 5 D-13 interactivity triad), commit ed82453. Sweep: 0/14 panics post-fix; Demacia parity preserved; 121/121 unit tests pass. Tooling lesson: agent-browser text-mode `errors`/`console` silently truncates structured WASM panic entries — `--json` mode is mandatory for hydration panic capture (this masked the real symmetric-bug nature for two waves). Plan-structure deviation: fix actually landed in Wave 4 (expanded scope) rather than Wave 3 because Plan 03's deepened investigation revealed the Plan 01–02 baseline error.
+- [Phase 18.2]: Anti-structural-branching hydration rule — `InitialTheme` (region) must be read ONCE at room top level and passed as `region: String` prop; never inside reactive closures or child components. Reading context inside reactive primitive caused Phase 18.2 tachys `Option::unwrap()` panic. Rule now required in CLAUDE.md + leptos-patterns.md BEFORE any new room is built (ROOM-03).
+- [Phase 19]: Bug-report inbox auto-exports on server start; CLAUDE.md instructs future sessions to read it if `total_open > 0`.
+- [Roadmap v1.4]: Old v1.3 Phases 20-25 (never built) superseded by v1.4 Phases 31-34. Phase numbers 20, 20.1, 21, 22, 23, 24, 25 are retired.
+- [Roadmap v1.4]: Build order — Phase 26 gates all rooms; Phases 27-29 rooms-first; Phase 30 art calendar-parallel with 27-29 (art swaps in at existing file paths, no code change); Phases 31-34 launch after rooms complete.
+- [Roadmap v1.4]: Room system uses extract-then-compose pattern (WarSurfaces, LibSurfaces, ThroneSurfaces over AtmosphereRoot); intra-room tab switching via RwSignal<ActiveSurface> + Show, NOT sub-routes (sub-routes remount AtmosphereRoot destroying parallax continuity).
+- [Roadmap v1.4]: Art identity — Riot IP go/no-go must be logged in PROJECT.md Key Decisions before first FLUX generation run; `/consult legal` gates first real run. Decision: original-world (Path A) or accepted-risk LoL-names (Path B).
 
 ## Blockers/Concerns
 
-- [Phase 12]: Region support scope — decide EUW-only vs. multi-region before writing solo sync; retrofitting touches every Riot API call
-- [Phase 15]: LP delta boundary logic across tier/division changes (promos, relegation, Master+ no-division) needs validation before implementing LP graph
+- [Phase 30 gate]: Riot IP go/no-go decision must be made before any FLUX production run — project owner decision only. `/consult legal` required before committing generated assets.
+- [Phase 26]: Confirm `ban_priority` and `team_note` exact table names in `schema.surql` before writing `get_team_growth_counts` — research flagged these as unconfirmed.
+- [Phase 26]: `prefers-reduced-motion` runtime listener is missing from `AtmosphereRoot` (only a mount-time check exists) — must be added in Phase 26 (A11Y-01) before rooms ship.
+- [Phase 29]: QuickNav focus trap not implemented — WCAG 2.1 SC 2.1.2 failure. Fix required in Phase 29 (ROOM-08).
+
+## Deferred Items
+
+| Category | Item | Status | Deferred At |
+|----------|------|--------|-------------|
+| Riot IP | go/no-go for FLUX art generation | Pending project owner decision | v1.4 roadmap |
+| Growth tiers | Calibrate tier thresholds against real beta user data | Post-beta | v1.4 research |
+| Mousemove guard | AtomicBool "listener active" guard vs. Phase 18.2 accumulation pattern | Phase 27 scope | v1.4 research |
 
 ## Session Continuity
 
-Last session: 2026-05-31T10:57:00.000Z
-Stopped at: Phase 19 complete (UAT + security verified) — ready to discuss/plan Phase 20
+Last session: 2026-06-04
+Stopped at: v1.4 roadmap created — 9 phases (26-34), 20 requirements mapped, REQUIREMENTS.md traceability updated, STATE.md updated
 Resume file: None
-Next command: `/gsd:plan-phase 19` (next milestone phase — Bug-Report Widget; both UI-18-RUNTIME-01 + UI-18.1-HYDRATE-01 now resolved, so all Phase 18 dependencies are clear).
-
-## v1.3 Decisions (baked in pivot 2026-05-06)
-
-- Phase 15 critical bugs (CR-01 WASM hover, CR-02 Rule 40) → Phase 16 close-out, not pre-pivot inline fix
-- Hetzner: reuse feynman-lookup's CAX11; new domain (e.g. `lol-companion.gg` placeholder); Caddy stanza → port 3001
-- Bug-report widget captures: page URL + semantic element label + free text + bug/wishlist toggle (no screenshots, no CSS selectors)
-- Launch shape: closed beta via named-friends invite list (no public self-serve registration in v1.3)
-- Old Phase 16 (Draft Integration) → deferred to v1.4 (now Phase 25 after Region Variants insertion on 2026-05-11)
-- [2026-05-11] Region Variants inserted as new Phase 18; subsequent v1.3 phases renumbered (18→19 Bug-Report Widget, 19→20 Prod Hardening, 19.1→20.1 Access Gate, 20→21 Deploy, 21→22 Compliance, 22→23 Pre-Launch, 23→24 Soft Launch)
-
-## Blind-spot Inventory (carried into Phase 22 / Phase 23)
-
-1. Riot Developer Portal application status
-2. G-13 Tier-A transparency section missing in vault `[[lol-team-companion]]`
-3. Impressum: §5 DDG (not §5 TMG); no Steuernummer
-4. DSE 4-section structure (logfiles, registration, hosting, betroffenenrechte)
-5. Riot puuid → US processor — needs DSE Tier-A entry
-6. G-01 sweep — no Google Fonts CDN in deployed HTML
-7. G-12 sweep — no `outline:none` without ring replacement
-8. Post-deploy WASM-200 check (per feynman 2026-04-16 incident)
-9. Post-deploy server-fn check (catches binary-arch mismatch)
-10. Caddy CSP + Leptos 0.8 nonces — `'unsafe-inline'` with TODO for nonce middleware
-11. Cross-compile glibc pin: `--target aarch64-unknown-linux-gnu.2.36`
-12. `cargo-leptos` `_bg.wasm` rename in deploy recipe
-13. Two-layer firewall (Hetzner Cloud + on-host ufw)
-14. Vault staleness: `[[lol-team-companion]]`, `[[product-portfolio]]`, `[[self-employment-action-plan]]`
-15. Backup: feynman has none — Phase 20 SurrealKV snapshot must work standalone
+Next command: `/gsd:plan-phase 26`
