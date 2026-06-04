@@ -355,7 +355,13 @@ Plans:
   2. `AtmosphereRoot` accepts optional tier props for all four rooms' axis names (War Room: tactics/intel/command; Library: records/tomes/analysis; Throne: roster/progression/crown) without breaking Solo Journey
   3. A developer reading `CLAUDE.md` and `.claude/rules/leptos-patterns.md` can find the anti-structural-branching hydration rule before building any room — the rule is explicitly stated with a reference to the Phase 18.2 incident
   4. A user who enables "Reduce Motion" in their OS mid-session (without reloading) sees the parallax stop immediately — the runtime `MediaQueryList` change-listener is active in `AtmosphereRoot`
-**Plans**: TBD
+**Plans**: 4 plans (1 wave, fully parallel — zero file overlap)
+Plans:
+**Wave 1** *(parallel — no inter-dependency)*
+- [ ] 26-01-PLAN.md — ROOM-01: TeamGrowthCounts + TeamGrowthState (War Room axis derivation) + get_team_growth_counts query, unit-tested
+- [ ] 26-02-PLAN.md — ROOM-03: anti-structural-branching hydration rule codified in CLAUDE.md + leptos-patterns.md (18.2 / html/mod.rs:217 refs)
+- [ ] 26-03-PLAN.md — ROOM-02 + A11Y-01: AtmosphereRoot axis generalization (all 4 rooms) + runtime prefers-reduced-motion MQL change-listener (CHECKPOINT)
+- [ ] 26-04-PLAN.md — ROOM-02: standalone reusable RoomSurface ARIA tablist component with ?tab= sync + dummy-surface unit test
 **UI hint**: no (model, DB, documentation, and component internals — no new visible UI surfaces)
 
 ### Phase 27: War Room
@@ -501,7 +507,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~23. Pre-Launch Full Review~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 33 | — |
 | ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
-| 26. Room System Foundations | v1.4 | 0/? | Not started | — |
+| 26. Room System Foundations | v1.4 | 0/4 | Not started | — |
 | 27. War Room | v1.4 | 0/? | Not started | — |
 | 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
