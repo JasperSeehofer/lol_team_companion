@@ -40,7 +40,7 @@ gaps_resolved:
 | `src/components/room/room_surface.rs` | Keep-mounted RoomSurface with PanelFn contract | VERIFIED | `pub type PanelFn = Box<dyn Fn() -> AnyView>`; `attr:hidden` toggle; no `<Show>`; 5 unit tests passing |
 | `src/components/room/parallax.rs` | AtmosphereRoot with generation-ID mousemove guard | VERIFIED | `NEXT_PARALLAX_ID: AtomicUsize` + `ACTIVE_MOUSEMOVE thread_local`; WR-01 fix in commit `3af2d8e`; cleanup owner-guarded |
 | `e2e/tests/war-room.spec.ts` | War Room e2e contract (SC2-SC5) | VERIFIED | 214 lines; 6 tests covering renders/ARIA/growth-tiers/mousemove-guard/canary-demacia/canary-pandemonium |
-| `input.css` (tactics/intel/command CSS rules) | 9 CSS rules for War Room axis overlays | MISSING | Only lib/armory/banner selectors exist (lines 436-444). No [data-tactics-tier=*], [data-intel-tier=*], or [data-command-tier=*] selectors. Gap committed from the original Solo Journey spike (commit 2c11b31) and never extended for War Room in any Phase 26 or 27 plan. |
+| `input.css` (tactics/intel/command CSS rules) | 9 CSS rules for War Room axis overlays | VERIFIED (added) | 9 selectors added after line 444 (`[data-tactics-tier='1..3'] .room-overlay--tactics` etc.), mirroring lib/armory/banner. Original gap (absent since the Solo Journey spike) closed in-session via `fix(27): add War Room tactics/intel/command tier→opacity CSS`. |
 
 ### Key Link Verification
 
@@ -48,7 +48,7 @@ gaps_resolved:
 |------|----|-----|--------|---------|
 | `war_room.rs:WarRoomRoom` | `get_team_growth_state` | `Resource::new` | VERIFIED | Resource drives `tactics_tier`/`intel_tier`/`command_tier` signals passed to `AtmosphereRoot` |
 | `AtmosphereRoot` | `data-tactics-tier` DOM attr | `move || tactics_tier.get().to_string()` | VERIFIED | `parallax.rs:339-340`; signal value written reactively |
-| `data-tactics-tier` DOM attr | `room-overlay--tactics` opacity | CSS `[data-tactics-tier=*]` selectors | NOT_WIRED | CSS selectors are absent in `input.css`; the data attribute exists but no CSS rule reads it |
+| `data-tactics-tier` DOM attr | `room-overlay--tactics` opacity | CSS `[data-tactics-tier=*]` selectors | VERIFIED | CSS selectors added to `input.css`; computed opacity > 0 for tier≥1 confirmed in-browser via strengthened SC3 e2e assertion |
 | `war_room.rs:WarSurfaces` | 5 Surface components | `RoomSurface panels=panels` | VERIFIED | Draft (show_ban_priority=false), Tree-Drafter, Game Plan, Opponents, Ban Priority — all 5 wired |
 | `DraftSurface` | `show_ban_priority=false` | prop gate at `draft.rs:3767` | VERIFIED | WR-02 fix in commit `72ec30d`; prevents double-mount of BanPrioritySurface |
 
@@ -57,7 +57,7 @@ gaps_resolved:
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|--------------|--------|-------------------|--------|
 | `AtmosphereRoot` data-tactics-tier | `tactics_tier: Signal<u8>` | `get_team_growth_state` → `db::get_team_growth_counts` → SurrealDB count queries | Yes — 6 COUNT queries across draft/draft_tree/opponent/ban_priority/post_game_learning/team_note tables | FLOWING |
-| `GrowthOverlay axis="tactics"` opacity | CSS `[data-tactics-tier=*]` | `input.css` CSS selectors | No — selectors do not exist | DISCONNECTED |
+| `GrowthOverlay axis="tactics"` opacity | CSS `[data-tactics-tier=*]` | `input.css` CSS selectors | Yes — selectors added; tier≥1 → opacity 0.34/0.67/1, tier 0 → 0 (browser-verified) | FLOWING |
 
 ### Behavioral Spot-Checks
 
@@ -68,7 +68,7 @@ gaps_resolved:
 | `attr:hidden` present | `grep -q 'attr:hidden' src/components/room/room_surface.rs` | found | PASS |
 | PanelFn exported | `grep -q 'PanelFn' src/components/room/mod.rs` | found | PASS |
 | 148 unit tests pass | documented in 27-08-SUMMARY.md | 148 passed | PASS |
-| War Room overlays get CSS-driven opacity by tier | `grep -E "data-tactics-tier|data-intel-tier|data-command-tier" input.css` | No output — selectors absent | FAIL |
+| War Room overlays get CSS-driven opacity by tier | `grep -E "data-tactics-tier|data-intel-tier|data-command-tier" input.css` | 9 selectors present; SC3 e2e asserts computed opacity > 0 for tier≥1 | PASS |
 
 Step 7b is otherwise SKIPPED (dev server not running per verification context).
 
@@ -80,15 +80,15 @@ No probe scripts (`scripts/*/tests/probe-*.sh`) exist for Phase 27. E2e gate res
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|---------|
-| ROOM-04 | All plans (27-01 through 27-08) | War Room hosts draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere | PARTIAL | Route, tab system, 5 surfaces, mousemove guard, ARIA, and e2e coverage are complete. Growth overlay visual effect is broken due to missing CSS rules. The requirement's core "parallax atmosphere + tabbed surfaces" clause is met; the "environment grows visibly" clause is not. |
+| ROOM-04 | All plans (27-01 through 27-08) | War Room hosts draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere | COMPLETE | Route, tab system, 5 surfaces, mousemove guard, ARIA, and e2e coverage complete. The "environment grows visibly" clause is now also met after the in-session CSS fix (tier→opacity rules added; browser-verified via the strengthened SC3 e2e assertion). |
 
-ROOM-04 is marked `[x]` (Complete) in REQUIREMENTS.md traceability table. That marking is premature given the CSS gap.
+ROOM-04 is marked `[x]` (Complete) in REQUIREMENTS.md traceability table — accurate now that the CSS gap is closed.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `input.css` | 436-444 | Missing CSS selectors for War Room growth axes (tactics/intel/command) | BLOCKER | Overlays permanently invisible; SC3 visual growth broken |
+| `input.css` | 436-444 | Missing CSS selectors for War Room growth axes (tactics/intel/command) | RESOLVED | Was BLOCKER (overlays invisible); fixed in-session — 9 tier→opacity selectors added, browser-verified |
 
 No unreferenced TBD/FIXME/XXX markers found in the phase-modified files (`war_room.rs`, `room_surface.rs`, `parallax.rs`).
 
@@ -100,11 +100,11 @@ None. The gap (missing CSS rules) is statically verifiable from source; all rema
 
 ### Gaps Summary
 
-**One blocker identified:**
+**One blocker identified — RESOLVED in-session:**
 
-SC3 ("growth overlays advance through tiers") has a broken data → CSS link. The `AtmosphereRoot` correctly emits `data-tactics-tier`, `data-intel-tier`, and `data-command-tier` as reactive attributes, and `get_team_growth_state` correctly reads real DB counts to populate them. However, `input.css` only contains the CSS selectors for Solo Journey's three axes (lib/armory/banner). The nine corresponding selectors for the War Room's three axes were never added — not in the original Solo Journey spike, not in Phase 26, and not in any of the 8 Phase 27 plans. The e2e SC3 test checks only the data attribute values (which are correct), not the resulting overlay visibility, so the test passes while the visual effect is absent.
+SC3 ("growth overlays advance through tiers") had a broken data → CSS link. The `AtmosphereRoot` correctly emits `data-tactics-tier`, `data-intel-tier`, and `data-command-tier` as reactive attributes, and `get_team_growth_state` correctly reads real DB counts to populate them. However, `input.css` only contained the CSS selectors for Solo Journey's three axes (lib/armory/banner). The nine corresponding selectors for the War Room's three axes were never added — not in the original Solo Journey spike, not in Phase 26, and not in any of the 8 Phase 27 plans. The e2e SC3 test checked only the data attribute values (which are correct), not the resulting overlay visibility, so it passed while the visual effect was absent.
 
-**Fix:** Add 9 CSS rules to `input.css` after line 444, mirroring the existing pattern:
+**Resolution:** The 9 CSS rules below were added to `input.css` after line 444, and the SC3 e2e test was strengthened to assert computed overlay opacity in a real browser (tier≥1 → opacity > 0, tier 0 → 0). war-room.spec.ts re-ran 6/6 GREEN. The fix is a pure CSS addition — no Rust, no WASM, no server fn changes; both compile targets unaffected.
 
 ```css
 [data-tactics-tier="1"] .room-overlay--tactics { opacity: 0.34; }
