@@ -44,8 +44,10 @@ for (const { path, content } of AUTHED_PAGES) {
     const body = await authedPage.textContent("body");
     expect(body).toMatch(content);
 
-    // Nav should be present
-    await expect(authedPage.locator("nav")).toBeVisible();
+    // Nav should be present. Use first() because the War Room page renders a
+    // second <nav role="tablist"> (RoomSurface) alongside the primary nav —
+    // strict mode would fail with an "resolved to 2 elements" error on /war-room.
+    await expect(authedPage.locator("nav").first()).toBeVisible();
 
     // No JS errors (ignore 404s — the Tailwind v4 @import "tailwindcss" causes a
     // harmless 404 in dev mode on every page)

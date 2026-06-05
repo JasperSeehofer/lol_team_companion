@@ -59,12 +59,24 @@ async function authenticatePage(page: Page): Promise<void> {
  * Navigates to /team/roster, fills the form if visible, and waits for redirect.
  * Safe to call even if the user already has a team — the form won't be visible.
  *
+ * New users default to solo mode (D-03). If the roster page shows the
+ * "Switch to Team Mode" gate, click it and wait for reload before creating.
+ *
  * Source: derived from existing pipeline.spec.ts pattern (lines 25-40).
  */
 export async function createTeam(page: Page, name: string): Promise<void> {
   await page.goto("/team/roster");
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
+
+  // Handle solo-mode gate: new users see "Switch to Team Mode" before the form.
+  const switchModeBtn = page.locator('button:has-text("Switch to Team Mode")');
+  if (await switchModeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await switchModeBtn.click();
+    // Button triggers set_user_mode + window.location.reload() — wait for reload.
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+  }
 
   const teamNameInput = page.locator('input[name="name"]');
   if (await teamNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -117,13 +129,30 @@ export { expect };
  * saves successfully the axis is already ≥ 1 on subsequent runs.
  */
 export async function seedTier1Team(page: Page): Promise<void> {
-  // Navigate to /draft and save one empty draft.
-  // A draft does not need any picks/bans filled — an empty save still creates
-  // a `draft` record that counts toward tactics_tier (threshold: draft + draft_tree ≥ 1).
+  // Navigate to /draft and save one named draft.
+  // The DraftSurface `do_save` handler rejects saves with an empty name
+  // (line 1596: `if name.trim().is_empty() { return; }`).  Fill the name
+  // field first so the save proceeds. An otherwise empty draft (no picks/bans)
+  // still creates a `draft` record counted toward tactics_tier.
   await page.goto("/draft");
   await page.waitForLoadState("networkidle");
   // Wait for WASM hydration so the Save Draft button is interactive.
   await page.waitForTimeout(1000);
+
+  // Fill a draft name before saving (required — empty name is rejected by
+  // do_save at line 1596: `if name.trim().is_empty() { return; }`).
+  // The Draft Name input is the first text input in the header form area.
+  // Use fill() which triggers the on:input handler so the Leptos signal updates.
+  const nameInput = page.getByLabel("Draft Name").first();
+  if (await nameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await nameInput.fill("SC3 Seed Draft");
+  } else {
+    // Fallback: first visible text input on the page (below the nav).
+    const fallbackInput = page.locator('input[type="text"]').first();
+    if (await fallbackInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await fallbackInput.fill("SC3 Seed Draft");
+    }
+  }
 
   const saveBtn = page.locator('button:has-text("Save Draft")');
   if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
