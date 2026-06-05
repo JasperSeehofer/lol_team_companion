@@ -22,10 +22,24 @@ findings:
   warning: 5
   info: 4
   total: 9
-status: issues_found
+resolved:
+  - WR-01  # parallax listener-loss race — fixed via generation-id single-listener slot
+  - WR-02  # Ban Priority double-mount — fixed via DraftSurface show_ban_priority prop
+  - IN-02  # MOUSEMOVE_ACTIVE SSR dead-code — removed incidentally with WR-01
+remaining:
+  - WR-03  # reduced-motion change-listener (out of scope this pass)
+  - WR-04  # redundant per-surface auth/fetch on keep-mount
+  - WR-05  # stale status-message lifetime
+status: partially_resolved
 ---
 
 # Phase 27: Code Review Report
+
+> **Resolution (2026-06-05):** WR-01 and WR-02 (the two confirmed functional bugs) were
+> fixed in-session before phase completion — see the `fix(27): ...` commits. Both compile
+> targets pass, 148 unit tests pass, and the full e2e gate re-ran GREEN (6/6 war-room
+> SC2–5, 21/21 smoke incl. flat-route D-02 regression + /war-room SC1). WR-03/04/05
+> (advisory, lower severity) remain open for a future polish pass or `/gsd:code-review 27 --fix`.
 
 **Reviewed:** 2026-06-05
 **Depth:** standard
