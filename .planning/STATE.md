@@ -4,24 +4,24 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Completed 27-01-PLAN.md (RoomSurface keep-mounted PanelFn refactor)
-last_updated: "2026-06-05T17:25:40.943Z"
+last_updated: "2026-06-05T17:33:31.890Z"
 last_activity: 2026-06-05
 progress:
   total_phases: 19
   completed_phases: 11
   total_plans: 59
-  completed_plans: 55
+  completed_plans: 56
   percent: 58
 ---
 
 ## Current Position
 
 Phase: 27 (war-room) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-06-05
 
-Progress: [█████████░] 93%
+Progress: [██████████] 95%
 
 ## Project Reference
 
@@ -42,6 +42,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase 27-01]: RoomSurface contract changed to `panels: Vec<(SurfaceTab, PanelFn)>` (D-06/D-07/D-09); all tabpanels mount eagerly and toggle via `hidden` attribute; `PanelFn` re-exported from `components/room/mod.rs`.
 - [Phase ?]: DraftSurface receives region as plain String prop (rule #58); BanPrioritySurface has no region prop
 - [Phase ?]: banned_champions live-draft closure stays in DraftSurface (D-05); persistent ban_priority editor moves to BanPrioritySurface
+- [Phase ?]: TreeDrafterSurface(region: String) extracted chrome-free; TreeDrafterPage thin shell; rule #58 enforced
 
 ## Blockers/Concerns
 
@@ -60,7 +61,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-05T17:25:33.701Z
+Last session: 2026-06-05T17:33:23.683Z
 Stopped at: Completed 27-01-PLAN.md (RoomSurface keep-mounted PanelFn refactor)
 Resume file: None
 Next command: `/gsd:execute-phase 27-war-room plan 02`
