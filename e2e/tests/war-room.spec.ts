@@ -144,6 +144,26 @@ test.describe("War Room", () => {
       parseInt(commandVal ?? "0", 10)
     );
     expect(maxTier, "seeded team has at least one axis at tier ≥ 1").toBeGreaterThanOrEqual(1);
+
+    // --- Part B (SC3 "visibly"): tier must translate to overlay opacity ---
+    // Guards against the data-attrs-wired-but-no-CSS regression: an axis at
+    // tier ≥ 1 must have a visible overlay (opacity > 0); a tier-0 axis stays
+    // hidden (opacity 0). This is what makes the room grow *visibly*.
+    const axisTiers: Record<string, number> = {
+      tactics: parseInt(tacticsVal ?? "0", 10),
+      intel: parseInt(intelVal ?? "0", 10),
+      command: parseInt(commandVal ?? "0", 10),
+    };
+    for (const [axis, tier] of Object.entries(axisTiers)) {
+      const opacity = await authedPage
+        .locator(`.room-overlay--${axis}`)
+        .evaluate((el) => parseFloat(getComputedStyle(el).opacity));
+      if (tier >= 1) {
+        expect(opacity, `${axis} overlay (tier ${tier}) is visible`).toBeGreaterThan(0);
+      } else {
+        expect(opacity, `${axis} overlay (tier 0) is hidden`).toBe(0);
+      }
+    }
   });
 
   // SC4 — Mousemove guard (no listener accumulation across navigations)
