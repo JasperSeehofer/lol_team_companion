@@ -241,11 +241,14 @@ fn actions_to_slots(actions: &[DraftAction]) -> Vec<Option<String>> {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Components
 // ---------------------------------------------------------------------------
 
+/// Chrome-free surface used both by the flat `/tree-drafter` route (via `TreeDrafterPage`)
+/// and by the War Room tab. Receives `region` as a plain `String` prop — never reads
+/// `InitialTheme` internally (rule #58).
 #[component]
-pub fn TreeDrafterPage() -> impl IntoView {
+pub fn TreeDrafterSurface(region: String) -> impl IntoView {
     // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -256,10 +259,6 @@ pub fn TreeDrafterPage() -> impl IntoView {
             }
         }
     });
-
-    // Region — read ONCE at page entry, passed as String prop to sub-views
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
 
     // Mode: "edit" or "live"
     let (mode, set_mode) = signal("edit".to_string());
@@ -705,10 +704,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let region_for_section = region.clone();
 
     view! {
-        // Phase 17: canvas-grain wrapper + bg-base. Outer min-h-screen ensures the
-        // grain extends past short pages; inner max-width container preserves the
-        // 90rem cap from the previous layout.
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        // Phase 17 / Phase 27-05: chrome-free surface; canvas-grain wrapper lives in
+        // TreeDrafterPage (flat route) or the War Room tab chrome. Inner max-width
+        // container preserves the 90rem cap from the previous layout.
         <div class="max-w-[90rem] mx-auto flex flex-col gap-6">
             // Header — region-aware SectionHead
             <div class="flex items-center justify-between">
@@ -1107,6 +1105,18 @@ pub fn TreeDrafterPage() -> impl IntoView {
             </div>
             </Card>
         </div>
+    }
+}
+
+/// Thin page shell for the flat `/tree-drafter` route. Reads `InitialTheme` ONCE here
+/// (rule #58) and passes `region` as a plain prop to `TreeDrafterSurface`.
+#[component]
+pub fn TreeDrafterPage() -> impl IntoView {
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+    view! {
+        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Tree drafter">
+            <TreeDrafterSurface region=region />
         </div>
     }
 }
