@@ -1,12 +1,22 @@
 //! Reusable intra-room tab component.
 //!
-//! `RoomSurface` renders an ARIA-compliant tab bar and one `<Show>`-gated
-//! panel per surface. The active tab is deep-linkable via the `?tab=` URL
-//! param. Signal + `<Show>` only — never sub-routes (D-02: sub-routes would
-//! remount `AtmosphereRoot` and destroy parallax continuity).
+//! `RoomSurface` renders an ARIA-compliant tab bar and keep-mounted panels,
+//! one per surface. Inactive panels are hidden via the `hidden` attribute
+//! (D-06/D-07), not unmounted. The active tab is deep-linkable via the
+//! `?tab=` URL param. Signal + `attr:hidden` only — never sub-routes (D-02:
+//! sub-routes would remount `AtmosphereRoot` and destroy parallax continuity).
 
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_query_map};
+
+// ─── Panel render function type ──────────────────────────────────────────────
+
+/// A render function for a single tab panel.
+///
+/// `Box<dyn Fn() -> AnyView>` is the simplest type that works across SSR and
+/// WASM without lifetime issues. Called once at mount; the result stays
+/// mounted and is hidden via `attr:hidden` when the tab is inactive (D-06/D-09).
+pub type PanelFn = Box<dyn Fn() -> AnyView>;
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -41,33 +51,39 @@ pub(crate) fn resolve_active_tab(tab_ids: &[&str], requested: &str) -> usize {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-/// Intra-room tab bar + `<Show>`-per-surface wrapper.
+/// Intra-room tab bar with keep-mounted, CSS-hidden panels (D-06/D-07/D-09).
 ///
-/// Renders a `role="tablist"` bar above content panels. The active surface
-/// is driven by the `?tab=` URL query parameter (readable link) and written
-/// back via `use_navigate`; unknown or missing values fall back to the first
-/// tab (D-01 discretion).
+/// Renders a `role="tablist"` bar above content panels. ALL panels mount
+/// eagerly at room entry; inactive panels are hidden via the `hidden`
+/// attribute rather than unmounted (D-06). This preserves in-tab state across
+/// tab switches and prevents parallax atmosphere flashes.
+///
+/// The active surface is driven by the `?tab=` URL query parameter (readable
+/// link) and written back via `use_navigate`; unknown or missing values fall
+/// back to the first tab (D-01 discretion).
 ///
 /// The active tab id is provided to descendants as a
 /// `Signal<&'static str>` via `provide_context`, so panel children can branch
 /// on which surface is showing without re-reading the URL.
 ///
 /// # Contract
-/// * `tabs` must be non-empty.
-/// * `id` values must be stable ASCII slugs.
-/// * Switch surfaces with signal + `<Show>` only — never sub-routes (D-02).
+/// * `panels` must be non-empty.
+/// * `SurfaceTab.id` values must be stable ASCII slugs.
+/// * Switch surfaces via `attr:hidden` toggle only — never sub-routes (D-02).
 #[component]
 pub fn RoomSurface(
-    /// Ordered list of surfaces exposed by this room.
-    tabs: Vec<SurfaceTab>,
-    /// Panel content. Rendered inside the active surface's `tabpanel`. The
-    /// active tab id is available via `use_context::<Signal<&'static str>>()`.
-    children: ChildrenFn,
+    /// Ordered list of surfaces, each paired with its panel content factory.
+    /// The factory is called ONCE at mount; all panels mount eagerly (D-08).
+    panels: Vec<(SurfaceTab, PanelFn)>,
 ) -> impl IntoView {
     let params = use_query_map();
     let navigate = use_navigate();
 
-    // Clone tabs into a StoredValue so closures can access it without moving.
+    // Derive the tab descriptor list from panels so the tab-bar render and
+    // URL resolution work with a cloneable, non-PanelFn type.
+    let tabs: Vec<SurfaceTab> = panels.iter().map(|(tab, _)| tab.clone()).collect();
+
+    // Store tabs in a StoredValue so closures can access it without moving.
     let tabs_stored = StoredValue::new(tabs);
 
     // Derive the active tab index from the URL param.
@@ -123,30 +139,25 @@ pub fn RoomSurface(
             })}
         </nav>
 
-        {tabs_stored.with_value(|tabs| {
-            tabs.iter()
-                .enumerate()
-                .map(|(idx, tab)| {
-                    let id = tab.id;
-                    let tab_label_id = format!("tab-{id}");
-                    let panel_id = format!("panel-{id}");
-                    // ChildrenFn is an Rc — clone it per panel so each <Show>
-                    // body owns a callable handle (the closure runs repeatedly).
-                    let children = children.clone();
-                    view! {
-                        <Show when=move || active_idx.get() == idx>
-                            <div
-                                id=panel_id.clone()
-                                role="tabpanel"
-                                aria-labelledby=tab_label_id.clone()
-                            >
-                                {children()}
-                            </div>
-                        </Show>
-                    }
-                })
-                .collect_view()
-        })}
+        // D-06/D-07: Render ALL panels at mount; hide inactive ones via the
+        // `hidden` attribute. `hidden` removes the panel from a11y/tab order
+        // (display:none via browser built-in) while keeping the DOM mounted,
+        // preserving in-tab state across switches and preventing atmosphere flash.
+        {panels.into_iter().enumerate().map(|(idx, (tab, render_fn))| {
+            let id = tab.id;
+            let tab_label_id = format!("tab-{id}");
+            let panel_id = format!("panel-{id}");
+            view! {
+                <div
+                    id=panel_id
+                    role="tabpanel"
+                    aria-labelledby=tab_label_id
+                    hidden=move || if active_idx.get() != idx { Some("") } else { None }
+                >
+                    {render_fn()}
+                </div>
+            }
+        }).collect_view()}
     }
 }
 
