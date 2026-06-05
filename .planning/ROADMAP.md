@@ -77,7 +77,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 **Note on build order:** Phases 26 (foundations) gates all rooms. Phases 27-29 (rooms) run after 26 and may be partially parallelized. Phase 30 (art) is calendar-parallel with 27-29 — rooms ship with placeholder assets; art swaps in at the same file paths. Phases 31-34 (launch) follow all room work, with Phase 31 (hardening + beta gate) mandatory before deploy.
 
-- [ ] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases)
+- [x] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases) (completed 2026-06-05)
 - [ ] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern
 - [ ] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links
 - [ ] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions
@@ -358,10 +358,10 @@ Plans:
 **Plans**: 4 plans (1 wave, fully parallel — zero file overlap)
 Plans:
 **Wave 1** *(parallel — no inter-dependency)*
-- [ ] 26-01-PLAN.md — ROOM-01: TeamGrowthCounts + TeamGrowthState (War Room axis derivation) + get_team_growth_counts query, unit-tested
-- [ ] 26-02-PLAN.md — ROOM-03: anti-structural-branching hydration rule codified in CLAUDE.md + leptos-patterns.md (18.2 / html/mod.rs:217 refs)
-- [ ] 26-03-PLAN.md — ROOM-02 + A11Y-01: AtmosphereRoot axis generalization (all 4 rooms) + runtime prefers-reduced-motion MQL change-listener (CHECKPOINT)
-- [ ] 26-04-PLAN.md — ROOM-02: standalone reusable RoomSurface ARIA tablist component with ?tab= sync + dummy-surface unit test
+- [x] 26-01-PLAN.md — ROOM-01: TeamGrowthCounts + TeamGrowthState (War Room axis derivation) + get_team_growth_counts query, unit-tested
+- [x] 26-02-PLAN.md — ROOM-03: anti-structural-branching hydration rule codified in CLAUDE.md + leptos-patterns.md (18.2 / html/mod.rs:217 refs)
+- [x] 26-03-PLAN.md — ROOM-02 + A11Y-01: AtmosphereRoot axis generalization (all 4 rooms) + runtime prefers-reduced-motion MQL change-listener (CHECKPOINT)
+- [x] 26-04-PLAN.md — ROOM-02: standalone reusable RoomSurface ARIA tablist component with ?tab= sync + dummy-surface unit test
 **UI hint**: no (model, DB, documentation, and component internals — no new visible UI surfaces)
 
 ### Phase 27: War Room
@@ -507,7 +507,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~23. Pre-Launch Full Review~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 33 | — |
 | ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
-| 26. Room System Foundations | v1.4 | 0/4 | Not started | — |
+| 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 0/? | Not started | — |
 | 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
