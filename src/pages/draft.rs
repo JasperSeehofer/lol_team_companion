@@ -1128,12 +1128,12 @@ pub fn BanPrioritySurface() -> impl IntoView {
     }
 }
 
+/// DraftSurface — chrome-free, reusable surface for the full draft-planning UI.
+/// Receives `region` as a plain prop (read ONCE at the page/room entry per rule #58).
+/// Used as the first tab in the War Room and wrapped by the thin `DraftPage` shell for
+/// the flat `/draft` route.
 #[component]
-pub fn DraftPage() -> impl IntoView {
-    // Region — read ONCE at page entry, passed to all sub-views (18-04)
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-
+pub fn DraftSurface(region: String) -> impl IntoView {
     // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -1770,8 +1770,7 @@ pub fn DraftPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Draft">
-            <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
+        <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
             // War Table header strip — sigil, phase badge, opponent name, intel toggle
             <div class="bg-surface/80 backdrop-blur border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → War Table header">
                 <CompanionSigil region=region.clone() />
@@ -3755,7 +3754,20 @@ pub fn DraftPage() -> impl IntoView {
 
             // Ban Priority Panel (D-04: strategic editor extracted to BanPrioritySurface)
             <BanPrioritySurface />
-            </div>
+        </div>
+    }
+}
+
+/// DraftPage — thin shell for the flat `/draft` route. Reads region ONCE and passes it
+/// down to DraftSurface. Provides the page-level chrome (canvas-grain wrapper).
+#[component]
+pub fn DraftPage() -> impl IntoView {
+    // Rule #58: read InitialTheme ONCE at shell top; never inside reactive primitives.
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+    view! {
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Draft">
+            <DraftSurface region=region />
         </div>
     }
 }
