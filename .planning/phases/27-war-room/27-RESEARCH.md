@@ -630,17 +630,15 @@ fn resolve_empty_falls_back_to_first() { … }
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`BanPrioritySurface`: champion autocomplete?**
+1. **`BanPrioritySurface`: champion autocomplete?** — **RESOLVED.**
    - What we know: The ban-priority editor at `draft.rs:1012-1019` has `ban_new_champ: RwSignal<String>`. The editor adds champion names to the ban list.
-   - What's unclear: Whether the view section (not read in this research) uses `<ChampionAutocomplete>` or a plain `<input type="text">`.
-   - Recommendation: Grep `draft.rs` for `ban_new_champ` in the view section. If `ChampionAutocomplete` is used, add `get_champions()` Resource to `BanPrioritySurface`. If plain input, no action.
+   - **RESOLVED:** The orchestrator grepped `draft.rs` directly — the ban-priority editor uses `<ChampionPicker>` (grid; `use crate::components::champion_picker::ChampionPicker`, draft.rs:2 / picker usage draft.rs:2851), NOT `<ChampionAutocomplete>`. `BanPrioritySurface` brings `ChampionPicker`; no `get_champions()` autocomplete Resource is required. Confirmed in `27-PATTERNS.md`.
 
-2. **`AtomicBool` for `static` in WASM: `#[cfg(target_arch = "wasm32")]` scope needed?**
+2. **`AtomicBool` for `static` in WASM: `#[cfg(target_arch = "wasm32")]` scope needed?** — **RESOLVED.**
    - What we know: `static MOUSEMOVE_ACTIVE: AtomicBool` at module level is valid Rust. WASM is single-threaded.
-   - What's unclear: Whether there are any linker warnings about `static` in the nightly WASM target with BFD linker.
-   - Recommendation: Add the `static` declaration unconditionally (it's SSR-harmless) and guard the `compare_exchange` inside `#[cfg(feature = "hydrate")]`. No special `wasm32` cfg needed.
+   - **RESOLVED:** Declare the `static` unconditionally (SSR-harmless) and guard the `compare_exchange` inside `#[cfg(feature = "hydrate")]`. No special `wasm32` cfg needed. Plan 27-02 follows this verbatim.
 
 ---
 
