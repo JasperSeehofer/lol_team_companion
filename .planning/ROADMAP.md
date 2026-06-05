@@ -375,7 +375,7 @@ Plans:
   4. Round-trip from `/draft` (flat route) to `/war-room` and back does not accumulate duplicate `mousemove` listeners — parallax amplitude is unchanged after the round-trip
   5. `/war-room` appears in the e2e smoke suite and passes the hydration-no-panic canary in both demacia and pandemonium themes
 **Plans**: 8 plans across 4 waves
-- [ ] 27-01-PLAN.md — RoomSurface keep-mounted per-tab PanelFn refactor (D-06/07/09)
+- [x] 27-01-PLAN.md — RoomSurface keep-mounted per-tab PanelFn refactor (D-06/07/09)
 - [ ] 27-02-PLAN.md — AtmosphereRoot mousemove accumulation guard (AtomicBool)
 - [ ] 27-03-PLAN.md — Wave 0 e2e scaffolding: war-room.spec.ts + pages.spec entry + tier-1 seed fixture
 - [ ] 27-04-PLAN.md — Extract DraftSurface + BanPrioritySurface from draft.rs (thin DraftPage shell)
@@ -516,7 +516,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
-| 27. War Room | v1.4 | 0/? | Not started | — |
+| 27. War Room | v1.4 | 1/8 | In Progress|  |
 | 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
