@@ -1132,8 +1132,16 @@ pub fn BanPrioritySurface() -> impl IntoView {
 /// Receives `region` as a plain prop (read ONCE at the page/room entry per rule #58).
 /// Used as the first tab in the War Room and wrapped by the thin `DraftPage` shell for
 /// the flat `/draft` route.
+///
+/// `show_ban_priority`: when `false`, the embedded `<BanPrioritySurface />` is not
+/// rendered. Pass `false` in the War Room where a dedicated "Ban Priority" tab
+/// provides the single live instance (prevents the WR-02 double-mount hazard).
+/// Defaults to `true` so the flat `/draft` route is unchanged.
 #[component]
-pub fn DraftSurface(region: String) -> impl IntoView {
+pub fn DraftSurface(
+    region: String,
+    #[prop(default = true)] show_ban_priority: bool,
+) -> impl IntoView {
     // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -3752,8 +3760,11 @@ pub fn DraftSurface(region: String) -> impl IntoView {
                 })}
             </div>
 
-            // Ban Priority Panel (D-04: strategic editor extracted to BanPrioritySurface)
-            <BanPrioritySurface />
+            // Ban Priority Panel (D-04: strategic editor extracted to BanPrioritySurface).
+            // Omitted when show_ban_priority=false (War Room keeps one live instance in the
+            // dedicated "Ban Priority" tab — see war_room.rs). The flat /draft route keeps
+            // show_ban_priority=true (default) and renders it here as before.
+            {show_ban_priority.then(|| view! { <BanPrioritySurface /> })}
         </div>
     }
 }

@@ -141,7 +141,9 @@ fn WarSurfaces(region: String) -> impl IntoView {
             SurfaceTab { id: "draft", label: "Draft" },
             Box::new(move || {
                 let r = region_for_draft.clone();
-                view! { <DraftSurface region=r /> }.into_any()
+                // show_ban_priority=false: the dedicated "Ban Priority" tab below is the single
+                // live BanPrioritySurface in the War Room (WR-02 fix — prevents double-mount).
+                view! { <DraftSurface region=r show_ban_priority=false /> }.into_any()
             }) as PanelFn,
         ),
         (
