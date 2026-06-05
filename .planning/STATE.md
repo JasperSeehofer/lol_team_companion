@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: verifying
-stopped_at: Completed 27-01-PLAN.md (RoomSurface keep-mounted PanelFn refactor)
-last_updated: "2026-06-05T18:47:16.592Z"
+status: planning
+stopped_at: Phase 28 context gathered
+last_updated: "2026-06-05T23:09:02.457Z"
 last_activity: 2026-06-05
 progress:
   total_phases: 19
@@ -16,9 +16,9 @@ progress:
 
 ## Current Position
 
-Phase: 27 (war-room) — EXECUTING
-Plan: 8 of 8
-Status: Phase complete — ready for verification
+Phase: 28
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-05
 
 Progress: [██████████] 100%
@@ -28,7 +28,7 @@ Progress: [██████████] 100%
 See: .planning/PROJECT.md (updated 2026-05-31)
 
 **Core value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
-**Current focus:** Phase 27 — war-room
+**Current focus:** Phase 28 — library & ia healing
 
 ## Decisions
 
@@ -61,7 +61,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-05T18:47:16.577Z
-Stopped at: Completed 27-01-PLAN.md (RoomSurface keep-mounted PanelFn refactor)
-Resume file: None
+Last session: 2026-06-05T23:09:02.432Z
+Stopped at: Phase 28 context gathered
+Resume file: .planning/phases/28-library-ia-healing/28-CONTEXT.md
 Next command: `/gsd:execute-phase 27-war-room plan 02`
