@@ -374,7 +374,15 @@ Plans:
   3. A team with saved drafts and scouted opponents sees more atmospheric detail than a fresh team (growth overlays advance through tiers based on actual team data)
   4. Round-trip from `/draft` (flat route) to `/war-room` and back does not accumulate duplicate `mousemove` listeners — parallax amplitude is unchanged after the round-trip
   5. `/war-room` appears in the e2e smoke suite and passes the hydration-no-panic canary in both demacia and pandemonium themes
-**Plans**: TBD
+**Plans**: 8 plans across 4 waves
+- [ ] 27-01-PLAN.md — RoomSurface keep-mounted per-tab PanelFn refactor (D-06/07/09)
+- [ ] 27-02-PLAN.md — AtmosphereRoot mousemove accumulation guard (AtomicBool)
+- [ ] 27-03-PLAN.md — Wave 0 e2e scaffolding: war-room.spec.ts + pages.spec entry + tier-1 seed fixture
+- [ ] 27-04-PLAN.md — Extract DraftSurface + BanPrioritySurface from draft.rs (thin DraftPage shell)
+- [ ] 27-05-PLAN.md — Extract TreeDrafterSurface from tree_drafter.rs (thin shell)
+- [ ] 27-06-PLAN.md — Extract GamePlanSurface + OpponentsSurface (thin shells)
+- [ ] 27-07-PLAN.md — Compose WarRoomRoom + WarSurfaces + get_team_growth_state + /war-room route + placeholder assets
+- [ ] 27-08-PLAN.md — e2e phase gate: SC1-SC5 green + flat-route regression (D-02)
 **UI hint**: yes
 
 ### Phase 28: Library & IA Healing
