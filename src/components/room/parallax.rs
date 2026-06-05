@@ -13,13 +13,36 @@
 //! setting can flip at runtime).
 
 use leptos::prelude::*;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Accumulation guard: ensures at most one `mousemove` listener is registered
-/// on `window` even when two `AtmosphereRoot` instances coexist momentarily
-/// during a room round-trip (Leptos #3665 / D-08). Unconditional static —
-/// SSR reads but never fires the `compare_exchange` path (hydrate-gated).
-static MOUSEMOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// Monotonic instance counter: assigns each `AtmosphereRoot` a unique `my_id`
+/// so the single-listener slot can track which instance currently owns it.
+/// Only used in the hydrate target — gated to suppress the SSR dead-code
+/// warning (mirrors the ACTIVE_MOUSEMOVE thread_local below).
+#[cfg(feature = "hydrate")]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "hydrate")]
+static NEXT_PARALLAX_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// Single active mousemove listener slot (hydrate target only — WASM is
+/// single-threaded so `thread_local!` + `RefCell` is safe and avoids the
+/// `Send` bound that a raw `static` would require for `Closure`).
+///
+/// Invariant: at most ONE `mousemove` listener is registered on `window` at
+/// any time while any `AtmosphereRoot` is mounted; ZERO after the last
+/// unmounts. The Closure lives here from mount to cleanup — the slot is the
+/// single source of truth for both the function pointer and the owner id.
+///
+/// Verified trace (WR-01 fix):
+///   A mounts  → slot=None   → add cb_A, slot=(A,cb_A)            [1 listener]
+///   B mounts  → slot=(A,*) → remove cb_A, add cb_B, slot=(B,cb_B) [1 listener]
+///   A cleans  → stored_id=B ≠ my_id=A → no-op                   [1 listener]
+///   B cleans  → stored_id=B == my_id=B → remove cb_B, slot=None  [0 listeners]
+#[cfg(feature = "hydrate")]
+thread_local! {
+    static ACTIVE_MOUSEMOVE: std::cell::RefCell<
+        Option<(usize, wasm_bindgen::closure::Closure<dyn FnMut(web_sys::MouseEvent)>)>
+    > = const { std::cell::RefCell::new(None) };
+}
 
 /// DOM id of the atmosphere root — the RAF callback looks it up to write
 /// `--px`/`--py`. Only one room mounts at a time, so a fixed id is safe.
@@ -60,15 +83,19 @@ pub fn AtmosphereRoot(
         use wasm_bindgen::closure::Closure;
         use wasm_bindgen::JsCast;
 
-        // Non-reactive shared state (rule 22): latest pointer, a re-entrancy
-        // guard for the rAF, and the listener handle kept alive for teardown.
-        // The listener holds a JS `Closure` (not Send/Sync) so it needs
-        // LocalStorage; WASM is single-threaded so this is sound.
+        // Assign a unique id to this AtmosphereRoot instance (WR-01 fix).
+        // Used to guard cleanup: only the current ACTIVE_MOUSEMOVE owner removes
+        // the listener, so a stale older root's cleanup never tears down the
+        // newer root's listener.
+        let my_id = NEXT_PARALLAX_ID.fetch_add(1, Ordering::Relaxed);
+
+        // Non-reactive shared state (rule 22): latest pointer position and a
+        // re-entrancy guard for the rAF. Both are per-instance (not global) —
+        // the single active listener always captures its own copies of these.
         use leptos::prelude::LocalStorage;
         let latest = StoredValue::new((0.0_f64, 0.0_f64));
         let raf_pending = StoredValue::new(false);
-        let listener: StoredValue<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>, LocalStorage> =
-            StoredValue::new_local(None);
+
         // A11Y-01 / D-11: the runtime prefers-reduced-motion `change` listener
         // pair — (MediaQueryList, Closure) — kept alive for teardown. The
         // closure reads state from the captured MediaQueryList (`.matches()`),
@@ -91,9 +118,10 @@ pub fn AtmosphereRoot(
                 .ok()
                 .flatten();
 
-            // Build the mousemove → CSS-var handler up-front and store it —
-            // even under reduced motion — so a later Reduce-Motion-OFF toggle
-            // can re-attach it without a page reload.
+            // Build the mousemove → CSS-var handler. The Closure will be moved
+            // into ACTIVE_MOUSEMOVE below (if motion is currently allowed) or
+            // discarded if reduced-motion is active (the change-listener will
+            // handle the ON→OFF transition via ACTIVE_MOUSEMOVE at that point).
             let cb =
                 Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
                     // Normalise pointer to -1..=1 relative to viewport centre.
@@ -143,15 +171,15 @@ pub fn AtmosphereRoot(
                         raf_cb.forget();
                     }
                 });
-            // Keep the closure alive AND retrievable so on_cleanup can remove it
-            // and the change-listener can re-attach it — the room mounts/unmounts
-            // per navigation, so a leaked window listener would stack.
-            listener.set_value(Some(cb));
 
             // A11Y-01 / D-11: attach a runtime `change` listener on the media
             // query so a mid-session Reduce Motion flip freezes (ON) or restores
             // (OFF) parallax without a reload. Attached regardless of the initial
             // state so the started-reduced → toggled-off path also restores.
+            //
+            // The change-listener routes all mousemove attach/detach through
+            // ACTIVE_MOUSEMOVE so the single-listener invariant holds (WR-01 fix,
+            // WR-03 scope: change-listener branches now use the same slot).
             if let Some(media) = mql.as_ref() {
                 let media_state = media.clone();
                 let change_cb = Closure::<dyn FnMut()>::new(move || {
@@ -160,8 +188,9 @@ pub fn AtmosphereRoot(
                     };
                     if media_state.matches() {
                         // Reduce Motion turned ON: freeze the planes (--px/--py
-                        // → 0) and detach the mousemove listener. The closure
-                        // itself stays stored so OFF can re-attach it.
+                        // → 0) and detach the mousemove listener if this instance
+                        // currently owns it. The Closure stays in the slot so the
+                        // OFF branch can re-attach it.
                         if let Some(el) = w
                             .document()
                             .and_then(|d| d.get_element_by_id(ATMOSPHERE_ROOT_ID))
@@ -172,23 +201,48 @@ pub fn AtmosphereRoot(
                                 let _ = style.set_property("--py", "0");
                             }
                         }
-                        listener.with_value(|slot| {
-                            if let Some(cb) = slot.as_ref() {
-                                let _ = w.remove_event_listener_with_callback(
-                                    "mousemove",
-                                    cb.as_ref().unchecked_ref(),
-                                );
+                        ACTIVE_MOUSEMOVE.with(|slot| {
+                            let owner = slot.borrow().as_ref().map(|(id, _)| *id);
+                            if owner == Some(my_id) {
+                                // Remove from window.
+                                if let Some((_, ref stored_cb)) = *slot.borrow() {
+                                    let _ = w.remove_event_listener_with_callback(
+                                        "mousemove",
+                                        stored_cb.as_ref().unchecked_ref(),
+                                    );
+                                }
+                                // Leave slot occupied (Closure stays alive for the
+                                // OFF branch). Mark with sentinel id=0: "stored but
+                                // not on window". Counter starts at 1 so 0 is safe.
+                                let mut guard = slot.borrow_mut();
+                                if let Some(pair) = guard.take() {
+                                    *guard = Some((0, pair.1));
+                                }
                             }
                         });
                     } else {
-                        // Reduce Motion turned OFF: re-attach the stored
-                        // mousemove handler — parallax resumes immediately.
-                        listener.with_value(|slot| {
-                            if let Some(cb) = slot.as_ref() {
-                                let _ = w.add_event_listener_with_callback(
-                                    "mousemove",
-                                    cb.as_ref().unchecked_ref(),
-                                );
+                        // Reduce Motion turned OFF: re-attach the stored Closure
+                        // via ACTIVE_MOUSEMOVE. Only re-attach if the slot is in
+                        // the detached-sentinel state (owner == 0) or belongs to
+                        // this instance. If another root has taken ownership since
+                        // the ON event, leave it alone — it already has its own
+                        // listener registered.
+                        ACTIVE_MOUSEMOVE.with(|slot| {
+                            let owner = slot.borrow().as_ref().map(|(id, _)| *id);
+                            // owner == 0: this instance's cb is stored but detached
+                            // (set by the ON branch above). Re-attach it.
+                            if owner == Some(0) {
+                                if let Some((_, ref stored_cb)) = *slot.borrow() {
+                                    let _ = w.add_event_listener_with_callback(
+                                        "mousemove",
+                                        stored_cb.as_ref().unchecked_ref(),
+                                    );
+                                }
+                                // Restore real owner id.
+                                let mut guard = slot.borrow_mut();
+                                if let Some(pair) = guard.take() {
+                                    *guard = Some((my_id, pair.1));
+                                }
                             }
                         });
                     }
@@ -203,43 +257,64 @@ pub fn AtmosphereRoot(
             // handles later toggles either way.
             let reduced = mql.as_ref().map(|m| m.matches()).unwrap_or(false);
             if reduced {
+                // Under reduced motion: drop cb (never used). The change-listener
+                // is already registered; when motion turns OFF it will find the
+                // slot in an appropriate state.
+                drop(cb);
                 return;
             }
 
-            // Accumulation guard (D-08 / Leptos #3665): if another
-            // AtmosphereRoot already holds the listener (e.g. during a War
-            // Room → Solo Journey → War Room round-trip where on_cleanup has
-            // not yet fired), skip registration to prevent doubled parallax
-            // amplitude. The flag is cleared in on_cleanup.
-            if MOUSEMOVE_ACTIVE
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_err()
-            {
-                return;
-            }
-
-            listener.with_value(|slot| {
-                if let Some(cb) = slot.as_ref() {
-                    let _ = win
-                        .add_event_listener_with_callback("mousemove", cb.as_ref().unchecked_ref());
+            // Single-listener slot (WR-01 fix): evict the previous owner's
+            // listener (if any), attach this instance's new Closure, and take
+            // ownership of the slot. WASM is single-threaded so no locking needed.
+            ACTIVE_MOUSEMOVE.with(|slot| {
+                // Remove old owner's listener from window (if any).
+                if let Some((_, ref old_cb)) = *slot.borrow() {
+                    let _ = win.remove_event_listener_with_callback(
+                        "mousemove",
+                        old_cb.as_ref().unchecked_ref(),
+                    );
                 }
+                // Attach new listener.
+                let _ = win
+                    .add_event_listener_with_callback("mousemove", cb.as_ref().unchecked_ref());
+                // Store (my_id, cb) — moves cb into the slot (Closure is now
+                // owned by ACTIVE_MOUSEMOVE, not a local variable).
+                *slot.borrow_mut() = Some((my_id, cb));
             });
         });
 
         on_cleanup(move || {
-            // Clear the accumulation guard so the next AtmosphereRoot mount
-            // can register a fresh listener. Must happen before the closure
-            // drop so the flag is free even if window() is unavailable.
-            MOUSEMOVE_ACTIVE.store(false, Ordering::SeqCst);
-            listener.update_value(|slot| {
-                if let Some(cb) = slot.take() {
-                    if let Some(w) = web_sys::window() {
-                        let _ = w.remove_event_listener_with_callback(
-                            "mousemove",
-                            cb.as_ref().unchecked_ref(),
-                        );
+            // Owner-guarded cleanup (WR-01 fix): only remove the global listener
+            // if this instance currently owns the slot. A stale older root's
+            // cleanup must not tear down the newer root's listener.
+            //
+            // Also handles the detached-sentinel case (owner == 0): that means
+            // our cb is stored but not on window — clear the slot to free the
+            // Closure, but no removeEventListener call needed.
+            ACTIVE_MOUSEMOVE.with(|slot| {
+                let owner = slot.borrow().as_ref().map(|(id, _)| *id);
+                match owner {
+                    Some(id) if id == my_id => {
+                        // This instance owns the slot and the listener is live.
+                        if let Some((_, ref cb)) = *slot.borrow() {
+                            if let Some(w) = web_sys::window() {
+                                let _ = w.remove_event_listener_with_callback(
+                                    "mousemove",
+                                    cb.as_ref().unchecked_ref(),
+                                );
+                            }
+                        }
+                        *slot.borrow_mut() = None;
                     }
-                    // cb dropped here, freeing the JS closure.
+                    Some(0) => {
+                        // Detached-sentinel: our cb is stored but not on window
+                        // (reduced-motion ON was active). Just free the Closure.
+                        *slot.borrow_mut() = None;
+                    }
+                    _ => {
+                        // Another instance owns the slot — leave it untouched.
+                    }
                 }
             });
             // Tear down the runtime reduced-motion change-listener too, so it
