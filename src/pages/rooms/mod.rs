@@ -3,3 +3,4 @@
 //! Records, and Throne follow once the system is proven.
 
 pub mod solo_journey;
+pub mod war_room;
