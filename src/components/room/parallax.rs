@@ -33,6 +33,18 @@ pub fn AtmosphereRoot(
     lib_tier: Signal<u8>,
     #[prop(optional, into)] armory_tier: Signal<u8>,
     #[prop(optional, into)] banner_tier: Signal<u8>,
+    // War Room axes (D-10). Optional → default signal yields 0 (Seed).
+    #[prop(optional, into)] tactics_tier: Signal<u8>,
+    #[prop(optional, into)] intel_tier: Signal<u8>,
+    #[prop(optional, into)] command_tier: Signal<u8>,
+    // Library axes (D-10).
+    #[prop(optional, into)] records_tier: Signal<u8>,
+    #[prop(optional, into)] tomes_tier: Signal<u8>,
+    #[prop(optional, into)] analysis_tier: Signal<u8>,
+    // Throne axes (D-10).
+    #[prop(optional, into)] roster_tier: Signal<u8>,
+    #[prop(optional, into)] progression_tier: Signal<u8>,
+    #[prop(optional, into)] crown_tier: Signal<u8>,
     children: Children,
 ) -> impl IntoView {
     // Pointer → CSS var bridge. Hydrate-only; SSR renders a static painting.
@@ -50,23 +62,31 @@ pub fn AtmosphereRoot(
         let raf_pending = StoredValue::new(false);
         let listener: StoredValue<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>, LocalStorage> =
             StoredValue::new_local(None);
+        // A11Y-01 / D-11: the runtime prefers-reduced-motion `change` listener
+        // pair — (MediaQueryList, Closure) — kept alive for teardown. The
+        // closure reads state from the captured MediaQueryList (`.matches()`),
+        // so no `MediaQueryListEvent` web-sys feature is required.
+        let mql_listener: StoredValue<
+            Option<(web_sys::MediaQueryList, Closure<dyn FnMut()>)>,
+            LocalStorage,
+        > = StoredValue::new_local(None);
 
         Effect::new(move |_| {
             let Some(win) = web_sys::window() else {
                 return;
             };
 
-            // Reduced-motion gate #1: never attach the listener at all.
-            let reduced = win
+            // The reduced-motion media query. We both read its initial state
+            // (gate #1, below) and listen for runtime toggles (A11Y-01) off this
+            // single object.
+            let mql = win
                 .match_media("(prefers-reduced-motion: reduce)")
                 .ok()
-                .flatten()
-                .map(|m| m.matches())
-                .unwrap_or(false);
-            if reduced {
-                return;
-            }
+                .flatten();
 
+            // Build the mousemove → CSS-var handler up-front and store it —
+            // even under reduced motion — so a later Reduce-Motion-OFF toggle
+            // can re-attach it without a page reload.
             let cb =
                 Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
                     // Normalise pointer to -1..=1 relative to viewport centre.
@@ -116,15 +136,75 @@ pub fn AtmosphereRoot(
                         raf_cb.forget();
                     }
                 });
-
-            if let Some(w) = web_sys::window() {
-                let _ =
-                    w.add_event_listener_with_callback("mousemove", cb.as_ref().unchecked_ref());
-            }
             // Keep the closure alive AND retrievable so on_cleanup can remove it
-            // — the room mounts/unmounts per navigation, so a leaked window
-            // listener would stack across route changes.
+            // and the change-listener can re-attach it — the room mounts/unmounts
+            // per navigation, so a leaked window listener would stack.
             listener.set_value(Some(cb));
+
+            // A11Y-01 / D-11: attach a runtime `change` listener on the media
+            // query so a mid-session Reduce Motion flip freezes (ON) or restores
+            // (OFF) parallax without a reload. Attached regardless of the initial
+            // state so the started-reduced → toggled-off path also restores.
+            if let Some(media) = mql.as_ref() {
+                let media_state = media.clone();
+                let change_cb = Closure::<dyn FnMut()>::new(move || {
+                    let Some(w) = web_sys::window() else {
+                        return;
+                    };
+                    if media_state.matches() {
+                        // Reduce Motion turned ON: freeze the planes (--px/--py
+                        // → 0) and detach the mousemove listener. The closure
+                        // itself stays stored so OFF can re-attach it.
+                        if let Some(el) = w
+                            .document()
+                            .and_then(|d| d.get_element_by_id(ATMOSPHERE_ROOT_ID))
+                        {
+                            if let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>() {
+                                let style = web_sys::HtmlElement::style(&html_el);
+                                let _ = style.set_property("--px", "0");
+                                let _ = style.set_property("--py", "0");
+                            }
+                        }
+                        listener.with_value(|slot| {
+                            if let Some(cb) = slot.as_ref() {
+                                let _ = w.remove_event_listener_with_callback(
+                                    "mousemove",
+                                    cb.as_ref().unchecked_ref(),
+                                );
+                            }
+                        });
+                    } else {
+                        // Reduce Motion turned OFF: re-attach the stored
+                        // mousemove handler — parallax resumes immediately.
+                        listener.with_value(|slot| {
+                            if let Some(cb) = slot.as_ref() {
+                                let _ = w.add_event_listener_with_callback(
+                                    "mousemove",
+                                    cb.as_ref().unchecked_ref(),
+                                );
+                            }
+                        });
+                    }
+                });
+                let _ = media
+                    .add_event_listener_with_callback("change", change_cb.as_ref().unchecked_ref());
+                mql_listener.set_value(Some((media.clone(), change_cb)));
+            }
+
+            // Reduced-motion gate #1: only attach the mousemove listener now
+            // when motion is currently allowed. The change-listener above
+            // handles later toggles either way.
+            let reduced = mql.as_ref().map(|m| m.matches()).unwrap_or(false);
+            if reduced {
+                return;
+            }
+
+            listener.with_value(|slot| {
+                if let Some(cb) = slot.as_ref() {
+                    let _ = win
+                        .add_event_listener_with_callback("mousemove", cb.as_ref().unchecked_ref());
+                }
+            });
         });
 
         on_cleanup(move || {
@@ -139,6 +219,15 @@ pub fn AtmosphereRoot(
                     // cb dropped here, freeing the JS closure.
                 }
             });
+            // Tear down the runtime reduced-motion change-listener too, so it
+            // does not accumulate across room navigations (T-26-03).
+            mql_listener.update_value(|slot| {
+                if let Some((mql, cb)) = slot.take() {
+                    let _ = mql
+                        .remove_event_listener_with_callback("change", cb.as_ref().unchecked_ref());
+                    // cb dropped here, freeing the JS closure.
+                }
+            });
         });
     }
 
@@ -150,6 +239,15 @@ pub fn AtmosphereRoot(
             data-lib-tier=move || lib_tier.get().to_string()
             data-armory-tier=move || armory_tier.get().to_string()
             data-banner-tier=move || banner_tier.get().to_string()
+            data-tactics-tier=move || tactics_tier.get().to_string()
+            data-intel-tier=move || intel_tier.get().to_string()
+            data-command-tier=move || command_tier.get().to_string()
+            data-records-tier=move || records_tier.get().to_string()
+            data-tomes-tier=move || tomes_tier.get().to_string()
+            data-analysis-tier=move || analysis_tier.get().to_string()
+            data-roster-tier=move || roster_tier.get().to_string()
+            data-progression-tier=move || progression_tier.get().to_string()
+            data-crown-tier=move || crown_tier.get().to_string()
         >
             {children()}
         </div>
@@ -182,7 +280,10 @@ pub fn Plane(#[prop(into)] src: String, depth: i32, z: i32) -> impl IntoView {
 /// symmetric (the Phase 18.1/18.2 lesson).
 #[component]
 pub fn GrowthOverlay(
-    /// Short axis key matching the CSS rules: `lib` | `armory` | `banner`.
+    /// Short axis key matching the CSS rules. One of the twelve room axes:
+    /// Solo `lib` | `armory` | `banner`; War `tactics` | `intel` | `command`;
+    /// Library `records` | `tomes` | `analysis`; Throne `roster` |
+    /// `progression` | `crown`.
     #[prop(into)]
     axis: String,
     #[prop(into)] src: String,
