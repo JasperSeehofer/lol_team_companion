@@ -925,6 +925,209 @@ fn resolve_mode(stored: &str, region: &str, route: &str) -> String {
     }
 }
 
+/// BanPrioritySurface — chrome-free, reusable surface for the persistent strategic ban-priority
+/// editor. Owns all ban-priority signals, the get/save server functions, and the editor view.
+/// Takes no `region` prop (no region-dependent UI). Used as the fifth tab in the War Room.
+#[component]
+pub fn BanPrioritySurface() -> impl IntoView {
+    // Auth redirect (each surface keeps its own — pattern from SoloSurfaces)
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
+    // Ban priorities signals (D-04: persistent strategic editor)
+    let ban_priorities = Resource::new(|| (), |_| get_ban_priorities());
+    let (ban_panel_open, set_ban_panel_open) = signal(false);
+    let (editing_bans, set_editing_bans) = signal(false);
+    let (ban_edit_list, set_ban_edit_list) = signal(Vec::<BanPriority>::new());
+    let (ban_new_champ, set_ban_new_champ) = signal(String::new());
+    let (ban_new_reason, set_ban_new_reason) = signal(String::new());
+    let (ban_status, set_ban_status) = signal(Option::<String>::None);
+
+    view! {
+        // Ban Priority Panel
+        <div class="bg-elevated border border-divider rounded-lg">
+            <button
+                class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
+                on:click=move |_| set_ban_panel_open.update(|v| *v = !*v)
+            >
+                <h2 class="text-xl font-bold text-primary">"Ban Priorities"</h2>
+                <span class="text-muted">{move || if ban_panel_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
+            </button>
+            {move || ban_panel_open.get().then(|| {
+                let is_editing = editing_bans.get();
+                view! {
+                    <div class="px-4 pb-4 flex flex-col gap-3">
+                        {if is_editing {
+                            view! {
+                                <div class="flex flex-col gap-2">
+                                    // Existing items
+                                    {move || {
+                                        let items = ban_edit_list.get();
+                                        if items.is_empty() {
+                                            view! { <p class="text-dimmed text-sm">"No ban priorities yet."</p> }.into_any()
+                                        } else {
+                                            view! {
+                                                <div class="flex flex-col gap-1">
+                                                    {items.into_iter().enumerate().map(|(i, bp)| {
+                                                        let champ = bp.champion.clone();
+                                                        let reason = bp.reason.clone().unwrap_or_default();
+                                                        view! {
+                                                            <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
+                                                                <span class="text-accent font-bold text-sm w-6">{format!("#{}", i + 1)}</span>
+                                                                <span class="text-primary font-medium flex-1">{champ}</span>
+                                                                <span class="text-muted text-sm flex-1 truncate">{reason}</span>
+                                                                <button
+                                                                    class="text-red-400 hover:text-red-300 text-sm cursor-pointer"
+                                                                    on:click=move |_| {
+                                                                        set_ban_edit_list.update(|list| {
+                                                                            if i < list.len() { list.remove(i); }
+                                                                            // Re-rank
+                                                                            for (j, item) in list.iter_mut().enumerate() {
+                                                                                item.rank = j as i32;
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                >"Remove"</button>
+                                                            </div>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any()
+                                        }
+                                    }}
+                                    // Add new entry
+                                    <div class="flex gap-2 items-end">
+                                        <div class="flex-1">
+                                            <label class="block text-secondary text-xs mb-1">"Champion"</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Champion name..."
+                                                class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
+                                                prop:value=move || ban_new_champ.get()
+                                                on:input=move |ev| set_ban_new_champ.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <div class="flex-1">
+                                            <label class="block text-secondary text-xs mb-1">"Reason (optional)"</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Why ban?"
+                                                class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
+                                                prop:value=move || ban_new_reason.get()
+                                                on:input=move |ev| set_ban_new_reason.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <button
+                                            class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1 transition-colors cursor-pointer"
+                                            on:click=move |_| {
+                                                let champ = ban_new_champ.get_untracked();
+                                                if champ.trim().is_empty() { return; }
+                                                let reason_val = ban_new_reason.get_untracked();
+                                                let reason = if reason_val.trim().is_empty() { None } else { Some(reason_val) };
+                                                set_ban_edit_list.update(|list| {
+                                                    let rank = list.len() as i32;
+                                                    list.push(BanPriority {
+                                                        id: None,
+                                                        team_id: String::new(),
+                                                        champion: champ.trim().to_string(),
+                                                        rank,
+                                                        reason,
+                                                    });
+                                                });
+                                                set_ban_new_champ.set(String::new());
+                                                set_ban_new_reason.set(String::new());
+                                            }
+                                        >"+ Add"</button>
+                                    </div>
+                                    // Save / Cancel
+                                    <div class="flex gap-2 mt-1">
+                                        <button
+                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
+                                            on:click=move |_| {
+                                                let list = ban_edit_list.get_untracked();
+                                                let json = serde_json::to_string(&list).unwrap_or_default();
+                                                leptos::task::spawn_local(async move {
+                                                    match save_ban_priorities(json).await {
+                                                        Ok(_) => {
+                                                            set_ban_status.set(Some("Saved!".into()));
+                                                            ban_priorities.refetch();
+                                                            set_editing_bans.set(false);
+                                                        }
+                                                        Err(e) => set_ban_status.set(Some(format!("Error: {e}"))),
+                                                    }
+                                                });
+                                            }
+                                        >"Save"</button>
+                                        <button
+                                            class="bg-overlay hover:bg-overlay-strong text-secondary rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
+                                            on:click=move |_| set_editing_bans.set(false)
+                                        >"Cancel"</button>
+                                        {move || ban_status.get().map(|msg| view! {
+                                            <span class="text-green-300 text-sm self-center">{msg}</span>
+                                        })}
+                                    </div>
+                                </div>
+                            }.into_any()
+                        } else {
+                            // View mode
+                            view! {
+                                <div class="flex flex-col gap-2">
+                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
+                                        {move || ban_priorities.get().map(|result| match result {
+                                            Ok(list) if list.is_empty() => view! {
+                                                <p class="text-dimmed text-sm">"No ban priorities set."</p>
+                                            }.into_any(),
+                                            Ok(list) => view! {
+                                                <div class="flex flex-col gap-1">
+                                                    {list.iter().map(|bp| {
+                                                        let champ = bp.champion.clone();
+                                                        let reason = bp.reason.clone().unwrap_or_default();
+                                                        let rank = bp.rank + 1;
+                                                        view! {
+                                                            <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
+                                                                <span class="text-accent font-bold text-sm w-6">{format!("#{rank}")}</span>
+                                                                <span class="text-primary font-medium flex-1">{champ}</span>
+                                                                <span class="text-muted text-sm flex-1 truncate">{reason}</span>
+                                                            </div>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any(),
+                                            Err(e) => view! {
+                                                <ErrorBanner message=format!("Failed to load ban priorities: {e}") />
+                                            }.into_any(),
+                                        })}
+                                    </Suspense>
+                                    <button
+                                        class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1.5 transition-colors self-start cursor-pointer"
+                                        on:click=move |_| {
+                                            // Copy current priorities into edit list
+                                            if let Some(Ok(list)) = ban_priorities.get_untracked() {
+                                                set_ban_edit_list.set(list);
+                                            } else {
+                                                set_ban_edit_list.set(Vec::new());
+                                            }
+                                            set_ban_status.set(None);
+                                            set_editing_bans.set(true);
+                                        }
+                                    >"Edit"</button>
+                                </div>
+                            }.into_any()
+                        }}
+                    </div>
+                }
+            })}
+        </div>
+    }
+}
+
 #[component]
 pub fn DraftPage() -> impl IntoView {
     // Region — read ONCE at page entry, passed to all sub-views (18-04)
@@ -1008,15 +1211,6 @@ pub fn DraftPage() -> impl IntoView {
     let (series_fearless_input, set_series_fearless_input) = signal(false);
     let (series_status, set_series_status) = signal(Option::<String>::None);
     let series_resource = Resource::new(|| (), |_| list_series_fn());
-
-    // Ban priorities (Phase 4)
-    let ban_priorities = Resource::new(|| (), |_| get_ban_priorities());
-    let (ban_panel_open, set_ban_panel_open) = signal(false);
-    let (editing_bans, set_editing_bans) = signal(false);
-    let (ban_edit_list, set_ban_edit_list) = signal(Vec::<BanPriority>::new());
-    let (ban_new_champ, set_ban_new_champ) = signal(String::new());
-    let (ban_new_reason, set_ban_new_reason) = signal(String::new());
-    let (ban_status, set_ban_status) = signal(Option::<String>::None);
 
     // Intel sidebar (Phase 5 — Pool Awareness & Matchup Surfacing)
     let (intel_open, set_intel_open) = signal(false);
@@ -3559,180 +3753,8 @@ pub fn DraftPage() -> impl IntoView {
                 })}
             </div>
 
-            // Ban Priority Panel
-            <div class="bg-elevated border border-divider rounded-lg">
-                <button
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
-                    on:click=move |_| set_ban_panel_open.update(|v| *v = !*v)
-                >
-                    <h2 class="text-xl font-bold text-primary">"Ban Priorities"</h2>
-                    <span class="text-muted">{move || if ban_panel_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
-                </button>
-                {move || ban_panel_open.get().then(|| {
-                    let is_editing = editing_bans.get();
-                    view! {
-                        <div class="px-4 pb-4 flex flex-col gap-3">
-                            {if is_editing {
-                                view! {
-                                    <div class="flex flex-col gap-2">
-                                        // Existing items
-                                        {move || {
-                                            let items = ban_edit_list.get();
-                                            if items.is_empty() {
-                                                view! { <p class="text-dimmed text-sm">"No ban priorities yet."</p> }.into_any()
-                                            } else {
-                                                view! {
-                                                    <div class="flex flex-col gap-1">
-                                                        {items.into_iter().enumerate().map(|(i, bp)| {
-                                                            let champ = bp.champion.clone();
-                                                            let reason = bp.reason.clone().unwrap_or_default();
-                                                            view! {
-                                                                <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
-                                                                    <span class="text-accent font-bold text-sm w-6">{format!("#{}", i + 1)}</span>
-                                                                    <span class="text-primary font-medium flex-1">{champ}</span>
-                                                                    <span class="text-muted text-sm flex-1 truncate">{reason}</span>
-                                                                    <button
-                                                                        class="text-red-400 hover:text-red-300 text-sm cursor-pointer"
-                                                                        on:click=move |_| {
-                                                                            set_ban_edit_list.update(|list| {
-                                                                                if i < list.len() { list.remove(i); }
-                                                                                // Re-rank
-                                                                                for (j, item) in list.iter_mut().enumerate() {
-                                                                                    item.rank = j as i32;
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    >"Remove"</button>
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                        }}
-                                        // Add new entry
-                                        <div class="flex gap-2 items-end">
-                                            <div class="flex-1">
-                                                <label class="block text-secondary text-xs mb-1">"Champion"</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Champion name..."
-                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || ban_new_champ.get()
-                                                    on:input=move |ev| set_ban_new_champ.set(event_target_value(&ev))
-                                                />
-                                            </div>
-                                            <div class="flex-1">
-                                                <label class="block text-secondary text-xs mb-1">"Reason (optional)"</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Why ban?"
-                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || ban_new_reason.get()
-                                                    on:input=move |ev| set_ban_new_reason.set(event_target_value(&ev))
-                                                />
-                                            </div>
-                                            <button
-                                                class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1 transition-colors cursor-pointer"
-                                                on:click=move |_| {
-                                                    let champ = ban_new_champ.get_untracked();
-                                                    if champ.trim().is_empty() { return; }
-                                                    let reason_val = ban_new_reason.get_untracked();
-                                                    let reason = if reason_val.trim().is_empty() { None } else { Some(reason_val) };
-                                                    set_ban_edit_list.update(|list| {
-                                                        let rank = list.len() as i32;
-                                                        list.push(BanPriority {
-                                                            id: None,
-                                                            team_id: String::new(),
-                                                            champion: champ.trim().to_string(),
-                                                            rank,
-                                                            reason,
-                                                        });
-                                                    });
-                                                    set_ban_new_champ.set(String::new());
-                                                    set_ban_new_reason.set(String::new());
-                                                }
-                                            >"+ Add"</button>
-                                        </div>
-                                        // Save / Cancel
-                                        <div class="flex gap-2 mt-1">
-                                            <button
-                                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
-                                                on:click=move |_| {
-                                                    let list = ban_edit_list.get_untracked();
-                                                    let json = serde_json::to_string(&list).unwrap_or_default();
-                                                    leptos::task::spawn_local(async move {
-                                                        match save_ban_priorities(json).await {
-                                                            Ok(_) => {
-                                                                set_ban_status.set(Some("Saved!".into()));
-                                                                ban_priorities.refetch();
-                                                                set_editing_bans.set(false);
-                                                            }
-                                                            Err(e) => set_ban_status.set(Some(format!("Error: {e}"))),
-                                                        }
-                                                    });
-                                                }
-                                            >"Save"</button>
-                                            <button
-                                                class="bg-overlay hover:bg-overlay-strong text-secondary rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
-                                                on:click=move |_| set_editing_bans.set(false)
-                                            >"Cancel"</button>
-                                            {move || ban_status.get().map(|msg| view! {
-                                                <span class="text-green-300 text-sm self-center">{msg}</span>
-                                            })}
-                                        </div>
-                                    </div>
-                                }.into_any()
-                            } else {
-                                // View mode
-                                view! {
-                                    <div class="flex flex-col gap-2">
-                                        <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
-                                            {move || ban_priorities.get().map(|result| match result {
-                                                Ok(list) if list.is_empty() => view! {
-                                                    <p class="text-dimmed text-sm">"No ban priorities set."</p>
-                                                }.into_any(),
-                                                Ok(list) => view! {
-                                                    <div class="flex flex-col gap-1">
-                                                        {list.iter().map(|bp| {
-                                                            let champ = bp.champion.clone();
-                                                            let reason = bp.reason.clone().unwrap_or_default();
-                                                            let rank = bp.rank + 1;
-                                                            view! {
-                                                                <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
-                                                                    <span class="text-accent font-bold text-sm w-6">{format!("#{rank}")}</span>
-                                                                    <span class="text-primary font-medium flex-1">{champ}</span>
-                                                                    <span class="text-muted text-sm flex-1 truncate">{reason}</span>
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any(),
-                                                Err(e) => view! {
-                                                    <ErrorBanner message=format!("Failed to load ban priorities: {e}") />
-                                                }.into_any(),
-                                            })}
-                                        </Suspense>
-                                        <button
-                                            class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1.5 transition-colors self-start cursor-pointer"
-                                            on:click=move |_| {
-                                                // Copy current priorities into edit list
-                                                if let Some(Ok(list)) = ban_priorities.get_untracked() {
-                                                    set_ban_edit_list.set(list);
-                                                } else {
-                                                    set_ban_edit_list.set(Vec::new());
-                                                }
-                                                set_ban_status.set(None);
-                                                set_editing_bans.set(true);
-                                            }
-                                        >"Edit"</button>
-                                    </div>
-                                }.into_any()
-                            }}
-                        </div>
-                    }
-                })}
-            </div>
+            // Ban Priority Panel (D-04: strategic editor extracted to BanPrioritySurface)
+            <BanPrioritySurface />
             </div>
         </div>
     }
