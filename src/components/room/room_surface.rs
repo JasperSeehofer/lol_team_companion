@@ -193,4 +193,29 @@ mod tests {
         let tab_ids = ["alpha", "beta"];
         assert_eq!(resolve_active_tab(&tab_ids, "alpha"), 0);
     }
+
+    /// Smoke test: `PanelFn` type alias compiles and tab resolution is
+    /// consistent with the ids the dummy panel vec declares.
+    /// A full DOM-render test lives in the e2e suite (Plan 03/08); this test
+    /// validates that `panels: Vec<(SurfaceTab, PanelFn)>` is a valid type
+    /// and that `resolve_active_tab` correctly maps to its entries.
+    #[test]
+    fn panel_fn_contract_compiles_and_resolves() {
+        // Type-level check: PanelFn can be named as a concrete type.
+        // The closures use `unreachable!()` so they are never called;
+        // they only exercise the type system.
+        let panels: Vec<(SurfaceTab, PanelFn)> = vec![
+            (SurfaceTab { id: "alpha", label: "Alpha" }, Box::new(|| unreachable!())),
+            (SurfaceTab { id: "beta",  label: "Beta"  }, Box::new(|| unreachable!())),
+        ];
+
+        // Derive the tab id slice just as RoomSurface does internally.
+        let tab_ids: Vec<&str> = panels.iter().map(|(tab, _)| tab.id).collect();
+
+        // These assertions confirm the contract: given the same ids a real
+        // panels vec would hold, resolve_active_tab returns the right index.
+        assert_eq!(resolve_active_tab(&tab_ids, "beta"),  1);
+        assert_eq!(resolve_active_tab(&tab_ids, "alpha"), 0);
+        assert_eq!(resolve_active_tab(&tab_ids, ""),      0);
+    }
 }
