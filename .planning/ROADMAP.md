@@ -78,7 +78,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 **Note on build order:** Phases 26 (foundations) gates all rooms. Phases 27-29 (rooms) run after 26 and may be partially parallelized. Phase 30 (art) is calendar-parallel with 27-29 — rooms ship with placeholder assets; art swaps in at the same file paths. Phases 31-34 (launch) follow all room work, with Phase 31 (hardening + beta gate) mandatory before deploy.
 
 - [x] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases) (completed 2026-06-05)
-- [ ] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern
+- [x] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern (completed 2026-06-05)
 - [ ] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links
 - [ ] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions
 - [ ] **Phase 30: Art Production** - Original-world art identity established; FLUX layer-separated art for all rooms (first region) and second region; CI-enforced 400 KB/room/region budget
@@ -382,7 +382,7 @@ Plans:
 - [x] 27-05-PLAN.md — Extract TreeDrafterSurface from tree_drafter.rs (thin shell)
 - [x] 27-06-PLAN.md — Extract GamePlanSurface + OpponentsSurface (thin shells)
 - [x] 27-07-PLAN.md — Compose WarRoomRoom + WarSurfaces + get_team_growth_state + /war-room route + placeholder assets
-- [ ] 27-08-PLAN.md — e2e phase gate: SC1-SC5 green + flat-route regression (D-02)
+- [x] 27-08-PLAN.md — e2e phase gate: SC1-SC5 green + flat-route regression (D-02)
 **UI hint**: yes
 
 ### Phase 28: Library & IA Healing
@@ -516,7 +516,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
-| 27. War Room | v1.4 | 7/8 | In Progress|  |
+| 27. War Room | v1.4 | 8/8 | Complete   | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
