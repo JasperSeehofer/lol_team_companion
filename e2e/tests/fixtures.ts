@@ -101,6 +101,47 @@ export const test = base.extend<Fixtures>({
 export { expect };
 
 /**
+ * Seed a team with enough strategy artifacts to push at least one War Room
+ * growth axis to tier ≥ 1.
+ *
+ * Tier-1 thresholds (from src/models/growth.rs TeamGrowthState::from_counts):
+ *   - tactics:  draft + draft_tree ≥ 1  → save 1 draft via /draft
+ *   - intel:    opponent ≥ 1            → would require /opponents + "Save & Fetch"
+ *   - command:  ban_priority + post_game_learning ≥ 1
+ *
+ * Minimum sufficient: 1 saved draft → tactics_tier = 1 (Sprout). This is the
+ * lowest-cost seed that satisfies SC3's "at least one axis ≥ 1" requirement.
+ *
+ * Prerequisites: page must already be authenticated and have a team (call
+ * createTeam first, or use the teamPage fixture). Idempotent — if the draft
+ * saves successfully the axis is already ≥ 1 on subsequent runs.
+ */
+export async function seedTier1Team(page: Page): Promise<void> {
+  // Navigate to /draft and save one empty draft.
+  // A draft does not need any picks/bans filled — an empty save still creates
+  // a `draft` record that counts toward tactics_tier (threshold: draft + draft_tree ≥ 1).
+  await page.goto("/draft");
+  await page.waitForLoadState("networkidle");
+  // Wait for WASM hydration so the Save Draft button is interactive.
+  await page.waitForTimeout(1000);
+
+  const saveBtn = page.locator('button:has-text("Save Draft")');
+  if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await saveBtn.click();
+    // Wait for the button to switch to "Update Draft" (indicates server persisted the record).
+    await page.locator('button:has-text("Update Draft")').waitFor({
+      state: "visible",
+      timeout: 15000,
+    }).catch(() => {
+      // Non-fatal: if the button doesn't switch the seed may have still worked
+      // (e.g. already seeded on a previous run). Continue rather than throw.
+    });
+  }
+  // Brief settle before the test navigates away.
+  await page.waitForTimeout(300);
+}
+
+/**
  * Set the region (theme) for the current page.
  *
  * Sets the `lol_companion_theme` cookie at the browser-context level and reloads so

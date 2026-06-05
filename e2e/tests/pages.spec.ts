@@ -22,6 +22,8 @@ const AUTHED_PAGES = [
   { path: "/personal-learnings/new", content: /learning|new|happened|learned/i },
   // Phase 17 plan 17-01 stubs (auth — filled by plan 06)
   { path: "/admin/invites", content: /admin|invites|placeholder/i },
+  // Phase 27 War Room (SC1 smoke — route ships in Plan 27-07)
+  { path: "/war-room", content: /draft|war|room|plan/i },
 ];
 
 for (const { path, content } of AUTHED_PAGES) {
