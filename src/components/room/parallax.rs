@@ -13,6 +13,13 @@
 //! setting can flip at runtime).
 
 use leptos::prelude::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Accumulation guard: ensures at most one `mousemove` listener is registered
+/// on `window` even when two `AtmosphereRoot` instances coexist momentarily
+/// during a room round-trip (Leptos #3665 / D-08). Unconditional static —
+/// SSR reads but never fires the `compare_exchange` path (hydrate-gated).
+static MOUSEMOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// DOM id of the atmosphere root — the RAF callback looks it up to write
 /// `--px`/`--py`. Only one room mounts at a time, so a fixed id is safe.
@@ -199,6 +206,18 @@ pub fn AtmosphereRoot(
                 return;
             }
 
+            // Accumulation guard (D-08 / Leptos #3665): if another
+            // AtmosphereRoot already holds the listener (e.g. during a War
+            // Room → Solo Journey → War Room round-trip where on_cleanup has
+            // not yet fired), skip registration to prevent doubled parallax
+            // amplitude. The flag is cleared in on_cleanup.
+            if MOUSEMOVE_ACTIVE
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                return;
+            }
+
             listener.with_value(|slot| {
                 if let Some(cb) = slot.as_ref() {
                     let _ = win
@@ -208,6 +227,10 @@ pub fn AtmosphereRoot(
         });
 
         on_cleanup(move || {
+            // Clear the accumulation guard so the next AtmosphereRoot mount
+            // can register a fresh listener. Must happen before the closure
+            // drop so the flag is free even if window() is unavailable.
+            MOUSEMOVE_ACTIVE.store(false, Ordering::SeqCst);
             listener.update_value(|slot| {
                 if let Some(cb) = slot.take() {
                     if let Some(w) = web_sys::window() {
