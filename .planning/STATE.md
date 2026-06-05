@@ -4,24 +4,24 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Completed 27-01-PLAN.md (RoomSurface keep-mounted PanelFn refactor)
-last_updated: "2026-06-05T17:11:13.588Z"
+last_updated: "2026-06-05T17:25:40.943Z"
 last_activity: 2026-06-05
 progress:
   total_phases: 19
   completed_phases: 11
   total_plans: 59
-  completed_plans: 54
+  completed_plans: 55
   percent: 58
 ---
 
 ## Current Position
 
 Phase: 27 (war-room) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-06-05
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 93%
 
 ## Project Reference
 
@@ -40,6 +40,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Roadmap v1.4]: Art identity — Riot IP go/no-go must be logged in PROJECT.md Key Decisions before first FLUX generation run; `/consult legal` gates first real run. Decision: original-world (Path A) or accepted-risk LoL-names (Path B).
 - [Phase 27-01]: Leptos 0.8 native element attribute syntax — `hidden=move || Option<&str>` without `attr:` prefix on native HTML elements; `attr:` is only valid as a component prop pass-through and is rejected by `view!` macro on native elements.
 - [Phase 27-01]: RoomSurface contract changed to `panels: Vec<(SurfaceTab, PanelFn)>` (D-06/D-07/D-09); all tabpanels mount eagerly and toggle via `hidden` attribute; `PanelFn` re-exported from `components/room/mod.rs`.
+- [Phase ?]: DraftSurface receives region as plain String prop (rule #58); BanPrioritySurface has no region prop
+- [Phase ?]: banned_champions live-draft closure stays in DraftSurface (D-05); persistent ban_priority editor moves to BanPrioritySurface
 
 ## Blockers/Concerns
 
@@ -58,7 +60,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-05T17:11:13.575Z
+Last session: 2026-06-05T17:25:33.701Z
 Stopped at: Completed 27-01-PLAN.md (RoomSurface keep-mounted PanelFn refactor)
 Resume file: None
 Next command: `/gsd:execute-phase 27-war-room plan 02`
