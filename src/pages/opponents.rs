@@ -364,7 +364,7 @@ const ROLES: [(&str, &str); 5] = [
 // ---------------------------------------------------------------------------
 
 #[component]
-pub fn OpponentsPage() -> impl IntoView {
+pub fn OpponentsSurface() -> impl IntoView {
     let user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
 
@@ -613,6 +613,11 @@ pub fn OpponentsPage() -> impl IntoView {
             </div>
         </div>
     }
+}
+
+#[component]
+pub fn OpponentsPage() -> impl IntoView {
+    view! { <OpponentsSurface /> }
 }
 
 // ---------------------------------------------------------------------------
