@@ -380,7 +380,7 @@ Plans:
 - [x] 27-03-PLAN.md — Wave 0 e2e scaffolding: war-room.spec.ts + pages.spec entry + tier-1 seed fixture
 - [x] 27-04-PLAN.md — Extract DraftSurface + BanPrioritySurface from draft.rs (thin DraftPage shell)
 - [x] 27-05-PLAN.md — Extract TreeDrafterSurface from tree_drafter.rs (thin shell)
-- [ ] 27-06-PLAN.md — Extract GamePlanSurface + OpponentsSurface (thin shells)
+- [x] 27-06-PLAN.md — Extract GamePlanSurface + OpponentsSurface (thin shells)
 - [ ] 27-07-PLAN.md — Compose WarRoomRoom + WarSurfaces + get_team_growth_state + /war-room route + placeholder assets
 - [ ] 27-08-PLAN.md — e2e phase gate: SC1-SC5 green + flat-route regression (D-02)
 **UI hint**: yes
@@ -516,7 +516,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
-| 27. War Room | v1.4 | 5/8 | In Progress|  |
+| 27. War Room | v1.4 | 6/8 | In Progress|  |
 | 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
