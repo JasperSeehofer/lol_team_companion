@@ -442,6 +442,16 @@
 [data-banner-tier="1"] .room-overlay--banner { opacity: 0.34; }
 [data-banner-tier="2"] .room-overlay--banner { opacity: 0.67; }
 [data-banner-tier="3"] .room-overlay--banner { opacity: 1; }
+/* War Room axes (tactics/intel/command) — same tier→opacity ramp as Solo Journey. */
+[data-tactics-tier="1"] .room-overlay--tactics { opacity: 0.34; }
+[data-tactics-tier="2"] .room-overlay--tactics { opacity: 0.67; }
+[data-tactics-tier="3"] .room-overlay--tactics { opacity: 1; }
+[data-intel-tier="1"] .room-overlay--intel { opacity: 0.34; }
+[data-intel-tier="2"] .room-overlay--intel { opacity: 0.67; }
+[data-intel-tier="3"] .room-overlay--intel { opacity: 1; }
+[data-command-tier="1"] .room-overlay--command { opacity: 0.34; }
+[data-command-tier="2"] .room-overlay--command { opacity: 0.67; }
+[data-command-tier="3"] .room-overlay--command { opacity: 1; }
 
 /* ============================================================
    Reduced-motion gate (WCAG / accessibility-standards.md §6).
