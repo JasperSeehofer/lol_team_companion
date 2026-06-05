@@ -520,7 +520,7 @@ fn input_class() -> &'static str {
 // ---------------------------------------------------------------------------
 
 #[component]
-pub fn GamePlanPage() -> impl IntoView {
+pub fn GamePlanSurface() -> impl IntoView {
     // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -1013,8 +1013,7 @@ pub fn GamePlanPage() -> impl IntoView {
     // our_champ_signals/enemy_champ_signals used last for role-specific section
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Game plan">
-            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
+        <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header per UI-SPEC §"Game Plan Page Layout"
                 <div>
                     <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - game plan"</p>
@@ -1664,6 +1663,14 @@ pub fn GamePlanPage() -> impl IntoView {
                 </div>
             </div>
             </div>
+    }
+}
+
+#[component]
+pub fn GamePlanPage() -> impl IntoView {
+    view! {
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Game plan">
+            <GamePlanSurface />
         </div>
     }
 }
