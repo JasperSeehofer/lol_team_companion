@@ -171,6 +171,80 @@ export async function seedTier1Team(page: Page): Promise<void> {
 }
 
 /**
+ * Seed a team with enough Library-room artifacts to push at least one Library
+ * growth axis to tier ≥ 1.
+ *
+ * NOTE: `seedTier1Team` (draft → tactics) moves only the WAR ROOM tactics axis
+ * and does NOT touch any Library axis.  This distinct helper is required because
+ * the Library axes derive from different source tables:
+ *
+ *   records  ← match_syncs  (requires Riot API sync — not easily seedable via UI)
+ *   tomes    ← post_game_learning + team_note  ≥ 1 → tier 1
+ *   analysis ← post_game_learning              ≥ 1 → tier 1
+ *
+ * Minimum sufficient seed: save ONE post-game review via the Library's Post-Game
+ * tab.  A single review creates one `post_game_learning` row, which satisfies
+ * both the tomes (post_game_learning + team_note ≥ 1) and analysis
+ * (post_game_learning ≥ 1) tier-1 thresholds simultaneously.
+ *
+ * After this helper returns, the calling test should reload `/library` and
+ * check that `data-tomes-tier` ≥ 1 AND `data-analysis-tier` ≥ 1 on
+ * `.room-atmosphere`.
+ *
+ * Prerequisites: page must already be authenticated and have a team (call
+ * createTeam first, or use the teamPage fixture). Idempotent — additional runs
+ * just add more reviews (tier stays ≥ 1 either way).
+ */
+export async function seedLibraryTier1Team(page: Page): Promise<void> {
+  // Navigate to the Library's Post-Game surface tab.
+  // /post-game now redirects → /library?tab=post-game (Plan 06), so navigate
+  // directly to the final destination so we land on the surface with one load.
+  await page.goto("/library?tab=post-game");
+  await page.waitForLoadState("networkidle");
+  // Wait for WASM hydration so the review form is interactive.
+  await page.waitForTimeout(1200);
+
+  // Fill the "What Went Well" textarea with at least one line. This is the
+  // minimum required for the save to produce a non-empty review.
+  // The textarea has the class "textarea" and is inside the Post-Game review
+  // editor. We target by its visual label using aria/text proximity heuristics
+  // or a fallback to the first visible textarea on the page.
+  const wentWellLabel = page.locator('label:has-text("What Went Well")').first();
+  let filled = false;
+  if (await wentWellLabel.isVisible({ timeout: 3000 }).catch(() => false)) {
+    // Use sibling textarea via parent container
+    const wentWellTextarea = page.locator('textarea').first();
+    if (await wentWellTextarea.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await wentWellTextarea.fill("SC4 Library seed — what went well");
+      filled = true;
+    }
+  }
+  if (!filled) {
+    // Fallback: fill any visible textarea on the page
+    const anyTextarea = page.locator('textarea').first();
+    if (await anyTextarea.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await anyTextarea.fill("SC4 Library seed");
+    }
+  }
+
+  // Click the Save Review button.
+  const saveBtn = page.locator('button:has-text("Save Review")');
+  if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await saveBtn.click();
+    // Wait for "Update Review" to appear — indicates the server persisted the record.
+    await page.locator('button:has-text("Update Review")').waitFor({
+      state: "visible",
+      timeout: 15000,
+    }).catch(() => {
+      // Non-fatal: the save may have succeeded even if the button label change
+      // is missed (e.g. WASM rehydrate lag). Continue rather than throw.
+    });
+  }
+  // Brief settle before the test navigates away.
+  await page.waitForTimeout(300);
+}
+
+/**
  * Set the region (theme) for the current page.
  *
  * Sets the `lol_companion_theme` cookie at the browser-context level and reloads so
