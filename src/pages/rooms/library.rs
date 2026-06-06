@@ -19,6 +19,164 @@ use crate::pages::personal_learnings::PersonalLearningsSurface;
 use crate::pages::post_game::PostGameSurface;
 use crate::pages::stats::StatsSurface;
 
+// ─── IA-Healing Redirect Server Functions ────────────────────────────────────
+
+/// Redirect `/stats` → `/library?tab=stats` (D-08/D-09).
+#[server]
+pub async fn redirect_to_library_stats() -> Result<(), ServerFnError> {
+    leptos_axum::redirect("/library?tab=stats");
+    Ok(())
+}
+
+/// Redirect `/analytics` → `/library?tab=analytics` (D-08/D-09).
+#[server]
+pub async fn redirect_to_library_analytics() -> Result<(), ServerFnError> {
+    leptos_axum::redirect("/library?tab=analytics");
+    Ok(())
+}
+
+/// Redirect `/post-game` → `/library?tab=post-game` (D-08/D-09).
+#[server]
+pub async fn redirect_to_library_post_game() -> Result<(), ServerFnError> {
+    leptos_axum::redirect("/library?tab=post-game");
+    Ok(())
+}
+
+/// Redirect `/personal-learnings` → `/library?tab=personal` (D-08/D-09).
+#[server]
+pub async fn redirect_to_library_personal() -> Result<(), ServerFnError> {
+    leptos_axum::redirect("/library?tab=personal");
+    Ok(())
+}
+
+/// Redirect `/opponents` → `/war-room?tab=opponents` (D-09 — OpponentsSurface already
+/// lives in the War Room from Phase 27).
+#[server]
+pub async fn redirect_to_war_room_opponents() -> Result<(), ServerFnError> {
+    leptos_axum::redirect("/war-room?tab=opponents");
+    Ok(())
+}
+
+// ─── IA-Healing Redirect Shell Components ────────────────────────────────────
+
+/// Thin shell that 302-redirects `/stats` → `/library?tab=stats`.
+///
+/// Uses the dual pattern: `leptos_axum::redirect()` for SSR 302 headers +
+/// `window.location().set_href()` for the client-side navigation path
+/// (analog `roster.rs`/`profile.rs` — wasm-patterns rule #37).
+#[component]
+pub fn StatsRedirect() -> impl IntoView {
+    let action = ServerAction::<RedirectToLibraryStats>::new();
+    action.dispatch(RedirectToLibraryStats {});
+
+    #[cfg(feature = "hydrate")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href("/library?tab=stats");
+    }
+
+    view! { <></> }
+}
+
+/// Thin shell that 302-redirects `/analytics` → `/library?tab=analytics`.
+#[component]
+pub fn AnalyticsRedirect() -> impl IntoView {
+    let action = ServerAction::<RedirectToLibraryAnalytics>::new();
+    action.dispatch(RedirectToLibraryAnalytics {});
+
+    #[cfg(feature = "hydrate")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href("/library?tab=analytics");
+    }
+
+    view! { <></> }
+}
+
+/// Thin shell that 302-redirects `/post-game` → `/library?tab=post-game`.
+#[component]
+pub fn PostGameRedirect() -> impl IntoView {
+    let action = ServerAction::<RedirectToLibraryPostGame>::new();
+    action.dispatch(RedirectToLibraryPostGame {});
+
+    #[cfg(feature = "hydrate")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href("/library?tab=post-game");
+    }
+
+    view! { <></> }
+}
+
+/// Thin shell that 302-redirects `/personal-learnings` → `/library?tab=personal`.
+///
+/// Note: `/personal-learnings/new` is declared after this route in `app.rs` and
+/// resolves to `NewLearningPage` directly — exact-match precedence (D-11, Pitfall 3).
+#[component]
+pub fn PersonalLearningsRedirect() -> impl IntoView {
+    let action = ServerAction::<RedirectToLibraryPersonal>::new();
+    action.dispatch(RedirectToLibraryPersonal {});
+
+    #[cfg(feature = "hydrate")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href("/library?tab=personal");
+    }
+
+    view! { <></> }
+}
+
+/// Thin shell that 302-redirects `/opponents` → `/war-room?tab=opponents`.
+#[component]
+pub fn OpponentsRedirect() -> impl IntoView {
+    let action = ServerAction::<RedirectToWarRoomOpponents>::new();
+    action.dispatch(RedirectToWarRoomOpponents {});
+
+    #[cfg(feature = "hydrate")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href("/war-room?tab=opponents");
+    }
+
+    view! { <></> }
+}
+
+/// Thin shell that 302-redirects `/match/:id` → `/library?tab=match&id={id}`.
+///
+/// The `:id` path param is read via `use_params_map` and carried into the
+/// redirect target unchanged (D-11 — id preserved). Uses `unwrap_or_default()`
+/// for the param read (no bare `.unwrap()` — wasm-patterns rule #35).
+#[component]
+pub fn MatchRedirect() -> impl IntoView {
+    use leptos_router::hooks::use_params_map;
+
+    let params = use_params_map();
+    let id = params.read_untracked().get("id").unwrap_or_default();
+    let target = format!("/library?tab=match&id={id}");
+
+    // SSR: dispatch the server action with the resolved target so the 302
+    // header carries the id.
+    let action = ServerAction::<RedirectToLibraryMatch>::new();
+    action.dispatch(RedirectToLibraryMatch { id: id.clone() });
+
+    // Client-side: navigate immediately via window.location.
+    #[cfg(feature = "hydrate")]
+    {
+        let href = target.clone();
+        if let Some(window) = web_sys::window() {
+            let _ = window.location().set_href(&href);
+        }
+    }
+
+    let _ = target;
+    view! { <></> }
+}
+
+/// Server function for `/match/:id` → `/library?tab=match&id={id}` redirect.
+///
+/// Accepts the `id` so the SSR redirect target carries the preserved match id.
+#[server]
+pub async fn redirect_to_library_match(id: String) -> Result<(), ServerFnError> {
+    let target = format!("/library?tab=match&id={id}");
+    leptos_axum::redirect(&target);
+    Ok(())
+}
+
 // ─── Server function ─────────────────────────────────────────────────────────
 
 /// Fetch the team's Library growth state for atmosphere overlay tiers.
