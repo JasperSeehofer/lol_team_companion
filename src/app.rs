@@ -26,6 +26,7 @@ use crate::pages::{
     personal_learnings::{NewLearningPage, PersonalLearningsPage},
     post_game::PostGamePage,
     profile::ProfilePage,
+    rooms::library::LibraryRoom,
     rooms::solo_journey::SoloJourneyRoom,
     rooms::war_room::WarRoomRoom,
     solo_dashboard::SoloDashboardPage,
@@ -156,6 +157,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/solo") view=SoloDashboardPage />
                         <Route path=path!("/journey") view=SoloJourneyRoom />
                         <Route path=path!("/war-room") view=WarRoomRoom />
+                        <Route path=path!("/library") view=LibraryRoom />
                         <Route path=path!("/match/:id") view=MatchDetailPage />
                         <Route path=path!("/personal-learnings") view=PersonalLearningsPage />
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />

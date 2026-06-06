@@ -2,5 +2,6 @@
 //! over a parallax atmosphere. Solo Journey is the first; War Room, Hall of
 //! Records, and Throne follow once the system is proven.
 
+pub mod library;
 pub mod solo_journey;
 pub mod war_room;
