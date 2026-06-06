@@ -19,7 +19,7 @@
 - [x] **ROOM-04**: War Room hosts draft, tree-drafter, game-plan, opponents, and ban-priority as surfaces under one parallax atmosphere
 - [x] **ROOM-05**: Hall of Records / Library hosts stats, match detail, analytics, post-game, and team learnings as surfaces
 - [ ] **ROOM-06**: Throne / Home room hosts identity, team dashboard, and solo progression
-- [ ] **ROOM-07**: IA healing — previously-siloed features are reachable in their intent room (opponents in War Room, learnings in Library); legacy flat routes still resolve as deep links
+- [x] **ROOM-07**: IA healing — previously-siloed features are reachable in their intent room (opponents in War Room, learnings in Library); legacy flat routes still resolve as deep links
 - [ ] **ROOM-08**: QuickNav command palette available app-wide (every room + flat route) with a proper focus trap; nav IA reflects the rooms
 
 ### Accessibility (closed-beta blockers)
@@ -72,7 +72,7 @@ Filled during roadmap creation (2026-06-04).
 | A11Y-01 | Phase 26 — Room System Foundations | Pending |
 | ROOM-04 | Phase 27 — War Room | Complete |
 | ROOM-05 | Phase 28 — Library & IA Healing | Complete |
-| ROOM-07 | Phase 28 — Library & IA Healing | Pending |
+| ROOM-07 | Phase 28 — Library & IA Healing | Complete |
 | ROOM-06 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
 | ROOM-08 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
 | A11Y-02 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |

@@ -399,7 +399,7 @@ Plans:
 Plans:
 **Wave 1** *(parallel — no inter-dependency; independent files)*
 - [x] 28-01-PLAN.md — Library growth model (LibraryGrowthCounts/State + from_counts + tier tests) + get_library_growth_counts batch query
-- [ ] 28-02-PLAN.md — Wave 0 e2e wiring: /library smoke entry + redirected-entry removal in pages.spec; /library added to hydration-no-panic SCOPED_ROUTES
+- [x] 28-02-PLAN.md — Wave 0 e2e wiring: /library smoke entry + redirected-entry removal in pages.spec; /library added to hydration-no-panic SCOPED_ROUTES
 - [ ] 28-03-PLAN.md — Extract StatsSurface + MatchDetailSurface; Stats→Match-Detail shared-signal bridge (D-07) + in-tab recent-match list (D-06)
 - [ ] 28-04-PLAN.md — Extract AnalyticsSurface + PostGameSurface + PersonalLearningsSurface (chrome-free; /personal-learnings/new href preserved)
 
@@ -530,7 +530,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
-| 28. Library & IA Healing | v1.4 | 1/7 | In Progress|  |
+| 28. Library & IA Healing | v1.4 | 2/7 | In Progress|  |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
