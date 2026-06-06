@@ -13,7 +13,6 @@ use crate::error_template::ErrorTemplate;
 use crate::pages::{
     action_items::ActionItemsPage,
     admin::invites::AdminInvitesPage,
-    analytics::AnalyticsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
     closed_beta::ClosedBetaPage,
@@ -21,16 +20,15 @@ use crate::pages::{
     game_plan::GamePlanPage,
     home::HomePage,
     legal::{datenschutz::DatenschutzPage, impressum::ImpressumPage},
-    match_detail::MatchDetailPage,
-    opponents::OpponentsPage,
-    personal_learnings::{NewLearningPage, PersonalLearningsPage},
-    post_game::PostGamePage,
+    personal_learnings::NewLearningPage,
     profile::ProfilePage,
-    rooms::library::LibraryRoom,
+    rooms::library::{
+        AnalyticsRedirect, LibraryRoom, MatchRedirect, OpponentsRedirect,
+        PersonalLearningsRedirect, PostGameRedirect, StatsRedirect,
+    },
     rooms::solo_journey::SoloJourneyRoom,
     rooms::war_room::WarRoomRoom,
     solo_dashboard::SoloDashboardPage,
-    stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
     team_builder::TeamBuilderPage,
     tree_drafter::TreeDrafterPage,
@@ -146,20 +144,20 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/team/roster") view=RosterPage />
                         <Route path=path!("/draft") view=DraftPage />
                         <Route path=path!("/tree-drafter") view=TreeDrafterPage />
-                        <Route path=path!("/stats") view=StatsPage />
+                        <Route path=path!("/stats") view=StatsRedirect />
                         <Route path=path!("/champion-pool") view=ChampionPoolPage />
                         <Route path=path!("/team-builder") view=TeamBuilderPage />
                         <Route path=path!("/game-plan") view=GamePlanPage />
-                        <Route path=path!("/post-game") view=PostGamePage />
-                        <Route path=path!("/opponents") view=OpponentsPage />
+                        <Route path=path!("/post-game") view=PostGameRedirect />
+                        <Route path=path!("/opponents") view=OpponentsRedirect />
                         <Route path=path!("/action-items") view=ActionItemsPage />
-                        <Route path=path!("/analytics") view=AnalyticsPage />
+                        <Route path=path!("/analytics") view=AnalyticsRedirect />
                         <Route path=path!("/solo") view=SoloDashboardPage />
                         <Route path=path!("/journey") view=SoloJourneyRoom />
                         <Route path=path!("/war-room") view=WarRoomRoom />
                         <Route path=path!("/library") view=LibraryRoom />
-                        <Route path=path!("/match/:id") view=MatchDetailPage />
-                        <Route path=path!("/personal-learnings") view=PersonalLearningsPage />
+                        <Route path=path!("/match/:id") view=MatchRedirect />
+                        <Route path=path!("/personal-learnings") view=PersonalLearningsRedirect />
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />
                         // Phase 17 plan 17-01 stubs (filled by plan 06)
                         <Route path=path!("/closed-beta") view=ClosedBetaPage />
