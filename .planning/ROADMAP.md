@@ -395,7 +395,20 @@ Plans:
   3. A user who follows a link to `/opponents` (the old flat route) arrives at the Opponents surface within the War Room — flat routes for IA-healed features redirect into their intent room
   4. A team with post-game reviews, team notebook entries, and match syncs sees more atmospheric detail than a fresh team (Library growth axes: records, tomes, analysis)
   5. `/library` appears in the e2e smoke suite and passes the hydration-no-panic canary in both regions
-**Plans**: TBD
+**Plans**: 7 plans across 3 waves
+Plans:
+**Wave 1** *(parallel — no inter-dependency; independent files)*
+- [ ] 28-01-PLAN.md — Library growth model (LibraryGrowthCounts/State + from_counts + tier tests) + get_library_growth_counts batch query
+- [ ] 28-02-PLAN.md — Wave 0 e2e wiring: /library smoke entry + redirected-entry removal in pages.spec; /library added to hydration-no-panic SCOPED_ROUTES
+- [ ] 28-03-PLAN.md — Extract StatsSurface + MatchDetailSurface; Stats→Match-Detail shared-signal bridge (D-07) + in-tab recent-match list (D-06)
+- [ ] 28-04-PLAN.md — Extract AnalyticsSurface + PostGameSurface + PersonalLearningsSurface (chrome-free; /personal-learnings/new href preserved)
+
+**Wave 2** *(depend on Wave 1; 28-06 sequential after 28-05 — shared app.rs + library.rs)*
+- [ ] 28-05-PLAN.md — Compose LibraryRoom + LibrarySurfaces + get_library_growth_state + /library route + placeholder assets (CHECKPOINT)
+- [ ] 28-06-PLAN.md — IA-healing redirect shells (6 flat routes → intent room; /match/:id id preserved; /personal-learnings/new + /draft/tree-drafter/game-plan untouched)
+
+**Wave 3** *(phase gate — depends on all)*
+- [ ] 28-07-PLAN.md — e2e phase gate: SC1 smoke + SC2/SC3 redirect resolution + SC5 canary both regions + SC4 tier unit tests + full-suite regression
 **UI hint**: yes
 
 ### Phase 29: Throne, QuickNav & Room A11Y
@@ -516,7 +529,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~24. Soft Launch + Feedback Loop~~ | ~~v1.3~~ | — | SUPERSEDED by Phase 34 | — |
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
-| 27. War Room | v1.4 | 8/8 | Complete   | 2026-06-05 |
+| 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 0/? | Not started | — |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
