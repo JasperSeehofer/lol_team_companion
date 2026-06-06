@@ -79,7 +79,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 - [x] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases) (completed 2026-06-05)
 - [x] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern (completed 2026-06-05)
-- [ ] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links
+- [x] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links (completed 2026-06-06)
 - [ ] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions
 - [ ] **Phase 30: Art Production** - Original-world art identity established; FLUX layer-separated art for all rooms (first region) and second region; CI-enforced 400 KB/room/region budget
 - [ ] **Phase 31: Production Hardening & Beta Gate** - Production binary hardened for HTTPS deploy; closed-beta invite gate on registration
@@ -408,7 +408,7 @@ Plans:
 - [x] 28-06-PLAN.md — IA-healing redirect shells (6 flat routes → intent room; /match/:id id preserved; /personal-learnings/new + /draft/tree-drafter/game-plan untouched)
 
 **Wave 3** *(phase gate — depends on all)*
-- [ ] 28-07-PLAN.md — e2e phase gate: SC1 smoke + SC2/SC3 redirect resolution + SC5 canary both regions + SC4 tier unit tests + full-suite regression
+- [x] 28-07-PLAN.md — e2e phase gate: SC1 smoke + SC2/SC3 redirect resolution + SC5 canary both regions + SC4 tier unit tests + full-suite regression
 **UI hint**: yes
 
 ### Phase 29: Throne, QuickNav & Room A11Y
@@ -530,7 +530,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
-| 28. Library & IA Healing | v1.4 | 6/7 | In Progress|  |
+| 28. Library & IA Healing | v1.4 | 7/7 | Complete   | 2026-06-06 |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
