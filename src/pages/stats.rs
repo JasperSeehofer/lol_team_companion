@@ -3,6 +3,7 @@ use crate::components::stat_card::StatCard;
 use crate::components::ui::{EmptyState, ErrorBanner, NoTeamState, SkeletonCard};
 use crate::models::match_data::ChampionTrend;
 use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -273,6 +274,251 @@ fn format_damage(damage: i32) -> String {
         format!("{:.1}k", damage as f64 / 1000.0)
     } else {
         damage.to_string()
+    }
+}
+
+/// Chrome-free Stats surface for the Library room tab strip.
+///
+/// Strips: auth guard, outer canvas-grain/min-h-screen wrapper, BattleLogHeadline title block.
+/// Reads the shared `selected_match_id: RwSignal<Option<String>>` from context (provided by
+/// LibrarySurfaces) and wires the match-row CTA to set it + navigate("?tab=match") (D-07).
+/// Does NOT read InitialTheme (rule #58).
+#[component]
+pub fn StatsSurface() -> impl IntoView {
+    // Shared match-selection signal provided by LibrarySurfaces (Plan 05).
+    let selected_match_id = use_context::<RwSignal<Option<String>>>()
+        .expect("LibrarySurfaces provides selected_match_id");
+    let navigate = use_navigate();
+
+    let api_key = Resource::new(|| (), |_| check_api_key());
+    let stats = Resource::new(|| (), |_| get_team_stats());
+    let (sync_result, set_sync_result) = signal(Option::<Result<String, String>>::None);
+    let (syncing, set_syncing) = signal(false);
+    let (sync_queue, set_sync_queue) = signal(Option::<i32>::Some(440)); // default: Flex
+
+    // Filters
+    let (min_players, set_min_players) = signal(2_usize);
+    let (filter_player, set_filter_player) = signal(String::new());
+    let (filter_queue, set_filter_queue) = signal(0_i32); // 0 = all queues
+    let (show_all, set_show_all) = signal(true); // true = show all matches by default
+
+    let has_team = Resource::new(
+        || (),
+        |_| async {
+            crate::pages::team::dashboard::get_team_dashboard()
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        },
+    );
+
+    let do_sync = move |_| {
+        set_syncing.set(true);
+        set_sync_result.set(None);
+        let queue = sync_queue.get_untracked();
+        leptos::task::spawn_local(async move {
+            match sync_team_stats(queue).await {
+                Ok(msg) => {
+                    set_sync_result.set(Some(Ok(msg)));
+                    stats.refetch();
+                }
+                Err(e) => set_sync_result.set(Some(Err(e.to_string()))),
+            }
+            set_syncing.set(false);
+        });
+    };
+
+    // Create the CTA callback once at component scope so it is Copy and can be
+    // captured freely by reactive closures without ownership issues.
+    let on_match_cta: Callback<String, ()> = Callback::new(move |riot_id: String| {
+        selected_match_id.set(Some(riot_id));
+        navigate("?tab=match", Default::default());
+    });
+
+    view! {
+        <div class="flex flex-col gap-6">
+            // Sync controls
+            <div class="flex items-end justify-between gap-6 flex-wrap">
+                <div class="flex items-center gap-3">
+                    // Queue type selector for sync
+                    <select
+                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                        on:change=move |ev| {
+                            let v = event_target_value(&ev);
+                            let q = match v.as_str() {
+                                "420" => Some(420),
+                                "440" => Some(440),
+                                _ => None,
+                            };
+                            set_sync_queue.set(q);
+                        }
+                    >
+                        <option value="440" selected>"Flex (440)"</option>
+                        <option value="420">"Solo/Duo (420)"</option>
+                        <option value="0">"All Queues"</option>
+                    </select>
+                    <button
+                        class=move || if syncing.get() {
+                            "bg-overlay-strong text-muted font-semibold rounded-lg px-5 py-2.5 text-sm cursor-not-allowed flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        } else {
+                            "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-5 py-2.5 text-sm transition-colors flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        }
+                        on:click=do_sync
+                        disabled=move || syncing.get()
+                    >
+                        {move || if syncing.get() {
+                            view! {
+                                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                <span>"Syncing..."</span>
+                            }.into_any()
+                        } else {
+                            view! { <span>"Sync Matches"</span> }.into_any()
+                        }}
+                    </button>
+                </div>
+            </div>
+
+            <HeraldicDivider />
+
+            // API key warning
+            <Suspense fallback=|| ()>
+                {move || api_key.get().map(|result| {
+                    if let Ok(false) = result {
+                        view! {
+                            <div class="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-start gap-3" role="alert">
+                                <span class="text-warning text-lg flex-shrink-0" aria-hidden="true">"!"</span>
+                                <div>
+                                    <p class="text-warning font-medium text-sm">"RIOT_API_KEY not configured"</p>
+                                    <p class="text-warning/70 text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
+                                </div>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }
+                })}
+            </Suspense>
+
+            // Sync progress banner
+            {move || if syncing.get() {
+                view! {
+                    <div class="bg-info/10 border border-info/30 rounded-xl p-3 flex items-center gap-3" role="status" aria-live="polite">
+                        <svg class="animate-spin h-4 w-4 text-info flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        <span class="text-info text-sm">"Syncing matches from Riot API... This may take a moment."</span>
+                    </div>
+                }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
+
+            // Sync result
+            {move || sync_result.get().map(|r| match r {
+                Ok(msg) => view! {
+                    <div class="bg-success/10 border border-success/30 rounded-xl p-3 text-success text-sm" role="status">{msg}</div>
+                }.into_any(),
+                Err(msg) => view! {
+                    <div class="bg-danger/10 border border-danger/30 rounded-xl p-3 text-danger text-sm" role="alert">{msg}</div>
+                }.into_any(),
+            })}
+
+            // All / Team toggle (always visible)
+            <div class="flex items-center gap-3">
+                <div class="flex rounded-lg overflow-hidden border border-outline/50">
+                    <button
+                        class=move || if show_all.get() {
+                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        } else {
+                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        }
+                        on:click=move |_| set_show_all.set(true)
+                    >"All Matches"</button>
+                    <button
+                        class=move || if !show_all.get() {
+                            "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        } else {
+                            "px-3 py-1.5 text-sm font-medium bg-overlay/50 text-muted hover:text-primary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        }
+                        on:click=move |_| set_show_all.set(false)
+                    >"Team Games"</button>
+                </div>
+                <span class="text-dimmed text-xs">
+                    {move || if show_all.get() {
+                        "Showing all matches including solo queue"
+                    } else {
+                        "Showing games with 2+ team members"
+                    }}
+                </span>
+            </div>
+
+            // Stats content
+            <Suspense fallback=|| view! {
+                <div class="flex flex-col gap-2">
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                    <SkeletonCard height="h-14" />
+                </div>
+            }>
+                {move || stats.get().map(|result| match result {
+                    Err(e) => view! {
+                        <ErrorBanner message=format!("Failed to load stats: {e}") />
+                    }.into_any(),
+                    Ok(rows) if rows.is_empty() => {
+                        let user_has_team = has_team.get().unwrap_or(false);
+                        if user_has_team {
+                            view! {
+                                <EmptyState
+                                    icon="\u{2756}"
+                                    message="No match stats yet — link your Riot account and play some games to see stats here"
+                                    cta_label="Link Riot Account"
+                                    cta_href="/profile"
+                                />
+                            }.into_any()
+                        } else {
+                            view! { <NoTeamState /> }.into_any()
+                        }
+                    },
+                    Ok(rows) => {
+                        let all_matches = group_matches(&rows);
+                        let unique_players: Vec<String> = {
+                            let mut seen = HashSet::new();
+                            rows.iter()
+                                .filter(|r| seen.insert(r.username.clone()))
+                                .map(|r| r.username.clone())
+                                .collect()
+                        };
+                        let roster_size = unique_players.len();
+
+                        view! {
+                            <StatsContent
+                                all_matches=all_matches
+                                unique_players=unique_players
+                                roster_size=roster_size
+                                min_players=min_players
+                                set_min_players=set_min_players
+                                filter_player=filter_player
+                                set_filter_player=set_filter_player
+                                filter_queue=filter_queue
+                                set_filter_queue=set_filter_queue
+                                show_all=show_all
+                                on_open_match=on_match_cta
+                            />
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+
+            // Champion Trends (below match history)
+            <ChampionTrendsSection />
+        </div>
     }
 }
 
@@ -570,6 +816,10 @@ fn StatsContent(
     filter_queue: ReadSignal<i32>,
     set_filter_queue: WriteSignal<i32>,
     show_all: ReadSignal<bool>,
+    /// When `Some`, clicking the folio CTA calls this callback instead of navigating to /match/:id.
+    /// Used by `StatsSurface` to set the shared signal + navigate to ?tab=match (D-07).
+    #[prop(optional)]
+    on_open_match: Option<Callback<String, ()>>,
 ) -> impl IntoView {
     let all_matches = StoredValue::new(all_matches);
     let unique_players_for_filter = unique_players.clone();
@@ -930,7 +1180,8 @@ fn StatsContent(
                                 let total_kills: i32 = m.players.iter().map(|p| p.kills).sum();
                                 let total_deaths: i32 = m.players.iter().map(|p| p.deaths).sum();
                                 let total_assists: i32 = m.players.iter().map(|p| p.assists).sum();
-                                let detail_href = format!("/match/{}", m.riot_match_id);
+                                let match_page_url = format!("/match/{}", m.riot_match_id);
+                                let riot_match_id_for_cta = m.riot_match_id.clone();
 
                                 view! {
                                     <div class="bg-elevated border border-divider rounded-xl p-6 transition-all duration-200">
@@ -1000,13 +1251,29 @@ fn StatsContent(
                                             view! { <span></span> }.into_any()
                                         }}
 
-                                        // CTA
-                                        <a
-                                            href=detail_href
-                                            class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                        >
-                                            "Open match detail"
-                                        </a>
+                                        // CTA — when on_open_match is provided (Library surface),
+                                        // dispatch via shared signal + ?tab=match navigation (D-07).
+                                        // Otherwise fall back to the standalone /match/:id link.
+                                        {if let Some(cb) = on_open_match {
+                                            view! {
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    on:click=move |_| cb.run(riot_match_id_for_cta.clone())
+                                                >
+                                                    "Open match detail"
+                                                </button>
+                                            }.into_any()
+                                        } else {
+                                            view! {
+                                                <a
+                                                    href=match_page_url
+                                                    class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                >
+                                                    "Open match detail"
+                                                </a>
+                                            }.into_any()
+                                        }}
                                     </div>
 
                                     // Companion card: full team scoreboard for this match
