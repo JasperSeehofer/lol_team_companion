@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
-stopped_at: Completed 28-04-PLAN.md (Analytics+PostGame+PersonalLearnings surface extraction)
-last_updated: "2026-06-06T02:10:00.000Z"
+stopped_at: "checkpoint:human-verify in 28-05-PLAN.md — Tasks 1-3 complete, awaiting /library verification"
+last_updated: "2026-06-06T01:38:08.786Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 19
   completed_phases: 12
   total_plans: 66
-  completed_plans: 63
-  percent: 95
+  completed_plans: 64
+  percent: 63
 ---
 
 ## Current Position
@@ -49,6 +49,9 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase 28-03]: #[prop(optional)] Option<Callback<T,()>> — pass bare Callback at call site (Leptos macro wraps in Some); StatsPage omits prop (None = href fallback), StatsSurface supplies it (Some = signal+navigate)
 - [Phase 28-04]: PostGameSurface carries all CRUD state verbatim (Resources/signals/Effects); PostGamePage becomes canvas-grain+SectionHead+Card shell only — avoids any shared-state coupling between page and surface
 - [Phase 28-04]: PersonalLearningsSurface strips page h1 header but preserves + New learning CTA in surface-level header div; both CTAs point at /personal-learnings/new (D-11 mandate)
+- [Phase 28-05]: region prop accepted by LibrarySurfaces but prefixed _region; none of the 5 surfaces need it — keeps prop parity with WarSurfaces without unused-variable warning
+- [Phase 28-05]: provide_context(selected_match_id) placed before panels vec and view! in LibrarySurfaces — both keep-mounted Stats and Match Detail panels find signal in context on mount (D-07 bridge, Pitfall 4)
+- [Phase 28-05]: Tab IDs stats/match/analytics/post-game/personal match Plan 06 redirect targets (?tab=...)
 
 ## Blockers/Concerns
 
@@ -67,7 +70,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-06T02:10:00.000Z
-Stopped at: Completed 28-04-PLAN.md (Analytics+PostGame+PersonalLearnings surface extraction)
+Last session: 2026-06-06T01:38:08.759Z
+Stopped at: "checkpoint:human-verify in 28-05-PLAN.md — Tasks 1-3 done; resume after /library human verification"
 Resume file: None
-Next command: `/gsd:execute-phase 28-library-ia-healing plan 05`
+Next command: Resume 28-05 continuation after checkpoint approval

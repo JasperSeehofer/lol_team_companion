@@ -404,7 +404,7 @@ Plans:
 - [x] 28-04-PLAN.md — Extract AnalyticsSurface + PostGameSurface + PersonalLearningsSurface (chrome-free; /personal-learnings/new href preserved)
 
 **Wave 2** *(depend on Wave 1; 28-06 sequential after 28-05 — shared app.rs + library.rs)*
-- [ ] 28-05-PLAN.md — Compose LibraryRoom + LibrarySurfaces + get_library_growth_state + /library route + placeholder assets (CHECKPOINT)
+- [x] 28-05-PLAN.md — Compose LibraryRoom + LibrarySurfaces + get_library_growth_state + /library route + placeholder assets (CHECKPOINT)
 - [ ] 28-06-PLAN.md — IA-healing redirect shells (6 flat routes → intent room; /match/:id id preserved; /personal-learnings/new + /draft/tree-drafter/game-plan untouched)
 
 **Wave 3** *(phase gate — depends on all)*
@@ -530,7 +530,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | ~~25. Draft Integration~~ | ~~v1.4~~ | — | SUPERSEDED by Phase 34 | — |
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
-| 28. Library & IA Healing | v1.4 | 4/7 | In Progress|  |
+| 28. Library & IA Healing | v1.4 | 5/7 | In Progress|  |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
