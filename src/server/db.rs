@@ -120,11 +120,47 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     let db = Surreal::new::<SurrealKv>(path).await?;
     db.use_ns("lol_companion").use_db("app").await?;
     apply_schema(&db).await?;
+    // Best-effort backfill of legacy user rows whose string mode/theme fields
+    // predate their schema definitions (they read as NONE). Without this, any
+    // UPDATE on such a user (e.g. linking a Riot account) fails SurrealDB's
+    // `string` coercion: "Expected `string` but found `NONE`".
+    if let Err(e) = migrate_user_mode_defaults(&db).await {
+        tracing::warn!("User mode-defaults migration failed: {e}");
+    }
     // Best-effort champion name normalization (skipped if Data Dragon is unreachable)
     if let Err(e) = migrate_champion_names(&db).await {
         tracing::warn!("Champion name migration failed: {e}");
     }
     Ok(Arc::new(db))
+}
+
+/// Backfill legacy `user` rows whose non-optional `string` fields (`mode`,
+/// `theme`, `draft_mode`, `team_dashboard_mode`, `solo_mode`) were added after
+/// the row was created and therefore hold `NONE`. SurrealDB re-validates every
+/// field on any `UPDATE`, so a single `NONE` here makes account linking (and any
+/// other user update) fail with `Expected `string` but found `NONE``.
+///
+/// All five fields are set in ONE `UPDATE` so the written record is fully valid
+/// in a single validation pass (setting them one-at-a-time would re-trip the
+/// coercion on whichever sibling field is still `NONE`). `??` preserves any
+/// existing non-`NONE` value, so a user's real theme/mode choices are untouched.
+async fn migrate_user_mode_defaults(db: &Surreal<Db>) -> DbResult<()> {
+    db.query(
+        "UPDATE user SET \
+            mode = mode ?? 'solo', \
+            theme = theme ?? 'demacia', \
+            draft_mode = draft_mode ?? 'auto', \
+            team_dashboard_mode = team_dashboard_mode ?? 'auto', \
+            solo_mode = solo_mode ?? 'auto' \
+         WHERE mode IS NONE \
+            OR theme IS NONE \
+            OR draft_mode IS NONE \
+            OR team_dashboard_mode IS NONE \
+            OR solo_mode IS NONE",
+    )
+    .await?
+    .check()?;
+    Ok(())
 }
 
 async fn apply_schema(db: &Surreal<Db>) -> DbResult<()> {
@@ -6355,5 +6391,49 @@ mod tests {
 
         let counts = get_library_growth_counts(&db, &team_id).await.unwrap();
         assert_eq!(counts.match_syncs, 0, "no members → records must be 0");
+    }
+
+    #[tokio::test]
+    async fn user_mode_defaults_migration_runs_and_preserves_values() {
+        use surrealdb::engine::local::Mem;
+        let db = surrealdb::Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // A user created under the current schema gets the field defaults.
+        // Override theme with a real preference the migration must NOT clobber.
+        let mut ur = db
+            .query("CREATE user SET username='u', email='u@x.t', password_hash='h' RETURN id")
+            .await
+            .unwrap();
+        let rec: Option<IdRecord> = ur.take(0).unwrap();
+        let uid = rec.unwrap().id.to_sql();
+        db.query(format!("UPDATE {uid} SET theme='pandemonium', draft_mode='manual'"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // Migration query must parse + execute (validates `??` / `IS NONE` SurQL)
+        // and must leave existing non-NONE values untouched.
+        migrate_user_mode_defaults(&db).await.unwrap();
+
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct ModeRow {
+            draft_mode: String,
+            theme: String,
+        }
+        let mut r = db
+            .query(format!("SELECT draft_mode, theme FROM {uid}"))
+            .await
+            .unwrap();
+        let row: Option<ModeRow> = r.take(0).unwrap();
+        let row = row.unwrap();
+        assert_eq!(row.draft_mode, "manual", "existing draft_mode preserved");
+        assert_eq!(row.theme, "pandemonium", "existing theme preserved");
     }
 }
