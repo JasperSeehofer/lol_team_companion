@@ -3,25 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
-stopped_at: Completed 28-03-PLAN.md (Stats + MatchDetail surface extraction)
-last_updated: "2026-06-06T01:08:25.455Z"
+stopped_at: Completed 28-04-PLAN.md (Analytics+PostGame+PersonalLearnings surface extraction)
+last_updated: "2026-06-06T02:10:00.000Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 19
   completed_phases: 12
   total_plans: 66
-  completed_plans: 62
-  percent: 63
+  completed_plans: 63
+  percent: 95
 ---
 
 ## Current Position
 
 Phase: 28 (library-ia-healing) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-06-06
 
-Progress: [█████████░] 94%
+Progress: [██████████] 95%
 
 ## Project Reference
 
@@ -47,6 +47,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase 28-01]: match.team_id vs post_game_learning/team_note.team field-name distinction (Pitfall 5) documented in get_library_growth_counts doc comment
 - [Phase 28-03]: Callback<T,()> must be created at component scope (not inside a FnMut reactive closure) when it captures non-Copy values — otherwise the outer closure becomes FnOnce; Resource::new needs move || signal.get() source closure when input is a Signal<T>
 - [Phase 28-03]: #[prop(optional)] Option<Callback<T,()>> — pass bare Callback at call site (Leptos macro wraps in Some); StatsPage omits prop (None = href fallback), StatsSurface supplies it (Some = signal+navigate)
+- [Phase 28-04]: PostGameSurface carries all CRUD state verbatim (Resources/signals/Effects); PostGamePage becomes canvas-grain+SectionHead+Card shell only — avoids any shared-state coupling between page and surface
+- [Phase 28-04]: PersonalLearningsSurface strips page h1 header but preserves + New learning CTA in surface-level header div; both CTAs point at /personal-learnings/new (D-11 mandate)
 
 ## Blockers/Concerns
 
@@ -65,7 +67,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-06T01:08:25.431Z
-Stopped at: Completed 28-01-PLAN.md (Library growth data layer)
+Last session: 2026-06-06T02:10:00.000Z
+Stopped at: Completed 28-04-PLAN.md (Analytics+PostGame+PersonalLearnings surface extraction)
 Resume file: None
-Next command: `/gsd:execute-phase 28-library-ia-healing plan 02`
+Next command: `/gsd:execute-phase 28-library-ia-healing plan 05`
