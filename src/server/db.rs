@@ -4222,11 +4222,38 @@ pub async fn get_library_growth_counts(
 ) -> DbResult<LibraryGrowthCounts> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
+    // Step 1: resolve team member user IDs (same pattern as get_team_match_stats).
+    let mut r = db
+        .query("SELECT user FROM team_member WHERE team = type::record('team', $team_key)")
+        .bind(("team_key", team_key.clone()))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct UserRef {
+        user: RecordId,
+    }
+    let user_refs: Vec<UserRef> = r.take(0).unwrap_or_default();
+
+    // Step 2: count distinct matches that team members have player_match rows for.
+    // A match synced by multiple members must count only once.
+    let match_syncs: u32 = if user_refs.is_empty() {
+        0
+    } else {
+        let user_ids: Vec<String> = user_refs.iter().map(|u| u.user.to_sql()).collect();
+        let user_id_list = user_ids.join(", ");
+        let count_query = format!(
+            "RETURN array::len(array::distinct(SELECT VALUE match FROM player_match WHERE user IN [{user_id_list}]))"
+        );
+        let mut cr = db.query(&count_query).await?;
+        let n: Option<i64> = cr.take(0)?;
+        n.unwrap_or(0).max(0) as u32
+    };
+
+    // Step 3: tomes (post_game_learning + team_note) and analysis counts are scoped
+    // directly by team field — they work correctly and are unchanged.
     let mut result = db
         .query(
-            "SELECT count() as n FROM match \
-               WHERE team_id = type::record('team', $team_key) GROUP ALL; \
-             SELECT count() as n FROM post_game_learning \
+            "SELECT count() as n FROM post_game_learning \
                WHERE team = type::record('team', $team_key) GROUP ALL; \
              SELECT count() as n FROM team_note \
                WHERE team = type::record('team', $team_key) GROUP ALL",
@@ -4243,9 +4270,8 @@ pub async fn get_library_growth_counts(
         rows.first().map(|r| r.n.max(0) as u32).unwrap_or(0)
     }
 
-    let match_syncs = count_of(result.take(0).unwrap_or_default());
-    let post_game_learning = count_of(result.take(1).unwrap_or_default());
-    let team_note = count_of(result.take(2).unwrap_or_default());
+    let post_game_learning = count_of(result.take(0).unwrap_or_default());
+    let team_note = count_of(result.take(1).unwrap_or_default());
 
     Ok(LibraryGrowthCounts {
         match_syncs,
@@ -6190,5 +6216,144 @@ mod tests {
             result.is_err(),
             "create_bug_report must reject whitespace-only description"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Library growth — records axis (CR-01 / SC4 unit coverage)
+    //
+    // E2e seeding of the records axis requires Riot API match syncs (no UI
+    // path exists without a real API key).  This unit test covers the DB
+    // query logic for get_library_growth_counts's records count, exercising
+    // the player_match→team_member join against an in-memory SurrealDB.
+    // See e2e/tests/library.spec.ts for the corresponding note.
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn library_records_counts_distinct_matches_via_player_match() {
+        use surrealdb::engine::local::Mem;
+        let db = surrealdb::Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // Seed team + two members + two matches where both members played in
+        // match_a (distinct count = 1) and only member_1 played in match_b
+        // (distinct count = 2 total).  A third match seeded for a non-team
+        // user must NOT be counted.
+
+        // Create users first (team.created_by requires a valid user record).
+        let mut r = db
+            .query(
+                "CREATE user SET username='u1', email='u1@x.t', password_hash='h' RETURN id; \
+                 CREATE user SET username='u2', email='u2@x.t', password_hash='h' RETURN id; \
+                 CREATE user SET username='u3', email='u3@x.t', password_hash='h' RETURN id;",
+            )
+            .await
+            .unwrap();
+        let u1_rec: Option<IdRecord> = r.take(0).unwrap();
+        let u1 = u1_rec.unwrap().id.to_sql();
+        let u2_rec: Option<IdRecord> = r.take(1).unwrap();
+        let u2 = u2_rec.unwrap().id.to_sql();
+        let u3_rec: Option<IdRecord> = r.take(2).unwrap();
+        let u3 = u3_rec.unwrap().id.to_sql();
+
+        // Create team with required created_by field (SCHEMAFULL constraint).
+        let mut tr = db
+            .query(format!(
+                "CREATE team SET name='TestTeam', region='NA', created_by={u1} RETURN id"
+            ))
+            .await
+            .unwrap();
+        let team_rec: Option<IdRecord> = tr.take(0).unwrap();
+        let team_id = team_rec.unwrap().id.to_sql();
+
+        // Add u1 and u2 as team members; u3 is NOT on the team.
+        db.query(format!(
+            "CREATE team_member SET team={team_id}, user={u1}, role='player', roster_type='starter'; \
+             CREATE team_member SET team={team_id}, user={u2}, role='player', roster_type='starter';"
+        ))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+
+        // Create two matches.
+        let mut mr = db
+            .query(
+                "CREATE match SET match_id='M1', queue_id=420, game_duration=1800 RETURN id; \
+                 CREATE match SET match_id='M2', queue_id=420, game_duration=1900 RETURN id;",
+            )
+            .await
+            .unwrap();
+        let match_a: Option<IdRecord> = mr.take(0).unwrap();
+        let ma = match_a.unwrap().id.to_sql();
+        let match_b: Option<IdRecord> = mr.take(1).unwrap();
+        let mb = match_b.unwrap().id.to_sql();
+
+        // u1 and u2 both played match_a (distinct = 1).
+        // u1 played match_b (distinct = 2).
+        // u3 played a third match (should NOT count — not on team).
+        let mut mr2 = db
+            .query("CREATE match SET match_id='M3', queue_id=420, game_duration=1600 RETURN id")
+            .await
+            .unwrap();
+        let match_c: Option<IdRecord> = mr2.take(0).unwrap();
+        let mc = match_c.unwrap().id.to_sql();
+
+        db.query(format!(
+            "CREATE player_match SET match={ma}, user={u1}, champion='Ahri', kills=5, deaths=1, assists=8, cs=200, vision_score=30, damage=25000, win=true; \
+             CREATE player_match SET match={ma}, user={u2}, champion='Garen', kills=3, deaths=2, assists=4, cs=180, vision_score=20, damage=20000, win=true; \
+             CREATE player_match SET match={mb}, user={u1}, champion='Ahri', kills=7, deaths=0, assists=6, cs=220, vision_score=35, damage=28000, win=false; \
+             CREATE player_match SET match={mc}, user={u3}, champion='Lux', kills=2, deaths=3, assists=9, cs=190, vision_score=25, damage=22000, win=true;"
+        ))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+
+        let counts = get_library_growth_counts(&db, &team_id).await.unwrap();
+        assert_eq!(
+            counts.match_syncs, 2,
+            "records axis: expected 2 distinct matches (M1+M2 via team members), got {}",
+            counts.match_syncs
+        );
+        // post_game_learning and team_note seeded as zero — tomes/analysis unaffected.
+        assert_eq!(counts.post_game_learning, 0);
+        assert_eq!(counts.team_note, 0);
+    }
+
+    #[tokio::test]
+    async fn library_records_zero_when_no_team_members() {
+        use surrealdb::engine::local::Mem;
+        let db = surrealdb::Surreal::new::<Mem>(()).await.unwrap();
+        db.use_ns("test").use_db("test").await.unwrap();
+        db.query(include_str!("../../schema.surql"))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        // team.created_by is a required field (SCHEMAFULL) — seed a user first.
+        let mut ur = db
+            .query("CREATE user SET username='owner', email='owner@x.t', password_hash='h' RETURN id")
+            .await
+            .unwrap();
+        let owner_rec: Option<IdRecord> = ur.take(0).unwrap();
+        let owner = owner_rec.unwrap().id.to_sql();
+
+        let mut r = db
+            .query(format!(
+                "CREATE team SET name='EmptyTeam', region='EUW', created_by={owner} RETURN id"
+            ))
+            .await
+            .unwrap();
+        let team_rec: Option<IdRecord> = r.take(0).unwrap();
+        let team_id = team_rec.unwrap().id.to_sql();
+
+        let counts = get_library_growth_counts(&db, &team_id).await.unwrap();
+        assert_eq!(counts.match_syncs, 0, "no members → records must be 0");
     }
 }
