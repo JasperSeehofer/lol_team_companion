@@ -13,6 +13,20 @@
  * invisible).  Plan 28-05 adds the 9 Library CSS selectors; this spec asserts they
  * are effective in a real browser.
  *
+ * NOTE on records axis e2e seeding: the records axis (data-records-tier) counts
+ * distinct matches associated with team members via player_match rows.  These rows
+ * are written by store_matches_with_synced_by, which requires a real Riot API
+ * response — there is no UI path to seed player_match rows without a live API key.
+ * Consequently the records axis is expected to be tier 0 in this e2e test.
+ * The correctness of the records COUNT QUERY itself (CR-01 fix: team_member JOIN
+ * player_match → distinct match count) is covered at the unit level in
+ * src/server/db.rs — see the `library_records_counts_distinct_matches_via_player_match`
+ * and `library_records_zero_when_no_team_members` test cases.
+ *
+ * Part B asserts the CSS wiring: a tier-0 records overlay stays at opacity 0
+ * (guards the CSS-gap regression), and tier ≥ 1 tomes/analysis overlays are
+ * visible (guards the active-tier rendering path).
+ *
  * attachPanicListeners and PANIC_REGEX are intentionally kept out of fixtures.ts —
  * per D-06 of hydration-no-panic.spec.ts, the listener overhead should not leak
  * into tests that don't need it.
@@ -32,7 +46,12 @@ test.describe("Library", () => {
     // seedLibraryTier1Team: creates a post-game review →
     //   tomes_tier = tier_for(post_game_learning + team_note, [1,5,15]) = 1
     //   analysis_tier = tier_for(post_game_learning, [1,5,15]) = 1
-    // (records_tier stays 0 — that requires Riot API match syncs)
+    //
+    // records_tier stays 0: seeding player_match rows requires a Riot API
+    // response; no e2e-reachable UI path exists without a live API key.
+    // The records COUNT QUERY correctness is verified by unit tests in db.rs:
+    //   - library_records_counts_distinct_matches_via_player_match
+    //   - library_records_zero_when_no_team_members
     await createTeam(authedPage, `LibrarySeed_${Date.now()}`);
     await seedLibraryTier1Team(authedPage);
 
