@@ -12,18 +12,17 @@ const AUTHED_PAGES = [
   { path: "/team-builder", content: /team|builder|composition/i },
   { path: "/draft", content: /draft|ban|pick/i },
   { path: "/tree-drafter", content: /tree|draft/i },
-  { path: "/stats", content: /stats|match|history/i },
   { path: "/champion-pool", content: /champion|pool|tier/i },
   { path: "/game-plan", content: /game|plan|strategy/i },
-  { path: "/post-game", content: /post|game|review/i },
-  { path: "/analytics", content: /analytics|strategy|effectiveness/i },
   { path: "/solo", content: /dashboard|matches|ranked|solo/i },
-  { path: "/personal-learnings", content: /learnings|personal|reflections/i },
   { path: "/personal-learnings/new", content: /learning|new|happened|learned/i },
   // Phase 17 plan 17-01 stubs (auth — filled by plan 06)
   { path: "/admin/invites", content: /admin|invites|placeholder/i },
   // Phase 27 War Room (SC1 smoke — route ships in Plan 27-07)
   { path: "/war-room", content: /draft|war|room|plan/i },
+  // Phase 28 Library room (SC1 smoke — route ships in Plan 28-05; /stats, /analytics,
+  // /post-game, /personal-learnings redirect here after IA healing)
+  { path: "/library", content: /stats|match|analytics|post.game|learnings/i },
 ];
 
 for (const { path, content } of AUTHED_PAGES) {
