@@ -183,22 +183,16 @@ fn champion_icon_url(name: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Browse Page: PersonalLearningsPage
+// Browse Components: PersonalLearningsSurface + PersonalLearningsPage
 // ---------------------------------------------------------------------------
 
+/// Chrome-free Personal Learnings surface for use inside LibrarySurfaces.
+/// Strips: auth guard, canvas-grain/min-h-screen wrapper, page header with <h1>.
+/// Keeps: learnings Resource, filter/sort signals, expanded_id, full list/detail view.
+/// Keeps the + New learning CTA pointing at /personal-learnings/new (D-11).
+/// Does NOT read use_context::<InitialTheme>() (rule #58).
 #[component]
-pub fn PersonalLearningsPage() -> impl IntoView {
-    // Auth guard
-    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-    Effect::new(move || {
-        if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
-        }
-    });
-
+pub fn PersonalLearningsSurface() -> impl IntoView {
     let learnings = Resource::new(|| (), |_| list_learnings());
 
     let filter_type = RwSignal::new("all".to_string());
@@ -208,6 +202,220 @@ pub fn PersonalLearningsPage() -> impl IntoView {
     let expanded_id: RwSignal<Option<String>> = RwSignal::new(None);
 
     let toast = use_context::<ToastContext>();
+
+    view! {
+        <div>
+            // Surface header: + New learning CTA (page <h1> stripped, D-11 href preserved)
+            <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
+                <a
+                    href="/personal-learnings/new"
+                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                >
+                    "+ New learning"
+                </a>
+            </div>
+
+            <Suspense fallback=move || view! {
+                <div class="text-muted text-sm">"Loading..."</div>
+            }>
+                {move || {
+                    let data = learnings.get();
+                    match data {
+                        None => view! { <div></div> }.into_any(),
+                        Some(Err(e)) => view! {
+                            <ErrorBanner message=e.to_string() />
+                        }.into_any(),
+                        Some(Ok(all_learnings)) => {
+                            let all_learnings = StoredValue::new(all_learnings);
+
+                            // Unique champions for dropdown
+                            let unique_champions: Vec<String> = {
+                                let mut set = std::collections::BTreeSet::new();
+                                all_learnings.with_value(|ls| {
+                                    for l in ls {
+                                        if let Some(c) = &l.champion {
+                                            set.insert(c.clone());
+                                        }
+                                    }
+                                });
+                                set.into_iter().collect()
+                            };
+
+                            view! {
+                                // Filter bar
+                                <div class="bg-elevated border border-divider rounded-xl p-4 flex items-center gap-3 mb-6 flex-wrap">
+                                    <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filter"</span>
+                                    // Type filter
+                                    <select
+                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                        on:change=move |ev| filter_type.set(event_target_value(&ev))
+                                    >
+                                        <option value="all">"All Types"</option>
+                                        <option value="general">"General"</option>
+                                        <option value="champion">"Champion"</option>
+                                        <option value="matchup">"Matchup"</option>
+                                    </select>
+                                    // Champion filter
+                                    <select
+                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                        on:change=move |ev| filter_champion.set(event_target_value(&ev))
+                                    >
+                                        <option value="all">"All Champions"</option>
+                                        {unique_champions.into_iter().map(|c| {
+                                            let c2 = c.clone();
+                                            view! { <option value=c>{c2}</option> }
+                                        }).collect_view()}
+                                    </select>
+                                    // Tag filter
+                                    <select
+                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                        on:change=move |ev| filter_tag.set(event_target_value(&ev))
+                                    >
+                                        <option value="all">"All Tags"</option>
+                                        {LEARNING_TAGS.iter().map(|t| {
+                                            let t = *t;
+                                            view! { <option value=t>{t}</option> }
+                                        }).collect_view()}
+                                    </select>
+                                    // Sort (right-aligned)
+                                    <select
+                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors ml-auto"
+                                        on:change=move |ev| sort_mode.set(event_target_value(&ev))
+                                    >
+                                        <option value="newest">"Newest first"</option>
+                                        <option value="champion">"By champion"</option>
+                                    </select>
+                                </div>
+
+                                // Card grid
+                                {move || {
+                                    let ft = filter_type.get();
+                                    let fc = filter_champion.get();
+                                    let ftag = filter_tag.get();
+                                    let sm = sort_mode.get();
+
+                                    let filtered: Vec<PersonalLearning> = all_learnings.with_value(|ls| {
+                                        ls.iter()
+                                            .filter(|l| {
+                                                let type_ok = ft == "all" || l.learning_type == ft;
+                                                let champ_ok = fc == "all"
+                                                    || l.champion.as_deref() == Some(fc.as_str());
+                                                let tag_ok = ftag == "all"
+                                                    || l.tags.contains(&ftag);
+                                                type_ok && champ_ok && tag_ok
+                                            })
+                                            .cloned()
+                                            .collect()
+                                    });
+
+                                    if all_learnings.with_value(|ls| ls.is_empty()) {
+                                        // No learnings at all
+                                        return view! {
+                                            <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
+                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Empty journal"</span>
+                                                <h2 class="font-display italic text-primary text-2xl mt-2">"No learnings yet"</h2>
+                                                <p class="text-muted text-sm mt-3 mb-6 max-w-md mx-auto">
+                                                    "Write your first reflection after a game. Start from a match or create one here."
+                                                </p>
+                                                <a
+                                                    href="/personal-learnings/new"
+                                                    class="inline-flex items-center bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                >
+                                                    "Write your first learning"
+                                                </a>
+                                            </div>
+                                        }.into_any();
+                                    }
+
+                                    if filtered.is_empty() {
+                                        return view! {
+                                            <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
+                                                <p class="text-muted text-sm mb-3">"No learnings match these filters."</p>
+                                                <button
+                                                    class="text-accent text-sm hover:underline cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
+                                                    on:click=move |_| {
+                                                        filter_type.set("all".to_string());
+                                                        filter_champion.set("all".to_string());
+                                                        filter_tag.set("all".to_string());
+                                                    }
+                                                >
+                                                    "Reset filters"
+                                                </button>
+                                            </div>
+                                        }.into_any();
+                                    }
+
+                                    if sm == "champion" {
+                                        // Group by champion
+                                        let mut grouped: BTreeMap<String, Vec<PersonalLearning>> = BTreeMap::new();
+                                        for l in filtered {
+                                            let key = l.champion.clone().unwrap_or_else(|| "General".to_string());
+                                            grouped.entry(key).or_default().push(l);
+                                        }
+
+                                        view! {
+                                            <div>
+                                                {grouped.into_iter().map(|(champ, items)| {
+                                                    view! {
+                                                        <div class="mb-6">
+                                                            <p class="font-imperial uppercase tracking-wider text-xs text-muted py-2 mb-2 border-b border-divider/30">
+                                                                {champ}
+                                                            </p>
+                                                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                                {items.into_iter().map(|l| {
+                                                                    view! {
+                                                                        <LearningCard
+                                                                            learning=l
+                                                                            expanded_id=expanded_id
+                                                                            learnings=learnings
+                                                                            toast=toast
+                                                                        />
+                                                                    }
+                                                                }).collect_view()}
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {filtered.into_iter().map(|l| {
+                                                    view! {
+                                                        <LearningCard
+                                                            learning=l
+                                                            expanded_id=expanded_id
+                                                            learnings=learnings
+                                                            toast=toast
+                                                        />
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }}
+                            }.into_any()
+                        }
+                    }
+                }}
+            </Suspense>
+        </div>
+    }
+}
+
+#[component]
+pub fn PersonalLearningsPage() -> impl IntoView {
+    // Auth guard — retained for the flat /personal-learnings route until Plan 06 redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
 
     view! {
         <div class="canvas-grain bg-base min-h-screen">
@@ -228,192 +436,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                         "+ New learning"
                     </a>
                 </div>
-
-                <Suspense fallback=move || view! {
-                    <div class="text-muted text-sm">"Loading..."</div>
-                }>
-                    {move || {
-                        let data = learnings.get();
-                        match data {
-                            None => view! { <div></div> }.into_any(),
-                            Some(Err(e)) => view! {
-                                <ErrorBanner message=e.to_string() />
-                            }.into_any(),
-                            Some(Ok(all_learnings)) => {
-                                let all_learnings = StoredValue::new(all_learnings);
-
-                                // Unique champions for dropdown
-                                let unique_champions: Vec<String> = {
-                                    let mut set = std::collections::BTreeSet::new();
-                                    all_learnings.with_value(|ls| {
-                                        for l in ls {
-                                            if let Some(c) = &l.champion {
-                                                set.insert(c.clone());
-                                            }
-                                        }
-                                    });
-                                    set.into_iter().collect()
-                                };
-
-                                view! {
-                                    // Filter bar (Card.plain)
-                                    <div class="bg-elevated border border-divider rounded-xl p-4 flex items-center gap-3 mb-6 flex-wrap">
-                                        <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filter"</span>
-                                        // Type filter
-                                        <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            on:change=move |ev| filter_type.set(event_target_value(&ev))
-                                        >
-                                            <option value="all">"All Types"</option>
-                                            <option value="general">"General"</option>
-                                            <option value="champion">"Champion"</option>
-                                            <option value="matchup">"Matchup"</option>
-                                        </select>
-                                        // Champion filter
-                                        <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            on:change=move |ev| filter_champion.set(event_target_value(&ev))
-                                        >
-                                            <option value="all">"All Champions"</option>
-                                            {unique_champions.into_iter().map(|c| {
-                                                let c2 = c.clone();
-                                                view! { <option value=c>{c2}</option> }
-                                            }).collect_view()}
-                                        </select>
-                                        // Tag filter
-                                        <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            on:change=move |ev| filter_tag.set(event_target_value(&ev))
-                                        >
-                                            <option value="all">"All Tags"</option>
-                                            {LEARNING_TAGS.iter().map(|t| {
-                                                let t = *t;
-                                                view! { <option value=t>{t}</option> }
-                                            }).collect_view()}
-                                        </select>
-                                        // Sort (right-aligned)
-                                        <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors ml-auto"
-                                            on:change=move |ev| sort_mode.set(event_target_value(&ev))
-                                        >
-                                            <option value="newest">"Newest first"</option>
-                                            <option value="champion">"By champion"</option>
-                                        </select>
-                                    </div>
-
-                                    // Card grid
-                                    {move || {
-                                        let ft = filter_type.get();
-                                        let fc = filter_champion.get();
-                                        let ftag = filter_tag.get();
-                                        let sm = sort_mode.get();
-
-                                        let filtered: Vec<PersonalLearning> = all_learnings.with_value(|ls| {
-                                            ls.iter()
-                                                .filter(|l| {
-                                                    let type_ok = ft == "all" || l.learning_type == ft;
-                                                    let champ_ok = fc == "all"
-                                                        || l.champion.as_deref() == Some(fc.as_str());
-                                                    let tag_ok = ftag == "all"
-                                                        || l.tags.contains(&ftag);
-                                                    type_ok && champ_ok && tag_ok
-                                                })
-                                                .cloned()
-                                                .collect()
-                                        });
-
-                                        if all_learnings.with_value(|ls| ls.is_empty()) {
-                                            // No learnings at all
-                                            return view! {
-                                                <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
-                                                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Empty journal"</span>
-                                                    <h2 class="font-display italic text-primary text-2xl mt-2">"No learnings yet"</h2>
-                                                    <p class="text-muted text-sm mt-3 mb-6 max-w-md mx-auto">
-                                                        "Write your first reflection after a game. Start from a match or create one here."
-                                                    </p>
-                                                    <a
-                                                        href="/personal-learnings/new"
-                                                        class="inline-flex items-center bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                    >
-                                                        "Write your first learning"
-                                                    </a>
-                                                </div>
-                                            }.into_any();
-                                        }
-
-                                        if filtered.is_empty() {
-                                            return view! {
-                                                <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
-                                                    <p class="text-muted text-sm mb-3">"No learnings match these filters."</p>
-                                                    <button
-                                                        class="text-accent text-sm hover:underline cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
-                                                        on:click=move |_| {
-                                                            filter_type.set("all".to_string());
-                                                            filter_champion.set("all".to_string());
-                                                            filter_tag.set("all".to_string());
-                                                        }
-                                                    >
-                                                        "Reset filters"
-                                                    </button>
-                                                </div>
-                                            }.into_any();
-                                        }
-
-                                        if sm == "champion" {
-                                            // Group by champion
-                                            let mut grouped: BTreeMap<String, Vec<PersonalLearning>> = BTreeMap::new();
-                                            for l in filtered {
-                                                let key = l.champion.clone().unwrap_or_else(|| "General".to_string());
-                                                grouped.entry(key).or_default().push(l);
-                                            }
-
-                                            view! {
-                                                <div>
-                                                    {grouped.into_iter().map(|(champ, items)| {
-                                                        view! {
-                                                            <div class="mb-6">
-                                                                <p class="font-imperial uppercase tracking-wider text-xs text-muted py-2 mb-2 border-b border-divider/30">
-                                                                    {champ}
-                                                                </p>
-                                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                                    {items.into_iter().map(|l| {
-                                                                        view! {
-                                                                            <LearningCard
-                                                                                learning=l
-                                                                                expanded_id=expanded_id
-                                                                                learnings=learnings
-                                                                                toast=toast
-                                                                            />
-                                                                        }
-                                                                    }).collect_view()}
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! {
-                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {filtered.into_iter().map(|l| {
-                                                        view! {
-                                                            <LearningCard
-                                                                learning=l
-                                                                expanded_id=expanded_id
-                                                                learnings=learnings
-                                                                toast=toast
-                                                            />
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }.into_any()
-                                        }
-                                    }}
-                                }.into_any()
-                            }
-                        }
-                    }}
-                </Suspense>
+                <PersonalLearningsSurface />
             </div>
         </div>
     }
