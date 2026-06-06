@@ -364,7 +364,10 @@ pub fn Plane(#[prop(into)] src: String, depth: i32, z: i32) -> impl IntoView {
             src=src
             alt=""
             aria-hidden="true"
-            loading="lazy"
+            // Eager: the parallax atmosphere is the above-the-fold LCP background.
+            // Lazy-loading made the planes pop in a few seconds after paint, a
+            // visible color jump from the CSS base to the loaded art (Phase 28 UAT).
+            loading="eager"
             class="room-plane w-full h-full object-cover"
             style=format!("--depth:{depth}; z-index:{z};")
         />
@@ -392,7 +395,9 @@ pub fn GrowthOverlay(
             src=src
             alt=""
             aria-hidden="true"
-            loading="lazy"
+            // Eager: overlays fade in via the data-*-tier opacity transition; if the
+            // image lazy-loads it pops mid-transition. The atmosphere is LCP art.
+            loading="eager"
             class=format!("room-overlay room-overlay--{axis} w-full h-full object-cover")
             style=format!("z-index:{z};")
         />
