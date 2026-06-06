@@ -349,26 +349,18 @@ fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Components
 // ---------------------------------------------------------------------------
 
+/// Chrome-free Post-Game surface for use inside LibrarySurfaces.
+/// Strips: auth guard, InitialTheme/region read, canvas-grain/min-h-screen
+/// outer wrapper, SectionHead header, Card outer wrapper.
+/// Keeps: reviews/plans/drafts/match_ids Resources, all CRUD signals and
+/// handlers, full review-list view.
+/// Does NOT read use_context::<InitialTheme>() (rule #58).
+/// No new recursion_limit directive — already project-wide in lib.rs/main.rs (rule #38).
 #[component]
-pub fn PostGamePage() -> impl IntoView {
-    // Auth redirect
-    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-    Effect::new(move || {
-        if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
-        }
-    });
-
-    // Region — read ONCE at page entry, passed as String prop to sub-views
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-
+pub fn PostGameSurface() -> impl IntoView {
     // URL query params
     use leptos_router::hooks::use_query_map;
     let query = use_query_map();
@@ -561,17 +553,8 @@ pub fn PostGamePage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Post game">
-            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
-                // Page header — region-aware SectionHead
-                <SectionHead
-                    region=region.clone()
-                    title="What we learned in the field.".to_string()
-                    eyebrow="Strategy hub \u{00B7} Post-Game"
-                />
-
-                // Main content — wrapped in region-aware Card
-                <Card region=region.clone() attr:data-feedback-label="Post game → Learning list">
+        <div data-feedback-label="Post game">
+            <div class="flex flex-col gap-6">
             {move || action_item_count.get().map(|n| {
                 let label = if n == 1 {
                     "1 action item created".to_string()
@@ -1006,7 +989,41 @@ pub fn PostGamePage() -> impl IntoView {
                     </div>
                 </div>
             </div>
-            </Card>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+pub fn PostGamePage() -> impl IntoView {
+    // Auth redirect — retained for the flat /post-game route until Plan 06 redirect
+    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
+            }
+        }
+    });
+
+    // Region — read ONCE at page entry, passed as String prop to sub-views
+    let theme = use_context::<InitialTheme>().unwrap_or_default();
+    let region = theme.0.clone();
+
+    view! {
+        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Post game">
+            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
+                // Page header — region-aware SectionHead
+                <SectionHead
+                    region=region.clone()
+                    title="What we learned in the field.".to_string()
+                    eyebrow="Strategy hub \u{00B7} Post-Game"
+                />
+                // Surface content
+                <Card region=region.clone() attr:data-feedback-label="Post game → Learning list">
+                    <PostGameSurface />
+                </Card>
             </div>
         </div>
     }
