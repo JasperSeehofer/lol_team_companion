@@ -82,6 +82,10 @@ const SCOPED_ROUTES = [
   // (no structural `if`), so this is the canary that the room never
   // reintroduces the HYDRATE-01 panic class.
   "/journey",
+  // Phase 28 Library room (SC5) — exercises /library in both regions;
+  // after Plan 05/06, /post-game and /match/test-match-id redirect here
+  // and continue to exercise the redirect-then-load canary path (D-11).
+  "/library",
 ] as const;
 
 /**
