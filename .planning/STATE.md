@@ -4,31 +4,31 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Phase 28 context gathered
-last_updated: "2026-06-06T00:25:53.478Z"
-last_activity: 2026-06-06 -- Phase 28 planning complete
+last_updated: "2026-06-06T00:44:28.942Z"
+last_activity: 2026-06-06
 progress:
   total_phases: 19
   completed_phases: 12
   total_plans: 66
-  completed_plans: 59
+  completed_plans: 60
   percent: 63
 ---
 
 ## Current Position
 
-Phase: 28
-Plan: Not started
+Phase: 28 (library-ia-healing) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-06-06 -- Phase 28 planning complete
+Last activity: 2026-06-06
 
-Progress: [██████████] 100%
+Progress: [█████████░] 91%
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-31)
 
 **Core value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
-**Current focus:** Phase 28 — library & ia healing
+**Current focus:** Phase 28 — library-ia-healing
 
 ## Decisions
 
@@ -43,6 +43,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase ?]: DraftSurface receives region as plain String prop (rule #58); BanPrioritySurface has no region prop
 - [Phase ?]: banned_champions live-draft closure stays in DraftSurface (D-05); persistent ban_priority editor moves to BanPrioritySurface
 - [Phase ?]: TreeDrafterSurface(region: String) extracted chrome-free; TreeDrafterPage thin shell; rule #58 enforced
+- [Phase 28-01]: D-13 thresholds are calibration hypotheses — records [1,10,30], tomes/analysis [1,5,15] — tunable post-beta without touching room UI
+- [Phase 28-01]: match.team_id vs post_game_learning/team_note.team field-name distinction (Pitfall 5) documented in get_library_growth_counts doc comment
 
 ## Blockers/Concerns
 
@@ -61,7 +63,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-05T23:09:02.432Z
-Stopped at: Phase 28 context gathered
-Resume file: .planning/phases/28-library-ia-healing/28-CONTEXT.md
-Next command: `/gsd:execute-phase 27-war-room plan 02`
+Last session: 2026-06-06T00:55:00Z
+Stopped at: Completed 28-01-PLAN.md (Library growth data layer)
+Resume file: None
+Next command: `/gsd:execute-phase 28-library-ia-healing plan 02`
