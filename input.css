@@ -452,6 +452,16 @@
 [data-command-tier="1"] .room-overlay--command { opacity: 0.34; }
 [data-command-tier="2"] .room-overlay--command { opacity: 0.67; }
 [data-command-tier="3"] .room-overlay--command { opacity: 1; }
+/* Library axes (records/tomes/analysis) — same tier→opacity ramp as War Room. */
+[data-records-tier="1"] .room-overlay--records { opacity: 0.34; }
+[data-records-tier="2"] .room-overlay--records { opacity: 0.67; }
+[data-records-tier="3"] .room-overlay--records { opacity: 1; }
+[data-tomes-tier="1"] .room-overlay--tomes { opacity: 0.34; }
+[data-tomes-tier="2"] .room-overlay--tomes { opacity: 0.67; }
+[data-tomes-tier="3"] .room-overlay--tomes { opacity: 1; }
+[data-analysis-tier="1"] .room-overlay--analysis { opacity: 0.34; }
+[data-analysis-tier="2"] .room-overlay--analysis { opacity: 0.67; }
+[data-analysis-tier="3"] .room-overlay--analysis { opacity: 1; }
 
 /* ============================================================
    Reduced-motion gate (WCAG / accessibility-standards.md §6).
