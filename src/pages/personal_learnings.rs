@@ -548,8 +548,8 @@ fn LearningCard(
             <p class="text-muted text-xs mb-2 line-clamp-2">
                 {learning.with_value(|l| {
                     let preview = &l.what_happened;
-                    if preview.len() > 80 {
-                        format!("{}\u{2026}", &preview[..80])
+                    if preview.chars().count() > 80 {
+                        format!("{}\u{2026}", preview.chars().take(80).collect::<String>())
                     } else {
                         preview.clone()
                     }
