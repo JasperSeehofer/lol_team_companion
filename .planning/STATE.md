@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
-stopped_at: "checkpoint:human-verify in 28-05-PLAN.md — Tasks 1-3 complete, awaiting /library verification"
+stopped_at: ""
 last_updated: "2026-06-06T01:38:08.786Z"
 last_activity: 2026-06-06
 progress:
@@ -71,6 +71,6 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 ## Session Continuity
 
 Last session: 2026-06-06T01:38:08.759Z
-Stopped at: "checkpoint:human-verify in 28-05-PLAN.md — Tasks 1-3 done; resume after /library human verification"
+Stopped at: "28-05 checkpoint approved (deferred to end-of-phase integrated human verification); executing Wave 3"
 Resume file: None
-Next command: Resume 28-05 continuation after checkpoint approval
+Next command: Continue Wave 3 (28-06) then Wave 4 (28-07)
