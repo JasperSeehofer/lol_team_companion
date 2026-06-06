@@ -19,7 +19,7 @@ use crate::models::{
         DashboardSummary, GamePlan, GamePlanEffectiveness, PoolGapWarning, PostGameLearning,
         PostGamePreview, StrategyTagSummary,
     },
-    growth::{GrowthCounts, TeamGrowthCounts},
+    growth::{GrowthCounts, LibraryGrowthCounts, TeamGrowthCounts},
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     personal_learning::PersonalLearning,
@@ -4201,6 +4201,54 @@ pub async fn get_team_growth_counts(
         draft_tree,
         opponent,
         ban_priority,
+        post_game_learning,
+        team_note,
+    })
+}
+
+/// Accumulation counts for a team, used to drive the Library room growth atmosphere.
+/// Three `count() … GROUP ALL` statements in one round-trip.
+///
+/// Caller contract: `team_id` MUST be pre-authorized (same as `get_team_growth_counts`);
+/// never call this with raw client-supplied input. Returns only aggregate counts — no
+/// row-level data exposed.
+///
+/// Note: field names differ per table (Pitfall 5) —
+///   `match.team_id` vs `post_game_learning.team` / `team_note.team`.
+/// Using the wrong field name silently returns 0.
+pub async fn get_library_growth_counts(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<LibraryGrowthCounts> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    let mut result = db
+        .query(
+            "SELECT count() as n FROM match \
+               WHERE team_id = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM post_game_learning \
+               WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM team_note \
+               WHERE team = type::record('team', $team_key) GROUP ALL",
+        )
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    fn count_of(rows: Vec<CountResult>) -> u32 {
+        rows.first().map(|r| r.n.max(0) as u32).unwrap_or(0)
+    }
+
+    let match_syncs = count_of(result.take(0).unwrap_or_default());
+    let post_game_learning = count_of(result.take(1).unwrap_or_default());
+    let team_note = count_of(result.take(2).unwrap_or_default());
+
+    Ok(LibraryGrowthCounts {
+        match_syncs,
         post_game_learning,
         team_note,
     })
