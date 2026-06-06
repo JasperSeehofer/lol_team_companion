@@ -1,9 +1,10 @@
 ---
 phase: 28-library-ia-healing
-verified: 2026-06-06T12:00:00Z
-status: human_needed
+verified: 2026-06-06T13:35:00Z
+status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
+human_uat: passed (28-HUMAN-UAT.md — all 3 items pass; 2 UAT-surfaced room-feel defects fixed in ffc06f2)
 re_verification:
   previous_status: gaps_found
   previous_score: 4/5

@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: complete
-stopped_at: "Phase 28 complete — all 7 plans, all 5 SC green; phase gate passed"
-last_updated: "2026-06-06T11:40:32.425Z"
+status: ready_to_plan
+stopped_at: Phase 28 complete (7/7) — ready to discuss Phase 29
+last_updated: 2026-06-06T13:49:57.481Z
 last_activity: 2026-06-06
 progress:
   total_phases: 19
@@ -16,9 +16,9 @@ progress:
 
 ## Current Position
 
-Phase: 28 (library-ia-healing) — COMPLETE
-Plan: 7 of 7
-Status: Phase gate green — all 5 SC confirmed
+Phase: 29
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-06
 
 Progress: [██████████] 100%
@@ -28,7 +28,7 @@ Progress: [██████████] 100%
 See: .planning/PROJECT.md (updated 2026-05-31)
 
 **Core value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
-**Current focus:** Phase 28 — library-ia-healing
+**Current focus:** Phase 29 — throne, quicknav & room a11y
 
 ## Decisions
 
