@@ -654,7 +654,7 @@ used in: fetch_match_detail(match_id: String) — the server fn takes this Strin
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`/match/:id` redirect — query param vs nested route**
    - What we know: `MatchDetailSurface` needs to receive the match id; `RoomSurface` uses `?tab=` for surface switching; there is no sub-routing inside `RoomSurface` (by design, D-02)
