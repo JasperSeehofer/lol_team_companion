@@ -3,25 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
-stopped_at: ""
-last_updated: "2026-06-06T01:38:08.786Z"
+stopped_at: "28-05 checkpoint approved (deferred to end-of-phase integrated human verification); executing Wave 3"
+last_updated: "2026-06-06T10:38:26.752Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 19
   completed_phases: 12
   total_plans: 66
-  completed_plans: 64
+  completed_plans: 65
   percent: 63
 ---
 
 ## Current Position
 
 Phase: 28 (library-ia-healing) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-06-06
 
-Progress: [██████████] 95%
+Progress: [██████████] 98%
 
 ## Project Reference
 
@@ -52,6 +52,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase 28-05]: region prop accepted by LibrarySurfaces but prefixed _region; none of the 5 surfaces need it — keeps prop parity with WarSurfaces without unused-variable warning
 - [Phase 28-05]: provide_context(selected_match_id) placed before panels vec and view! in LibrarySurfaces — both keep-mounted Stats and Match Detail panels find signal in context on mount (D-07 bridge, Pitfall 4)
 - [Phase 28-05]: Tab IDs stats/match/analytics/post-game/personal match Plan 06 redirect targets (?tab=...)
+- [Phase ?]: Dual redirect pattern (SSR leptos_axum::redirect + hydrate set_href) used for all six IA-healing redirect shells — same contract as roster.rs/profile.rs
+- [Phase ?]: MatchRedirect reads use_params_map id at component top; dispatches RedirectToLibraryMatch(id) server fn so SSR 302 preserves the match id (D-11)
 
 ## Blockers/Concerns
 
@@ -70,7 +72,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-06T01:38:08.759Z
+Last session: 2026-06-06T10:38:14.447Z
 Stopped at: "28-05 checkpoint approved (deferred to end-of-phase integrated human verification); executing Wave 3"
 Resume file: None
 Next command: Continue Wave 3 (28-06) then Wave 4 (28-07)
