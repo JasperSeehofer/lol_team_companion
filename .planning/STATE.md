@@ -3,25 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
-stopped_at: Completed 28-01-PLAN.md (Library growth data layer)
-last_updated: "2026-06-06T00:49:09.203Z"
+stopped_at: Completed 28-03-PLAN.md (Stats + MatchDetail surface extraction)
+last_updated: "2026-06-06T01:08:25.455Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 19
   completed_phases: 12
   total_plans: 66
-  completed_plans: 61
+  completed_plans: 62
   percent: 63
 ---
 
 ## Current Position
 
 Phase: 28 (library-ia-healing) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-06-06
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ## Project Reference
 
@@ -45,6 +45,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase ?]: TreeDrafterSurface(region: String) extracted chrome-free; TreeDrafterPage thin shell; rule #58 enforced
 - [Phase 28-01]: D-13 thresholds are calibration hypotheses — records [1,10,30], tomes/analysis [1,5,15] — tunable post-beta without touching room UI
 - [Phase 28-01]: match.team_id vs post_game_learning/team_note.team field-name distinction (Pitfall 5) documented in get_library_growth_counts doc comment
+- [Phase 28-03]: Callback<T,()> must be created at component scope (not inside a FnMut reactive closure) when it captures non-Copy values — otherwise the outer closure becomes FnOnce; Resource::new needs move || signal.get() source closure when input is a Signal<T>
+- [Phase 28-03]: #[prop(optional)] Option<Callback<T,()>> — pass bare Callback at call site (Leptos macro wraps in Some); StatsPage omits prop (None = href fallback), StatsSurface supplies it (Some = signal+navigate)
 
 ## Blockers/Concerns
 
@@ -63,7 +65,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-06T00:49:09.176Z
+Last session: 2026-06-06T01:08:25.431Z
 Stopped at: Completed 28-01-PLAN.md (Library growth data layer)
 Resume file: None
 Next command: `/gsd:execute-phase 28-library-ia-healing plan 02`
