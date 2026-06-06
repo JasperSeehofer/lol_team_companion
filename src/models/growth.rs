@@ -154,6 +154,55 @@ impl Default for TeamGrowthState {
     }
 }
 
+/// Raw per-team accumulation counts driving the Library room growth atmosphere.
+/// Three axes: records (match history), tomes (written knowledge), analysis
+/// (analytical depth). Field names differ per source table — see `get_library_growth_counts`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryGrowthCounts {
+    /// match table, scoped by team_id (records axis).
+    pub match_syncs: u32,
+    /// post_game_learning table, scoped by team (tomes + analysis axes).
+    pub post_game_learning: u32,
+    /// team_note table, scoped by team (tomes axis).
+    pub team_note: u32,
+}
+
+/// Derived Library room growth state. SC4 ("a richer team sees more atmospheric
+/// detail") is driven by these tier values surfacing as `data-records-tier` /
+/// `data-tomes-tier` / `data-analysis-tier` on the atmosphere root.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryGrowthState {
+    pub counts: LibraryGrowthCounts,
+    /// The archive grows as matches accumulate.
+    pub records_tier: u8,
+    /// Written knowledge — reviews + team notes.
+    pub tomes_tier: u8,
+    /// Analytical depth — post-game reviews only.
+    pub analysis_tier: u8,
+}
+
+impl LibraryGrowthState {
+    // D-13: calibration hypotheses, tunable without touching the room UI
+    pub fn from_counts(counts: LibraryGrowthCounts) -> Self {
+        let records = tier_for(counts.match_syncs, [1, 10, 30]);
+        let tomes = tier_for(counts.post_game_learning + counts.team_note, [1, 5, 15]);
+        let analysis = tier_for(counts.post_game_learning, [1, 5, 15]);
+        LibraryGrowthState {
+            counts,
+            records_tier: records.level(),
+            tomes_tier: tomes.level(),
+            analysis_tier: analysis.level(),
+        }
+    }
+}
+
+impl Default for LibraryGrowthState {
+    /// An empty library (all Seed) — the safe fallback when a team has no data.
+    fn default() -> Self {
+        LibraryGrowthState::from_counts(LibraryGrowthCounts::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,5 +327,46 @@ mod tests {
         let json = serde_json::to_string(&g).unwrap();
         let back: TeamGrowthState = serde_json::from_str(&json).unwrap();
         assert_eq!(g, back);
+    }
+
+    // --- Library (team-scoped) growth ---
+
+    #[test]
+    fn library_empty_counts_are_all_seed() {
+        let g = LibraryGrowthState::default();
+        assert_eq!(g.records_tier, 0);
+        assert_eq!(g.tomes_tier, 0);
+        assert_eq!(g.analysis_tier, 0);
+    }
+
+    #[test]
+    fn library_records_tracks_match_syncs() {
+        // 10 syncs → exactly the tier-2 lower bound (10).
+        let g = LibraryGrowthState::from_counts(LibraryGrowthCounts {
+            match_syncs: 10,
+            ..Default::default()
+        });
+        assert_eq!(g.records_tier, 2);
+    }
+
+    #[test]
+    fn library_tomes_combines_reviews_and_notes() {
+        // 3 reviews + 2 notes = 5 → tier-2 lower bound (5).
+        let g = LibraryGrowthState::from_counts(LibraryGrowthCounts {
+            post_game_learning: 3,
+            team_note: 2,
+            ..Default::default()
+        });
+        assert_eq!(g.tomes_tier, 2);
+    }
+
+    #[test]
+    fn library_analysis_tracks_post_game_reviews() {
+        // 15 reviews → tier-3 lower bound (15).
+        let g = LibraryGrowthState::from_counts(LibraryGrowthCounts {
+            post_game_learning: 15,
+            ..Default::default()
+        });
+        assert_eq!(g.analysis_tier, 3);
     }
 }
