@@ -4,31 +4,31 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Phase 29 context gathered
-last_updated: "2026-06-08T09:09:47.776Z"
-last_activity: 2026-06-08 -- Phase 29 planning complete
+last_updated: "2026-06-08T14:28:26.066Z"
+last_activity: 2026-06-08
 progress:
   total_phases: 19
   completed_phases: 13
   total_plans: 73
-  completed_plans: 66
+  completed_plans: 67
   percent: 68
 ---
 
 ## Current Position
 
-Phase: 29
-Plan: Not started
+Phase: 29 (throne-quicknav-room-a11y) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-06-08 -- Phase 29 planning complete
+Last activity: 2026-06-08
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-31)
 
 **Core value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
-**Current focus:** Phase 29 — throne, quicknav & room a11y
+**Current focus:** Phase 29 — throne-quicknav-room-a11y
 
 ## Decisions
 
@@ -54,6 +54,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase 28-05]: Tab IDs stats/match/analytics/post-game/personal match Plan 06 redirect targets (?tab=...)
 - [Phase ?]: Dual redirect pattern (SSR leptos_axum::redirect + hydrate set_href) used for all six IA-healing redirect shells — same contract as roster.rs/profile.rs
 - [Phase ?]: MatchRedirect reads use_params_map id at component top; dispatches RedirectToLibraryMatch(id) server fn so SSR 302 preserves the match id (D-11)
+- [Phase Phase 29-01]: ThroneGrowthState has NO counts field — progression derives from user ranked games independently of team membership (D-05/D-07 lock)
+- [Phase Phase 29-01]: get_throne_growth_counts: pre-authorized team_id caller contract, parameterized type::record(), 2-statement batch count (roster + crown wins)
 
 ## Blockers/Concerns
 
@@ -72,7 +74,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-06T14:53:30.923Z
+Last session: 2026-06-08T14:28:03.978Z
 Stopped at: Phase 29 context gathered
-Resume file: .planning/phases/29-throne-quicknav-room-a11y/29-CONTEXT.md
+Resume file: None
 Next command: Begin Phase 29 (Throne Room)

@@ -424,7 +424,7 @@ Plans:
 **Plans**: 7 plans across 3 waves
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
-- [ ] 29-01-PLAN.md — Throne growth model (ThroneGrowthCounts/State + blended from_parts, D-07) + get_throne_growth_counts + 5 unit tests
+- [x] 29-01-PLAN.md — Throne growth model (ThroneGrowthCounts/State + blended from_parts, D-07) + get_throne_growth_counts + 5 unit tests
 - [ ] 29-02-PLAN.md — Wave 0 blockers: 9 input.css tier selectors + 12 placeholder WebPs + /throne canary/smoke entries + 3 new e2e specs
 - [ ] 29-03-PLAN.md — Extract IdentitySurface from profile.rs (chrome-free, region-agnostic, inline empty-state)
 - [ ] 29-04-PLAN.md — Split team/dashboard.rs into DashboardSurface/RosterSurface/DevelopmentSurface (+ fold Action Items + TeamNotebook, D-03; Game Day Brief dropped)
@@ -544,7 +544,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 7/7 | Complete    | 2026-06-06 |
-| 29. Throne, QuickNav & Room A11Y | v1.4 | 0/? | Not started | — |
+| 29. Throne, QuickNav & Room A11Y | v1.4 | 1/7 | In Progress|  |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
 | 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
