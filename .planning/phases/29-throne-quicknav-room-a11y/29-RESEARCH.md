@@ -642,22 +642,18 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView { ...
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`crown` win/loss literal value**
-   - What we know: `post_game_learning.win_loss` is `option<string>` (`schema.surql:126`).
-   - What's unclear: the exact stored value ("win"/"loss" vs other). 
-   - Recommendation: grep `save_post_game_learning` (`db.rs:1890`) and the post-game form before writing the count query; resolve in Wave 0.
+> All three resolved during planning (2026-06-08); resolutions are locked in the plan interfaces. Annotated below.
 
-2. **`progression` metric: games-played vs LP-milestone vs tier-rank**
-   - What we know: `RankedInfo` carries `tier`/`division`/`lp`/`wins`/`losses` (`db.rs:5032`).
-   - What's unclear: D-04 says "ranked LP / rank milestones"; games-played (A1) is a robust always-present proxy but LP/tier may better match intent.
-   - Recommendation: games-played is the safest tier-0-avoiding default for a teamless ranked user; planner/discuss may refine to an LP or tier ladder. Either is a pure `growth.rs` change, no UI impact.
+1. **`crown` win/loss literal value** — **RESOLVED: `win_loss = 'win'`** (confirmed `post_game.rs:828`, `db.rs:2051`). Locked in Plan 29-01 Task 2 interfaces/action.
+   - What we knew: `post_game_learning.win_loss` is `option<string>` (`schema.surql:126`).
 
-3. **Game Day Brief fate (A5)**
-   - What we know: `TeamGameDayBriefView` (`dashboard.rs:2016`) is a whole alternate dashboard mode.
-   - What's unclear: whether it survives the split or is dropped.
-   - Recommendation: FLAG to the user — likely out of scope (Dashboard = summary), but it's existing capability and D-03's "compose existing only" ethos argues for not silently deleting it. Could fold its panels into `DashboardSurface` or defer.
+2. **`progression` metric: games-played vs LP-milestone vs tier-rank** — **RESOLVED: games-played** (`wins+losses`, tier thresholds `[1,20,60]`); pure `growth.rs` choice, no UI impact, tunable post-beta. Locked in Plan 29-01 action.
+   - What we knew: `RankedInfo` carries `tier`/`division`/`lp`/`wins`/`losses` (`db.rs:5032`).
+
+3. **Game Day Brief fate (A5)** — **RESOLVED: DROPPED this phase.** `TeamGameDayBriefView` was an alternate dashboard *mode* (a mode-branch that violates D-02's no-structural-branch rule); its summary content is preserved inside `DashboardSurface`. Decision locked in Plan 29-04 interfaces DECISION block.
+   - What we knew: `TeamGameDayBriefView` (`dashboard.rs:2016`) is a whole alternate dashboard mode.
 
 ---
 
