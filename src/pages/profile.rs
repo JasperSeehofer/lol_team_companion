@@ -136,6 +136,187 @@ fn GiltCard(children: Children) -> impl IntoView {
     }
 }
 
+/// Chrome-free identity surface for the Throne room (Plan 05 / SC1).
+///
+/// Renders the Riot-account link section (with region selector) and the champion-pool
+/// summary.  No-team and unlinked-account states are handled by empty-state CTAs INSIDE
+/// the component body (D-02 always-show guard; rule #58 structural-branch prohibition).
+///
+/// CRITICAL (rule #58): this component is region-agnostic and does NOT read the
+/// `InitialTheme` context. It accepts no region prop — the Throne room does NOT need to
+/// forward region here.
+#[component]
+pub fn IdentitySurface() -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let user = Resource::new(|| (), |_| get_current_user());
+    let link_riot = ServerAction::<crate::pages::team::roster::LinkRiotAccount>::new();
+    let pool_resource = Resource::new(|| (), |_| get_champion_pool());
+
+    // Toast feedback for link_riot
+    Effect::new(move || {
+        if let Some(result) = link_riot.value().get() {
+            match result {
+                Ok(()) => toast.show.run((ToastKind::Success, "Riot account linked".into())),
+                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+            }
+        }
+    });
+
+    view! {
+        <div class="flex flex-col gap-7">
+            <Suspense fallback=move || view! {
+                <div class="flex flex-col gap-6">
+                    <SkeletonCard height="h-32" />
+                    <SkeletonCard height="h-32" />
+                </div>
+            }>
+                {move || Suspend::new(async move {
+                    let user_result = user.await;
+                    match user_result {
+                        Ok(Some(u)) => {
+                            let riot_name = u.riot_summoner_name.clone();
+                            let initial_region = u.riot_region.clone().unwrap_or_default();
+                            view! {
+                                <div class="flex flex-col gap-6">
+                                    // Riot account section
+                                    <GiltCard>
+                                        <div class="flex items-baseline justify-between mb-4">
+                                            <h2 class="font-display italic text-[22px] text-primary">"Riot Account"</h2>
+                                            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Linked seal"</span>
+                                        </div>
+
+                                        {match riot_name {
+                                            Some(name) => view! {
+                                                <p class="text-success text-sm mb-4">
+                                                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-success mr-2">"Linked"</span>
+                                                    <span class="font-display italic text-primary text-base">{name}</span>
+                                                </p>
+                                            }.into_any(),
+                                            None => view! {
+                                                <EmptyState
+                                                    icon="🔗"
+                                                    message="Link your Riot account to track match stats and see champion performance across the app"
+                                                />
+                                            }.into_any(),
+                                        }}
+
+                                        // Region dropdown
+                                        <div class="mb-4">
+                                            <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Region"</label>
+                                            <select
+                                                class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary w-full max-w-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                on:change=move |ev| {
+                                                    let region = event_target_value(&ev);
+                                                    leptos::task::spawn_local(async move {
+                                                        match save_region(region).await {
+                                                            Ok(()) => toast.show.run((ToastKind::Success, "Region saved".into())),
+                                                            Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                                                        }
+                                                    });
+                                                }
+                                            >
+                                                <option value="" selected={initial_region.is_empty()}>
+                                                    "Select your region"
+                                                </option>
+                                                {REGIONS.iter().map(|&(value, label)| {
+                                                    let sel = initial_region.clone();
+                                                    view! {
+                                                        <option value=value selected=move || sel == value>
+                                                            {label}
+                                                        </option>
+                                                    }
+                                                }).collect_view()}
+                                            </select>
+                                        </div>
+
+                                        <ActionForm action=link_riot>
+                                            <div class="flex flex-col gap-4">
+                                                <div>
+                                                    <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">
+                                                        "Riot ID (e.g. PlayerName#EUW)"
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        name="riot_id"
+                                                        placeholder="GameName#TAG"
+                                                        required
+                                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="submit"
+                                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                >
+                                                    "Link Account"
+                                                </button>
+                                            </div>
+                                        </ActionForm>
+                                    </GiltCard>
+
+                                    // Champion Pool summary
+                                    <GiltCard>
+                                        <div class="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h2 class="font-display italic text-[22px] text-primary">"Champion Pool"</h2>
+                                                <p class="text-muted text-sm">"Champions you play, organized by role and tier."</p>
+                                            </div>
+                                            <a
+                                                href="/champion-pool"
+                                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                            >
+                                                "Manage Pool"
+                                            </a>
+                                        </div>
+                                        <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=2 card_height="h-16" /> }>
+                                            {move || pool_resource.get().map(|result| match result {
+                                                Ok(pool) => {
+                                                    if pool.is_empty() {
+                                                        view! {
+                                                            <EmptyState
+                                                                icon="🏆"
+                                                                message="No champions in your pool yet — visit Champion Pool to add your picks."
+                                                            />
+                                                        }.into_any()
+                                                    } else {
+                                                        let counts: Vec<(&str, usize)> = POOL_ROLES.iter().map(|&role| {
+                                                            let count = pool.iter().filter(|e| e.role == role).count();
+                                                            (role, count)
+                                                        }).filter(|(_, c)| *c > 0).collect();
+                                                        view! {
+                                                            <div class="flex gap-3 flex-wrap">
+                                                                {counts.into_iter().map(|(role, count)| view! {
+                                                                    <div class="bg-surface border border-outline/50 rounded-lg px-3 py-2 flex items-baseline gap-2">
+                                                                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">{role}</span>
+                                                                        <span class="font-display italic text-primary text-lg tabular-nums">{count}</span>
+                                                                    </div>
+                                                                }).collect_view()}
+                                                            </div>
+                                                        }.into_any()
+                                                    }
+                                                }
+                                                Err(e) => view! { <p class="text-danger text-sm" role="alert">{e.to_string()}</p> }.into_any(),
+                                            })}
+                                        </Suspense>
+                                    </GiltCard>
+                                </div>
+                            }.into_any()
+                        }
+                        Ok(None) => view! {
+                            <EmptyState
+                                icon="🔐"
+                                message="Sign in to view your identity and link your Riot account."
+                            />
+                        }.into_any(),
+                        Err(e) => view! {
+                            <p class="text-danger text-sm" role="alert">{e.to_string()}</p>
+                        }.into_any(),
+                    }
+                })}
+            </Suspense>
+        </div>
+    }
+}
+
 #[component]
 pub fn ProfilePage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
