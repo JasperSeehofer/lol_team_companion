@@ -462,6 +462,16 @@
 [data-analysis-tier="1"] .room-overlay--analysis { opacity: 0.34; }
 [data-analysis-tier="2"] .room-overlay--analysis { opacity: 0.67; }
 [data-analysis-tier="3"] .room-overlay--analysis { opacity: 1; }
+/* Throne axes (roster/progression/crown) — same tier→opacity ramp. */
+[data-roster-tier="1"]      .room-overlay--roster      { opacity: 0.34; }
+[data-roster-tier="2"]      .room-overlay--roster      { opacity: 0.67; }
+[data-roster-tier="3"]      .room-overlay--roster      { opacity: 1;    }
+[data-progression-tier="1"] .room-overlay--progression { opacity: 0.34; }
+[data-progression-tier="2"] .room-overlay--progression { opacity: 0.67; }
+[data-progression-tier="3"] .room-overlay--progression { opacity: 1;    }
+[data-crown-tier="1"]       .room-overlay--crown       { opacity: 0.34; }
+[data-crown-tier="2"]       .room-overlay--crown       { opacity: 0.67; }
+[data-crown-tier="3"]       .room-overlay--crown       { opacity: 1;    }
 
 /* ============================================================
    Reduced-motion gate (WCAG / accessibility-standards.md §6).
