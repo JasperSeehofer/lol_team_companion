@@ -430,7 +430,7 @@ Plans:
 - [x] 29-04-PLAN.md — Split team/dashboard.rs into DashboardSurface/RosterSurface/DevelopmentSurface (+ fold Action Items + TeamNotebook, D-03; Game Day Brief dropped)
 
 **Wave 2** *(depend on Wave 1; 05 and 06 parallel — no file overlap)*
-- [ ] 29-05-PLAN.md — Compose ThroneRoom + ThroneSurfaces + get_throne_growth_state + /throne route + 3 redirect shells (CHECKPOINT)
+- [x] 29-05-PLAN.md — Compose ThroneRoom + ThroneSurfaces + get_throne_growth_state + /throne route + 3 redirect shells (CHECKPOINT)
 - [ ] 29-06-PLAN.md — QuickNav filter + focus trap + focus-restore (ROOM-08) + room-centric HUB_ROUTES restructure (5 touch-points)
 
 **Wave 3** *(phase gate — depends on 05 + 06)*
@@ -544,7 +544,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 7/7 | Complete    | 2026-06-06 |
-| 29. Throne, QuickNav & Room A11Y | v1.4 | 4/7 | In Progress|  |
+| 29. Throne, QuickNav & Room A11Y | v1.4 | 5/7 | In Progress|  |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
 | 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
