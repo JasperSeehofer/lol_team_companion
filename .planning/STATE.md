@@ -4,24 +4,24 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Phase 29 context gathered
-last_updated: "2026-06-08T14:44:02.698Z"
+last_updated: "2026-06-08T15:04:10.481Z"
 last_activity: 2026-06-08
 progress:
   total_phases: 19
   completed_phases: 13
   total_plans: 73
-  completed_plans: 69
+  completed_plans: 70
   percent: 68
 ---
 
 ## Current Position
 
 Phase: 29 (throne-quicknav-room-a11y) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-06-08
 
-Progress: [██████████] 95%
+Progress: [██████████] 96%
 
 ## Project Reference
 
@@ -57,6 +57,9 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase Phase 29-01]: ThroneGrowthState has NO counts field — progression derives from user ranked games independently of team membership (D-05/D-07 lock)
 - [Phase Phase 29-01]: get_throne_growth_counts: pre-authorized team_id caller contract, parameterized type::record(), 2-statement batch count (roster + crown wins)
 - [Phase ?]: [Phase 29-02]: Wave 0 CSS selectors + placeholder WebPs before room render plan; test skip guards keep suite green
+- [Phase ?]: TeamNotebookInner: auth resolves server-side, no props needed
+- [Phase ?]: Game Day Brief mode dropped from surfaces; DashboardSurface retains prep-priority panel content
+- [Phase ?]: DevelopmentSurface: ActionItemsPanel imported from action_items.rs, TeamNotebookInner resolves auth server-side independently of team gate
 
 ## Blockers/Concerns
 
@@ -75,7 +78,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-08T14:44:02.668Z
+Last session: 2026-06-08T15:03:23.468Z
 Stopped at: Phase 29 context gathered
 Resume file: None
 Next command: Begin Phase 29 (Throne Room)
