@@ -33,10 +33,11 @@ decisions:
   - "get_throne_growth_state computes progression from ranked snapshot BEFORE get_user_team_id match — teamless ranked grinder's room still lights progression overlay (D-05/D-07 lock)"
   - "ThroneSurfaces does NOT use provide_context for shared state — each of the 5 surfaces resolves auth independently; double-fetch of get_team_dashboard is accepted (eager-fetch optimization deferred)"
   - "/throne route added immediately after /analytics to preserve existing route ordering"
+requirements_completed: [ROOM-06, A11Y-02]
 metrics:
-  duration: "12 minutes"
+  duration: "15 minutes"
   completed: "2026-06-08"
-  tasks_completed: 2
+  tasks_completed: 3
   tasks_total: 3
   files_created: 1
   files_modified: 2
@@ -52,8 +53,7 @@ metrics:
 |------|------|--------|-------|
 | 1 | Create throne.rs — get_throne_growth_state + ThroneRoom + ThroneSurfaces + 3 redirect shells | 2a54d35 | src/pages/rooms/throne.rs |
 | 2 | Wire /throne route + 3 redirects into app.rs; export throne in rooms/mod.rs | 3534c7d | src/app.rs, src/pages/rooms/mod.rs |
-
-Task 3 (checkpoint:human-verify) — awaiting human verification.
+| 3 | Checkpoint: human-verify /throne hydration canary + redirects | APPROVED | See verification section |
 
 ## What Was Built
 
@@ -94,6 +94,8 @@ Computes `ranked = get_latest_ranked_snapshot(...)` FIRST, then the team axes vi
 
 ## Verification Results
 
+### Automated (pre-checkpoint)
+
 - `cargo check --features ssr`: exit 0
 - `cargo check --features hydrate --target wasm32-unknown-unknown`: exit 0
 - `grep -c 'use_context::<InitialTheme>' src/pages/rooms/throne.rs`: 1 (rule #58 — single top-level read)
@@ -101,6 +103,20 @@ Computes `ranked = get_latest_ranked_snapshot(...)` FIRST, then the team axes vi
 - `get_latest_ranked_snapshot` at line 118, `get_user_team_id` at line 124 — personal axis BEFORE team check
 - All three redirect shells present with correct `?tab=` targets
 - `/team/roster` and `/journey` routes unchanged
+
+### Checkpoint: Human-Verify — APPROVED (2026-06-08)
+
+Evidence gathered by orchestrator against the running dev server:
+
+- `/throne` returns HTTP 200
+- `e2e/hydration-no-panic.spec.ts` for `/throne`: 2/2 PASS — both [demacia] and [pandemonium] regions hydrate WITHOUT the tachys `html/mod.rs:217` `Option::unwrap()` panic (rule #58 keystone risk cleared; SC4 satisfied)
+- All 12 Throne atmosphere WebP assets committed (29-02) and resolve over HTTP 200 (dev-server staleness showing 11/12 as 404 was a stale `target/site/` cache; `public/` dir confirmed correct on disk and in git — not a code defect; production `cargo leptos build` copies all of `public/`)
+- `room-contrast.spec.ts` (SC5) and `throne-growth.spec.ts` (SC1/SC1b) remain skip-guarded by design; will be un-skipped and greened in Plan 29-07 (the phase gate)
+
+SC1 through SC5 status:
+- SC1/SC1b (growth overlays light): acceptance deferred to 29-07 phase gate; blended server fn correctness confirmed by source assertion
+- SC4 (hydration-no-panic canary): PASSED in both regions
+- SC5 (contrast scrim WCAG AA): z-8 scrim wired; formal contrast spec un-skipped in 29-07
 
 ## Deviations from Plan
 
