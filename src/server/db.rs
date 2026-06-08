@@ -19,7 +19,7 @@ use crate::models::{
         DashboardSummary, GamePlan, GamePlanEffectiveness, PoolGapWarning, PostGameLearning,
         PostGamePreview, StrategyTagSummary,
     },
-    growth::{GrowthCounts, LibraryGrowthCounts, TeamGrowthCounts},
+    growth::{GrowthCounts, LibraryGrowthCounts, TeamGrowthCounts, ThroneGrowthCounts},
     match_data::PlayerMatchStats,
     opponent::{Opponent, OpponentPlayer},
     personal_learning::PersonalLearning,
@@ -4313,6 +4313,51 @@ pub async fn get_library_growth_counts(
         match_syncs,
         post_game_learning,
         team_note,
+    })
+}
+
+/// Accumulation counts for a team, used to drive the Throne room growth atmosphere.
+/// Two `count() … GROUP ALL` statements in one round-trip:
+///   - statement 0: `team_member` rows scoped by `team` (roster axis)
+///   - statement 1: `post_game_learning` rows scoped by `team` AND `win_loss = 'win'` (crown axis)
+///
+/// Caller contract: `team_id` MUST be a server-resolved, pre-authorized value (V4 access
+/// control — same as `get_team_growth_counts`). This fn is called by Plan 05's
+/// `get_throne_growth_state`, which derives `team_id` via `get_user_team_id(db, user.id)` —
+/// never from raw client input. Returns only aggregate counts; no row-level data exposed.
+///
+/// The win literal is `'win'` (lowercase) — verified against `post_game.rs:828` / `db.rs:2051`.
+pub async fn get_throne_growth_counts(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<ThroneGrowthCounts> {
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+
+    let mut result = db
+        .query(
+            "SELECT count() as n FROM team_member \
+               WHERE team = type::record('team', $team_key) GROUP ALL; \
+             SELECT count() as n FROM post_game_learning \
+               WHERE team = type::record('team', $team_key) AND win_loss = 'win' GROUP ALL",
+        )
+        .bind(("team_key", team_key))
+        .await?;
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct CountResult {
+        n: i64,
+    }
+
+    fn count_of(rows: Vec<CountResult>) -> u32 {
+        rows.first().map(|r| r.n.max(0) as u32).unwrap_or(0)
+    }
+
+    let team_members = count_of(result.take(0).unwrap_or_default());
+    let team_wins = count_of(result.take(1).unwrap_or_default());
+
+    Ok(ThroneGrowthCounts {
+        team_members,
+        team_wins,
     })
 }
 
