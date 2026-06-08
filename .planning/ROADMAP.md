@@ -421,7 +421,20 @@ Plans:
   3. While the QuickNav overlay is open, keyboard Tab does not reach parallax plane elements behind it — the focus trap is effective
   4. Every room (`/war-room`, `/library`, `/throne`) passes the hydration-no-panic canary in both demacia and pandemonium themes: no `tachys` `Option::unwrap()` panic appears in the console, and at least one interactive element (tab switch, growth state display) responds to user input
   5. Text on the surface layer of every room holds WCAG AA contrast (4.5:1 minimum) over the art planes — the contrast scrim at z-8 is verified per room
-**Plans**: TBD
+**Plans**: 7 plans across 3 waves
+Plans:
+**Wave 1** *(parallel — zero file overlap)*
+- [ ] 29-01-PLAN.md — Throne growth model (ThroneGrowthCounts/State + blended from_parts, D-07) + get_throne_growth_counts + 5 unit tests
+- [ ] 29-02-PLAN.md — Wave 0 blockers: 9 input.css tier selectors + 12 placeholder WebPs + /throne canary/smoke entries + 3 new e2e specs
+- [ ] 29-03-PLAN.md — Extract IdentitySurface from profile.rs (chrome-free, region-agnostic, inline empty-state)
+- [ ] 29-04-PLAN.md — Split team/dashboard.rs into DashboardSurface/RosterSurface/DevelopmentSurface (+ fold Action Items + TeamNotebook, D-03; Game Day Brief dropped)
+
+**Wave 2** *(depend on Wave 1; 05 and 06 parallel — no file overlap)*
+- [ ] 29-05-PLAN.md — Compose ThroneRoom + ThroneSurfaces + get_throne_growth_state + /throne route + 3 redirect shells (CHECKPOINT)
+- [ ] 29-06-PLAN.md — QuickNav filter + focus trap + focus-restore (ROOM-08) + room-centric HUB_ROUTES restructure (5 touch-points)
+
+**Wave 3** *(phase gate — depends on 05 + 06)*
+- [ ] 29-07-PLAN.md — e2e phase gate: SC1-SC5 green both regions + redirect resolution + full-suite regression (CHECKPOINT)
 **UI hint**: yes
 
 ### Phase 30: Art Production
