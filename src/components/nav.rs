@@ -151,72 +151,77 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
 }
 
 // ---------------------------------------------------------------------------
-// 4-Hub Information Architecture (D-09)
+// Room-centric Information Architecture (D-11)
 // ---------------------------------------------------------------------------
 
-/// Hub-grouped sub-routes. Each hub maps to its sub-nav children.
+/// Room-grouped sub-routes. Each room maps to its surfaces via `?tab=` deep-links.
 /// `live` hub omitted from sub-nav (single-page hub, deferred feature).
 /// `pub` so the QuickNav command palette can reuse the same destinations.
 pub const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
     (
-        "strategy",
+        "war-room",
         &[
-            ("/draft", "Draft"),
-            ("/tree-drafter", "Tree"),
-            ("/champion-pool", "Pool"),
-            ("/game-plan", "Game plan"),
-            ("/post-game", "Post-game"),
-            ("/opponents", "Opponents"),
-            ("/action-items", "Action items"),
+            ("/war-room?tab=draft", "Draft"),
+            ("/war-room?tab=tree-drafter", "Tree"),
+            ("/war-room?tab=game-plan", "Game Plan"),
+            ("/war-room?tab=opponents", "Opponents"),
+            ("/war-room?tab=ban-priority", "Ban Priority"),
         ],
     ),
     (
-        "history",
+        "library",
         &[
-            ("/stats", "Stats"),
-            ("/match", "Match"),
-            ("/personal-learnings", "Learnings"),
-            ("/analytics", "Analytics"),
+            ("/library?tab=stats", "Stats"),
+            ("/library?tab=match", "Match"),
+            ("/library?tab=analytics", "Analytics"),
+            ("/library?tab=post-game", "Post-Game"),
+            ("/library?tab=personal", "Learnings"),
         ],
     ),
     (
-        "profile",
+        "throne",
         &[
-            ("/profile", "Profile"),
-            ("/team/dashboard", "Team"),
-            ("/team/roster", "Roster"),
-            ("/team-builder", "Team builder"),
-            ("/solo", "Solo"),
-            ("/journey", "Journey"),
+            ("/throne?tab=identity", "Identity"),
+            ("/throne?tab=dashboard", "Dashboard"),
+            ("/throne?tab=roster", "Roster"),
+            ("/throne?tab=development", "Development"),
+            ("/throne?tab=solo", "Solo"),
         ],
     ),
 ];
 
-/// Map a URL path to its primary hub. Returns `""` for paths outside any hub
+/// Map a URL path to its primary room hub. Returns `""` for paths outside any room
 /// (e.g. `/`, `/auth/*`, `/closed-beta`, `/legal/*`) so the sub-nav strip
 /// suppresses itself on those routes.
+///
+/// Legacy flat routes (e.g. `/draft`, `/stats`, `/profile`) that now redirect into
+/// a room are also mapped here so active-state highlights correctly during the redirect.
 fn hub_for_path(path: &str) -> &'static str {
-    if path.starts_with("/draft")
+    if path.starts_with("/war-room")
+        || path.starts_with("/draft")
         || path.starts_with("/tree-drafter")
         || path.starts_with("/champion-pool")
         || path.starts_with("/game-plan")
         || path.starts_with("/post-game")
         || path.starts_with("/opponents")
         || path.starts_with("/action-items")
+        || path.starts_with("/ban-priority")
     {
-        "strategy"
-    } else if path.starts_with("/stats")
+        "war-room"
+    } else if path.starts_with("/library")
+        || path.starts_with("/stats")
         || path.starts_with("/match")
         || path.starts_with("/personal-learnings")
         || path.starts_with("/analytics")
     {
-        "history"
-    } else if path.starts_with("/profile")
+        "library"
+    } else if path.starts_with("/throne")
+        || path.starts_with("/profile")
         || path.starts_with("/team")
         || path.starts_with("/solo")
         || path.starts_with("/journey")
     {
-        "profile"
+        "throne"
     } else if path.starts_with("/live") {
         "live"
     } else {
@@ -300,10 +305,10 @@ pub fn Nav() -> impl IntoView {
         })
     };
 
-    let strategy_btn_cls = hub_btn_class("strategy", false);
+    let war_room_btn_cls = hub_btn_class("war-room", false);
     let live_btn_cls = hub_btn_class("live", true);
-    let history_btn_cls = hub_btn_class("history", false);
-    let profile_btn_cls = hub_btn_class("profile", false);
+    let library_btn_cls = hub_btn_class("library", false);
+    let throne_btn_cls = hub_btn_class("throne", false);
 
     view! {
         <header class="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-divider">
@@ -315,20 +320,20 @@ pub fn Nav() -> impl IntoView {
                         <CompanionSigil region=region.clone() />
                     </A>
 
-                    // 4 primary hubs
+                    // 3 primary room hubs
                     <nav class="hidden md:flex items-center gap-1" aria-label="Primary">
-                        <A href="/draft" attr:class=move || strategy_btn_cls.get()>
-                            "Strategy"
+                        <A href="/war-room" attr:class=move || war_room_btn_cls.get()>
+                            "War Room"
                         </A>
                         // Live hub disabled (deferred feature)
                         <span class=move || live_btn_cls.get() aria-disabled="true" title="Live coming soon">
                             "Live"
                         </span>
-                        <A href="/stats" attr:class=move || history_btn_cls.get()>
-                            "History"
+                        <A href="/library" attr:class=move || library_btn_cls.get()>
+                            "Library"
                         </A>
-                        <A href="/profile" attr:class=move || profile_btn_cls.get()>
-                            "Profile"
+                        <A href="/throne" attr:class=move || throne_btn_cls.get()>
+                            "Throne"
                         </A>
                     </nav>
 
@@ -533,9 +538,38 @@ pub fn Nav() -> impl IntoView {
                             <nav class="flex gap-1 py-2 border-t border-divider/30 overflow-x-auto" aria-label="Sub-navigation">
                                 {routes.iter().map(|(path, label)| {
                                     let path_owned = path.to_string();
-                                    let path_for_class = path_owned.clone();
+                                    // Split href into path prefix and optional ?tab= value for active matching.
+                                    let (path_prefix, tab_param) = if let Some(idx) = path_owned.find('?') {
+                                        let prefix = path_owned[..idx].to_string();
+                                        // Extract the tab value from "?tab=<slug>"
+                                        let tab_val = path_owned[idx+1..].split('&')
+                                            .find_map(|kv| {
+                                                let mut parts = kv.splitn(2, '=');
+                                                if parts.next() == Some("tab") { parts.next().map(|v| v.to_string()) } else { None }
+                                            });
+                                        (prefix, tab_val)
+                                    } else {
+                                        (path_owned.clone(), None)
+                                    };
                                     let location = use_location();
-                                    let is_active = move || location.pathname.get().starts_with(&path_for_class);
+                                    let is_active = move || {
+                                        let pathname = location.pathname.get();
+                                        if !pathname.starts_with(&path_prefix) {
+                                            return false;
+                                        }
+                                        match &tab_param {
+                                            None => true,
+                                            Some(tab) => {
+                                                // Check search string contains tab=<slug>
+                                                let search = location.search.get();
+                                                let search = search.trim_start_matches('?');
+                                                search.split('&').any(|kv| {
+                                                    let mut parts = kv.splitn(2, '=');
+                                                    parts.next() == Some("tab") && parts.next() == Some(tab.as_str())
+                                                })
+                                            }
+                                        }
+                                    };
                                     view! {
                                         <A
                                             href=path_owned

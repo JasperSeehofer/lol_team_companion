@@ -11,13 +11,13 @@ use leptos_router::components::A;
 
 use crate::components::nav::HUB_ROUTES;
 
-/// Human-readable label for each hub key used in `HUB_ROUTES`.
+/// Human-readable label for each room key used in `HUB_ROUTES`.
 fn hub_label(key: &str) -> &'static str {
     match key {
-        "strategy" => "War Room",
-        "history" => "Hall of Records",
-        "profile" => "Profile & Journey",
-        _ => "More",
+        "war-room" => "War Room",
+        "library"  => "Hall of Records",
+        "throne"   => "Throne",
+        _          => "More",
     }
 }
 
