@@ -203,6 +203,65 @@ impl Default for LibraryGrowthState {
     }
 }
 
+// --- Throne (blended team + personal) growth ---
+
+/// Raw accumulation counts driving the Throne room growth atmosphere (team-scoped axes only).
+/// Two axes: `team_members` (roster) and `team_wins` (crown). The third axis — `progression`
+/// — is user-scoped (viewing user's ranked games) and supplied separately via `from_parts`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThroneGrowthCounts {
+    /// team_member rows for the team (roster axis).
+    pub team_members: u32,
+    /// post_game_learning rows where win_loss = "win" (crown axis).
+    pub team_wins: u32,
+}
+
+/// Derived Throne room growth state. SC1 ("the room's environment reflects roster size,
+/// LP milestones, and combined team record") is driven by these tier values surfacing as
+/// `data-roster-tier`/`data-progression-tier`/`data-crown-tier` on the atmosphere root.
+///
+/// KEY DIVERGENCE from TeamGrowthState/LibraryGrowthState: ThroneGrowthState has NO
+/// `counts` field. The blended constructor takes both team counts AND the viewing user's
+/// optional RankedInfo — it cannot be derived from a single `*Counts` struct.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThroneGrowthState {
+    pub roster_tier: u8,
+    pub progression_tier: u8,
+    pub crown_tier: u8,
+}
+
+impl ThroneGrowthState {
+    // D-05/D-07: progression derives from the viewing user's ranked games independently
+    // of team membership — calibration thresholds [1,20,60], tunable without touching
+    // the room UI.
+    /// Blended derivation: team counts + the viewing user's optional ranked snapshot.
+    /// `progression` derives independently so it advances with NO team (D-05/D-07).
+    pub fn from_parts(
+        team: ThroneGrowthCounts,
+        ranked: Option<crate::models::user::RankedInfo>,
+    ) -> Self {
+        let roster = tier_for(team.team_members, [1, 3, 5]);
+        let crown = tier_for(team.team_wins, [1, 5, 15]);
+        let games = ranked
+            .as_ref()
+            .map(|r| (r.wins + r.losses).max(0) as u32)
+            .unwrap_or(0);
+        let progression = tier_for(games, [1, 20, 60]);
+        ThroneGrowthState {
+            roster_tier: roster.level(),
+            progression_tier: progression.level(),
+            crown_tier: crown.level(),
+        }
+    }
+}
+
+impl Default for ThroneGrowthState {
+    /// All-zero tiers — the safe fallback for a teamless user with no ranked data.
+    fn default() -> Self {
+        Self::from_parts(ThroneGrowthCounts::default(), None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,5 +427,66 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(g.analysis_tier, 3);
+    }
+
+    // --- Throne (blended team + personal) growth ---
+
+    #[test]
+    fn throne_empty_all_seed() {
+        let g = ThroneGrowthState::default();
+        assert_eq!(g.roster_tier, 0);
+        assert_eq!(g.progression_tier, 0);
+        assert_eq!(g.crown_tier, 0);
+    }
+
+    #[test]
+    fn throne_roster_tracks_members() {
+        // 5 members → tier-3 lower bound [1, 3, 5].
+        let g = ThroneGrowthState::from_parts(
+            ThroneGrowthCounts { team_members: 5, team_wins: 0 },
+            None,
+        );
+        assert_eq!(g.roster_tier, 3);
+    }
+
+    #[test]
+    fn throne_crown_tracks_wins() {
+        // 15 wins → tier-3 lower bound [1, 5, 15].
+        let g = ThroneGrowthState::from_parts(
+            ThroneGrowthCounts { team_members: 0, team_wins: 15 },
+            None,
+        );
+        assert_eq!(g.crown_tier, 3);
+    }
+
+    #[test]
+    fn throne_progression_grows_without_team() {
+        // D-05/D-07: 40 wins + 25 losses = 65 games ≥ 60 → progression_tier == 3.
+        // No team → roster_tier == 0 AND crown_tier == 0.
+        use crate::models::user::RankedInfo;
+        let ranked = RankedInfo {
+            queue_type: "RANKED_SOLO_5x5".to_string(),
+            tier: "GOLD".to_string(),
+            division: "II".to_string(),
+            lp: 50,
+            wins: 40,
+            losses: 25,
+        };
+        let g = ThroneGrowthState::from_parts(ThroneGrowthCounts::default(), Some(ranked));
+        assert_eq!(g.progression_tier, 3, "progression must advance with no team");
+        assert_eq!(g.roster_tier, 0, "roster must remain 0 with no team");
+        assert_eq!(g.crown_tier, 0, "crown must remain 0 with no team");
+    }
+
+    #[test]
+    fn throne_state_round_trips_json() {
+        let g = ThroneGrowthState {
+            roster_tier: 2,
+            progression_tier: 3,
+            crown_tier: 1,
+        };
+        let json = serde_json::to_string(&g).unwrap();
+        let back: ThroneGrowthState = serde_json::from_str(&json).unwrap();
+        assert_eq!(g, back);
     }
 }
