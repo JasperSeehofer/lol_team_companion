@@ -431,7 +431,7 @@ Plans:
 
 **Wave 2** *(depend on Wave 1; 05 and 06 parallel — no file overlap)*
 - [x] 29-05-PLAN.md — Compose ThroneRoom + ThroneSurfaces + get_throne_growth_state + /throne route + 3 redirect shells (CHECKPOINT)
-- [ ] 29-06-PLAN.md — QuickNav filter + focus trap + focus-restore (ROOM-08) + room-centric HUB_ROUTES restructure (5 touch-points)
+- [x] 29-06-PLAN.md — QuickNav filter + focus trap + focus-restore (ROOM-08) + room-centric HUB_ROUTES restructure (5 touch-points)
 
 **Wave 3** *(phase gate — depends on 05 + 06)*
 - [ ] 29-07-PLAN.md — e2e phase gate: SC1-SC5 green both regions + redirect resolution + full-suite regression (CHECKPOINT)
@@ -544,7 +544,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 7/7 | Complete    | 2026-06-06 |
-| 29. Throne, QuickNav & Room A11Y | v1.4 | 5/7 | In Progress|  |
+| 29. Throne, QuickNav & Room A11Y | v1.4 | 6/7 | In Progress|  |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
 | 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
