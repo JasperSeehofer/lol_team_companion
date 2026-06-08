@@ -4,4 +4,5 @@
 
 pub mod library;
 pub mod solo_journey;
+pub mod throne;
 pub mod war_room;

@@ -11,7 +11,6 @@ use crate::components::room::QuickNav;
 use crate::components::ui::ToastProvider;
 use crate::error_template::ErrorTemplate;
 use crate::pages::{
-    action_items::ActionItemsPage,
     admin::invites::AdminInvitesPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
@@ -21,15 +20,15 @@ use crate::pages::{
     home::HomePage,
     legal::{datenschutz::DatenschutzPage, impressum::ImpressumPage},
     personal_learnings::NewLearningPage,
-    profile::ProfilePage,
     rooms::library::{
         AnalyticsRedirect, LibraryRoom, MatchRedirect, OpponentsRedirect,
         PersonalLearningsRedirect, PostGameRedirect, StatsRedirect,
     },
     rooms::solo_journey::SoloJourneyRoom,
+    rooms::throne::{ActionItemsRedirect, ProfileRedirect, TeamDashboardRedirect, ThroneRoom},
     rooms::war_room::WarRoomRoom,
     solo_dashboard::SoloDashboardPage,
-    team::{dashboard::TeamDashboard, roster::RosterPage},
+    team::roster::RosterPage,
     team_builder::TeamBuilderPage,
     tree_drafter::TreeDrafterPage,
 };
@@ -137,10 +136,10 @@ pub fn App() -> impl IntoView {
                 <main>
                     <Routes fallback=|| view! { <ErrorTemplate outside_errors=Errors::default() /> }>
                         <Route path=path!("/") view=HomePage />
-                        <Route path=path!("/profile") view=ProfilePage />
+                        <Route path=path!("/profile") view=ProfileRedirect />
                         <Route path=path!("/auth/login") view=LoginPage />
                         <Route path=path!("/auth/register") view=RegisterPage />
-                        <Route path=path!("/team/dashboard") view=TeamDashboard />
+                        <Route path=path!("/team/dashboard") view=TeamDashboardRedirect />
                         <Route path=path!("/team/roster") view=RosterPage />
                         <Route path=path!("/draft") view=DraftPage />
                         <Route path=path!("/tree-drafter") view=TreeDrafterPage />
@@ -150,8 +149,9 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/game-plan") view=GamePlanPage />
                         <Route path=path!("/post-game") view=PostGameRedirect />
                         <Route path=path!("/opponents") view=OpponentsRedirect />
-                        <Route path=path!("/action-items") view=ActionItemsPage />
+                        <Route path=path!("/action-items") view=ActionItemsRedirect />
                         <Route path=path!("/analytics") view=AnalyticsRedirect />
+                        <Route path=path!("/throne") view=ThroneRoom />
                         <Route path=path!("/solo") view=SoloDashboardPage />
                         <Route path=path!("/journey") view=SoloJourneyRoom />
                         <Route path=path!("/war-room") view=WarRoomRoom />
