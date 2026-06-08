@@ -6,8 +6,11 @@
 import { test, expect } from "./fixtures";
 
 const AUTHED_PAGES = [
-  { path: "/profile", content: /profile|account|riot/i },
-  { path: "/team/dashboard", content: /team|dashboard|roster/i },
+  // /profile and /team/dashboard redirect to /throne after Plan 29-05 IA healing.
+  // They are retained here without standalone-content assertions so the redirect
+  // chain stays exercised; the destination /throne entry below covers content.
+  { path: "/profile", content: /profile|account|riot|identity|throne/i },
+  { path: "/team/dashboard", content: /team|dashboard|roster|throne/i },
   { path: "/team/roster", content: /team|create|join/i },
   { path: "/team-builder", content: /team|builder|composition/i },
   { path: "/draft", content: /draft|ban|pick/i },
@@ -23,6 +26,8 @@ const AUTHED_PAGES = [
   // Phase 28 Library room (SC1 smoke — route ships in Plan 28-05; /stats, /analytics,
   // /post-game, /personal-learnings redirect here after IA healing)
   { path: "/library", content: /stats|match|analytics|post.game|learnings/i },
+  // Phase 29 Throne room (SC1 smoke — route ships in Plan 29-05)
+  { path: "/throne", content: /identity|dashboard|roster|development|solo/i },
 ];
 
 for (const { path, content } of AUTHED_PAGES) {

@@ -86,6 +86,10 @@ const SCOPED_ROUTES = [
   // after Plan 05/06, /post-game and /match/test-match-id redirect here
   // and continue to exercise the redirect-then-load canary path (D-11).
   "/library",
+  // Phase 29 Throne room (SC4 A11Y-02 gate) — exercises both regions;
+  // region read ONCE at ThroneRoom top → rule #58 structural guard.
+  // Both demacia and pandemonium auto-iterate via the for-region loop below.
+  "/throne",
 ] as const;
 
 /**
