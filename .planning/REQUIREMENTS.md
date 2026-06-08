@@ -20,12 +20,12 @@
 - [x] **ROOM-05**: Hall of Records / Library hosts stats, match detail, analytics, post-game, and team learnings as surfaces
 - [x] **ROOM-06**: Throne / Home room hosts identity, team dashboard, and solo progression
 - [x] **ROOM-07**: IA healing — previously-siloed features are reachable in their intent room (opponents in War Room, learnings in Library); legacy flat routes still resolve as deep links
-- [ ] **ROOM-08**: QuickNav command palette available app-wide (every room + flat route) with a proper focus trap; nav IA reflects the rooms
+- [x] **ROOM-08**: QuickNav command palette available app-wide (every room + flat route) with a proper focus trap; nav IA reflects the rooms
 
 ### Accessibility (closed-beta blockers)
 
 - [ ] **A11Y-01**: A runtime `prefers-reduced-motion` change-listener freezes/restores parallax without a page reload (not just a mount-time check)
-- [ ] **A11Y-02**: Every room passes the per-route hydration-no-panic canary in both regions, keeps `focus-visible` rings, and holds WCAG AA text contrast over the art (scrims)
+- [x] **A11Y-02**: Every room passes the per-route hydration-no-panic canary in both regions, keeps `focus-visible` rings, and holds WCAG AA text contrast over the art (scrims)
 
 ### Art Production
 
@@ -74,8 +74,8 @@ Filled during roadmap creation (2026-06-04).
 | ROOM-05 | Phase 28 — Library & IA Healing | Complete |
 | ROOM-07 | Phase 28 — Library & IA Healing | Complete |
 | ROOM-06 | Phase 29 — Throne, QuickNav & Room A11Y | Complete |
-| ROOM-08 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
-| A11Y-02 | Phase 29 — Throne, QuickNav & Room A11Y | Pending |
+| ROOM-08 | Phase 29 — Throne, QuickNav & Room A11Y | Complete |
+| A11Y-02 | Phase 29 — Throne, QuickNav & Room A11Y | Complete |
 | ART-01 | Phase 30 — Art Production | Pending |
 | ART-02 | Phase 30 — Art Production | Pending |
 | ART-03 | Phase 30 — Art Production | Pending |

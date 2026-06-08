@@ -4,24 +4,24 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Phase 29 context gathered
-last_updated: "2026-06-08T14:28:26.066Z"
+last_updated: "2026-06-08T14:35:32.760Z"
 last_activity: 2026-06-08
 progress:
   total_phases: 19
   completed_phases: 13
   total_plans: 73
-  completed_plans: 67
+  completed_plans: 68
   percent: 68
 ---
 
 ## Current Position
 
 Phase: 29 (throne-quicknav-room-a11y) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-06-08
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 93%
 
 ## Project Reference
 
@@ -56,6 +56,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase ?]: MatchRedirect reads use_params_map id at component top; dispatches RedirectToLibraryMatch(id) server fn so SSR 302 preserves the match id (D-11)
 - [Phase Phase 29-01]: ThroneGrowthState has NO counts field — progression derives from user ranked games independently of team membership (D-05/D-07 lock)
 - [Phase Phase 29-01]: get_throne_growth_counts: pre-authorized team_id caller contract, parameterized type::record(), 2-statement batch count (roster + crown wins)
+- [Phase ?]: [Phase 29-02]: Wave 0 CSS selectors + placeholder WebPs before room render plan; test skip guards keep suite green
 
 ## Blockers/Concerns
 
@@ -74,7 +75,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-08T14:28:03.978Z
+Last session: 2026-06-08T14:35:15.636Z
 Stopped at: Phase 29 context gathered
 Resume file: None
 Next command: Begin Phase 29 (Throne Room)
