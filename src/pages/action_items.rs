@@ -225,7 +225,7 @@ pub fn ActionItemsPanel() -> impl IntoView {
         <div>
             // Quick stats
             <Suspense fallback=move || view! { <SkeletonLine width="w-48" height="h-5" /> }>
-                {move || items.get().map(|result| match result {
+                {move || Suspend::new(async move { match items.await {
                     Ok(ref all_items) => {
                         let open_count = all_items.iter().filter(|i| i.status == "open").count();
                         let in_progress_count = all_items.iter().filter(|i| i.status == "in_progress").count();
@@ -248,7 +248,7 @@ pub fn ActionItemsPanel() -> impl IntoView {
                         }.into_any()
                     }
                     Err(_) => view! { <span></span> }.into_any(),
-                })}
+                } })}
             </Suspense>
 
             // Add item form
@@ -284,7 +284,7 @@ pub fn ActionItemsPanel() -> impl IntoView {
                         }
                     />
                     <Suspense fallback=move || view! { <span></span> }>
-                        {move || members.get().map(|result| match result {
+                        {move || Suspend::new(async move { match members.await {
                             Ok(ref member_list) if !member_list.is_empty() => {
                                 let member_list = member_list.clone();
                                 view! {
@@ -303,7 +303,7 @@ pub fn ActionItemsPanel() -> impl IntoView {
                                 }.into_any()
                             }
                             _ => view! { <span></span> }.into_any(),
-                        })}
+                        } })}
                     </Suspense>
                     <button
                         class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -325,7 +325,7 @@ pub fn ActionItemsPanel() -> impl IntoView {
                     <option value="done">"Done"</option>
                 </select>
                 <Suspense fallback=move || view! { <span></span> }>
-                    {move || members.get().map(|result| match result {
+                    {move || Suspend::new(async move { match members.await {
                         Ok(ref member_list) if !member_list.is_empty() => {
                             let member_list = member_list.clone();
                             view! {
@@ -345,13 +345,13 @@ pub fn ActionItemsPanel() -> impl IntoView {
                             }.into_any()
                         }
                         _ => view! { <span></span> }.into_any(),
-                    })}
+                    } })}
                 </Suspense>
             </div>
 
             // Items list
             <Suspense fallback=move || view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
-                {move || items.get().map(|result| match result {
+                {move || Suspend::new(async move { match items.await {
                     Ok(all_items) => {
                         let sf = status_filter.get();
                         let af = assignee_filter.get();
@@ -474,7 +474,7 @@ pub fn ActionItemsPanel() -> impl IntoView {
                     Err(e) => view! {
                         <ErrorBanner message=format!("Failed to load action items: {e}") />
                     }.into_any(),
-                })}
+                } })}
             </Suspense>
         </div>
     }
@@ -581,7 +581,7 @@ pub fn ActionItemsPage() -> impl IntoView {
 
                 // Quick stats
                 <Suspense fallback=move || view! { <SkeletonLine width="w-48" height="h-5" /> }>
-                    {move || items.get().map(|result| match result {
+                    {move || Suspend::new(async move { match items.await {
                         Ok(ref all_items) => {
                             let open_count = all_items.iter().filter(|i| i.status == "open").count();
                             let in_progress_count = all_items.iter().filter(|i| i.status == "in_progress").count();
@@ -604,7 +604,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                             }.into_any()
                         }
                         Err(_) => view! { <span></span> }.into_any(),
-                    })}
+                    } })}
                 </Suspense>
 
                 // Add item form (Card.plain)
@@ -640,7 +640,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                             }
                         />
                         <Suspense fallback=move || view! { <span></span> }>
-                            {move || members.get().map(|result| match result {
+                            {move || Suspend::new(async move { match members.await {
                                 Ok(ref member_list) if !member_list.is_empty() => {
                                     let member_list = member_list.clone();
                                     view! {
@@ -659,7 +659,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                                     }.into_any()
                                 }
                                 _ => view! { <span></span> }.into_any(),
-                            })}
+                            } })}
                         </Suspense>
                         <button
                             class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -681,7 +681,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                         <option value="done">"Done"</option>
                     </select>
                     <Suspense fallback=move || view! { <span></span> }>
-                        {move || members.get().map(|result| match result {
+                        {move || Suspend::new(async move { match members.await {
                             Ok(ref member_list) if !member_list.is_empty() => {
                                 let member_list = member_list.clone();
                                 view! {
@@ -701,13 +701,13 @@ pub fn ActionItemsPage() -> impl IntoView {
                                 }.into_any()
                             }
                             _ => view! { <span></span> }.into_any(),
-                        })}
+                        } })}
                     </Suspense>
                 </div>
 
                 // Items list
                 <Suspense fallback=move || view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
-                    {move || items.get().map(|result| match result {
+                    {move || Suspend::new(async move { match items.await {
                         Ok(all_items) => {
                             let sf = status_filter.get();
                             let af = assignee_filter.get();
@@ -830,7 +830,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load action items: {e}") />
                         }.into_any(),
-                    })}
+                    } })}
                 </Suspense>
             </div>
         </div>
