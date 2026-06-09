@@ -188,6 +188,57 @@ for (const region of ["demacia", "pandemonium"] as const) {
 // a coarse "any DOM change" check — that's brittle and false-positive
 // prone.
 
+// ---------------------------------------------------------------------------
+// 1b. Team-user Development-tab no-panic + interactivity (Phase 29.1)
+// ---------------------------------------------------------------------------
+//
+// The SC4 panic-sweep matrix above uses `authedPage` (authenticated, NO team).
+// For that user DevelopmentSurface hits Ok(None) → <NoTeamState/> and never
+// mounts ActionItemsPanel, so it can NOT surface the Phase 29 regression:
+// ActionItemsPanel's own items/members resources, read via .get().map inside
+// the conditional Ok(Some(_)) branch of DevelopmentSurface's outer Suspense,
+// produced an SSR-resolved vs WASM-pending structural mismatch → tachys
+// hydration.rs Option::unwrap()-on-None panic, freezing every WASM handler.
+//
+// These tests use the `teamPage` fixture (authenticated WITH a team) so
+// DevelopmentSurface hits Ok(Some(_)) and mounts ActionItemsPanel — the exact
+// path that panicked. Phase 29.1 converted all 8 ActionItemsPanel/Page Suspense
+// reads to Suspend::new; these gates lock that fix in BOTH regions and assert
+// the Action Items add-item control is interactive post-hydrate (SC2).
+
+for (const region of ["demacia", "pandemonium"] as const) {
+  test(`/throne?tab=development hydrates without panic for team user [${region}]`, async ({
+    teamPage,
+  }) => {
+    const errors = await attachPanicListeners(teamPage);
+    await setRegion(teamPage, region);
+    await teamPage.goto("/throne?tab=development");
+    await teamPage.waitForLoadState("networkidle");
+    await teamPage.waitForTimeout(1500);
+    expect(
+      errors,
+      `Expected no panic on /throne?tab=development [${region}]; got: ${errors.join(
+        "\n"
+      )}`
+    ).toEqual([]);
+
+    // SC2 interactivity: prove WASM handlers attached. Fill the add-item
+    // text input and assert it reflects the typed value (on:input + prop:value
+    // are live). A panic during hydration would have killed this handler.
+    const addInput = teamPage
+      .locator('input[placeholder="What needs to be done?"]')
+      .first();
+    await expect(addInput).toBeVisible({ timeout: 3000 });
+    await addInput.fill("e2e-handler-probe");
+    await expect(addInput).toHaveValue("e2e-handler-probe", { timeout: 2000 });
+
+    expect(
+      errors,
+      `Panic after Action Items interaction [${region}]: ${errors.join("\n")}`
+    ).toEqual([]);
+  });
+}
+
 test("mode-toggle observable on /draft [pandemonium]", async ({
   authedPage,
 }) => {

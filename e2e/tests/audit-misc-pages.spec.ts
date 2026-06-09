@@ -92,12 +92,17 @@ test("action-items: page loads", async ({ teamPage }) => {
   // Assert: tab nav is present (RoomSurface) and redirect arrived at /throne.
   await expect(page.locator('nav[role="tablist"]').first()).toBeVisible({ timeout: 5000 });
 
-  // Note: a pre-existing tachys hydration panic (ActionItemsPanel nested in
-  // keep-mounted DevelopmentSurface) affects team users. This is a known issue
-  // from Plan 29-05 that requires Suspend::new refactor of ActionItemsPanel.
-  // SC4 (hydration-no-panic.spec.ts) uses authedPage (no team) and passes.
-  // We only assert the redirect resolved — no panic assertion here.
-  // See: .planning/phases/29-throne-quicknav-room-a11y/29-07-SUMMARY.md
+  // Phase 29.1 FIXED the tachys hydration panic that previously affected team
+  // users here (ActionItemsPanel nested in keep-mounted DevelopmentSurface).
+  // The fix converted ActionItemsPanel/Page Suspense reads to Suspend::new.
+  // This assertion now actively gates the fix: no panic/unreachable console error.
+  // See: .planning/phases/29.1-actionitemspanel-hydration-reconciliation-gap-closure-for-ph/
+  const panics = filterRealErrors(errors).filter(
+    (e) =>
+      e.toLowerCase().includes("panic") ||
+      e.toLowerCase().includes("unreachable")
+  );
+  expect(panics).toHaveLength(0);
 });
 
 test("team-builder: page loads and basic interaction", async ({ teamPage }) => {
