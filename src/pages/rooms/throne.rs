@@ -131,6 +131,46 @@ pub async fn get_throne_growth_state(
     Ok(ThroneGrowthState::from_parts(team_counts, ranked))
 }
 
+// ─── E2E Seed Helpers (debug builds only) ────────────────────────────────────
+
+/// E2E-only: insert a `RANKED_SOLO_5x5` ranked snapshot for the current user.
+///
+/// Compiled only in debug builds (`debug_assertions`). This lets the SC1b
+/// Playwright test seed a ranked record without going through the Riot API.
+/// Auth-gated — rejects unauthenticated callers.
+///
+/// Inserts: Gold II, 75 LP, 25 wins, 10 losses (total 35 games ≥ 20 → tier 2).
+#[cfg(debug_assertions)]
+#[server]
+pub async fn seed_ranked_snapshot_for_test() -> Result<(), ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+
+    db::store_ranked_snapshot(
+        &surreal,
+        &user.id,
+        "RANKED_SOLO_5x5",
+        "Gold",
+        "II",
+        75,
+        25,
+        10,
+    )
+    .await
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(())
+}
+
 // ─── Page component ───────────────────────────────────────────────────────────
 
 /// The Throne page — parallax atmosphere over the five Throne surfaces.

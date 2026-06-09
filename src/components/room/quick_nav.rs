@@ -97,12 +97,17 @@ pub fn QuickNav() -> impl IntoView {
 
     // Auto-focus the filter input when the palette opens (D-09 UX).
     // Also clears the filter so the user sees all destinations fresh.
+    //
+    // Rule: read NodeRef with `get_untracked()` to avoid subscribing to the
+    // NodeRef signal. Subscribing would cause the Effect to re-run when the
+    // input mounts (NodeRef gets populated), which in turn calls filter.set("")
+    // again, potentially triggering a reactive re-render cascade.
     #[cfg(feature = "hydrate")]
     {
         Effect::new(move |_| {
             if open.get() {
                 filter.set(String::new());
-                if let Some(el) = input_ref.get() {
+                if let Some(el) = input_ref.get_untracked() {
                     let _ = el.focus();
                 }
             }

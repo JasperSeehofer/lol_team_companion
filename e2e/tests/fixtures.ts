@@ -113,6 +113,69 @@ export const test = base.extend<Fixtures>({
 export { expect };
 
 /**
+ * Seed a ranked snapshot for the current user via the E2E-only server fn.
+ *
+ * The server fn `seed_ranked_snapshot_for_test` is compiled into debug builds
+ * only (`#[cfg(debug_assertions)]` in throne.rs). It inserts a RANKED_SOLO_5x5
+ * entry of Gold II, 75 LP, 25 wins, 10 losses (35 total games ≥ 20 → tier 2)
+ * for the current session user.
+ *
+ * The server fn URL has a hash suffix that changes on recompile. This helper
+ * discovers it at test runtime from the WASM binary using `strings`. If the
+ * fn is not found (production build or wrong binary), the call is skipped and
+ * a warning is printed — the test that uses it will likely fail with a useful
+ * assertion error rather than a hard crash.
+ *
+ * Prerequisites: page must already be authenticated. Does NOT require a team.
+ * Idempotent — adds an additional snapshot row on each call (tier stays ≥ 1).
+ */
+export async function seedRankedSnapshotForTest(page: Page): Promise<void> {
+  const { execSync } = require("child_process");
+  const path = require("path");
+  // Project root is one level above the e2e directory.
+  // __dirname is e2e/tests, so we go up two levels to get to project root.
+  const projectRoot = path.resolve(__dirname, "../..");
+  // Search both WASM and SSR binaries — WASM may be stale if watch hasn't
+  // rebuilt it yet. SSR binary is authoritative for server-side routing.
+  const binaries = [
+    path.join(projectRoot, "target/site/pkg/lol_team_companion.wasm"),
+    path.join(projectRoot, "target/debug/lol_team_companion"),
+  ];
+
+  let url: string | null = null;
+  for (const binPath of binaries) {
+    try {
+      const raw = execSync(
+        `strings "${binPath}" 2>/dev/null | grep -oP "/api/seed_ranked_snapshot_for_test[0-9]+" | head -1`,
+        { encoding: "utf-8" }
+      ).trim();
+      if (raw.startsWith("/api/")) { url = raw; break; }
+    } catch {
+      // binary not found or strings unavailable — try next.
+    }
+  }
+
+  if (!url) {
+    console.warn(
+      "[seedRankedSnapshotForTest] Could not find server fn URL in WASM binary — " +
+        "ranked snapshot was NOT seeded. Test may fail."
+    );
+    return;
+  }
+
+  // POST to the server fn with the current session cookies.
+  const response = await page.request.post(`http://127.0.0.1:3020${url}`, {
+    headers: { "Content-Type": "application/json" },
+    data: "{}",
+  });
+  if (!response.ok()) {
+    console.warn(
+      `[seedRankedSnapshotForTest] Server fn returned ${response.status()} — snapshot may not have been seeded.`
+    );
+  }
+}
+
+/**
  * Seed a team with enough strategy artifacts to push at least one War Room
  * growth axis to tier ≥ 1.
  *

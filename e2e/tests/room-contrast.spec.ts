@@ -17,9 +17,9 @@ import { test, expect } from "./fixtures";
  * Rooms whose contrast scrim is asserted.
  * - war-room: ships Plan 27-07 (live).
  * - library: ships Plan 28-05 (live).
- * - throne: ships Plan 29-05 (skipped until then — see below).
+ * - throne: ships Plan 29-05 (live — Plan 07 skip guard removed).
  */
-const LIVE_ROOMS = ["/war-room", "/library"] as const;
+const LIVE_ROOMS = ["/war-room", "/library", "/throne"] as const;
 
 // ---------------------------------------------------------------------------
 // SC5 — live rooms (War Room + Library already built)
@@ -52,21 +52,4 @@ for (const room of LIVE_ROOMS) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// SC5 — Throne room (pending Plan 29-05)
-// ---------------------------------------------------------------------------
-// Skipped until Plan 29-05 ships /throne. Plan 07 removes the skip guard
-// and moves /throne into LIVE_ROOMS above (or a merged loop).
-test.skip(
-  "SC5: /throne has z-8 radial-gradient contrast scrim (pending Plan 29-05)",
-  async ({ authedPage }) => {
-    await authedPage.goto("/throne");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(1000);
-
-    const scrim = authedPage.locator('div[style*="radial-gradient"]').first();
-    await expect(scrim).toBeAttached({ timeout: 5000 });
-    const ariaHidden = await scrim.getAttribute("aria-hidden");
-    expect(ariaHidden).toBe("true");
-  }
-);
+// Plan 07: /throne has been merged into LIVE_ROOMS above — no separate skip block needed.

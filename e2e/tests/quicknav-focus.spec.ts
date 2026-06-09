@@ -21,9 +21,8 @@
  */
 import { test, expect } from "./fixtures";
 
-// Skip until Plan 29-06 ships the focus trap + restore implementation.
-// Plan 07 removes this guard.
-test.describe.skip("QuickNav focus (SC2/SC3) — pending Plan 29-06", () => {
+// Plan 07: skip guard removed — Plan 29-06 shipped focus trap + restore.
+test.describe("QuickNav focus (SC2/SC3)", () => {
   /**
    * SC2 — restore: focus returns to the QuickNav trigger after Escape.
    *
@@ -50,8 +49,8 @@ test.describe.skip("QuickNav focus (SC2/SC3) — pending Plan 29-06", () => {
     await expect(trigger).toBeVisible({ timeout: 5000 });
     await trigger.focus();
 
-    // Open QuickNav via Meta+k.
-    await authedPage.keyboard.press("Meta+k");
+    // Open QuickNav via Ctrl+k (Meta+k = Windows key on Linux; Ctrl+k works both platforms).
+    await authedPage.keyboard.press("Control+k");
     // Wait for the overlay to appear.
     await expect(
       authedPage.locator('[role="dialog"]').first()
@@ -89,8 +88,8 @@ test.describe.skip("QuickNav focus (SC2/SC3) — pending Plan 29-06", () => {
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(1000);
 
-    // Open QuickNav.
-    await authedPage.keyboard.press("Meta+k");
+    // Open QuickNav via Ctrl+k (Meta+k = Windows key on Linux; Ctrl+k works both platforms).
+    await authedPage.keyboard.press("Control+k");
     const dialog = authedPage.locator('[role="dialog"]').first();
     await expect(dialog).toBeVisible({ timeout: 3000 });
 

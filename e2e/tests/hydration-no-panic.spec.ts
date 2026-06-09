@@ -228,23 +228,30 @@ test("mode-toggle observable on /solo [pandemonium]", async ({
   ).toEqual([]);
 });
 
-test("mode-toggle observable on /team/dashboard [pandemonium]", async ({
+// /team/dashboard now redirects → /throne?tab=dashboard (D-11, Plan 29-05).
+// The old mode-toggle test is replaced with a Throne tab-click interactivity
+// triad: click the Roster tab and assert aria-selected flips to "true".
+// This proves WASM event-handlers attached correctly on Throne in pandemonium.
+test("throne tab-click observable on /throne [pandemonium]", async ({
   authedPage,
 }) => {
   const errors = await attachPanicListeners(authedPage);
   await setRegion(authedPage, "pandemonium");
-  await authedPage.goto("/team/dashboard");
+  // Navigate via the redirect: /team/dashboard → /throne?tab=dashboard.
+  await authedPage.goto("/throne");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
-  await setMode(authedPage, "dashboard");
+  // Click the "Roster" surface tab (the 3rd tab; D-14 specific-marker shape).
+  const rosterTab = authedPage.locator('nav[role="tablist"] button:has-text("Roster")');
+  await expect(rosterTab).toBeVisible({ timeout: 3000 });
+  await rosterTab.click();
+  // D-14: poll for the specific observable change — aria-selected="true" on Roster tab.
   await expect(
-    authedPage.locator(
-      'button[aria-pressed="true"]:has-text("DASHBOARD")'
-    )
+    authedPage.locator('nav[role="tablist"] button[aria-selected="true"]:has-text("Roster")')
   ).toBeVisible({ timeout: 2000 });
   expect(
     errors,
-    `Panic during /team/dashboard mode-toggle: ${errors.join("\n")}`
+    `Panic during /throne tab-click: ${errors.join("\n")}`
   ).toEqual([]);
 });
 

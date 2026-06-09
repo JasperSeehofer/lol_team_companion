@@ -1,5 +1,6 @@
 /**
  * Phase 29 Plan 02 — Throne room growth SC1 / SC1b assertions.
+ * Phase 29 Plan 07 — skip guards removed; seeding helpers wired.
  *
  * SC1: Throne overlays render at computed opacity > 0 for a seeded high-tier
  *      scenario. This test deliberately asserts getComputedStyle().opacity on
@@ -11,22 +12,12 @@
  * SC1b: A teamless-but-ranked user yields data-progression-tier > 0 while
  *       data-roster-tier == "0". This validates the D-05/D-07 blended growth
  *       divergence: progression advances independently of team membership.
- *       Marked test.fixme until a teamless+ranked seeding fixture is available
- *       (Plan 07 un-skips it) — the assertion shape is correct so Plan 07 can
- *       simply remove the fixme without rewriting the test.
- *
- * NOTE: /throne does not exist until Plan 29-05 ships. Until then these tests
- * will gracefully skip/fail-cleanly on "page not found" — they do NOT break
- * the existing green suite because they are guarded with test.skip when the
- * route 404s. Plan 07 removes the skip guards once the room is built.
  *
  * Requires a running dev server: cargo leptos watch
  */
-import { test, expect, createTeam } from "./fixtures";
+import { test, expect, createTeam, seedRankedSnapshotForTest } from "./fixtures";
 
-// Skip the whole suite until the /throne route exists (Plan 29-05).
-// Plan 07 removes this guard.
-test.describe.skip("Throne room growth (SC1/SC1b) — pending Plan 29-05", () => {
+test.describe("Throne room growth (SC1/SC1b)", () => {
   /**
    * SC1 — seed a team (roster axis ≥ 1) then assert:
    *   1. data-roster-tier attribute matches /[1-3]/ (data-attr assertion)
@@ -68,19 +59,18 @@ test.describe.skip("Throne room growth (SC1/SC1b) — pending Plan 29-05", () =>
    * SC1b — blended axes: teamless user with ranked games gets
    * data-progression-tier > 0 but data-roster-tier == "0".
    *
-   * Marked fixme: seeding a teamless+ranked fixture requires Riot API mock
-   * or a direct DB insert for a ranked_snapshot row — not yet available.
-   * Plan 07 un-skips this test by providing the seeding helper.
+   * Seeding: inserts a RANKED_SOLO_5x5 snapshot via the debug-only
+   * seed_ranked_snapshot_for_test server fn (throne.rs). The user
+   * intentionally has NO team — the progression axis must advance
+   * independently (D-05/D-07 blended growth contract).
    */
-  test.fixme(
-    "SC1b: progression-tier > 0 for teamless ranked user; roster-tier == 0",
+  test("SC1b: progression-tier > 0 for teamless ranked user; roster-tier == 0",
     async ({ authedPage }) => {
-      // TODO (Plan 07): seed a ranked_snapshot row for the test user WITHOUT
-      // creating a team. Then navigate to /throne and assert:
-      //   data-progression-tier matches /[1-3]/
-      //   data-roster-tier == "0"
-      //   .room-overlay--progression computed opacity > 0
-      //   .room-overlay--roster computed opacity == "0"
+      // Seed a ranked snapshot for this user WITHOUT creating a team.
+      // The helper calls the debug-only seed_ranked_snapshot_for_test server fn
+      // which inserts Gold II, 25W/10L (35 games ≥ 20 → progression_tier = 2).
+      await seedRankedSnapshotForTest(authedPage);
+      await authedPage.waitForTimeout(300);
 
       await authedPage.goto("/throne");
       await authedPage.waitForLoadState("networkidle");
@@ -88,6 +78,7 @@ test.describe.skip("Throne room growth (SC1/SC1b) — pending Plan 29-05", () =>
 
       // Progression axis: user-scoped (advances with no team — D-05/D-07).
       const root = authedPage.locator("[data-progression-tier]").first();
+      await expect(root).toBeVisible({ timeout: 5000 });
       await expect(root).toHaveAttribute("data-progression-tier", /[1-3]/);
 
       // Roster axis: team-scoped (stays 0 for a teamless user).
@@ -97,6 +88,7 @@ test.describe.skip("Throne room growth (SC1/SC1b) — pending Plan 29-05", () =>
       const progressionOverlay = authedPage
         .locator(".room-overlay--progression")
         .first();
+      await expect(progressionOverlay).toBeAttached({ timeout: 5000 });
       const progressionOpacity = await progressionOverlay.evaluate(
         (el) => getComputedStyle(el).opacity
       );
@@ -105,6 +97,7 @@ test.describe.skip("Throne room growth (SC1/SC1b) — pending Plan 29-05", () =>
       const rosterOverlay = authedPage
         .locator(".room-overlay--roster")
         .first();
+      await expect(rosterOverlay).toBeAttached({ timeout: 5000 });
       const rosterOpacity = await rosterOverlay.evaluate(
         (el) => getComputedStyle(el).opacity
       );
