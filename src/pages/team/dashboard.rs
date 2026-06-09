@@ -2367,53 +2367,65 @@ pub fn RosterSurface() -> impl IntoView {
 pub fn DevelopmentSurface() -> impl IntoView {
     use crate::pages::action_items::ActionItemsPanel;
 
-    // get_team_dashboard used only to gate on team membership (no-team CTA, D-02).
-    // is_leader and current_user_id are not needed in this surface (ActionItemsPanel
-    // and TeamNotebookInner resolve auth independently from their server fns).
+    // Phase 29.1 hydration fix — UNCONDITIONAL panel mount.
+    //
+    // Previously this surface wrapped <ActionItemsPanel/> + <TeamNotebookInner/>
+    // inside the Ok(Some(_)) branch of a `dash`-resource <Suspense> (no-team → CTA,
+    // team → panel). That conditional-Suspend branch is the root of the team-user
+    // tachys hydration.rs:216 panic: a child <Suspense> (the panel's) whose SSR
+    // renders RESOLVED content but whose hydrate render starts with the OUTER branch
+    // pending does not serialize its hydration markers correctly in Leptos 0.8 →
+    // SSR-resolved vs WASM-pending structural mismatch → reconciler panic at the
+    // panel's root <div>. The no-team SC4 canary never hit it (Ok(None) → CTA, panel
+    // never mounted).
+    //
+    // ActionItemsPanel + TeamNotebookInner already handle the no-team case via their
+    // own server fns returning Ok(Vec::new()) (rule #44), so they can mount
+    // UNCONDITIONALLY. We keep the no-team CTA as a SEPARATE, reactively-toggled
+    // banner ABOVE the always-present panel — this removes the conditional branch
+    // entirely so SSR and hydrate render the same structure (panel always present).
     let dash = Resource::new(|| (), |_| get_team_dashboard());
+    let has_team = RwSignal::new(true); // assume team until resolved → no SSR/hydrate flip on the panel
+    Effect::new(move |_| {
+        if let Some(Ok(d)) = dash.get() {
+            has_team.set(d.is_some());
+        }
+    });
 
     view! {
         <div data-feedback-label="Development surface">
-            <Suspense fallback=|| view! { <SkeletonCard height="h-16" /> }>
-                {move || dash.get().map(|result| match result {
-                    Ok(None) => view! {
-                        // D-02: inline empty-state CTA when no team
-                        <NoTeamState />
-                    }.into_any(),
-                    Ok(Some(_)) => {
-                        view! {
-                            <div class="flex flex-col gap-8">
-                                // Section header + Library deep-link (D-03)
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Tasking"</div>
-                                        <h2 class="font-display italic text-2xl text-primary">"Action Items"</h2>
-                                    </div>
-                                    // D-03: deep-link to team learnings in Library
-                                    // Do NOT re-host PostGameLearning content (D-03 — learnings stay in Library).
-                                    <A href="/library?tab=post-game" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"Team Learnings in Library \u{2192}"</A>
-                                </div>
+            <div class="flex flex-col gap-8">
+                // D-02 no-team CTA — reactive banner, NOT a structural gate on the panel.
+                // hidden via attr so SSR and hydrate emit the same node; only the
+                // attribute toggles once `dash` resolves on the client.
+                <div hidden=move || if has_team.get() { Some("") } else { None }>
+                    <NoTeamState />
+                </div>
 
-                                // Full Action Items feature — server fns imported from action_items.rs (D-03 substance)
-                                <ActionItemsPanel />
+                // Section header + Library deep-link (D-03)
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Tasking"</div>
+                        <h2 class="font-display italic text-2xl text-primary">"Action Items"</h2>
+                    </div>
+                    // D-03: deep-link to team learnings in Library
+                    // Do NOT re-host PostGameLearning content (D-03 — learnings stay in Library).
+                    <A href="/library?tab=post-game" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"Team Learnings in Library \u{2192}"</A>
+                </div>
 
-                                // Divider
-                                <div class="border-t border-divider"></div>
+                // Full Action Items feature — server fns imported from action_items.rs (D-03 substance)
+                <ActionItemsPanel />
 
-                                // Team Notebook (supporting notes — server fns defined in this file)
-                                <div>
-                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Folio"</div>
-                                    <h2 class="font-display italic text-2xl text-primary mb-4">"Team Notebook"</h2>
-                                    <TeamNotebookInner />
-                                </div>
-                            </div>
-                        }.into_any()
-                    },
-                    Err(e) => view! {
-                        <ErrorBanner message=format!("Failed to load team data: {e}") />
-                    }.into_any(),
-                })}
-            </Suspense>
+                // Divider
+                <div class="border-t border-divider"></div>
+
+                // Team Notebook (supporting notes — server fns defined in this file)
+                <div>
+                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Folio"</div>
+                    <h2 class="font-display italic text-2xl text-primary mb-4">"Team Notebook"</h2>
+                    <TeamNotebookInner />
+                </div>
+            </div>
         </div>
     }
 }
@@ -2470,8 +2482,8 @@ fn TeamNotebookInner() -> impl IntoView {
             </div>
 
             <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
-                {move || {
-                    notes_resource.get().map(move |res| match res {
+                {move || Suspend::new(async move {
+                    match notes_resource.await {
                         Ok(notes) if notes.is_empty() => {
                             view! { <p class="text-dimmed text-sm">"No notes yet. Be the first to write one!"</p> }.into_any()
                         }
@@ -2622,8 +2634,8 @@ fn TeamNotebookInner() -> impl IntoView {
                         Err(e) => view! {
                             <p class="text-danger text-sm" role="alert">{format!("Could not load notes: {e}")}</p>
                         }.into_any(),
-                    })
-                }}
+                    }
+                })}
             </Suspense>
         </div>
     }

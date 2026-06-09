@@ -184,27 +184,30 @@ pub fn ThroneRoom() -> impl IntoView {
 
     // Blended growth state drives the atmosphere overlays.
     // No team → roster/crown stay at Seed (tier 0); progression advances independently.
+    //
+    // Phase 29.1 hydration fix: reading `growth.get()` directly inside a
+    // `Signal::derive` happens OUTSIDE any <Suspense> (Leptos warns about this at
+    // throne.rs render). For a TEAM user the resource resolves to non-zero tiers
+    // during SSR but is still pending on hydrate (→ 0 via the fallback), so the
+    // `data-*-tier` attributes on AtmosphereRoot's root differ between SSR and
+    // hydrate. That desyncs the tachys hydration cursor and panics at the first
+    // complex descendant (ActionItemsPanel) — the team-user-only Phase 29 regression
+    // that the no-team SC4 canary (all tiers 0 both ways) never surfaced.
+    //
+    // Fix: tiers start at 0 (matching BOTH the SSR pending-state render AND the
+    // hydrate initial render — no structural/attribute divergence), then an Effect
+    // updates them once the resource resolves on the client. The overlays fade in
+    // reactively post-hydrate; initial paint is identical SSR↔hydrate.
     let growth = Resource::new(|| (), |_| get_throne_growth_state());
-    let roster_tier = Signal::derive(move || {
-        growth
-            .get()
-            .and_then(|r| r.ok())
-            .map(|g| g.roster_tier)
-            .unwrap_or(0)
-    });
-    let progression_tier = Signal::derive(move || {
-        growth
-            .get()
-            .and_then(|r| r.ok())
-            .map(|g| g.progression_tier)
-            .unwrap_or(0)
-    });
-    let crown_tier = Signal::derive(move || {
-        growth
-            .get()
-            .and_then(|r| r.ok())
-            .map(|g| g.crown_tier)
-            .unwrap_or(0)
+    let roster_tier = RwSignal::new(0u8);
+    let progression_tier = RwSignal::new(0u8);
+    let crown_tier = RwSignal::new(0u8);
+    Effect::new(move |_| {
+        if let Some(Ok(g)) = growth.get() {
+            roster_tier.set(g.roster_tier);
+            progression_tier.set(g.progression_tier);
+            crown_tier.set(g.crown_tier);
+        }
     });
 
     // Active region's asset directory (T-29-05-03: region is server-set, never
