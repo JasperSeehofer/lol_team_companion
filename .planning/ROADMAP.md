@@ -449,7 +449,9 @@ Plans:
   3. The `audit-misc-pages.spec.ts` action-items workaround (which currently suppresses the ActionItemsPanel panic assertion) is reverted to assert no panic, and passes
   4. `cargo check --features ssr` and `cargo check --features hydrate --target wasm32-unknown-unknown` both pass; full e2e regression suite green
 **Approach**: Convert `ActionItemsPanel`'s `{move || items.get().map(...)}`-inside-`<Suspense>` pattern to the `{move || Suspend::new(async move { items.await })}` pattern (NOT `LocalResource` — it has inverted SSR/WASM Suspense behavior); this refactors ~8 Suspense blocks in `action_items.rs`. Mirror the working Suspend::new pattern already used elsewhere in the room surfaces.
-**Plans**: TBD (run `/gsd:plan-phase 29.1`)
+**Plans**: 1 plan
+Plans:
+- [ ] 29.1-01-PLAN.md — Convert action_items.rs ActionItemsPanel/Page Suspense blocks to Suspend::new; add team-user no-panic + interactivity e2e (both regions); revert audit workaround
 **UI hint**: yes (team-user browser verification required in both regions)
 
 ### Phase 30: Art Production
