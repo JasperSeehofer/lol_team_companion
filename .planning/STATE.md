@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: verifying
-stopped_at: Phase 29 context gathered
-last_updated: "2026-06-09T13:22:19.973Z"
-last_activity: 2026-06-09
+status: executing
+stopped_at: Phase 29.1 complete (verified)
+last_updated: "2026-06-09T13:30:00.000Z"
+last_activity: 2026-06-09 -- Phase 29.1 executed and verified (5/5 must-haves)
 progress:
   total_phases: 20
   completed_phases: 15
@@ -16,10 +16,10 @@ progress:
 
 ## Current Position
 
-Phase: 29 (throne-quicknav-room-a11y) — COMPLETE (verified; 1 known issue → Phase 29.1)
-Plan: 7 of 7
-Status: Phase complete — ready for verification
-Next: plan Phase 29.1 (`/gsd:plan-phase 29.1`) before Phase 30, or proceed to Phase 30 (Art Production)
+Phase: 29.1 (actionitemspanel-hydration-reconciliation) — COMPLETE (verified; 5/5 must-haves)
+Plan: 1 of 1
+Status: Phase complete — verified
+Next: proceed to Phase 30 (Art Production) — gated on Riot IP go/no-go decision (`/consult legal`)
 Last activity: 2026-06-09
 
 Progress: [██████████] 100%
@@ -36,6 +36,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase 18.2]: Anti-structural-branching hydration rule — `InitialTheme` (region) must be read ONCE at room top level and passed as `region: String` prop; never inside reactive closures or child components. Reading context inside reactive primitive caused Phase 18.2 tachys `Option::unwrap()` panic. Rule now required in CLAUDE.md + leptos-patterns.md BEFORE any new room is built (ROOM-03).
 - [Phase 19]: Bug-report inbox auto-exports on server start; CLAUDE.md instructs future sessions to read it if `total_open > 0`.
 - [Phase 29 close-out]: All 5 SCs verified green via independent spec re-run. Orchestrator VERIFIED a team-user-only regression: `/throne?tab=development` panics at `tachys hydration.rs:216` (`pageerror: unreachable`), freezing the room, because `ActionItemsPanel`'s own `Resource::new` sits inside `DevelopmentSurface`'s conditional Suspense branch (nested-resource hydration mismatch, Leptos 0.8). SC4's no-team canary doesn't surface it. Closed Phase 29 with the issue documented; inserted Phase 29.1 (Suspend::new refactor of action_items.rs) to fix. User decision: verify-then-close + follow-up.
+- [Phase 29.1]: Throne Development-tab hydration panic fixed and VERIFIED (5/5 must-haves). Root cause was NOT the panel's `.get().map` reads but the conditional-Suspense-branch NESTING — a resource-backed sub-component (ActionItemsPanel/TeamNotebookInner) mounted inside the `Ok(Some(_))` branch of DevelopmentSurface's outer `dash` Suspense cannot hydrate in Leptos 0.8 (SSR-resolved vs WASM-pending structural mismatch → tachys panic). Fix: mount the sub-components UNCONDITIONALLY (both already return `Ok(Vec::new())` for no-team, rule #44) and gate the no-team CTA with a reactive `hidden` banner; collapse panel/page to a SINGLE Suspense awaiting all resources once. New generalizable gotcha (candidate for leptos-patterns.md alongside #58/#19): never embed a resource-backed sub-component inside a conditional branch of an outer Suspense — mount unconditionally + reactive `hidden`. Deviation overrode the plan's "do not touch DevelopmentSurface" instruction (Rule 1 — plan instruction contradicted its own binding must_haves.truths); justified and verified.
 - [Roadmap v1.4]: Old v1.3 Phases 20-25 (never built) superseded by v1.4 Phases 31-34. Phase numbers 20, 20.1, 21, 22, 23, 24, 25 are retired.
 - [Roadmap v1.4]: Build order — Phase 26 gates all rooms; Phases 27-29 rooms-first; Phase 30 art calendar-parallel with 27-29 (art swaps in at existing file paths, no code change); Phases 31-34 launch after rooms complete.
 - [Roadmap v1.4]: Room system uses extract-then-compose pattern (WarSurfaces, LibSurfaces, ThroneSurfaces over AtmosphereRoot); intra-room tab switching via RwSignal<ActiveSurface> + Show, NOT sub-routes (sub-routes remount AtmosphereRoot destroying parallax continuity).
