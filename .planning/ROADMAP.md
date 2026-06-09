@@ -80,7 +80,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - [x] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases) (completed 2026-06-05)
 - [x] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern (completed 2026-06-05)
 - [x] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links (completed 2026-06-06)
-- [ ] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions
+- [x] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions (completed 2026-06-09)
 - [ ] **Phase 30: Art Production** - Original-world art identity established; FLUX layer-separated art for all rooms (first region) and second region; CI-enforced 400 KB/room/region budget
 - [ ] **Phase 31: Production Hardening & Beta Gate** - Production binary hardened for HTTPS deploy; closed-beta invite gate on registration
 - [ ] **Phase 32: Deploy Infrastructure** - Binary running on Hetzner CAX11 at chosen domain via Caddy; `just deploy` recipe
@@ -434,7 +434,7 @@ Plans:
 - [x] 29-06-PLAN.md — QuickNav filter + focus trap + focus-restore (ROOM-08) + room-centric HUB_ROUTES restructure (5 touch-points)
 
 **Wave 3** *(phase gate — depends on 05 + 06)*
-- [ ] 29-07-PLAN.md — e2e phase gate: SC1-SC5 green both regions + redirect resolution + full-suite regression (CHECKPOINT)
+- [x] 29-07-PLAN.md — e2e phase gate: SC1-SC5 green both regions + redirect resolution + full-suite regression (CHECKPOINT)
 **UI hint**: yes
 
 ### Phase 30: Art Production
@@ -544,7 +544,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | 26. Room System Foundations | v1.4 | 4/4 | Complete   | 2026-06-05 |
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 7/7 | Complete    | 2026-06-06 |
-| 29. Throne, QuickNav & Room A11Y | v1.4 | 6/7 | In Progress|  |
+| 29. Throne, QuickNav & Room A11Y | v1.4 | 7/7 | Complete   | 2026-06-09 |
 | 30. Art Production | v1.4 | 0/? | Not started | — |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
 | 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
