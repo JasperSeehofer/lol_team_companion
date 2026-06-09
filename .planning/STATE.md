@@ -2,25 +2,25 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: phase_complete
-stopped_at: Phase 29 complete (verified); Phase 29.1 inserted for known-issue closure
-last_updated: "2026-06-09T08:42:14.349Z"
-last_activity: 2026-06-09
+status: executing
+stopped_at: Phase 29 context gathered
+last_updated: "2026-06-09T11:56:05.747Z"
+last_activity: 2026-06-09 -- Phase 29.1 planning complete
 progress:
-  total_phases: 19
+  total_phases: 20
   completed_phases: 14
-  total_plans: 73
+  total_plans: 74
   completed_plans: 73
-  percent: 74
+  percent: 70
 ---
 
 ## Current Position
 
 Phase: 29 (throne-quicknav-room-a11y) — COMPLETE (verified; 1 known issue → Phase 29.1)
 Plan: 7 of 7
-Status: All 5 SCs verified green (specs independently re-run). Team-user Development-tab hydration panic (tachys hydration.rs:216) verified real and deferred to inserted Phase 29.1.
+Status: Ready to execute
 Next: plan Phase 29.1 (`/gsd:plan-phase 29.1`) before Phase 30, or proceed to Phase 30 (Art Production)
-Last activity: 2026-06-09
+Last activity: 2026-06-09 -- Phase 29.1 planning complete
 
 Progress: [██████████] 100%
 
