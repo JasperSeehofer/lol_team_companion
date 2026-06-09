@@ -2,25 +2,25 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: executing
+status: verifying
 stopped_at: Phase 29 context gathered
-last_updated: "2026-06-09T11:56:05.747Z"
-last_activity: 2026-06-09 -- Phase 29.1 planning complete
+last_updated: "2026-06-09T13:22:19.973Z"
+last_activity: 2026-06-09
 progress:
   total_phases: 20
-  completed_phases: 14
+  completed_phases: 15
   total_plans: 74
-  completed_plans: 73
-  percent: 70
+  completed_plans: 74
+  percent: 75
 ---
 
 ## Current Position
 
 Phase: 29 (throne-quicknav-room-a11y) — COMPLETE (verified; 1 known issue → Phase 29.1)
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Next: plan Phase 29.1 (`/gsd:plan-phase 29.1`) before Phase 30, or proceed to Phase 30 (Art Production)
-Last activity: 2026-06-09 -- Phase 29.1 planning complete
+Last activity: 2026-06-09
 
 Progress: [██████████] 100%
 
@@ -62,6 +62,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 - [Phase ?]: TeamNotebookInner: auth resolves server-side, no props needed
 - [Phase ?]: Game Day Brief mode dropped from surfaces; DashboardSurface retains prep-priority panel content
 - [Phase ?]: DevelopmentSurface: ActionItemsPanel imported from action_items.rs, TeamNotebookInner resolves auth server-side independently of team gate
+- [Phase ?]: [Phase 29.1-01]: Team-user /throne?tab=development hydration panic root cause was the conditional-Suspend-branch NESTING in DevelopmentSurface, not ActionItemsPanel .get().map reads. Fix: mount ActionItemsPanel + TeamNotebookInner UNCONDITIONALLY (handle no-team via Ok(Vec::new), rule #44); no-team CTA is a reactive hidden banner; panel/page collapsed to a single Suspense.
+- [Phase ?]: [Phase 29.1-01]: Leptos 0.8 gotcha — a resource-backed sub-component mounted inside a conditional branch of an OUTER Suspense panics at hydration; mount unconditionally and gate optional chrome with a reactive hidden attribute, not a Suspend branch.
 
 ## Blockers/Concerns
 
@@ -80,7 +82,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-09T08:42:14.332Z
+Last session: 2026-06-09T13:21:40.422Z
 Stopped at: Phase 29 context gathered
 Resume file: None
 Next command: Begin Phase 29 (Throne Room)

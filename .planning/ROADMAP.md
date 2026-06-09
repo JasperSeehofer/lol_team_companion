@@ -81,7 +81,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - [x] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern (completed 2026-06-05)
 - [x] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links (completed 2026-06-06)
 - [x] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions (completed 2026-06-09; known issue → Phase 29.1)
-- [ ] **Phase 29.1: ActionItemsPanel Hydration Reconciliation** - Gap closure: fix the team-user `tachys` hydration panic on `/throne?tab=development` (nested Resource in conditional Suspense branch) via `Suspend::new` refactor of `action_items.rs` (inserted 2026-06-09)
+- [x] **Phase 29.1: ActionItemsPanel Hydration Reconciliation** - Gap closure: fix the team-user `tachys` hydration panic on `/throne?tab=development` (nested Resource in conditional Suspense branch) via `Suspend::new` refactor of `action_items.rs` (inserted 2026-06-09) (completed 2026-06-09)
 - [ ] **Phase 30: Art Production** - Original-world art identity established; FLUX layer-separated art for all rooms (first region) and second region; CI-enforced 400 KB/room/region budget
 - [ ] **Phase 31: Production Hardening & Beta Gate** - Production binary hardened for HTTPS deploy; closed-beta invite gate on registration
 - [ ] **Phase 32: Deploy Infrastructure** - Binary running on Hetzner CAX11 at chosen domain via Caddy; `just deploy` recipe
@@ -451,7 +451,7 @@ Plans:
 **Approach**: Convert `ActionItemsPanel`'s `{move || items.get().map(...)}`-inside-`<Suspense>` pattern to the `{move || Suspend::new(async move { items.await })}` pattern (NOT `LocalResource` — it has inverted SSR/WASM Suspense behavior); this refactors ~8 Suspense blocks in `action_items.rs`. Mirror the working Suspend::new pattern already used elsewhere in the room surfaces.
 **Plans**: 1 plan
 Plans:
-- [ ] 29.1-01-PLAN.md — Convert action_items.rs ActionItemsPanel/Page Suspense blocks to Suspend::new; add team-user no-panic + interactivity e2e (both regions); revert audit workaround
+- [x] 29.1-01-PLAN.md — Convert action_items.rs ActionItemsPanel/Page Suspense blocks to Suspend::new; add team-user no-panic + interactivity e2e (both regions); revert audit workaround
 **UI hint**: yes (team-user browser verification required in both regions)
 
 ### Phase 30: Art Production
