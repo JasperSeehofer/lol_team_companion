@@ -80,7 +80,8 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 - [x] **Phase 26: Room System Foundations** - Team-scoped growth model, AtmosphereRoot axis generalization, anti-structural-branching hydration rule, prefers-reduced-motion runtime listener (gates all room phases) (completed 2026-06-05)
 - [x] **Phase 27: War Room** - Draft, tree-drafter, game-plan, opponents, and ban-priority under one parallax atmosphere; RoomSurface tab component established as the pattern (completed 2026-06-05)
 - [x] **Phase 28: Library & IA Healing** - Stats, match detail, analytics, post-game, and learnings under library atmosphere; opponents and learnings IA healed into their intent rooms; legacy flat routes preserved as deep links (completed 2026-06-06)
-- [x] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions (completed 2026-06-09)
+- [x] **Phase 29: Throne, QuickNav & Room A11Y** - Throne hosts identity + team dashboard + solo progression; QuickNav promoted app-wide with focus trap; every room passes hydration-no-panic canary in both regions (completed 2026-06-09; known issue → Phase 29.1)
+- [ ] **Phase 29.1: ActionItemsPanel Hydration Reconciliation** - Gap closure: fix the team-user `tachys` hydration panic on `/throne?tab=development` (nested Resource in conditional Suspense branch) via `Suspend::new` refactor of `action_items.rs` (inserted 2026-06-09)
 - [ ] **Phase 30: Art Production** - Original-world art identity established; FLUX layer-separated art for all rooms (first region) and second region; CI-enforced 400 KB/room/region budget
 - [ ] **Phase 31: Production Hardening & Beta Gate** - Production binary hardened for HTTPS deploy; closed-beta invite gate on registration
 - [ ] **Phase 32: Deploy Infrastructure** - Binary running on Hetzner CAX11 at chosen domain via Caddy; `just deploy` recipe
@@ -436,6 +437,20 @@ Plans:
 **Wave 3** *(phase gate — depends on 05 + 06)*
 - [x] 29-07-PLAN.md — e2e phase gate: SC1-SC5 green both regions + redirect resolution + full-suite regression (CHECKPOINT)
 **UI hint**: yes
+
+### Phase 29.1: ActionItemsPanel Hydration Reconciliation (gap closure for Phase 29 team-user development-tab panic) (INSERTED 2026-06-09)
+**Goal**: Team users can open `/throne?tab=development` (and the `/action-items` redirect) without the WASM runtime panicking — the Development surface hydrates cleanly and its Action Items remain fully interactive for team users, closing the regression introduced when Action Items was composed into the Throne room's conditional-Suspense tab branch in Phase 29
+**Depends on**: Phase 29
+**Requirements**: ROOM-06 (regression closure), A11Y-02 (no frozen room)
+**Context**: Phase 29 (Plan 29-07) shipped with all 5 success criteria green but a documented, orchestrator-VERIFIED known issue: a team user visiting `/throne?tab=development` triggers a `tachys` `Option::unwrap() on None` panic at `hydration.rs:216` (`PAGEERROR: unreachable`), killing all WASM event handlers and freezing the room. SC4's canary uses a no-team user (whose Development tab has no `ActionItemsPanel` Resource), so it does not surface this. Root cause (per `29-07-SUMMARY.md` lines 180-194): `ActionItemsPanel` (`src/pages/action_items.rs:225`) renders its own `items = Resource::new(...)` inside the `Ok(Some(...))` conditional branch of `DevelopmentSurface`'s outer Suspense-wrapped Resource. In Leptos 0.8, nested resources in conditional branches of an outer Suspense boundary do not serialize correctly for hydration → SSR resolves and renders content while WASM hydration starts with the inner resource pending → structural mismatch → panic.
+**Success Criteria** (what must be TRUE):
+  1. A team user (one with a created team) visiting `/throne?tab=development` produces NO `tachys`/`hydration.rs` panic and NO `pageerror: unreachable` in the console in BOTH demacia and pandemonium regions — verified by an e2e spec that creates a team (teamPage fixture) before navigating (the existing SC4 canary's no-team path must continue to pass unchanged)
+  2. After hydration, Action Items on the Development tab are interactive for a team user — at least one Action Items control (add/toggle/filter) responds to input, proving handlers are live
+  3. The `audit-misc-pages.spec.ts` action-items workaround (which currently suppresses the ActionItemsPanel panic assertion) is reverted to assert no panic, and passes
+  4. `cargo check --features ssr` and `cargo check --features hydrate --target wasm32-unknown-unknown` both pass; full e2e regression suite green
+**Approach**: Convert `ActionItemsPanel`'s `{move || items.get().map(...)}`-inside-`<Suspense>` pattern to the `{move || Suspend::new(async move { items.await })}` pattern (NOT `LocalResource` — it has inverted SSR/WASM Suspense behavior); this refactors ~8 Suspense blocks in `action_items.rs`. Mirror the working Suspend::new pattern already used elsewhere in the room surfaces.
+**Plans**: TBD (run `/gsd:plan-phase 29.1`)
+**UI hint**: yes (team-user browser verification required in both regions)
 
 ### Phase 30: Art Production
 **Goal**: Original-world, legally-safe FLUX art is in place for all three new rooms in both regions — the project establishes its own visual identity (Arcane-inspired but not Riot IP), and every room's atmosphere looks like a real place rather than a placeholder gradient

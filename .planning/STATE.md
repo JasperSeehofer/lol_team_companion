@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: verifying
-stopped_at: Phase 29 context gathered
+status: phase_complete
+stopped_at: Phase 29 complete (verified); Phase 29.1 inserted for known-issue closure
 last_updated: "2026-06-09T08:42:14.349Z"
 last_activity: 2026-06-09
 progress:
@@ -16,9 +16,10 @@ progress:
 
 ## Current Position
 
-Phase: 29 (throne-quicknav-room-a11y) — EXECUTING
+Phase: 29 (throne-quicknav-room-a11y) — COMPLETE (verified; 1 known issue → Phase 29.1)
 Plan: 7 of 7
-Status: Phase complete — ready for verification
+Status: All 5 SCs verified green (specs independently re-run). Team-user Development-tab hydration panic (tachys hydration.rs:216) verified real and deferred to inserted Phase 29.1.
+Next: plan Phase 29.1 (`/gsd:plan-phase 29.1`) before Phase 30, or proceed to Phase 30 (Art Production)
 Last activity: 2026-06-09
 
 Progress: [██████████] 100%
@@ -34,6 +35,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 - [Phase 18.2]: Anti-structural-branching hydration rule — `InitialTheme` (region) must be read ONCE at room top level and passed as `region: String` prop; never inside reactive closures or child components. Reading context inside reactive primitive caused Phase 18.2 tachys `Option::unwrap()` panic. Rule now required in CLAUDE.md + leptos-patterns.md BEFORE any new room is built (ROOM-03).
 - [Phase 19]: Bug-report inbox auto-exports on server start; CLAUDE.md instructs future sessions to read it if `total_open > 0`.
+- [Phase 29 close-out]: All 5 SCs verified green via independent spec re-run. Orchestrator VERIFIED a team-user-only regression: `/throne?tab=development` panics at `tachys hydration.rs:216` (`pageerror: unreachable`), freezing the room, because `ActionItemsPanel`'s own `Resource::new` sits inside `DevelopmentSurface`'s conditional Suspense branch (nested-resource hydration mismatch, Leptos 0.8). SC4's no-team canary doesn't surface it. Closed Phase 29 with the issue documented; inserted Phase 29.1 (Suspend::new refactor of action_items.rs) to fix. User decision: verify-then-close + follow-up.
 - [Roadmap v1.4]: Old v1.3 Phases 20-25 (never built) superseded by v1.4 Phases 31-34. Phase numbers 20, 20.1, 21, 22, 23, 24, 25 are retired.
 - [Roadmap v1.4]: Build order — Phase 26 gates all rooms; Phases 27-29 rooms-first; Phase 30 art calendar-parallel with 27-29 (art swaps in at existing file paths, no code change); Phases 31-34 launch after rooms complete.
 - [Roadmap v1.4]: Room system uses extract-then-compose pattern (WarSurfaces, LibSurfaces, ThroneSurfaces over AtmosphereRoot); intra-room tab switching via RwSignal<ActiveSurface> + Show, NOT sub-routes (sub-routes remount AtmosphereRoot destroying parallax continuity).
