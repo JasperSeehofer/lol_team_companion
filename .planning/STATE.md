@@ -4,25 +4,25 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Phase 30 context gathered
-last_updated: "2026-06-15T13:10:07.501Z"
+last_updated: "2026-06-15T13:25:16.401Z"
 last_activity: 2026-06-15
 progress:
   total_phases: 20
   completed_phases: 15
   total_plans: 80
-  completed_plans: 75
+  completed_plans: 76
   percent: 75
 ---
 
 ## Current Position
 
 Phase: 30 (art-production) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Next: proceed to Phase 30 (Art Production) — gated on Riot IP go/no-go decision (`/consult legal`)
 Last activity: 2026-06-15
 
-Progress: [█████████░] 94%
+Progress: [██████████] 95%
 
 ## Project Reference
 
@@ -33,6 +33,8 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Decisions
 
+- [Phase 30-02]: Per-tier overlay CSS naming locked: `room-overlay--{axis}--tier-{N}` (e.g. `room-overlay--lib--tier-1`). Plans 05/06 generate art at `overlay-{axis}-{N}.webp` paths; the CSS class and asset path are the canonical link.
+- [Phase 30-02]: seedSoloTier1Growth seeds lib axis via one `personal_learning` record at `/personal-learnings/new` (lib threshold `[1,8,25]`). Seed-and-assert e2e pattern closes Phase 27 silent-fail gap — tier-visibility now has a regression gate before real art lands.
 - [Phase 18.2]: Anti-structural-branching hydration rule — `InitialTheme` (region) must be read ONCE at room top level and passed as `region: String` prop; never inside reactive closures or child components. Reading context inside reactive primitive caused Phase 18.2 tachys `Option::unwrap()` panic. Rule now required in CLAUDE.md + leptos-patterns.md BEFORE any new room is built (ROOM-03).
 - [Phase 19]: Bug-report inbox auto-exports on server start; CLAUDE.md instructs future sessions to read it if `total_open > 0`.
 - [Phase 29 close-out]: All 5 SCs verified green via independent spec re-run. Orchestrator VERIFIED a team-user-only regression: `/throne?tab=development` panics at `tachys hydration.rs:216` (`pageerror: unreachable`), freezing the room, because `ActionItemsPanel`'s own `Resource::new` sits inside `DevelopmentSurface`'s conditional Suspense branch (nested-resource hydration mismatch, Leptos 0.8). SC4's no-team canary doesn't surface it. Closed Phase 29 with the issue documented; inserted Phase 29.1 (Suspend::new refactor of action_items.rs) to fix. User decision: verify-then-close + follow-up.
@@ -83,7 +85,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-15T13:10:07.488Z
+Last session: 2026-06-15T13:25:16.388Z
 Stopped at: Phase 30 context gathered
 Resume file: None
 Next command: Begin Phase 29 (Throne Room)

@@ -577,7 +577,7 @@ Plans:
 **Wave 1**
 
 - [x] 30-01-PLAN.md — Legal/Path A gate + AI-IMAGES.md Path A prompt rewrite + .env.example (ART-01)
-- [ ] 30-02-PLAN.md — D-10 per-tier overlay code change (4 rooms) + input.css + placeholder WebPs + e2e seed-and-assert (ART-02)
+- [x] 30-02-PLAN.md — D-10 per-tier overlay code change (4 rooms) + input.css + placeholder WebPs + e2e seed-and-assert (ART-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -706,7 +706,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 7/7 | Complete    | 2026-06-06 |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 7/7 | Complete   | 2026-06-09 |
-| 30. Art Production | v1.4 | 1/6 | In Progress|  |
+| 30. Art Production | v1.4 | 2/6 | In Progress|  |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
 | 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
 | 33. Compliance & Pre-Launch Review | v1.4 | 0/? | Not started | — |
