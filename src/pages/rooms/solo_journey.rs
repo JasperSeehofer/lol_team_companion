@@ -60,10 +60,18 @@ pub fn SoloJourneyRoom() -> impl IntoView {
             <Plane src=format!("{dir}/plane-mid.webp") depth=16 z=2 />
             <Plane src=format!("{dir}/plane-near.webp") depth=32 z=3 />
 
-            // ── Growth overlays (fade in by tier via CSS data-*-tier) ───────
-            <GrowthOverlay axis="banner" src=format!("{dir}/overlay-banner.webp") z=4 />
-            <GrowthOverlay axis="lib" src=format!("{dir}/overlay-lib.webp") z=5 />
-            <GrowthOverlay axis="armory" src=format!("{dir}/overlay-armory.webp") z=6 />
+            // ── Growth overlays (discrete per-tier art via CSS data-*-tier) ──
+            // Three stacked images per axis — exactly one is visible at a given
+            // tier (CSS data-attr toggle, no reactive branching — ROOM-03).
+            <GrowthOverlay axis="banner--tier-1" src=format!("{dir}/overlay-banner-1.webp") z=4 />
+            <GrowthOverlay axis="banner--tier-2" src=format!("{dir}/overlay-banner-2.webp") z=4 />
+            <GrowthOverlay axis="banner--tier-3" src=format!("{dir}/overlay-banner-3.webp") z=4 />
+            <GrowthOverlay axis="lib--tier-1"    src=format!("{dir}/overlay-lib-1.webp")    z=5 />
+            <GrowthOverlay axis="lib--tier-2"    src=format!("{dir}/overlay-lib-2.webp")    z=5 />
+            <GrowthOverlay axis="lib--tier-3"    src=format!("{dir}/overlay-lib-3.webp")    z=5 />
+            <GrowthOverlay axis="armory--tier-1" src=format!("{dir}/overlay-armory-1.webp") z=6 />
+            <GrowthOverlay axis="armory--tier-2" src=format!("{dir}/overlay-armory-2.webp") z=6 />
+            <GrowthOverlay axis="armory--tier-3" src=format!("{dir}/overlay-armory-3.webp") z=6 />
 
             // Contrast scrim so surfaces read against any art (mirrors closed_beta).
             <div

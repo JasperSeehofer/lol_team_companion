@@ -264,10 +264,18 @@ pub fn LibraryRoom() -> impl IntoView {
             <Plane src=format!("{dir}/plane-mid.webp") depth=16 z=2 />
             <Plane src=format!("{dir}/plane-near.webp") depth=32 z=3 />
 
-            // ── Growth overlays (fade in by tier via CSS data-*-tier) ───────
-            <GrowthOverlay axis="records" src=format!("{dir}/overlay-records.webp") z=4 />
-            <GrowthOverlay axis="tomes" src=format!("{dir}/overlay-tomes.webp") z=5 />
-            <GrowthOverlay axis="analysis" src=format!("{dir}/overlay-analysis.webp") z=6 />
+            // ── Growth overlays (discrete per-tier art via CSS data-*-tier) ──
+            // Three stacked images per axis — exactly one is visible at a given
+            // tier (CSS data-attr toggle, no reactive branching — ROOM-03).
+            <GrowthOverlay axis="records--tier-1"  src=format!("{dir}/overlay-records-1.webp")  z=4 />
+            <GrowthOverlay axis="records--tier-2"  src=format!("{dir}/overlay-records-2.webp")  z=4 />
+            <GrowthOverlay axis="records--tier-3"  src=format!("{dir}/overlay-records-3.webp")  z=4 />
+            <GrowthOverlay axis="tomes--tier-1"    src=format!("{dir}/overlay-tomes-1.webp")    z=5 />
+            <GrowthOverlay axis="tomes--tier-2"    src=format!("{dir}/overlay-tomes-2.webp")    z=5 />
+            <GrowthOverlay axis="tomes--tier-3"    src=format!("{dir}/overlay-tomes-3.webp")    z=5 />
+            <GrowthOverlay axis="analysis--tier-1" src=format!("{dir}/overlay-analysis-1.webp") z=6 />
+            <GrowthOverlay axis="analysis--tier-2" src=format!("{dir}/overlay-analysis-2.webp") z=6 />
+            <GrowthOverlay axis="analysis--tier-3" src=format!("{dir}/overlay-analysis-3.webp") z=6 />
 
             // Contrast scrim so surfaces read against any art (mirrors solo_journey.rs).
             <div

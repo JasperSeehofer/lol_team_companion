@@ -227,10 +227,18 @@ pub fn ThroneRoom() -> impl IntoView {
             <Plane src=format!("{dir}/plane-mid.webp") depth=16 z=2 />
             <Plane src=format!("{dir}/plane-near.webp") depth=32 z=3 />
 
-            // ── Growth overlays (fade in by tier via CSS data-*-tier) ───────
-            <GrowthOverlay axis="roster" src=format!("{dir}/overlay-roster.webp") z=4 />
-            <GrowthOverlay axis="progression" src=format!("{dir}/overlay-progression.webp") z=5 />
-            <GrowthOverlay axis="crown" src=format!("{dir}/overlay-crown.webp") z=6 />
+            // ── Growth overlays (discrete per-tier art via CSS data-*-tier) ──
+            // Three stacked images per axis — exactly one is visible at a given
+            // tier (CSS data-attr toggle, no reactive branching — ROOM-03).
+            <GrowthOverlay axis="roster--tier-1"      src=format!("{dir}/overlay-roster-1.webp")      z=4 />
+            <GrowthOverlay axis="roster--tier-2"      src=format!("{dir}/overlay-roster-2.webp")      z=4 />
+            <GrowthOverlay axis="roster--tier-3"      src=format!("{dir}/overlay-roster-3.webp")      z=4 />
+            <GrowthOverlay axis="progression--tier-1" src=format!("{dir}/overlay-progression-1.webp") z=5 />
+            <GrowthOverlay axis="progression--tier-2" src=format!("{dir}/overlay-progression-2.webp") z=5 />
+            <GrowthOverlay axis="progression--tier-3" src=format!("{dir}/overlay-progression-3.webp") z=5 />
+            <GrowthOverlay axis="crown--tier-1"       src=format!("{dir}/overlay-crown-1.webp")       z=6 />
+            <GrowthOverlay axis="crown--tier-2"       src=format!("{dir}/overlay-crown-2.webp")       z=6 />
+            <GrowthOverlay axis="crown--tier-3"       src=format!("{dir}/overlay-crown-3.webp")       z=6 />
 
             // Contrast scrim so surfaces read against any art (D-15, mirrors solo_journey.rs:69).
             <div

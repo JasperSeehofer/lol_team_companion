@@ -433,45 +433,49 @@
   transition: opacity 400ms ease;
   will-change: opacity;
 }
-[data-lib-tier="1"] .room-overlay--lib { opacity: 0.34; }
-[data-lib-tier="2"] .room-overlay--lib { opacity: 0.67; }
-[data-lib-tier="3"] .room-overlay--lib { opacity: 1; }
-[data-armory-tier="1"] .room-overlay--armory { opacity: 0.34; }
-[data-armory-tier="2"] .room-overlay--armory { opacity: 0.67; }
-[data-armory-tier="3"] .room-overlay--armory { opacity: 1; }
-[data-banner-tier="1"] .room-overlay--banner { opacity: 0.34; }
-[data-banner-tier="2"] .room-overlay--banner { opacity: 0.67; }
-[data-banner-tier="3"] .room-overlay--banner { opacity: 1; }
-/* War Room axes (tactics/intel/command) — same tier→opacity ramp as Solo Journey. */
-[data-tactics-tier="1"] .room-overlay--tactics { opacity: 0.34; }
-[data-tactics-tier="2"] .room-overlay--tactics { opacity: 0.67; }
-[data-tactics-tier="3"] .room-overlay--tactics { opacity: 1; }
-[data-intel-tier="1"] .room-overlay--intel { opacity: 0.34; }
-[data-intel-tier="2"] .room-overlay--intel { opacity: 0.67; }
-[data-intel-tier="3"] .room-overlay--intel { opacity: 1; }
-[data-command-tier="1"] .room-overlay--command { opacity: 0.34; }
-[data-command-tier="2"] .room-overlay--command { opacity: 0.67; }
-[data-command-tier="3"] .room-overlay--command { opacity: 1; }
-/* Library axes (records/tomes/analysis) — same tier→opacity ramp as War Room. */
-[data-records-tier="1"] .room-overlay--records { opacity: 0.34; }
-[data-records-tier="2"] .room-overlay--records { opacity: 0.67; }
-[data-records-tier="3"] .room-overlay--records { opacity: 1; }
-[data-tomes-tier="1"] .room-overlay--tomes { opacity: 0.34; }
-[data-tomes-tier="2"] .room-overlay--tomes { opacity: 0.67; }
-[data-tomes-tier="3"] .room-overlay--tomes { opacity: 1; }
-[data-analysis-tier="1"] .room-overlay--analysis { opacity: 0.34; }
-[data-analysis-tier="2"] .room-overlay--analysis { opacity: 0.67; }
-[data-analysis-tier="3"] .room-overlay--analysis { opacity: 1; }
-/* Throne axes (roster/progression/crown) — same tier→opacity ramp. */
-[data-roster-tier="1"]      .room-overlay--roster      { opacity: 0.34; }
-[data-roster-tier="2"]      .room-overlay--roster      { opacity: 0.67; }
-[data-roster-tier="3"]      .room-overlay--roster      { opacity: 1;    }
-[data-progression-tier="1"] .room-overlay--progression { opacity: 0.34; }
-[data-progression-tier="2"] .room-overlay--progression { opacity: 0.67; }
-[data-progression-tier="3"] .room-overlay--progression { opacity: 1;    }
-[data-crown-tier="1"]       .room-overlay--crown       { opacity: 0.34; }
-[data-crown-tier="2"]       .room-overlay--crown       { opacity: 0.67; }
-[data-crown-tier="3"]       .room-overlay--crown       { opacity: 1;    }
+/* Per-tier discrete overlays — exactly one tier image visible at a time.
+   Base .room-overlay { opacity: 0 } covers tier-0 (all images hidden).
+   No explicit tier-0 rule and no explicit opacity-0 rules needed (Pitfall 6). */
+/* Solo Journey axes: banner / lib / armory */
+[data-banner-tier="1"] .room-overlay--banner--tier-1 { opacity: 1; }
+[data-banner-tier="2"] .room-overlay--banner--tier-2 { opacity: 1; }
+[data-banner-tier="3"] .room-overlay--banner--tier-3 { opacity: 1; }
+[data-lib-tier="1"] .room-overlay--lib--tier-1 { opacity: 1; }
+[data-lib-tier="2"] .room-overlay--lib--tier-2 { opacity: 1; }
+[data-lib-tier="3"] .room-overlay--lib--tier-3 { opacity: 1; }
+[data-armory-tier="1"] .room-overlay--armory--tier-1 { opacity: 1; }
+[data-armory-tier="2"] .room-overlay--armory--tier-2 { opacity: 1; }
+[data-armory-tier="3"] .room-overlay--armory--tier-3 { opacity: 1; }
+/* War Room axes: tactics / intel / command */
+[data-tactics-tier="1"] .room-overlay--tactics--tier-1 { opacity: 1; }
+[data-tactics-tier="2"] .room-overlay--tactics--tier-2 { opacity: 1; }
+[data-tactics-tier="3"] .room-overlay--tactics--tier-3 { opacity: 1; }
+[data-intel-tier="1"] .room-overlay--intel--tier-1 { opacity: 1; }
+[data-intel-tier="2"] .room-overlay--intel--tier-2 { opacity: 1; }
+[data-intel-tier="3"] .room-overlay--intel--tier-3 { opacity: 1; }
+[data-command-tier="1"] .room-overlay--command--tier-1 { opacity: 1; }
+[data-command-tier="2"] .room-overlay--command--tier-2 { opacity: 1; }
+[data-command-tier="3"] .room-overlay--command--tier-3 { opacity: 1; }
+/* Library axes: records / tomes / analysis */
+[data-records-tier="1"] .room-overlay--records--tier-1 { opacity: 1; }
+[data-records-tier="2"] .room-overlay--records--tier-2 { opacity: 1; }
+[data-records-tier="3"] .room-overlay--records--tier-3 { opacity: 1; }
+[data-tomes-tier="1"] .room-overlay--tomes--tier-1 { opacity: 1; }
+[data-tomes-tier="2"] .room-overlay--tomes--tier-2 { opacity: 1; }
+[data-tomes-tier="3"] .room-overlay--tomes--tier-3 { opacity: 1; }
+[data-analysis-tier="1"] .room-overlay--analysis--tier-1 { opacity: 1; }
+[data-analysis-tier="2"] .room-overlay--analysis--tier-2 { opacity: 1; }
+[data-analysis-tier="3"] .room-overlay--analysis--tier-3 { opacity: 1; }
+/* Throne axes: roster / progression / crown */
+[data-roster-tier="1"]      .room-overlay--roster--tier-1      { opacity: 1; }
+[data-roster-tier="2"]      .room-overlay--roster--tier-2      { opacity: 1; }
+[data-roster-tier="3"]      .room-overlay--roster--tier-3      { opacity: 1; }
+[data-progression-tier="1"] .room-overlay--progression--tier-1 { opacity: 1; }
+[data-progression-tier="2"] .room-overlay--progression--tier-2 { opacity: 1; }
+[data-progression-tier="3"] .room-overlay--progression--tier-3 { opacity: 1; }
+[data-crown-tier="1"]       .room-overlay--crown--tier-1       { opacity: 1; }
+[data-crown-tier="2"]       .room-overlay--crown--tier-2       { opacity: 1; }
+[data-crown-tier="3"]       .room-overlay--crown--tier-3       { opacity: 1; }
 
 /* ============================================================
    Reduced-motion gate (WCAG / accessibility-standards.md §6).

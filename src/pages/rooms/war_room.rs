@@ -104,10 +104,18 @@ pub fn WarRoomRoom() -> impl IntoView {
             <Plane src=format!("{dir}/plane-mid.webp") depth=16 z=2 />
             <Plane src=format!("{dir}/plane-near.webp") depth=32 z=3 />
 
-            // ── Growth overlays (fade in by tier via CSS data-*-tier) ───────
-            <GrowthOverlay axis="tactics" src=format!("{dir}/overlay-tactics.webp") z=4 />
-            <GrowthOverlay axis="intel" src=format!("{dir}/overlay-intel.webp") z=5 />
-            <GrowthOverlay axis="command" src=format!("{dir}/overlay-command.webp") z=6 />
+            // ── Growth overlays (discrete per-tier art via CSS data-*-tier) ──
+            // Three stacked images per axis — exactly one is visible at a given
+            // tier (CSS data-attr toggle, no reactive branching — ROOM-03).
+            <GrowthOverlay axis="tactics--tier-1" src=format!("{dir}/overlay-tactics-1.webp") z=4 />
+            <GrowthOverlay axis="tactics--tier-2" src=format!("{dir}/overlay-tactics-2.webp") z=4 />
+            <GrowthOverlay axis="tactics--tier-3" src=format!("{dir}/overlay-tactics-3.webp") z=4 />
+            <GrowthOverlay axis="intel--tier-1"   src=format!("{dir}/overlay-intel-1.webp")   z=5 />
+            <GrowthOverlay axis="intel--tier-2"   src=format!("{dir}/overlay-intel-2.webp")   z=5 />
+            <GrowthOverlay axis="intel--tier-3"   src=format!("{dir}/overlay-intel-3.webp")   z=5 />
+            <GrowthOverlay axis="command--tier-1" src=format!("{dir}/overlay-command-1.webp") z=6 />
+            <GrowthOverlay axis="command--tier-2" src=format!("{dir}/overlay-command-2.webp") z=6 />
+            <GrowthOverlay axis="command--tier-3" src=format!("{dir}/overlay-command-3.webp") z=6 />
 
             // Contrast scrim so surfaces read against any art (mirrors solo_journey.rs).
             <div
