@@ -4,32 +4,32 @@ milestone: v1.4
 milestone_name: Immersive Companion
 status: executing
 stopped_at: Phase 30 context gathered
-last_updated: "2026-06-15T10:47:24.823Z"
-last_activity: 2026-06-15 -- Phase 30 planning complete
+last_updated: "2026-06-15T13:10:07.501Z"
+last_activity: 2026-06-15
 progress:
   total_phases: 20
   completed_phases: 15
   total_plans: 80
-  completed_plans: 74
+  completed_plans: 75
   percent: 75
 ---
 
 ## Current Position
 
-Phase: 29.1 (actionitemspanel-hydration-reconciliation) — COMPLETE (verified; 5/5 must-haves)
-Plan: 1 of 1
+Phase: 30 (art-production) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
 Next: proceed to Phase 30 (Art Production) — gated on Riot IP go/no-go decision (`/consult legal`)
-Last activity: 2026-06-15 -- Phase 30 planning complete
+Last activity: 2026-06-15
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-31)
 
 **Core value:** Features talk to each other — and now the app is a *place* worth spending time in: an explorable environment that visibly grows as you put in the work.
-**Current focus:** Phase 29 — throne-quicknav-room-a11y
+**Current focus:** Phase 30 — art-production
 
 ## Decisions
 
@@ -83,7 +83,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-15T10:00:45.459Z
+Last session: 2026-06-15T13:10:07.488Z
 Stopped at: Phase 30 context gathered
-Resume file: .planning/phases/30-art-production/30-CONTEXT.md
+Resume file: None
 Next command: Begin Phase 29 (Throne Room)

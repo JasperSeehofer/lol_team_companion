@@ -29,7 +29,7 @@
 
 ### Art Production
 
-- [ ] **ART-01**: Original world & art identity — Arcane-inspired and evocative of LoL's regions but our own, with NO trademarked place-names or "in the style of [Riot product]" in committed assets; `AI-IMAGES.md` prompts revised; `/consult legal` check gates the first real generation run
+- [x] **ART-01**: Original world & art identity — Arcane-inspired and evocative of LoL's regions but our own, with NO trademarked place-names or "in the style of [Riot product]" in committed assets; `AI-IMAGES.md` prompts revised; `/consult legal` check gates the first real generation run
 - [ ] **ART-02**: Layer-separated environment art produced per room (first region) via the Black Forest Labs EU FLUX endpoint + BiRefNet layer separation, under a CI-enforced ~400 KB/room/region budget
 - [ ] **ART-03**: Second region art produced for all rooms once the first region is locked
 
@@ -76,7 +76,7 @@ Filled during roadmap creation (2026-06-04).
 | ROOM-06 | Phase 29 — Throne, QuickNav & Room A11Y | Complete |
 | ROOM-08 | Phase 29 — Throne, QuickNav & Room A11Y | Complete |
 | A11Y-02 | Phase 29 — Throne, QuickNav & Room A11Y | Complete |
-| ART-01 | Phase 30 — Art Production | Pending |
+| ART-01 | Phase 30 — Art Production | Complete |
 | ART-02 | Phase 30 — Art Production | Pending |
 | ART-03 | Phase 30 — Art Production | Pending |
 | LNCH-01 | Phase 31 — Production Hardening & Beta Gate | Pending |
