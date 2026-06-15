@@ -463,7 +463,15 @@ Plans:
   2. All three rooms have layer-separated WebP art for the first region (war-room, library, throne — 3 planes + 3 overlays each = 18 files); each file is within budget (sky/mid ≤ 80 KB, near ≤ 60 KB, each overlay ≤ 30 KB, total ≤ 400 KB/room/region); the CI `find public/img/rooms -name "*.webp" -size +100k` check returns 0
   3. BiRefNet layer separation was validated on one test plane for halo-fringe artifacts before the full 18-asset run; `AI-IMAGES.md` records the seed, compute path, and final file size for every asset
   4. All three rooms have second-region art for both regions (18 more files, same budget constraints); all rooms' atmosphere is visually distinct between regions
-**Plans**: TBD
+**Plans**: 6 plans
+Plans:
+- [ ] 30-01-PLAN.md — Legal/Path A gate + AI-IMAGES.md Path A prompt rewrite + .env.example (ART-01)
+- [ ] 30-02-PLAN.md — D-10 per-tier overlay code change (4 rooms) + input.css + placeholder WebPs + e2e seed-and-assert (ART-02)
+- [ ] 30-03-PLAN.md — Offline generation scripts (gen/remove-bg/encode/verify-budget) + asset_budget CI job (ART-02, D-11/D-12)
+- [ ] 30-04-PLAN.md — BiRefNet halo validation on one test plane before the full run (ART-02, SC3)
+- [ ] 30-05-PLAN.md — First-region (Aurelian Reach/demacia) generation for all 4 rooms + provenance + budget (ART-02, D-13)
+- [ ] 30-06-PLAN.md — Second-region (Sundered Hollow/pandemonium) generation, all 4 rooms, blind-distinctness gate (ART-03, D-08)
+**Planning note**: The original Goal/SC text (3 rooms, "no code changes", 18/18 files, +100k CI) is SUPERSEDED by CONTEXT.md D-09/D-10/D-13 — 4 rooms incl. Solo Journey, per-tier overlays (12 files/room/region, 96 total), a per-room overlay code change, and a per-room/region aggregate ≤400 KB CI gate.
 **UI hint**: yes (asset production; no code changes, but requires room routes to be reachable for visual verification)
 
 ### Phase 31: Production Hardening & Beta Gate
