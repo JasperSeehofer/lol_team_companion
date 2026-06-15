@@ -93,3 +93,34 @@ jobs:
             echo "$HITS"
             exit 1
           fi
+
+  asset_budget:
+    name: Room art asset budget (D-11 — per-file + per-room/region aggregate)
+    runs-on: ubuntu-latest
+    # Plan 30-03: D-11 CI enforcement. Checks committed room art on every push/PR.
+    # No needs: — runs parallel to check and style_guardrails.
+    # Mirrors scripts/verify-budget.sh; the script and this job must stay in sync.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Room art asset budget (per-file 120 KB + per-room/region 400 KB aggregate)
+        run: |
+          FAIL=0
+          # Per-file cap: no individual *.webp under public/img/rooms may exceed 120 KB.
+          if find public/img/rooms -name "*.webp" -size +120k | grep -q .; then
+            echo "::error::Room art file exceeds 120 KB cap"
+            find public/img/rooms -name "*.webp" -size +120k
+            FAIL=1
+          fi
+          # Per-room/region aggregate: sum of *.webp in each region dir must be <= 400 KB
+          # (400 * 1024 = 409600 bytes). Reports all violating regions before exiting.
+          for room in public/img/rooms/*/; do
+            for region in "${room}"*/; do
+              total=$(find "$region" -name "*.webp" -exec du -b {} \; | awk '{sum+=$1} END{print sum+0}')
+              if [ "$total" -gt 409600 ]; then
+                echo "::error::$region exceeds 400 KB budget (${total} bytes)"
+                FAIL=1
+              fi
+            done
+          done
+          exit $FAIL
