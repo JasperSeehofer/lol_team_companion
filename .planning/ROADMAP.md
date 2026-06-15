@@ -581,7 +581,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 30-03-PLAN.md — Offline generation scripts (gen/remove-bg/encode/verify-budget) + asset_budget CI job (ART-02, D-11/D-12)
+- [x] 30-03-PLAN.md — Offline generation scripts (gen/remove-bg/encode/verify-budget) + asset_budget CI job (ART-02, D-11/D-12)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -706,7 +706,7 @@ v1.4: 26 (foundations) → 27 (War Room) → 28 (Library + IA) → 29 (Throne + 
 | 27. War Room | v1.4 | 8/8 | Complete    | 2026-06-05 |
 | 28. Library & IA Healing | v1.4 | 7/7 | Complete    | 2026-06-06 |
 | 29. Throne, QuickNav & Room A11Y | v1.4 | 7/7 | Complete   | 2026-06-09 |
-| 30. Art Production | v1.4 | 2/6 | In Progress|  |
+| 30. Art Production | v1.4 | 3/6 | In Progress|  |
 | 31. Production Hardening & Beta Gate | v1.4 | 0/? | Not started | — |
 | 32. Deploy Infrastructure | v1.4 | 0/? | Not started | — |
 | 33. Compliance & Pre-Launch Review | v1.4 | 0/? | Not started | — |
