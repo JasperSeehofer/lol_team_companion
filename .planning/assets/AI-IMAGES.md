@@ -811,6 +811,149 @@ block (warm region approx lines 193–233, chaos region approx lines 235–268).
 
 ---
 
+## BiRefNet halo validation
+
+**Status:** PENDING — awaiting human execution with BFL_KEY + FAL_KEY credentials.
+
+**Test asset:** War Room · Aurelian Reach (`demacia`) · mid plane  
+**Required before:** Any full room/region generation run (this gate locks the compute path for Plans 05/06)  
+**Background color to inspect against:** `#070912` (room base from `input.css`)  
+**Date gated:** 2026-06-15
+
+### Why this gate exists (SC3 part A / Pitfall 4)
+
+BiRefNet's neural network can leave a 1–2 px white or grey "halo ring" on the
+painted architectural edges of the separated layer. Against the very dark room base
+(`#070912`) at full parallax amplitude that ring is clearly visible to the eye. The
+fix is cheap at one-plane scale; discovering halos after the ~96-asset full run would
+waste the entire production budget. This gate validates the pipeline on one asset before
+any full run starts.
+
+### Copy-pasteable command sequence
+
+```bash
+# 0. Prerequisites — set keys (do this first)
+export BFL_KEY=<your-bfl-api-key>
+export FAL_KEY=<your-fal-api-key>
+# OR: add them to .env and run: source .env
+
+# 1. Generate the test plane (War Room · demacia · mid)
+PROMPT='MIDGROUND only on transparent background — a large oak war table scattered with parchment maps, candles guttering in the draught, gilded map weights, warm amber light, hand-painted textured, painterly. Transparent sky.'
+./scripts/gen-room-art.sh \
+  --prompt "$PROMPT" \
+  war-room demacia plane-mid 20260615
+
+# Output PNG lands at: /tmp/war-room/demacia/plane-mid.png
+# Record the BFL-assigned seed integer printed in the output.
+
+# 2. BiRefNet background removal (fal.ai BiRefNet v2 heavy)
+./scripts/remove-bg.sh \
+  /tmp/war-room/demacia/plane-mid.png \
+  /tmp/war-room/demacia/plane-mid-transparent.png
+
+# 3. Encode to WebP
+./scripts/encode-webp.sh \
+  /tmp/war-room/demacia/plane-mid-transparent.png \
+  /tmp/war-room/demacia/plane-mid-test.webp
+
+# 4. Visual inspection — open in browser against #070912
+# Quick scratch page (no server needed):
+cat > /tmp/halo-check.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { background: #070912; margin: 0; }
+img { width: 100vw; height: 100vh; object-fit: cover; }
+</style>
+</head>
+<body>
+<img src="/tmp/war-room/demacia/plane-mid-test.webp" />
+</body>
+</html>
+EOF
+# Open /tmp/halo-check.html in your browser.
+# Move the window edge / zoom to full width to simulate full parallax amplitude.
+```
+
+### Exact visual acceptance check
+
+Inspect the architectural / pillar / table edges at 1× zoom against the `#070912`
+background:
+
+- **PASS (no halo):** Edges blend cleanly into the dark background — no visible
+  white, grey, or light-fringe ring around the painted elements.
+- **FAIL (halo present):** A light ring is visible around the silhouette at 1× zoom.
+  If a halo is present, apply one of the two remediations below.
+
+### Halo remediation options (Pitfall 4)
+
+**Option A — 1px erosion (fast, try first):**
+```bash
+# Shrink the alpha mask by 1 px before encoding
+magick /tmp/war-room/demacia/plane-mid-transparent.png \
+  -channel alpha -morphology Erode Disk:1 +channel \
+  /tmp/war-room/demacia/plane-mid-eroded.png
+
+./scripts/encode-webp.sh \
+  /tmp/war-room/demacia/plane-mid-eroded.png \
+  /tmp/war-room/demacia/plane-mid-test.webp
+# Re-open /tmp/halo-check.html and inspect again.
+```
+
+**Option B — isolated-on-pure-black regen (slower, cleaner source):**
+```bash
+# Regenerate with the dark-isolation prompt suffix
+PROMPT='MIDGROUND only on pure black background — a large oak war table scattered with parchment maps, candles guttering in the draught, gilded map weights, warm amber light, hand-painted textured, painterly. Pure black background (not transparent).'
+./scripts/gen-room-art.sh \
+  --prompt "$PROMPT" \
+  war-room demacia plane-mid 20260615
+
+# Then luminance-key extract the subject:
+magick /tmp/war-room/demacia/plane-mid.png \
+  \( +clone -colorspace Gray -level 10%,50% -negate \) \
+  -alpha off -compose CopyOpacity -composite \
+  /tmp/war-room/demacia/plane-mid-lumakey.png
+
+./scripts/encode-webp.sh \
+  /tmp/war-room/demacia/plane-mid-lumakey.png \
+  /tmp/war-room/demacia/plane-mid-test.webp
+# Re-open /tmp/halo-check.html and inspect again.
+```
+
+### Resume signal and what to record after approval
+
+Once the edge is clean, reply to the agent with:
+
+```
+approved: <recipe>
+```
+
+Where `<recipe>` is one of:
+- `BiRefNet heavy` — plain BiRefNet, no erode, no regen (pass on first attempt)
+- `BiRefNet heavy + 1px erode` — Option A worked
+- `isolated-on-pure-black regen + luminance-key` — Option B worked
+- `isolated-on-pure-black regen + luminance-key + 1px erode` — both steps needed
+
+Also note the **integer seed** BFL assigned (printed in step 1 output). The executor
+agent (Task 2 of this plan) will record the outcome in this file.
+
+### Locked compute path (to be filled in after approval)
+
+| Field | Value |
+|-------|-------|
+| **Test asset** | `public/img/rooms/war-room/demacia/plane-mid.webp` |
+| **Outcome** | PENDING |
+| **Locked recipe** | PENDING |
+| **Seed (BFL-assigned)** | PENDING |
+| **Full-run compute path** | PENDING |
+| **Plans 05/06 must use** | PENDING |
+
+Sky planes (`plane-sky.webp`) skip BiRefNet entirely — they are opaque.
+Mid, near, and all overlay planes must follow the validated recipe above.
+
+---
+
 ## How to regenerate via Phase 30 pipeline
 
 ```bash
