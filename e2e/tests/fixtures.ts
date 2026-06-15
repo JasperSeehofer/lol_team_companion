@@ -335,6 +335,69 @@ export async function seedLibraryTier1Team(page: Page): Promise<void> {
  * `domain` + `path` pair. We use the latter form for clarity and so the cookie
  * works even when called before any navigation.
  */
+/**
+ * Seed a Solo Journey personal learning so at least one Solo growth axis
+ * reaches tier ≥ 1.
+ *
+ * Which axis and why:
+ *   lib axis  ← personal_learning + champion_note ≥ 1 → tier 1
+ *   armory    ← champion_pool ≥ 1 → tier 1  (requires champion pool UI — heavier)
+ *   banner    ← ranked_snapshot ≥ 1 → tier 1  (requires Riot API sync — not seedable via UI)
+ *
+ * Minimum sufficient: save ONE personal learning via /personal-learnings/new.
+ * One review creates one `personal_learning` row, which satisfies the
+ * lib-axis tier-1 threshold (personal_learning + champion_note ≥ 1).
+ *
+ * After this helper returns the calling test should reload `/journey` and
+ * check that `data-lib-tier` ≥ 1 on `.room-atmosphere`.
+ *
+ * Prerequisites: page must already be authenticated (use the `authedPage` fixture).
+ * No team required — lib axis is user-scoped. Idempotent — additional runs
+ * just add more learnings (lib stays ≥ 1 either way).
+ */
+export async function seedSoloTier1Growth(page: Page): Promise<void> {
+  // Navigate to the personal learnings new-entry form.
+  await page.goto("/personal-learnings/new");
+  await page.waitForLoadState("networkidle");
+  // Wait for WASM hydration so the form is interactive.
+  await page.waitForTimeout(1200);
+
+  // Fill the three required textareas. They have matching placeholder text.
+  const whatHappened = page
+    .locator('textarea[placeholder*="what happened"]')
+    .first();
+  const whatILearned = page
+    .locator('textarea[placeholder*="What did you learn"]')
+    .first();
+  const nextTime = page
+    .locator('textarea[placeholder*="What will you do differently"]')
+    .first();
+
+  if (await whatHappened.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await whatHappened.fill("SC4 Solo seed — what happened");
+  }
+  if (await whatILearned.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await whatILearned.fill("SC4 Solo seed — what I learned");
+  }
+  if (await nextTime.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await nextTime.fill("SC4 Solo seed — next time I will");
+  }
+
+  // Click "Save learning" button.
+  const saveBtn = page.locator('button:has-text("Save learning")');
+  if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await saveBtn.click();
+    // Wait for navigation back to /personal-learnings (save redirects on success).
+    await page
+      .waitForURL("**/personal-learnings", { timeout: 15000 })
+      .catch(() => {
+        // Non-fatal: if redirect doesn't fire the seed still persisted.
+      });
+  }
+  // Brief settle before the test navigates away.
+  await page.waitForTimeout(300);
+}
+
 export async function setRegion(
   page: import("@playwright/test").Page,
   region: "demacia" | "pandemonium"

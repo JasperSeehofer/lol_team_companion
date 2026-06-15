@@ -19,7 +19,7 @@
  * SSR/hydrate symmetry canary.
  */
 
-import { test, expect } from "./fixtures";
+import { test, expect, seedSoloTier1Growth } from "./fixtures";
 
 const ROOM_BG_RE = /\/img\/rooms\//;
 
@@ -142,6 +142,46 @@ test.describe("Solo Journey room", () => {
     await dialog.locator('a[href="/champion-pool"]').first().click();
     await authedPage.waitForURL("**/champion-pool");
     await expect(dialog).toBeHidden();
+  });
+
+  test("per-tier overlay: correct tier visible, others hidden", async ({
+    authedPage,
+  }) => {
+    // Seed a personal learning so lib axis reaches tier ≥ 1 (closes Phase 27 silent-fail).
+    await seedSoloTier1Growth(authedPage);
+
+    // Navigate to the Solo Journey room and wait for the growth resource to resolve.
+    await authedPage.goto("/journey");
+    await authedPage.waitForLoadState("networkidle");
+    await authedPage.waitForTimeout(800); // growth resource settle
+
+    const root = authedPage.locator(".room-atmosphere");
+    const libTierStr = await root.getAttribute("data-lib-tier");
+    const libTier = parseInt(libTierStr ?? "0", 10);
+
+    // Guard: only assert overlay visibility when tier ≥ 1 so a tier-0
+    // environment does not false-fail (mirrors existing tier-attribute test).
+    if (libTier >= 1) {
+      // The active tier overlay must be visible (computed opacity > 0).
+      const activeTierOpacity = await authedPage
+        .locator(`.room-overlay--lib--tier-${libTier}`)
+        .evaluate((el) => getComputedStyle(el).opacity);
+      expect(
+        parseFloat(activeTierOpacity),
+        `lib tier-${libTier} overlay should be visible`
+      ).toBeGreaterThan(0);
+
+      // The other two tiers of the same axis must remain hidden.
+      for (const otherTier of [1, 2, 3].filter((t) => t !== libTier)) {
+        const otherOpacity = await authedPage
+          .locator(`.room-overlay--lib--tier-${otherTier}`)
+          .evaluate((el) => getComputedStyle(el).opacity);
+        expect(
+          parseFloat(otherOpacity),
+          `lib tier-${otherTier} overlay should be hidden when tier is ${libTier}`
+        ).toBe(0);
+      }
+    }
   });
 
   test("room art stays within the 400 KB asset budget", async ({
