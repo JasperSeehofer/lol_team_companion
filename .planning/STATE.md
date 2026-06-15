@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Immersive Companion
-status: executing
-stopped_at: Phase 29.1 complete (verified)
-last_updated: "2026-06-09T13:30:00.000Z"
-last_activity: 2026-06-09 -- Phase 29.1 executed and verified (5/5 must-haves)
+status: verifying
+stopped_at: Phase 30 context gathered
+last_updated: "2026-06-15T10:00:45.473Z"
+last_activity: 2026-06-09
 progress:
   total_phases: 20
   completed_phases: 15
@@ -83,7 +83,7 @@ See: .planning/PROJECT.md (updated 2026-05-31)
 
 ## Session Continuity
 
-Last session: 2026-06-09T13:21:40.422Z
-Stopped at: Phase 29 context gathered
-Resume file: None
+Last session: 2026-06-15T10:00:45.459Z
+Stopped at: Phase 30 context gathered
+Resume file: .planning/phases/30-art-production/30-CONTEXT.md
 Next command: Begin Phase 29 (Throne Room)
