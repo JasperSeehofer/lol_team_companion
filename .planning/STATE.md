@@ -16,11 +16,11 @@ progress:
 
 ## Current Position
 
-Phase: 30 (art-production) — EXECUTING
-Plan: 4 of 6
-Status: Ready to execute
-Next: proceed to Phase 30 (Art Production) — gated on Riot IP go/no-go decision (`/consult legal`)
-Last activity: 2026-06-15
+Phase: 30 (art-production) — EXECUTING (paused at 30-04 human-action gate)
+Plan: 4 of 6 (30-01/02/03 complete; 30-04 blocked on credentials + visual halo inspection)
+Status: PAUSED — awaiting human action (set BFL_KEY/FAL_KEY, run test-plane generation, make SC3a halo call)
+Next: see .planning/phases/30-art-production/.continue-here.md — resume with `/gsd:execute-phase 30` after running the test plane
+Last activity: 2026-06-19
 
 Progress: [██████████] 96%
 
