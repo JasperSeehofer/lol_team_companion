@@ -131,17 +131,17 @@ Path-specific patterns live in `.claude/rules/` and load automatically:
 
 ### Toolchain
 
-13. **BFD linker** — `.cargo/config.toml` forces `bfd` linker to work around an LLVM 22 lld crash on nightly.
+1. **BFD linker** — `.cargo/config.toml` forces `bfd` linker to work around an LLVM 22 lld crash on nightly.
 
-14. **Standalone Tailwind** — Uses the `tailwindcss-linux-x64` binary directly, no npm/node required. Referenced in `[package.metadata.leptos]`.
+2. **Standalone Tailwind** — Uses the `tailwindcss-linux-x64` binary directly, no npm/node required. Referenced in `[package.metadata.leptos]`.
 
-15. **tower-sessions version** — Must match the version used by axum-login (currently 0.14). A mismatch causes silent session failures.
+3. **tower-sessions version** — Must match the version used by axum-login (currently 0.14). A mismatch causes silent session failures.
 
 ### External APIs
 
-16. **riven crate** — `Queue::from(u16)` not `i16`; `puuid` field is `String` not `Option<String>`.
+4. **riven crate** — `Queue::from(u16)` not `i16`; `puuid` field is `String` not `Option<String>`.
 
-17. **Riot API key** — Set `RIOT_API_KEY` in `.env`. Loaded via `dotenvy::dotenv()` on startup.
+5. **Riot API key** — Set `RIOT_API_KEY` in `.env`. Loaded via `dotenvy::dotenv()` on startup.
 
 ## Adding a New Feature
 
@@ -168,9 +168,9 @@ Path-specific patterns live in `.claude/rules/` and load automatically:
 
 ### Testing
 
-39. **Run tests with `--features ssr --lib`** — `cargo test --features ssr --lib` runs unit tests only. Integration tests in `tests/` OOM during BFD linking and are skipped. Unit tests live in `#[cfg(test)]` blocks in model and server files.
+6. **Run tests with `--features ssr --lib`** — `cargo test --features ssr --lib` runs unit tests only. Integration tests in `tests/` OOM during BFD linking and are skipped. Unit tests live in `#[cfg(test)]` blocks in model and server files.
 
-41. **Tree assembly: use `children_of` map, not reversal heuristic** — Building a `HashMap<String, Vec<String>>` of parent→child IDs and doing a recursive DFS is correct regardless of DB return order. The old reverse-child_ids heuristic failed when sibling nodes shared the same `sort_order`.
+7. **Tree assembly: use `children_of` map, not reversal heuristic** — Building a `HashMap<String, Vec<String>>` of parent→child IDs and doing a recursive DFS is correct regardless of DB return order. The old reverse-child_ids heuristic failed when sibling nodes shared the same `sort_order`.
 
 ## Claude Code Dev Workflow
 
