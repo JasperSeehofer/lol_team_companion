@@ -235,9 +235,9 @@ Many WASM/Leptos runtime bugs (UI freezes, stale data, broken interactions) are 
 ## Design System
 
 Design tokens, color, typography, spacing, and accessibility standards are inherited from the Manyfold wiki:
-- Token catalog + Tailwind `@theme` block: `../professional-vault/wiki/concepts/design-system.md`
-- Component rules: `../professional-vault/wiki/concepts/ui-guidelines.md`
-- Accessibility: `../professional-vault/wiki/concepts/accessibility-standards.md`
+- Token catalog + Tailwind `@theme` block: `../garden/wiki/concepts/design-system.md`
+- Component rules: `../garden/wiki/concepts/ui-guidelines.md`
+- Accessibility: `../garden/wiki/concepts/accessibility-standards.md`
 
 This project uses **standard** density. Semantic tokens (`bg-base`, `bg-surface`, `text-primary`, etc.) are defined in `input.css` `@theme` block — use these, not hardcoded colors.
 
