@@ -213,25 +213,20 @@ pub fn ModeToggle(
 /// Region-neutral tone badge.
 /// `tone`: "neutral" | "accent" | "success" | "warning" | "danger" | "info"
 /// Uses JetBrains Mono, uppercase, wide tracking. Same appearance both regions.
-///
-/// Note: "success", "warning", "info" tokens may not be defined in input.css — fallback to
-/// "bg-elevated text-muted" for missing tones with a comment below.
+/// Every tone maps to the semantic status tokens defined in input.css
+/// (`--color-success`, `--color-warning`, `--color-danger`, `--color-info`).
 #[component]
 pub fn Badge(
     #[prop(optional, into)] tone: Option<String>,
     children: ChildrenFn,
 ) -> impl IntoView {
-    // Map tone to semantic token bg+text classes.
-    // success/warning/info: use token if defined in input.css; else fallback to bg-elevated text-muted.
-    // (As of Phase 17, input.css defines --color-danger but not --color-success/warning/info.
-    //  Fallback class is used until those tokens are added.)
     let tone_class = match tone.as_deref().unwrap_or("neutral") {
         "accent" => "bg-accent text-accent-contrast",
         "danger" => "bg-danger/15 text-danger",
-        "success" => "bg-elevated text-muted",   // fallback: --color-success not yet defined
-        "warning" => "bg-elevated text-muted",   // fallback: --color-warning not yet defined
-        "info" => "bg-elevated text-muted",      // fallback: --color-info not yet defined
-        _ => "bg-elevated text-muted",           // neutral
+        "success" => "bg-success/15 text-success",
+        "warning" => "bg-warning/15 text-warning",
+        "info" => "bg-info/15 text-info",
+        _ => "bg-elevated text-muted", // neutral
     };
 
     view! {
