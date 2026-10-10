@@ -405,11 +405,10 @@ pub fn ActionItemsPage() -> impl IntoView {
                                     if af == "unassigned" && item.assigned_to.is_some() {
                                         return false;
                                     }
-                                    if af != "all" && af != "unassigned" {
-                                        if item.assigned_to.as_deref() != Some(&af) {
+                                    if af != "all" && af != "unassigned"
+                                        && item.assigned_to.as_deref() != Some(&af) {
                                             return false;
                                         }
-                                    }
                                     true
                                 })
                                 .collect();

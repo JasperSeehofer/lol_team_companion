@@ -312,7 +312,7 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
                 champion: champ.to_string(),
                 role: role.to_string(),
                 tier,
-                notes: Some(format!("Strong in current meta")),
+                notes: Some("Strong in current meta".to_string()),
                 comfort_level: Some((5 - (j % 5)) as u8),
                 meta_tag: Some("strong".to_string()),
             };

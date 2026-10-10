@@ -4,6 +4,9 @@ use crate::models::draft::role_icon_url;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
+/// Per-slot warning `(title, detail)` shown on the board, `None` for no warning.
+pub type SlotWarnings = Signal<Vec<Option<(String, String)>>>;
+
 /// Returns (side, kind, label) for each of the 20 draft slots in official LoL order.
 pub fn slot_meta(idx: usize) -> (&'static str, &'static str, &'static str) {
     match idx {
@@ -42,14 +45,16 @@ pub fn DraftBoard(
     highlighted_slot: ReadSignal<Option<usize>>,
     on_slot_clear: Callback<usize>,
     #[prop(optional)] slot_comments: Option<ReadSignal<Vec<Option<String>>>>,
-    #[prop(optional)] warning_slots: Option<Signal<Vec<Option<(String, String)>>>>,
+    #[prop(optional)] warning_slots: Option<SlotWarnings>,
     #[prop(optional)] role_assignments: Option<ReadSignal<Vec<Option<String>>>>,
     #[prop(optional)] role_auto_guessed: Option<ReadSignal<Vec<bool>>>,
     #[prop(optional)] on_role_set: Option<Callback<(usize, String)>>,
 ) -> impl IntoView {
     let is_pandemonium = region == "pandemonium";
     let (first_pick_blue, set_first_pick_blue) = signal(true);
-    let champion_map = StoredValue::new(champion_map);
+    // Portraits resolve by champion name via ChampTile; the map prop is kept
+    // for callers until the M3 draft rebuild.
+    let _ = champion_map;
     let role_popover_open: RwSignal<Option<usize>> = RwSignal::new(None);
 
     // ── Ban slot: 64×64 circular gilt tile (Demacia "Forsworn") ──────────────
@@ -143,7 +148,7 @@ pub fn DraftBoard(
                                             </div>
                                         }.into_any()
                                     } else {
-                                        view! {}.into_any()
+                                        ().into_any()
                                     }}
                                     {if is_highlighted {
                                         view! {

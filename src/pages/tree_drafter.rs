@@ -533,14 +533,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 });
             });
             if let Some(win) = web_sys::window() {
-                match win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                if let Ok(timer_id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
                     cb.as_ref().unchecked_ref(),
                     2000,
                 ) {
-                    Ok(timer_id) => {
-                        auto_save_node_timer.set(Some(timer_id));
-                    }
-                    Err(_) => {}
+                    auto_save_node_timer.set(Some(timer_id));
                 }
             }
             cb.forget();

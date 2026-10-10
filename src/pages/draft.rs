@@ -1,3 +1,9 @@
+// The #[server] macro generates a client stub that does not inherit item-level
+// attributes, so clippy::too_many_arguments is allowed for this file: save/update
+// server fns take one argument per form field. A params struct is planned with
+// the API-layer refactor.
+#![allow(clippy::too_many_arguments)]
+
 use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
@@ -468,7 +474,7 @@ pub async fn get_opponent_intel_full(
         }
         let total_games = player.recent_champions.len() as u32;
         let mut champion_frequencies: Vec<(String, u32)> = freq_map.into_iter().collect();
-        champion_frequencies.sort_by(|a, b| b.1.cmp(&a.1));
+        champion_frequencies.sort_by_key(|e| std::cmp::Reverse(e.1));
 
         // OTP detection: most-played champion accounts for >60% of scouted games.
         let otp_champion = champion_frequencies.first().and_then(|(name, count)| {
@@ -1892,10 +1898,7 @@ pub fn DraftPage() -> impl IntoView {
                                             let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
                                             let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
                                             let tid = if team_id_val.is_empty() { None } else { Some(team_id_val) };
-                                            match save_draft(name_val, opp_opt, tid, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await {
-                                                Ok(new_id) => Some(new_id),
-                                                Err(_) => None,
-                                            }
+                                            save_draft(name_val, opp_opt, tid, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await.ok()
                                         };
 
                                         #[allow(unused_variables)]
@@ -3429,7 +3432,7 @@ pub fn DraftPage() -> impl IntoView {
                                             *champ_totals.entry(t.champion.clone()).or_insert(0) += t.count;
                                         }
                                         let mut champs: Vec<(String, i32)> = champ_totals.into_iter().filter(|(_, c)| *c >= 2).collect();
-                                        champs.sort_by(|a, b| b.1.cmp(&a.1));
+                                        champs.sort_by_key(|e| std::cmp::Reverse(e.1));
 
                                         if champs.is_empty() {
                                             return view! {
@@ -3486,7 +3489,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                 <th class="text-muted px-1 py-1">"Total"</th>
                                                                 {(0..20).map(|i| {
                                                                     let (side, kind, _) = crate::components::draft_board::slot_meta(i);
-                                                                    let label = format!("{}{}", &side[..1].to_uppercase(), if kind.contains("ban") { "B" } else { "P" });
+                                                                    let label = format!("{}{}", side[..1].to_uppercase(), if kind.contains("ban") { "B" } else { "P" });
                                                                     view! { <th class="text-muted px-0.5 py-1 text-center" title=format!("{side} {kind}")>{label}</th> }
                                                                 }).collect_view()}
                                                             </tr>

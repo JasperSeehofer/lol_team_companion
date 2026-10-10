@@ -1,3 +1,9 @@
+// The #[server] macro generates a client stub that does not inherit item-level
+// attributes, so clippy::too_many_arguments is allowed for this file: save/update
+// server fns take one argument per form field. A params struct is planned with
+// the API-layer refactor.
+#![allow(clippy::too_many_arguments)]
+
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::ui::{ErrorBanner, ToastContext, ToastKind};
 use crate::models::champion::Champion;

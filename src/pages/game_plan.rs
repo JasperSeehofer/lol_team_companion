@@ -740,7 +740,7 @@ pub fn GamePlanPage() -> impl IntoView {
     // When navigating from "View Game Plan" on the draft page, the URL includes
     // plan_id=<id>. This Effect finds the matching plan in the loaded list and
     // calls load_plan to populate the editor, so the correct plan opens immediately.
-    let plan_id_from_url = query.with(|q| q.get("plan_id").map(|s| s.clone()));
+    let plan_id_from_url = query.with(|q| q.get("plan_id"));
     let plan_id_applied = RwSignal::new(false);
     {
         let plan_id_from_url = plan_id_from_url.clone();
@@ -1897,7 +1897,7 @@ fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext)
                     <div class="px-6 pb-6 flex flex-col gap-3">
                         // Progress bar
                         {(total > 0).then(|| {
-                            let pct = if total > 0 { (done * 100) / total } else { 0 };
+                            let pct = (done * 100).checked_div(total).unwrap_or(0);
                             view! {
                                 <div class="w-full bg-overlay rounded-full h-2">
                                     <div

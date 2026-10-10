@@ -5,8 +5,16 @@ use thiserror::Error;
 pub enum RiotError {
     #[error("Riot API error: {0}")]
     Api(String),
+    /// Boxed: `riven::RiotApiError` is large and would bloat every
+    /// `Result<_, RiotError>` (clippy::result_large_err).
     #[error("riven error: {0}")]
-    Riven(#[from] riven::RiotApiError),
+    Riven(Box<riven::RiotApiError>),
+}
+
+impl From<riven::RiotApiError> for RiotError {
+    fn from(e: riven::RiotApiError) -> Self {
+        RiotError::Riven(Box::new(e))
+    }
 }
 
 pub struct MatchData {

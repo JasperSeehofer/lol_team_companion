@@ -199,11 +199,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                                 {tag_summaries.into_iter().filter(|s| s.games_played > 0).map(|s| {
                                                     let (bg_border, text_color) = tag_colors(&s.tag);
-                                                    let win_pct = if s.games_played > 0 {
-                                                        s.wins * 100 / s.games_played
-                                                    } else {
-                                                        0
-                                                    };
+                                                    let win_pct = (s.wins * 100).checked_div(s.games_played).unwrap_or(0);
                                                     let stars = rating_to_stars(s.avg_rating);
                                                     let tag_label = s.tag.clone();
                                                     let wl = format!("{}-{}", s.wins, s.losses);

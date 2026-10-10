@@ -32,11 +32,17 @@ use crate::pages::profile::get_current_user;
 /// line 590 — public/auth/legal pages must not show the widget.
 const HIDDEN_PREFIXES: &[&str] = &["/auth", "/closed-beta", "/legal"];
 
+/// A registered global event listener, kept so it can be removed later
+/// (hydrate only; closures are not `Send`, hence `LocalStorage`).
+#[cfg(feature = "hydrate")]
+type ListenerHandle<E> =
+    StoredValue<Option<wasm_bindgen::closure::Closure<dyn Fn(E)>>, leptos::prelude::LocalStorage>;
+
 /// Three-mode widget state.
 ///
 /// - `Idle`        — only the floating button is visible
 /// - `Selecting`   — global click-capture listener is attached; user
-///                   is targeting a tagged element
+///   is targeting a tagged element
 /// - `Editing`     — modal is open with the captured element label
 ///
 /// `#[allow(dead_code)]` because `Selecting` and `Editing` are only
@@ -214,16 +220,10 @@ fn BugReportWidgetInner(
     // `let` bindings.
     #[allow(unused_variables)]
     #[cfg(feature = "hydrate")]
-    let click_capture_handle: StoredValue<
-        Option<wasm_bindgen::closure::Closure<dyn Fn(web_sys::MouseEvent)>>,
-        leptos::prelude::LocalStorage,
-    > = StoredValue::new_local(None);
+    let click_capture_handle: ListenerHandle<web_sys::MouseEvent> = StoredValue::new_local(None);
     #[allow(unused_variables)]
     #[cfg(feature = "hydrate")]
-    let esc_handle: StoredValue<
-        Option<wasm_bindgen::closure::Closure<dyn Fn(web_sys::KeyboardEvent)>>,
-        leptos::prelude::LocalStorage,
-    > = StoredValue::new_local(None);
+    let esc_handle: ListenerHandle<web_sys::KeyboardEvent> = StoredValue::new_local(None);
 
     // --- exit_select_mode (declared first so start_select_mode can call it) ---
     //

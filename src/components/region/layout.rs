@@ -41,7 +41,7 @@ pub fn Card(
                         <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
                     }.into_any()
                 } else {
-                    view! {}.into_any()
+                    ().into_any()
                 }}
                 {children()}
             </div>
@@ -66,7 +66,7 @@ pub fn Card(
                         <div class="absolute bottom-1 right-1"><GiltCorner corner="br" size=20 /></div>
                     }.into_any()
                 } else {
-                    view! {}.into_any()
+                    ().into_any()
                 }}
                 {children()}
             </div>

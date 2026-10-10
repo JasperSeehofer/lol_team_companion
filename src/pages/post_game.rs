@@ -929,7 +929,7 @@ pub fn PostGamePage() -> impl IntoView {
                                         <button
                                             type="button"
                                             class=move || {
-                                                if rating.get().map_or(false, |r| r >= n) {
+                                                if rating.get().is_some_and(|r| r >= n) {
                                                     "text-accent text-xl hover:text-accent transition-colors"
                                                 } else {
                                                     "text-dimmed text-xl hover:text-accent/70 transition-colors"
@@ -938,7 +938,7 @@ pub fn PostGamePage() -> impl IntoView {
                                             on:click=move |_| set_rating.set(Some(n))
                                             aria-label=format!("Rate how well the plan worked: {} of 5 stars", n)
                                         >
-                                            {move || if rating.get().map_or(false, |r| r >= n) { "\u{2605}" } else { "\u{2606}" }}
+                                            {move || if rating.get().is_some_and(|r| r >= n) { "\u{2605}" } else { "\u{2606}" }}
                                         </button>
                                     }
                                 }).collect_view()}
@@ -1017,7 +1017,7 @@ pub fn PostGamePage() -> impl IntoView {
 #[component]
 fn LinkedPlanCard(plan_id: String) -> impl IntoView {
     let pid = plan_id.clone();
-    let linked_plan = Resource::new(move || pid.clone(), |id| get_linked_plan(id));
+    let linked_plan = Resource::new(move || pid.clone(), get_linked_plan);
 
     view! {
         <Suspense fallback=|| view! { <SkeletonCard height="h-16" /> }>

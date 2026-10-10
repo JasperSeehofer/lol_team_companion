@@ -477,7 +477,9 @@ pub async fn get_champion_stats_for_user(
 
     let rows: Vec<PlayerMatchRow> = r.take(0).unwrap_or_default();
 
-    let mut by_champ: HashMap<String, Vec<(f64, f64, f64, f64, bool)>> = HashMap::new();
+    // (kills, deaths, assists, cs, win) per game
+    type GameLine = (f64, f64, f64, f64, bool);
+    let mut by_champ: HashMap<String, Vec<GameLine>> = HashMap::new();
     for row in &rows {
         by_champ.entry(row.champion.clone()).or_default().push((
             row.kills as f64,
@@ -514,7 +516,7 @@ pub async fn get_champion_stats_for_user(
         })
         .collect();
 
-    results.sort_by(|a, b| b.games.cmp(&a.games));
+    results.sort_by_key(|e| std::cmp::Reverse(e.games));
     Ok(results)
 }
 
@@ -2503,6 +2505,7 @@ pub async fn save_opponent_player_info(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // one column per argument; params struct planned in M6
 pub async fn update_opponent_player(
     db: &Surreal<Db>,
     player_id: &str,
@@ -3115,6 +3118,7 @@ impl From<DbBugReport> for BugReport {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // one column per argument; params struct planned in M6
 pub async fn create_bug_report(
     db: &Surreal<Db>,
     user_id: &str,
@@ -3329,7 +3333,7 @@ pub async fn get_draft_tendencies(
         .into_iter()
         .map(|((champ, phase, order), count)| (champ, phase, order, count))
         .collect();
-    tendencies.sort_by(|a, b| b.3.cmp(&a.3));
+    tendencies.sort_by_key(|e| std::cmp::Reverse(e.3));
     Ok(tendencies)
 }
 
@@ -3439,7 +3443,7 @@ pub async fn get_win_condition_stats(
         .into_iter()
         .map(|(tag, (total, wins))| (tag, total, wins))
         .collect();
-    stats.sort_by(|a, b| b.1.cmp(&a.1));
+    stats.sort_by_key(|e| std::cmp::Reverse(e.1));
     Ok(stats)
 }
 
@@ -3464,7 +3468,7 @@ pub fn filter_win_condition_stats(
         .into_iter()
         .map(|(tag, (total, wins))| (tag, total, wins))
         .collect();
-    stats.sort_by(|a, b| b.1.cmp(&a.1));
+    stats.sort_by_key(|e| std::cmp::Reverse(e.1));
     stats
 }
 
@@ -3711,13 +3715,13 @@ pub async fn get_draft_outcome_stats(
         .into_iter()
         .map(|(tag, (g, w))| (tag, g, w))
         .collect();
-    tag_stats.sort_by(|a, b| b.1.cmp(&a.1));
+    tag_stats.sort_by_key(|e| std::cmp::Reverse(e.1));
 
     let mut fp_stats: Vec<(String, i32, i32)> = first_pick_counts
         .into_iter()
         .map(|(champ, (g, w))| (champ, g, w))
         .collect();
-    fp_stats.sort_by(|a, b| b.1.cmp(&a.1));
+    fp_stats.sort_by_key(|e| std::cmp::Reverse(e.1));
 
     Ok(DraftOutcomeData {
         blue_games,
@@ -3895,7 +3899,7 @@ pub fn compute_pool_gaps(
         .flat_map(|champ| {
             class_map
                 .get(champ.as_str())
-                .map(|tags| tags.iter().cloned().collect::<Vec<_>>())
+                .map(|tags| tags.to_vec())
                 .unwrap_or_default()
         })
         .collect();
@@ -4046,10 +4050,10 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
         .collect();
 
     // Fetch champion pool entries for all team members (for gap analysis)
-    let pool_gap_warnings = match compute_pool_gaps_for_team(db, &team_key).await {
-        Ok(warnings) => warnings,
-        Err(_) => Vec::new(), // Non-fatal: gap analysis failure should not break dashboard
-    };
+    // Non-fatal: gap analysis failure should not break the dashboard
+    let pool_gap_warnings = compute_pool_gaps_for_team(db, &team_key)
+        .await
+        .unwrap_or_default();
 
     Ok(DashboardSummary {
         open_action_item_count,
@@ -4216,7 +4220,7 @@ pub fn aggregate_champion_performance(
     }
 
     let mut result: Vec<ChampionPerformanceSummary> = map.into_values().collect();
-    result.sort_by(|a, b| b.games_in_match.cmp(&a.games_in_match));
+    result.sort_by_key(|e| std::cmp::Reverse(e.games_in_match));
     result
 }
 
@@ -4273,7 +4277,7 @@ pub async fn get_champion_performance_summary(
             created_at: String,
         }
 
-        let start_idx = if min > 1 { min - 1 } else { 0 };
+        let start_idx = min.saturating_sub(1);
         let mut oldest_r = db
             .query(
                 "SELECT <string>created_at AS created_at FROM player_match_stats \
@@ -4440,7 +4444,7 @@ pub async fn get_team_champion_performance(
     let match_count = count_rows.first().map(|r| r.n as usize).unwrap_or(0);
 
     let effective_cutoff = if match_count < min {
-        let start_idx = if min > 1 { min - 1 } else { 0 };
+        let start_idx = min.saturating_sub(1);
         let oldest_query = format!(
             "SELECT <string>created_at AS created_at FROM player_match_stats WHERE user IN [{user_id_list}] ORDER BY created_at DESC LIMIT 1 START {start_idx}"
         );
@@ -4467,7 +4471,7 @@ pub async fn get_team_champion_performance(
     );
 
     let mut result = db
-        .query(&format!(
+        .query(format!(
             "{match_query}; \
              SELECT champion FROM draft_action \
              WHERE draft IN (SELECT VALUE id FROM draft WHERE team = type::record('team', $team_key)) \
@@ -4737,6 +4741,7 @@ pub async fn get_should_auto_sync(db: &Surreal<Db>, user_id: &str) -> DbResult<b
 // Solo Mode: Ranked snapshots
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)] // one column per argument; params struct planned in M6
 pub async fn store_ranked_snapshot(
     db: &Surreal<Db>,
     user_id: &str,
@@ -5216,7 +5221,7 @@ pub async fn get_champion_trends(
             }
         })
         .collect();
-    trends.sort_by(|a, b| b.games.cmp(&a.games));
+    trends.sort_by_key(|e| std::cmp::Reverse(e.games));
     Ok(trends)
 }
 

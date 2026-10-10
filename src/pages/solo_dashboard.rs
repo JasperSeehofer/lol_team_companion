@@ -225,6 +225,7 @@ pub async fn upsert_personal_goal(
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+#[cfg(feature = "ssr")]
 fn window_to_cutoff(window: &str) -> Option<String> {
     use chrono::{Duration, Utc};
     let days: i64 = match window {
@@ -239,13 +240,6 @@ fn window_to_cutoff(window: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn tier_emblem_url(tier: &str) -> String {
-    format!(
-        "https://ddragon.leagueoflegends.com/cdn/img/ranked-emblems/{}.png",
-        tier.to_uppercase()
-    )
-}
 
 // ---------------------------------------------------------------------------
 // Phase 18-08: Mode toggle persistence
@@ -339,7 +333,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
     });
 
     let queue_filter: RwSignal<Option<i32>> = RwSignal::new(None);
-    let dashboard_resource = Resource::new(move || queue_filter.get(), |qf| get_solo_dashboard(qf));
+    let dashboard_resource = Resource::new(move || queue_filter.get(), get_solo_dashboard);
 
     let goal_progress_resource =
         Resource::new(|| (), |_| async move { compute_goal_progress().await });
@@ -514,71 +508,6 @@ pub fn SoloDashboardPage() -> impl IntoView {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-// RankedBadgeSection is no longer the top-level rank display — the rank info is
-// now embedded inline inside SoloDashboardPage using RankBadge + LPProgress primitives.
-// Kept here for reference but not currently used.
-#[allow(dead_code)]
-#[component]
-fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
-    view! {
-        <div class="bg-elevated border border-outline rounded-xl p-6">
-            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-accent mb-3">"Ranked Solo / Duo"</div>
-            {match ranked {
-                Some(info) => {
-                    let tier = info.tier.clone();
-                    let tier_for_img = info.tier.clone();
-                    let division = info.division.clone();
-                    let display_name = if division.is_empty() {
-                        info.tier.clone()
-                    } else {
-                        format!("{} {}", info.tier, info.division)
-                    };
-                    let total = info.wins + info.losses;
-                    let wr = if total > 0 {
-                        format!("{}%", (info.wins as f64 / total as f64 * 100.0).round() as i32)
-                    } else {
-                        "0%".to_string()
-                    };
-
-                    view! {
-                        <div class="flex items-center gap-5">
-                            <img
-                                src=tier_emblem_url(&tier_for_img)
-                                alt=tier.clone()
-                                class="w-20 h-20 object-contain"
-                                style="filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-accent) 35%, transparent))"
-                            />
-                            <div class="flex flex-col gap-1">
-                                <span class="font-display italic text-primary text-[32px] leading-tight">{display_name}</span>
-                                <span class="font-mono text-2xl text-accent tabular-nums">{format!("{} LP", info.lp)}</span>
-                                <span class="text-sm text-muted font-mono tabular-nums">
-                                    {format!("{}W {}L ({})", info.wins, info.losses, wr)}
-                                </span>
-                            </div>
-                        </div>
-                    }.into_any()
-                }
-                None => view! {
-                    <div class="flex items-center gap-4">
-                        <svg
-                            class="w-16 h-16 text-dimmed"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            aria-hidden="true"
-                        >
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                        </svg>
-                        <span class="font-display italic text-2xl text-muted">"Unranked"</span>
-                    </div>
-                }.into_any(),
-            }}
-        </div>
-    }
-}
 
 #[component]
 fn MatchListSection(
@@ -1157,8 +1086,8 @@ fn RankTargetCard(
         .and_then(|p| {
             p.goal
                 .target_value
-                .splitn(2, ':')
-                .nth(1)
+                .split_once(':')
+                .map(|x| x.1)
                 .map(|s| s.to_string())
         })
         .unwrap_or_else(|| "IV".to_string());
@@ -1254,7 +1183,7 @@ fn RankTargetCard(
                     }
                 }).unwrap_or_else(|| "—".to_string());
                 let target_display = if matches!(target_tier.to_uppercase().as_str(), "MASTER" | "GRANDMASTER" | "CHALLENGER") {
-                    format!("{}", tier_label_display(&target_tier))
+                    tier_label_display(&target_tier).to_string()
                 } else {
                     format!("{} {}", tier_label_display(&target_tier), target_div)
                 };

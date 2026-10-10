@@ -349,12 +349,12 @@ fn performance_verdict(user_val: f32, avg: f32) -> &'static str {
 
 fn normalize_pct(user_val: f32, avg: f32) -> f32 {
     let max = (user_val).max(avg * 2.0).max(1.0);
-    (user_val / max * 100.0).min(100.0).max(0.0)
+    (user_val / max * 100.0).clamp(0.0, 100.0)
 }
 
 fn avg_marker_pct(user_val: f32, avg: f32) -> f32 {
     let max = (user_val).max(avg * 2.0).max(1.0);
-    (avg / max * 100.0).min(100.0).max(0.0)
+    (avg / max * 100.0).clamp(0.0, 100.0)
 }
 
 #[component]
@@ -573,7 +573,7 @@ pub fn MatchDetailPage() -> impl IntoView {
     // Route param extraction
     let params = use_params_map();
     let match_id = move || params.read().get("id").unwrap_or_default();
-    let detail = Resource::new(match_id, |id| fetch_match_detail(id));
+    let detail = Resource::new(match_id, fetch_match_detail);
 
     // Signals for interactivity
     let (comparison_mode, set_comparison_mode) = signal(ComparisonMode::GameAverage);

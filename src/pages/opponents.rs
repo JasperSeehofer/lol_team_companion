@@ -858,8 +858,8 @@ fn OpponentDetail(
     let on_refresh_all = move |_| {
         let players_snap = players_stored.get_value();
         refreshing_all.set(true);
-        for i in 0..5 {
-            fetch_states[i].set(FetchState::Idle);
+        for state in fetch_states.iter() {
+            state.set(FetchState::Idle);
         }
         let fetch_states_clone = fetch_states;
         leptos::task::spawn_local(async move {

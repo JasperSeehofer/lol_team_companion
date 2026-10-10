@@ -322,7 +322,7 @@ fn compute_comp_tags(
     ];
     let has_split = picked
         .iter()
-        .any(|(_, c)| c.map_or(false, |ch| split_pushers.contains(&ch.name.as_str())));
+        .any(|(_, c)| c.is_some_and(|ch| split_pushers.contains(&ch.name.as_str())));
     if has_split {
         tags.push("split-push".to_string());
     }
@@ -357,7 +357,7 @@ fn compute_comp_tags(
     ];
     let scaler_count = picked
         .iter()
-        .filter(|(_, c)| c.map_or(false, |ch| scalers.contains(&ch.name.as_str())))
+        .filter(|(_, c)| c.is_some_and(|ch| scalers.contains(&ch.name.as_str())))
         .count();
     if scaler_count >= 3 {
         tags.push("scaling".to_string());
@@ -370,7 +370,7 @@ fn compute_comp_tags(
     ];
     let early_count = picked
         .iter()
-        .filter(|(_, c)| c.map_or(false, |ch| early_game.contains(&ch.name.as_str())))
+        .filter(|(_, c)| c.is_some_and(|ch| early_game.contains(&ch.name.as_str())))
         .count();
     if early_count >= 3 {
         tags.push("early-game".to_string());
@@ -385,11 +385,11 @@ fn compute_comp_tags(
     ];
     let has_enchanter = picked.iter().any(|(role, c)| {
         role.to_lowercase() == "support"
-            && c.map_or(false, |ch| enchanters.contains(&ch.name.as_str()))
+            && c.is_some_and(|ch| enchanters.contains(&ch.name.as_str()))
     });
     let has_hypercarry = picked.iter().any(|(role, c)| {
         (role.to_lowercase() == "bot" || role.to_lowercase() == "adc")
-            && c.map_or(false, |ch| hypercarries.contains(&ch.name.as_str()))
+            && c.is_some_and(|ch| hypercarries.contains(&ch.name.as_str()))
     });
     if has_enchanter && has_hypercarry {
         tags.push("protect-the-carry".to_string());
@@ -590,7 +590,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                                 let champ_name = entry.champion.clone();
                                                                 let comfort = entry.comfort_level.unwrap_or(0);
                                                                 let display = if comfort > 0 {
-                                                                    format!("{} ({})", champ_name, comfort_stars(comfort as u8))
+                                                                    format!("{} ({})", champ_name, comfort_stars(comfort))
                                                                 } else {
                                                                     champ_name.clone()
                                                                 };
@@ -663,7 +663,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                         }}
                                                         {if comfort > 0 {
                                                             view! {
-                                                                <span class="text-accent text-xs">{comfort_stars(comfort as u8)}</span>
+                                                                <span class="text-accent text-xs">{comfort_stars(comfort)}</span>
                                                             }.into_any()
                                                         } else {
                                                             view! { <span></span> }.into_any()

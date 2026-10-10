@@ -249,7 +249,7 @@ pub fn Nav() -> impl IntoView {
     // Escape key listener to close all dropdowns
     #[cfg(feature = "hydrate")]
     {
-        let close_all_esc = close_all.clone();
+        let close_all_esc = close_all;
         Effect::new(move |_| {
             use wasm_bindgen::closure::Closure;
             use wasm_bindgen::JsCast;

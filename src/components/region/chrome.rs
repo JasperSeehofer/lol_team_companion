@@ -87,7 +87,7 @@ pub fn ChampTile(
                                 </svg>
                             }.into_any()
                         } else {
-                            view! {}.into_any()
+                            ().into_any()
                         }}
                         {if locked {
                             view! {
@@ -97,7 +97,7 @@ pub fn ChampTile(
                                 ></div>
                             }.into_any()
                         } else {
-                            view! {}.into_any()
+                            ().into_any()
                         }}
                     </div>
                 }.into_any()
