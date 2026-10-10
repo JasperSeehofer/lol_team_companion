@@ -29,7 +29,7 @@ test.describe("Registration", () => {
     await page.click("button[type=submit]");
 
     // After successful registration, should navigate away from /auth/register
-    // Registration auto-logs in and redirects to /team/dashboard
+    // Registration auto-logs in and redirects to /solo (new users start in solo mode)
     await page.waitForLoadState("networkidle");
     const url = page.url();
     expect(url).not.toContain("/auth/register");
@@ -73,8 +73,8 @@ test.describe("Full auth flow", () => {
     await page.fill("input[name=password]", TEST_PASSWORD);
     await page.click("button[type=submit]");
 
-    // Should auto-login and redirect to /team/dashboard
-    await page.waitForURL("**/team/dashboard", { timeout: 15000 });
+    // Should auto-login and redirect to /solo (new users start in solo mode)
+    await page.waitForURL("**/solo", { timeout: 15000 });
     await page.waitForLoadState("networkidle");
 
     // Navigate to profile — should be accessible (not redirected to login)
@@ -93,7 +93,8 @@ test.describe("Full auth flow", () => {
     await page.fill("input[name=password]", TEST_PASSWORD);
     // Use the form's submit button specifically (not nav logout button)
     await page.locator("main button[type=submit], main input[type=submit]").first().click();
-    await page.waitForURL("**/team/dashboard", { timeout: 15000 });
+    // Login lands on /solo for a solo-mode user
+    await page.waitForURL("**/solo", { timeout: 15000 });
 
     // Let WASM Effects settle before navigating
     await page.waitForLoadState("load");

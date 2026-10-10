@@ -16,13 +16,12 @@
  *            /opponents, /action-items, /stats, /analytics,
  *            /personal-learnings, /admin/invites
  *   Scoped authed (subfolder baselines, Phase 18):
- *            /draft (3 modes × 2 regions = 6),
- *            /solo (3 modes × 2 regions = 6),
- *            /team/dashboard (2 modes × 2 regions = 4),
- *            /tree-drafter (2 regions),
- *            /champion-pool (2 regions),
- *            /match/:id (2 regions),
- *            /post-game (2 regions)
+ *            /draft (3 modes), /solo (3 modes), /team/dashboard,
+ *            /tree-drafter, /champion-pool, /match/:id, /post-game
+ *
+ * M0: the Pandemonium theme and the Game Day Brief were removed, so their
+ * baselines are gone. Remaining baselines predate the M0 footer and must be
+ * re-captured (`--update-snapshots`) once the M2 design system lands.
  */
 import { test, expect, setRegion, setMode } from "./fixtures";
 
@@ -154,7 +153,7 @@ test.describe("utility auth-required routes", () => {
 // Scoped routes — subfolder baselines per region × mode (Phase 18)
 // ---------------------------------------------------------------------------
 
-test.describe("scoped routes - /draft (6 baselines)", () => {
+test.describe("scoped routes - /draft (3 baselines)", () => {
   test("/draft demacia carousel baseline", async ({ authedPage }) => {
     await setRegion(authedPage, "demacia");
     await authedPage.goto("/draft");
@@ -191,48 +190,9 @@ test.describe("scoped routes - /draft (6 baselines)", () => {
     );
   });
 
-  test("/draft pandemonium carousel baseline", async ({ authedPage }) => {
-    // Navigate-first: SSR always renders demacia; set region client-side AFTER load.
-    await authedPage.goto("/draft");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "carousel");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-draft", "pandemonium-carousel.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/draft pandemonium war-table baseline", async ({ authedPage }) => {
-    await authedPage.goto("/draft");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "war-table");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-draft", "pandemonium-war-table.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/draft pandemonium ledger baseline", async ({ authedPage }) => {
-    await authedPage.goto("/draft");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "ledger");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-draft", "pandemonium-ledger.png"],
-      VR_OPTS
-    );
-  });
 });
 
-test.describe("scoped routes - /solo (6 baselines)", () => {
+test.describe("scoped routes - /solo (3 baselines)", () => {
   test("/solo demacia constellation baseline", async ({ authedPage }) => {
     await setRegion(authedPage, "demacia");
     await authedPage.goto("/solo");
@@ -269,51 +229,12 @@ test.describe("scoped routes - /solo (6 baselines)", () => {
     );
   });
 
-  test("/solo pandemonium constellation baseline", async ({ authedPage }) => {
-    await authedPage.goto("/solo");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "constellation");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-solo", "pandemonium-constellation.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/solo pandemonium forge baseline", async ({ authedPage }) => {
-    await authedPage.goto("/solo");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "forge");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-solo", "pandemonium-forge.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/solo pandemonium journal baseline", async ({ authedPage }) => {
-    await authedPage.goto("/solo");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "journal");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-solo", "pandemonium-journal.png"],
-      VR_OPTS
-    );
-  });
 });
 
-test.describe("scoped routes - /team/dashboard (4 baselines)", () => {
+test.describe("scoped routes - /team/dashboard (1 baseline)", () => {
   test("/team/dashboard demacia dashboard baseline", async ({ authedPage }) => {
     await setRegion(authedPage, "demacia");
     await authedPage.goto("/team/dashboard");
-    await setMode(authedPage, "dashboard");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
     await expect(authedPage).toHaveScreenshot(
@@ -322,46 +243,9 @@ test.describe("scoped routes - /team/dashboard (4 baselines)", () => {
     );
   });
 
-  test("/team/dashboard demacia brief baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
-    await authedPage.goto("/team/dashboard");
-    await setMode(authedPage, "brief");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-team-dashboard", "demacia-brief.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/team/dashboard pandemonium dashboard baseline", async ({ authedPage }) => {
-    await authedPage.goto("/team/dashboard");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "dashboard");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-team-dashboard", "pandemonium-dashboard.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/team/dashboard pandemonium brief baseline", async ({ authedPage }) => {
-    await authedPage.goto("/team/dashboard");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await setMode(authedPage, "brief");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-team-dashboard", "pandemonium-brief.png"],
-      VR_OPTS
-    );
-  });
 });
 
-test.describe("scoped routes - single-mode (8 baselines)", () => {
+test.describe("scoped routes - single-mode (4 baselines)", () => {
   test("/tree-drafter demacia baseline", async ({ authedPage }) => {
     await setRegion(authedPage, "demacia");
     await authedPage.goto("/tree-drafter");
@@ -373,18 +257,6 @@ test.describe("scoped routes - single-mode (8 baselines)", () => {
     );
   });
 
-  test("/tree-drafter pandemonium baseline", async ({ authedPage }) => {
-    await authedPage.goto("/tree-drafter");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-tree-drafter", "pandemonium.png"],
-      VR_OPTS
-    );
-  });
-
   test("/champion-pool demacia baseline", async ({ authedPage }) => {
     await setRegion(authedPage, "demacia");
     await authedPage.goto("/champion-pool");
@@ -392,18 +264,6 @@ test.describe("scoped routes - single-mode (8 baselines)", () => {
     await authedPage.waitForTimeout(500);
     await expect(authedPage).toHaveScreenshot(
       ["authed-champion-pool", "demacia.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/champion-pool pandemonium baseline", async ({ authedPage }) => {
-    await authedPage.goto("/champion-pool");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-champion-pool", "pandemonium.png"],
       VR_OPTS
     );
   });
@@ -421,18 +281,6 @@ test.describe("scoped routes - single-mode (8 baselines)", () => {
     );
   });
 
-  test("/match/:id pandemonium baseline", async ({ authedPage }) => {
-    await authedPage.goto("/match/test-match-id");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-match-detail", "pandemonium.png"],
-      VR_OPTS
-    );
-  });
-
   test("/post-game demacia baseline", async ({ authedPage }) => {
     await setRegion(authedPage, "demacia");
     await authedPage.goto("/post-game");
@@ -444,15 +292,4 @@ test.describe("scoped routes - single-mode (8 baselines)", () => {
     );
   });
 
-  test("/post-game pandemonium baseline", async ({ authedPage }) => {
-    await authedPage.goto("/post-game");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await setRegion(authedPage, "pandemonium");
-    await authedPage.waitForTimeout(300);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-post-game", "pandemonium.png"],
-      VR_OPTS
-    );
-  });
 });

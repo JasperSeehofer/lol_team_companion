@@ -1,6 +1,4 @@
-#![cfg(feature = "ssr")]
-
-mod common;
+use crate::common;
 
 use lol_team_companion::models::draft::DraftAction;
 use lol_team_companion::server::db;
@@ -65,6 +63,8 @@ async fn test_save_draft_with_actions() {
         vec!["teamfight".into()],
         None,
         None,
+        None, // series_id
+        None, // game_number
     )
     .await
     .unwrap();
@@ -98,6 +98,8 @@ async fn test_update_draft_replaces_actions() {
         vec![],
         None,
         None,
+        None, // series_id
+        None, // game_number
     )
     .await
     .unwrap();
@@ -127,6 +129,8 @@ async fn test_update_draft_replaces_actions() {
         vec!["pick".into()],
         Some("Win early".into()),
         Some("Watch for scaling".into()),
+        None, // series_id
+        None, // game_number
     )
     .await
     .unwrap();
@@ -161,6 +165,8 @@ async fn test_list_drafts_aggregates_actions_correctly() {
         vec![],
         None,
         None,
+        None, // series_id
+        None, // game_number
     )
     .await
     .unwrap();
@@ -179,6 +185,8 @@ async fn test_list_drafts_aggregates_actions_correctly() {
         vec![],
         None,
         None,
+        None, // series_id
+        None, // game_number
     )
     .await
     .unwrap();
@@ -210,6 +218,8 @@ async fn test_delete_draft() {
         vec![],
         None,
         None,
+        None, // series_id
+        None, // game_number
     )
     .await
     .unwrap();

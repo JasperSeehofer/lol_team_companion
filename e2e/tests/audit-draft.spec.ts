@@ -93,15 +93,8 @@ test("draft: load draft from saved list", async ({ teamPage }) => {
 
   // Try to find the draft in the saved drafts list and click it
   const draftInList = page.locator(`text=${draftName}`).first();
-  const draftVisible = await draftInList.isVisible({ timeout: 5000 }).catch(() => false);
-
-  if (!draftVisible) {
-    // List bug is present — this test cannot proceed
-    test.skip(
-    // @ts-ignore — skip inside test body after conditional check
-    );
-    return;
-  }
+  // Hard assertion: a missing list entry is a bug and must fail the test.
+  await expect(draftInList).toBeVisible({ timeout: 5000 });
 
   // Click the draft to load it
   await draftInList.click();
@@ -134,14 +127,8 @@ test("draft: delete a draft", async ({ teamPage }) => {
 
   // Look for a delete button — could be "Delete", trash icon button, or similar
   const deleteBtn = page.locator('button:has-text("Delete")').first();
-  const deleteVisible = await deleteBtn.isVisible({ timeout: 2000 }).catch(() => false);
-
-  if (!deleteVisible) {
-    test.skip(
-    // @ts-ignore — no delete mechanism found on draft page
-    );
-    return;
-  }
+  // Hard assertion: a missing delete control is a bug and must fail the test.
+  await expect(deleteBtn).toBeVisible({ timeout: 5000 });
 
   await deleteBtn.click();
   await page.waitForTimeout(1000);

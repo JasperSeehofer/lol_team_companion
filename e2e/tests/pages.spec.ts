@@ -43,7 +43,7 @@ for (const { path, content } of AUTHED_PAGES) {
     expect(body).toMatch(content);
 
     // Nav should be present
-    await expect(authedPage.locator("nav")).toBeVisible();
+    await expect(authedPage.locator('nav[aria-label="Primary"]')).toBeVisible();
 
     // No JS errors (ignore 404s — the Tailwind v4 @import "tailwindcss" causes a
     // harmless 404 in dev mode on every page)

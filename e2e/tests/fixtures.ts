@@ -110,13 +110,14 @@ export { expect };
  * sees the cookie (see `src/server/theme_layer.rs::theme_injection_middleware`).
  *
  * The helper is backwards-compatible — every existing caller continues to work because
- * the reload happens transparently here. Tests that call `setRegion(page, "pandemonium")`
+ * the reload happens transparently here. Tests that call `setRegion(page, "demacia")`
  * BEFORE `page.goto(...)` work because the cookie is set in the browser context first,
  * so the next navigation already carries it. Tests that call `setRegion` AFTER
  * `page.goto(...)` work because the helper reloads the current page.
  *
  * Phase 18.1 spec_lock D-01: cookie name=`lol_companion_theme`, path=`/`, sameSite=`Lax`.
- * D-05: only `demacia` / `pandemonium` are valid values (TypeScript enforced).
+ * M0: "demacia" is the only theme the server accepts; any other cookie value
+ * is clamped back to it, so the helper only accepts "demacia".
  *
  * Edge case: when called BEFORE any `page.goto()`, `page.url()` is `about:blank`. We
  * use the explicit `domain + path` form (rather than `url`) so the cookie is scoped
@@ -130,7 +131,7 @@ export { expect };
  */
 export async function setRegion(
   page: import("@playwright/test").Page,
-  region: "demacia" | "pandemonium"
+  region: "demacia"
 ): Promise<void> {
   // 1. Inject the cookie at the browser-context layer (sent on next request).
   await page.context().addCookies([
@@ -168,14 +169,12 @@ export async function setRegion(
  *
  * Draft:   carousel→"Carousel"/"CAROUSEL",  war-table→"War Table"/"WAR_TABLE",  ledger→"Ledger"/"LEDGER"
  * Solo:    constellation→"Constellation"/"CONSTELLATION",  forge→"Forge"/"FORGE",  journal→"Journal"/"JOURNAL"
- * Team:    dashboard→"Dashboard"/"DASHBOARD",  brief→"Game Day Brief"/"GAME_DAY"
  *
  * The helper tries title-case, uppercase+underscore, and a label map for
- * multi-word labels ("war-table" → "War Table") and demacia-only labels
- * ("brief" → "Game Day Brief").
+ * multi-word labels ("war-table" → "War Table").
  *
  * @param page - Playwright Page
- * @param mode - canonical mode key, e.g. "carousel", "war-table", "brief"
+ * @param mode - canonical mode key, e.g. "carousel", "war-table", "journal"
  */
 export async function setMode(
   page: import("@playwright/test").Page,
@@ -189,9 +188,6 @@ export async function setMode(
     "constellation": ["Constellation", "CONSTELLATION"],
     "forge": ["Forge", "FORGE"],
     "journal": ["Journal", "JOURNAL"],
-    "dashboard": ["Dashboard", "DASHBOARD"],
-    // "brief" has different labels per region: "Game Day Brief" (dem) vs "GAME_DAY" (pan)
-    "brief": ["Game Day Brief", "GAME_DAY"],
   };
 
   const candidates = LABEL_MAP[mode] ?? [

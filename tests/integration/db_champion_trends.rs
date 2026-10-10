@@ -1,6 +1,4 @@
-#![cfg(feature = "ssr")]
-
-mod common;
+use crate::common;
 
 use lol_team_companion::server::db;
 

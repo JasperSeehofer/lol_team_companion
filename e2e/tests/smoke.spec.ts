@@ -1,17 +1,16 @@
 /**
  * Smoke tests — verify all public pages load without JS errors.
- * The dev server must be running: cargo leptos watch
+ * Needs a running server (cargo leptos watch, or the built binary in CI).
  */
 import { test, expect } from "@playwright/test";
 
 const PUBLIC_PAGES = [
-  { path: "/", title: /LoL Team Companion/i },
-  { path: "/auth/login", title: /LoL Team Companion/i },
-  { path: "/auth/register", title: /LoL Team Companion/i },
-  // Phase 17 plan 17-01 stubs (public — filled by plan 06)
-  { path: "/closed-beta", title: /LoL Team Companion/i },
-  { path: "/legal/impressum", title: /LoL Team Companion/i },
-  { path: "/legal/datenschutz", title: /LoL Team Companion/i },
+  { path: "/", title: /Companion/i },
+  { path: "/auth/login", title: /Companion/i },
+  { path: "/auth/register", title: /Companion/i },
+  { path: "/closed-beta", title: /Companion/i },
+  { path: "/legal/impressum", title: /Companion/i },
+  { path: "/legal/datenschutz", title: /Companion/i },
 ];
 
 for (const { path, title } of PUBLIC_PAGES) {
@@ -25,18 +24,41 @@ for (const { path, title } of PUBLIC_PAGES) {
     await page.goto(path);
     await expect(page).toHaveTitle(title);
 
-    // Check nav is present (rendered by Leptos SSR)
-    await expect(page.locator("nav")).toBeVisible();
+    // Primary nav is present (rendered by Leptos SSR)
+    await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
 
-    // No JS errors (ignore favicon 404s and the Tailwind v4 @import "tailwindcss"
-    // 404 that leaks through in dev mode — the raw CSS import is processed at build
-    // time by the tailwind CLI but the unprocessed line causes a harmless browser fetch)
+    // Footer carries Riot's legal disclaimer on every page
+    await expect(page.getByTestId("riot-disclaimer")).toContainText(
+      "isn't endorsed by Riot Games"
+    );
+
+    // No JS errors. Generic 404s are ignored because third-party assets
+    // (e.g. CommunityDragon role icons) can be unreachable in sandboxed
+    // environments; the stylesheet itself is checked in a dedicated test below.
     expect(errors.filter((e) =>
       !e.includes("favicon") &&
       !e.includes("404 (Not Found)")
     )).toHaveLength(0);
   });
 }
+
+test("no stray /pkg/tailwindcss request", async ({ page }) => {
+  const missing: string[] = [];
+  page.on("response", (resp) => {
+    if (resp.status() === 404 && resp.url().includes("/pkg/")) {
+      missing.push(resp.url());
+    }
+  });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  expect(missing).toEqual([]);
+});
+
+test("unknown route shows a not-found page", async ({ page }) => {
+  const resp = await page.goto("/this-page-does-not-exist");
+  expect(resp?.status()).toBe(404);
+  await expect(page.locator("h1")).toHaveText(/page not found/i);
+});
 
 test("health endpoint returns ok", async ({ request }) => {
   const resp = await request.get("/healthz");

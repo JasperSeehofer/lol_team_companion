@@ -126,7 +126,7 @@ test("full pipeline: draft with picks → game plan prefill → save → source 
   ).toBeVisible({ timeout: 3000 });
 
   // Nav should be present
-  await expect(page.locator("nav")).toBeVisible();
+  await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
 
   // No real JS errors
   expect(filterRealErrors(errors)).toHaveLength(0);
@@ -146,7 +146,7 @@ test("game plan page loads cleanly with draft_id query param", async ({
   expect(page.url()).toContain("/game-plan");
   const bodyText = await page.textContent("body");
   expect(bodyText).toMatch(/game|plan|strategy/i);
-  await expect(page.locator("nav")).toBeVisible();
+  await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
@@ -164,7 +164,7 @@ test("post-game page loads cleanly with draft_id query param", async ({
   expect(page.url()).toContain("/post-game");
   const bodyText = await page.textContent("body");
   expect(bodyText).toMatch(/post|game|review/i);
-  await expect(page.locator("nav")).toBeVisible();
+  await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
