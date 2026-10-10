@@ -5,7 +5,7 @@
 //! request, so the Phase 18 `region` branching never activated at
 //! runtime even though it compiled and unit-tested correctly.
 //!
-//! Design (locked in `.planning/phases/18.1-.../18.1-CONTEXT.md`):
+//! Design (Phase 18.1 context, archived under git tag `planning-archive-2026-10`):
 //! - D-01: cookie `lol_companion_theme=<demacia|pandemonium>; Path=/;
 //!   Max-Age=31536000; SameSite=Lax` (NOT `HttpOnly` — the client
 //!   reads it for the optimistic update after a toggle click).
@@ -32,10 +32,15 @@ tokio::task_local! {
     pub static REQUEST_THEME: InitialTheme;
 }
 
-/// The two locked allowlist values (D-05). Anything else is treated
-/// as a missing cookie (defense against trivial tampering / XSS via
-/// the `<html data-theme="...">` attribute).
-const VALID_THEMES: [&str; 2] = ["demacia", "pandemonium"];
+/// Allowlist of themes the app serves (D-05). Release 1 ships one theme:
+/// "pandemonium" was retired in M0, so a stale cookie or DB value with that
+/// name falls back to the default. Anything else is treated as a missing
+/// value (defense against trivial tampering / XSS via the
+/// `<html data-theme="...">` attribute).
+pub const VALID_THEMES: [&str; 1] = ["demacia"];
+
+/// The theme every request falls back to.
+pub const DEFAULT_THEME: &str = "demacia";
 
 /// Parse a `Cookie:` header value and return the validated
 /// `lol_companion_theme` value if one is present and is in the
@@ -44,7 +49,7 @@ const VALID_THEMES: [&str; 2] = ["demacia", "pandemonium"];
 /// Returns `None` for:
 /// - missing key
 /// - empty header
-/// - value not in `{"demacia", "pandemonium"}` (D-05)
+/// - value not in [`VALID_THEMES`] (D-05)
 ///
 /// Validation against the allowlist mitigates T-18.1-01-01 (cookie
 /// tampering): a forged value cannot reach the `<html data-theme="">`
@@ -69,14 +74,14 @@ pub fn parse_theme_cookie(cookie_header: &str) -> Option<String> {
 /// authenticated user's account theme, which wins over the default
 /// `"demacia"`.
 ///
-/// The cookie value is assumed to be pre-validated by
-/// `parse_theme_cookie`. The `auth_theme` value comes from
-/// `AppUser.theme` which is constrained at the DB schema layer
-/// (`ASSERT $value IN ['demacia','pandemonium']`).
+/// Both inputs are clamped to [`VALID_THEMES`]: the DB schema still
+/// allows the retired "pandemonium" value on `user.theme`, so a stored
+/// value outside the allowlist is ignored rather than trusted.
 pub fn resolve_theme(cookie: Option<String>, auth_theme: Option<String>) -> String {
     cookie
-        .or(auth_theme)
-        .unwrap_or_else(|| "demacia".to_string())
+        .filter(|t| VALID_THEMES.contains(&t.as_str()))
+        .or(auth_theme.filter(|t| VALID_THEMES.contains(&t.as_str())))
+        .unwrap_or_else(|| DEFAULT_THEME.to_string())
 }
 
 /// Axum middleware function: reads the cookie + `AuthSession` from
@@ -129,10 +134,19 @@ mod tests {
 
     // Test 2 — multi-cookie header, middle position
     #[test]
-    fn parse_theme_cookie_multi_pandemonium() {
+    fn parse_theme_cookie_multi_demacia() {
+        assert_eq!(
+            parse_theme_cookie("a=1; lol_companion_theme=demacia; b=2"),
+            Some("demacia".to_string())
+        );
+    }
+
+    // Test 2b — retired theme is rejected (M0: one theme only)
+    #[test]
+    fn parse_theme_cookie_rejects_retired_pandemonium() {
         assert_eq!(
             parse_theme_cookie("a=1; lol_companion_theme=pandemonium; b=2"),
-            Some("pandemonium".to_string())
+            None
         );
     }
 
@@ -154,22 +168,28 @@ mod tests {
         assert_eq!(parse_theme_cookie(""), None);
     }
 
-    // Test 6 — cookie wins over auth (D-02)
+    // Test 6 — a retired theme in the cookie is clamped to the default
     #[test]
-    fn resolve_theme_cookie_wins_over_auth() {
+    fn resolve_theme_clamps_retired_cookie() {
         assert_eq!(
             resolve_theme(Some("pandemonium".to_string()), Some("demacia".to_string())),
-            "pandemonium"
+            "demacia"
         );
     }
 
-    // Test 7 — auth fallback when no cookie
+    // Test 7 — a retired theme stored on the user is clamped to the default
     #[test]
-    fn resolve_theme_auth_fallback() {
+    fn resolve_theme_clamps_retired_auth_theme() {
         assert_eq!(
             resolve_theme(None, Some("pandemonium".to_string())),
-            "pandemonium"
+            "demacia"
         );
+    }
+
+    // Test 7b — valid auth theme is used when no cookie
+    #[test]
+    fn resolve_theme_auth_fallback() {
+        assert_eq!(resolve_theme(None, Some("demacia".to_string())), "demacia");
     }
 
     // Test 8 — final default when neither cookie nor auth (D-06)

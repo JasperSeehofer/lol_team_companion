@@ -6,9 +6,10 @@ use leptos_router::{
 };
 
 use crate::components::bug_report_widget::BugReportWidget;
+use crate::components::footer::SiteFooter;
 use crate::components::nav::Nav;
 use crate::components::ui::ToastProvider;
-use crate::error_template::ErrorTemplate;
+use crate::error_template::NotFound;
 use crate::pages::{
     action_items::ActionItemsPage,
     admin::invites::AdminInvitesPage,
@@ -119,20 +120,21 @@ pub fn App() -> impl IntoView {
             .and_then(|w| w.document())
             .and_then(|d| d.document_element())
             .and_then(|el| el.get_attribute("data-theme"))
-            .filter(|v| v == "demacia" || v == "pandemonium")
+            // Release 1 serves one theme; anything else falls back.
+            .filter(|v| v == "demacia")
             .unwrap_or_else(|| "demacia".to_string());
         provide_context(InitialTheme(theme));
     }
 
     view! {
         <Stylesheet id="leptos" href="/pkg/lol_team_companion.css" />
-        <Title text="LoL Team Companion" />
+        <Title text="Companion" />
 
         <Router>
             <ToastProvider>
                 <Nav />
                 <main>
-                    <Routes fallback=|| view! { <ErrorTemplate outside_errors=Errors::default() /> }>
+                    <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=HomePage />
                         <Route path=path!("/profile") view=ProfilePage />
                         <Route path=path!("/auth/login") view=LoginPage />
@@ -160,6 +162,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
                     </Routes>
                 </main>
+                <SiteFooter />
                 // Floating bug-report widget (Phase 17 visual stub;
                 // Phase 18 wires submit-to-DB). Self-gates on auth +
                 // pathname so it never shows on /, /auth/*,

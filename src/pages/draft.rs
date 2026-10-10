@@ -1,9 +1,9 @@
 use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape, SectionHead, Stat};
+use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape, SectionHead};
 use crate::components::skeleton::PageLoading;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
 use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
 use crate::models::opponent::{Opponent, OpponentPlayerIntel};
@@ -3763,7 +3763,6 @@ fn DraftCarouselView(
     set_slot_comment_input: WriteSignal<String>,
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
     let region_for_head = region.clone();
     let region_for_board = region.clone();
     let region_for_loading = region.clone();
@@ -3776,17 +3775,8 @@ fn DraftCarouselView(
                 title="Draft Carousel".to_string()
             />
 
-            // Pandemonium mismatch patch: confidence + sample-size annotation
-            {if is_pandemonium {
-                view! {
-                    <div class="mb-3 flex items-center gap-3 py-2 border-b border-divider/50">
-                        <span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">"Pick confidence:"</span>
-                        <span class="font-mono text-[10px] text-accent">"conf 0.71"</span>
-                        <span class="font-mono text-[10px] text-muted">" · 1,400 similar comps"</span>
-                    </div>
-                }.into_any()
-            } else {
-                // Demacia mismatch patch: onDeck halo shown inline via ring-accent on active slot
+            {
+                // onDeck halo shown inline via ring-accent on active slot
                 // The DraftBoard itself handles the active-slot ring; the additional halo ring
                 // is rendered here as a context indicator for the next-pick slot.
                 view! {
@@ -3794,8 +3784,8 @@ fn DraftCarouselView(
                         <div class="w-3 h-3 rounded-full ring-2 ring-accent/60 animate-pulse"></div>
                         <span class="font-imperial text-[10px] uppercase tracking-[0.18em] text-muted">"Next pick"</span>
                     </div>
-                }.into_any()
-            }}
+                }
+            }
 
             <Suspense fallback=move || view! { <PageLoading region=region_for_loading.clone() variant="draft".to_string() /> }>
                 {move || champions_resource.get().map(|result| match result {
@@ -3945,7 +3935,6 @@ fn DraftWarTableView(
     set_slot_comment_input: WriteSignal<String>,
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
-    let is_demacia = region != "pandemonium";
     let region_for_head = region.clone();
     let region_for_board = region.clone();
     let region_for_card = region.clone();
@@ -3992,33 +3981,18 @@ fn DraftWarTableView(
                 })}
             </Suspense>
 
-            // Demacia mismatch patch: composition pillars + composite score
-            {if is_demacia {
-                view! {
-                    <div class="mt-4">
-                        <Card region=region_for_card variant="gilt".to_string()>
-                            <SectionHead
-                                region=region_for_pillars.clone()
-                                eyebrow="COMPOSITION".to_string()
-                                title="Pillars".to_string()
-                            />
-                            <div class="grid grid-cols-4 gap-4 mt-4">
-                                <Stat label="DPS".to_string() value="72".to_string() unit="/100".to_string() />
-                                <Stat label="FRONT".to_string() value="58".to_string() unit="/100".to_string() />
-                                <Stat label="POKE".to_string() value="34".to_string() unit="/100".to_string() />
-                                <Stat label="UTIL".to_string() value="61".to_string() unit="/100".to_string() />
-                            </div>
-                            <div class="mt-4 flex items-baseline gap-2">
-                                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">"Composite Score"</span>
-                                <span class="font-display text-[28px] text-accent">"81"</span>
-                                <span class="font-mono text-muted text-[12px]">"/ 100"</span>
-                            </div>
-                        </Card>
-                    </div>
-                }.into_any()
-            } else {
-                view! { <span></span> }.into_any()
-            }}
+            // Composition pillars: not computed yet. Show an honest empty state
+            // instead of placeholder scores (the Draft Graph milestone fills this).
+            <div class="mt-4">
+                <Card region=region_for_card variant="gilt".to_string()>
+                    <SectionHead
+                        region=region_for_pillars.clone()
+                        eyebrow="COMPOSITION".to_string()
+                        title="Pillars".to_string()
+                    />
+                    <EmptyState message="Composition scores are not computed yet. Once the Draft Graph ships, damage, frontline, poke and utility will be scored from the picks on this board, with the reason for each score." />
+                </Card>
+            </div>
 
             // Role override dropdowns for our-side pick slots
             {move || {
@@ -4132,14 +4106,14 @@ fn DraftLedgerView(
     let region_for_red = region.clone();
     let region_for_journal = region.clone();
 
-    // Slot layout per 20-slot draft board convention:
-    //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,14,16
-    //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,13,15
+    // Slot layout per 20-slot draft board convention (see `slot_meta`):
+    //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,13,15
+    //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,12,14
     // Using canonical pick indices for side columns (5 picks each).
     let blue_pick_slots: &[usize] = &[6, 9, 10, 17, 18];
     let red_pick_slots:  &[usize] = &[7, 8, 11, 16, 19];
-    let blue_ban_slots:  &[usize] = &[0, 2, 4, 14, 16];
-    let red_ban_slots:   &[usize] = &[1, 3, 5, 13, 15];
+    let blue_ban_slots:  &[usize] = &[0, 2, 4, 13, 15];
+    let red_ban_slots:   &[usize] = &[1, 3, 5, 12, 14];
 
     if is_pandemonium {
         view! {

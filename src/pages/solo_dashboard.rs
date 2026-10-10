@@ -1,7 +1,7 @@
 use crate::app::InitialTheme;
 use crate::components::region::*;
 use crate::components::skeleton::{PageEmpty, PageLoading};
-use crate::components::ui::{ErrorBanner, StatusMessage, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, ErrorBanner, StatusMessage, ToastContext, ToastKind};
 use crate::models::match_data::{GoalProgressPayload, PlayerMatchStats, RankedSnapshot};
 use crate::models::user::RankedInfo;
 use leptos::prelude::*;
@@ -881,7 +881,6 @@ fn SoloConstellationContent(
 
     let region_badge = region.clone();
     let current_tier_pan = current_tier.clone();
-    let region_sort = region.clone();
     let region_pool = region.clone();
 
     view! {
@@ -905,27 +904,6 @@ fn SoloConstellationContent(
                     </div>
                 }.into_any())}
             </Card>
-
-            // ── PANDEMONIUM PATCH (b): 4 deep stat cards (2×2 grid) ──────────
-            // TODO: Wire real KDA/CS/DMG/Vision values from dashboard_resource
-            // when per-stat aggregation is added in a future analytics phase.
-            // Current values are placeholders per CONTENT-CONTRACT-AUDIT.md.
-            {is_pandemonium.then(|| view! {
-                <div class="grid grid-cols-2 gap-2">
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="KDA".to_string() value="3.42".to_string() delta=0.18_f32 />
-                    </Card>
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="CS/min".to_string() value="7.1".to_string() delta={-0.2_f32} />
-                    </Card>
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="DMG Share".to_string() value="27.3".to_string() unit="%".to_string() delta=2.1_f32 />
-                    </Card>
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="Vision/min".to_string() value="1.4".to_string() delta=0.05_f32 />
-                    </Card>
-                </div>
-            }.into_any())}
 
             // ── LP History ────────────────────────────────────────────────────
             <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window region=lp_region attr:data-feedback-label="Solo dashboard → LP history graph" />
@@ -967,45 +945,15 @@ fn SoloConstellationContent(
                 attr:data-feedback-label="Solo dashboard → Recent matches"
             />
 
-            // ── DEMACIA PATCH (c): Sort/filter controls ───────────────────────
-            {is_demacia.then(|| view! {
-                <div class="flex items-center gap-3">
-                    <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">"Sort"</span>
-                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Champion"</Btn>
-                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Queue"</Btn>
-                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Date"</Btn>
-                </div>
-            }.into_any())}
-
-            // ── DEMACIA PATCH (a): Pool-gap warnings ──────────────────────────
-            // TODO: Wire real pool-gap detection from match history
-            // in a future analytics phase. Current gaps are
-            // placeholder advisories per CONTENT-CONTRACT-AUDIT.md.
+            // ── Pool gaps (not built yet) ─────────────────────────────────────
+            // Honest empty state: pool-gap detection does not exist yet, so we
+            // explain what will appear instead of showing invented advice.
             {is_demacia.then(|| view! {
                 <Card region=region_pool.clone() variant="gilt">
                     <SectionHead region=region_pool.clone()
                                  eyebrow="REVIEW"
                                  title="Pool Gaps".to_string() />
-                    <ul class="space-y-2 mt-2">
-                        <li class="flex items-center gap-2">
-                            <Badge tone="warning">"Gap"</Badge>
-                            <span class="font-display italic text-secondary text-sm">
-                                "No reliable engage support \u{2014} consider learning Leona or Rell"
-                            </span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <Badge tone="warning">"Gap"</Badge>
-                            <span class="font-display italic text-secondary text-sm">
-                                "Low DPS jungle option \u{2014} pick up Kindred or Lillia"
-                            </span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <Badge tone="warning">"Gap"</Badge>
-                            <span class="font-display italic text-secondary text-sm">
-                                "Missing scaling carry \u{2014} practice Kayle or Vladimir"
-                            </span>
-                        </li>
-                    </ul>
+                    <EmptyState message="Pool-gap analysis is not available yet. When it ships, roles and champion types missing from your pool will be detected from your synced match history and listed here." />
                 </Card>
             }.into_any())}
 
@@ -1513,198 +1461,71 @@ fn SoloForgeView(
     region: String,
     ranked: Option<RankedInfo>,
 ) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
-
     let current_tier = ranked.as_ref().map(|r| r.tier.clone()).unwrap_or_else(|| "UNRANKED".to_string());
     let current_division = ranked.as_ref().map(|r| r.division.clone()).unwrap_or_default();
     let current_lp = ranked.as_ref().map(|r| r.lp).unwrap_or(0);
-    let tier_upper = current_tier.to_uppercase();
 
-    // TODO: wire real prep/pool data from champion pool + match history phases
-    // StoredValue<Vec<[String; N]>> — each String is Send+Sync+Clone.
-    let prep_sv = StoredValue::new(vec![
-        ["[ ]".to_string(), "Aatrox — review lvl 3 jungle clear".to_string()],
-        ["[ ]".to_string(), "Study: how to play into poke comps".to_string()],
-        ["[x]".to_string(), "Warmup: 20 CS practice tool".to_string()],
-        ["[ ]".to_string(), "Mental reset — previous tilt noted".to_string()],
-    ]);
-
-    // TODO: wire from champion pool resource once pool-fill aggregation is added
-    let pool_sv = StoredValue::new(vec![
-        ["Aatrox".to_string(),   "12 games".to_string(), "58% WR".to_string()],
-        ["Jax".to_string(),      "8 games".to_string(),  "62% WR".to_string()],
-        ["Malphite".to_string(), "5 games".to_string(),  "40% WR".to_string()],
-    ]);
-
-    let targets_sv = StoredValue::new(vec![
-        ["Aatrox".to_string(),   "Master carry patterns".to_string()],
-        ["Jax".to_string(),      "Refine split-push decision-making".to_string()],
-        ["Malphite".to_string(), "Consistent engage timing".to_string()],
-    ]);
-
-    let champ_pool_sv = StoredValue::new(vec![
-        "Aatrox".to_string(), "Jax".to_string(), "Malphite".to_string(),
-    ]);
-
-    if is_pandemonium {
-        let tier_pan = StoredValue::new(current_tier.clone());
-        let div_pan  = StoredValue::new(current_division.clone());
-        let tier_up_pan = StoredValue::new(tier_upper.clone());
-        let r1 = region.clone();
-        let r2 = region.clone();
-        let r3 = region.clone();
-        let r4 = region.clone();
-        let r5 = region.clone();
-        let r6 = region.clone();
-        let r7 = region.clone();
-        view! {
-            <div class="flex flex-col gap-3">
-                <RiotTape label="FORGE · QUEUE_PREP" />
-                // Rank display
-                <Card region=r1 variant="zine">
-                    <Glitch region=r2.clone()>"// TIER"</Glitch>
-                    <div class="flex items-center gap-4 mt-2">
-                        <RankBadge tier=tier_pan.get_value() division=div_pan.get_value() large=false />
-                        <LPProgress region=r3.clone() lp={current_lp.max(0) as u32} max=100 />
+    // Only real data is shown here: the rank snapshot. Improvement targets and
+    // pool status are not computed yet, so they render honest empty states
+    // instead of placeholder champions.
+    let r1 = region.clone();
+    let r2 = region.clone();
+    let r3 = region.clone();
+    view! {
+        <div class="flex flex-col gap-4">
+            // Forge header
+            <Card region=r1.clone() variant="gilt">
+                <div class="text-center pb-2">
+                    <div class="flex justify-center mb-2">
+                        <Crown size=36 />
                     </div>
-                    <div class="mt-2">
-                        <Glitch region=r4.clone()>
-                            {move || format!("// TIER · {}", tier_up_pan.get_value())}
-                        </Glitch>
-                    </div>
-                </Card>
-                // Queue prep checklist
-                <Card region=r5 variant="zine">
-                    <Glitch region=r6.clone()>"// PREP_LIST"</Glitch>
-                    <div class="mt-2 flex flex-col gap-1">
-                        {move || prep_sv.get_value().into_iter().map(|row| {
-                            let a_sv = StoredValue::new(row[0].clone());
-                            let b_sv = StoredValue::new(row[1].clone());
-                            view! {
-                                <div class="font-mono text-[12px] flex gap-2 items-baseline border-b border-outline/20 py-1">
-                                    <span class="text-accent shrink-0">{move || a_sv.get_value()}</span>
-                                    <span class="text-primary">{move || b_sv.get_value()}</span>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // Pool status
-                <Card region=r7 variant="zine">
-                    <Glitch region=region.clone()>"// POOL_STATUS"</Glitch>
-                    <div class="mt-2 flex flex-col gap-1">
-                        {move || pool_sv.get_value().into_iter().map(|row| {
-                            let a_sv = StoredValue::new(row[0].clone());
-                            let b_sv = StoredValue::new(row[1].clone());
-                            let c_sv = StoredValue::new(row[2].clone());
-                            view! {
-                                <div class="font-mono text-[11px] flex gap-2 items-baseline border-b border-outline/20 py-1">
-                                    <span class="text-primary flex-1">{move || a_sv.get_value()}</span>
-                                    <span class="text-secondary">{move || b_sv.get_value()}</span>
-                                    <span class="text-accent">{move || c_sv.get_value()}</span>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // CTA
-                <Btn region="pandemonium".to_string() variant="primary">
-                    "QUEUE"
-                </Btn>
-            </div>
-        }.into_any()
-    } else {
-        let tier_dem = StoredValue::new(current_tier.clone());
-        let div_dem  = StoredValue::new(current_division.clone());
-        let r1 = region.clone();
-        let r2 = region.clone();
-        let r3 = region.clone();
-        let r4 = region.clone();
-        let r5 = region.clone();
-        let r6 = region.clone();
-        let r7 = region.clone();
-        let r8 = region.clone();
-        view! {
-            <div class="flex flex-col gap-4">
-                // Forge header
-                <Card region=r1.clone() variant="gilt">
-                    <div class="text-center pb-2">
-                        <div class="flex justify-center mb-2">
-                            <Crown size=36 />
-                        </div>
-                        <h1 class="font-display text-[24px] tracking-[0.08em] text-accent uppercase">
-                            "FORGE"
-                        </h1>
-                        <SectionHead
-                            region=r1.clone()
-                            eyebrow="CHAMPION MASTERY"
-                            title="Workbench".to_string()
-                        />
-                        <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=400 />
-                        </div>
-                    </div>
-                </Card>
-                // Rank display
-                <Card region=r2 variant="gilt">
+                    <h1 class="font-display text-[24px] tracking-[0.08em] text-accent uppercase">
+                        "FORGE"
+                    </h1>
                     <SectionHead
-                        region=r3.clone()
-                        eyebrow="CURRENT STANDING"
-                        title="Rank".to_string()
+                        region=r1.clone()
+                        eyebrow="CHAMPION MASTERY"
+                        title="Workbench".to_string()
                     />
-                    <div class="flex items-center gap-6 mt-3">
-                        <RankBadge tier=tier_dem.get_value() division=div_dem.get_value() large=true />
-                        <LPProgress region=r4.clone() lp={current_lp.max(0) as u32} max=100 />
+                    <div class="mt-2 flex justify-center">
+                        <HeraldicDivider width=400 />
                     </div>
-                </Card>
-                // Improvement targets
-                <Card region=r5 variant="gilt">
-                    <SectionHead
-                        region=r6.clone()
-                        eyebrow="FORGE"
-                        title="Improvement Targets".to_string()
-                    />
-                    <div class="flex justify-center mt-2">
-                        <HeraldicDivider width=480 />
-                    </div>
-                    <div class="mt-3 flex flex-col gap-2">
-                        {move || targets_sv.get_value().into_iter().map(|row| {
-                            let a_sv = StoredValue::new(row[0].clone());
-                            let b_sv = StoredValue::new(row[1].clone());
-                            view! {
-                                <div class="flex items-baseline gap-3 border-b border-outline/20 py-2 font-display text-[13px]">
-                                    <span class="text-accent shrink-0">"•"</span>
-                                    <span class="text-primary font-semibold">{move || a_sv.get_value()}</span>
-                                    <span class="text-secondary italic flex-1">{move || b_sv.get_value()}</span>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // Tool rack: champion pool
-                <Card region=r7 variant="gilt">
-                    <SectionHead
-                        region=r8.clone()
-                        eyebrow="TOOL RACK"
-                        title="Champion Pool".to_string()
-                    />
-                    <div class="flex gap-3 mt-3 flex-wrap">
-                        {move || champ_pool_sv.get_value().into_iter().map(|champ| {
-                            let champ_badge_sv = StoredValue::new(champ.clone());
-                            view! {
-                                <div class="flex flex-col items-center gap-1">
-                                    <ChampTile name=champ size=56 />
-                                    <Badge tone="neutral">{move || champ_badge_sv.get_value()}</Badge>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // Queue CTA
-                <Btn region=region variant="primary">
-                    "Queue Aatrox"
-                </Btn>
-            </div>
-        }.into_any()
+                </div>
+            </Card>
+            // Rank display
+            <Card region=r2.clone() variant="gilt">
+                <SectionHead
+                    region=r2.clone()
+                    eyebrow="CURRENT STANDING"
+                    title="Rank".to_string()
+                />
+                <div class="flex items-center gap-6 mt-3">
+                    <RankBadge tier=current_tier.clone() division=current_division.clone() large=true />
+                    <LPProgress region=r2.clone() lp={current_lp.max(0) as u32} max=100 />
+                </div>
+            </Card>
+            // Improvement targets (not built yet)
+            <Card region=r3.clone() variant="gilt">
+                <SectionHead
+                    region=r3.clone()
+                    eyebrow="FORGE"
+                    title="Improvement Targets".to_string()
+                />
+                <EmptyState message="Improvement targets are not available yet. They will be derived from your synced matches and personal learnings once that analysis ships." />
+            </Card>
+            // Champion pool pointer
+            <Card region=region.clone() variant="gilt">
+                <SectionHead
+                    region=region.clone()
+                    eyebrow="TOOL RACK"
+                    title="Champion Pool".to_string()
+                />
+                <EmptyState
+                    message="Your champion pool lives on the Champion Pool page. Per-champion games and win rates will appear here once pool statistics are aggregated from your match history."
+                    cta_label="Open Champion Pool"
+                    cta_href="/champion-pool"
+                />
+            </Card>
+        </div>
     }
 }

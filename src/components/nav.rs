@@ -6,7 +6,6 @@ use leptos_router::{
 
 use crate::app::InitialTheme;
 use crate::components::region::CompanionSigil;
-use crate::components::theme_toggle::ThemeToggle;
 use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};
 use crate::pages::team::dashboard::handle_join_request;
@@ -151,11 +150,12 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
 }
 
 // ---------------------------------------------------------------------------
-// 4-Hub Information Architecture (D-09)
+// Hub Information Architecture
 // ---------------------------------------------------------------------------
 
 /// Hub-grouped sub-routes. Each hub maps to its sub-nav children.
-/// `live` hub omitted from sub-nav (single-page hub, deferred feature).
+/// Match detail pages (`/match/:id`) are reached from Stats, so they have no
+/// sub-nav entry of their own but still highlight the History hub.
 const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
     (
         "strategy",
@@ -173,7 +173,6 @@ const HUB_ROUTES: &[(&str, &[(&str, &str)])] = &[
         "history",
         &[
             ("/stats", "Stats"),
-            ("/match", "Match"),
             ("/personal-learnings", "Learnings"),
             ("/analytics", "Analytics"),
         ],
@@ -214,8 +213,6 @@ fn hub_for_path(path: &str) -> &'static str {
         || path.starts_with("/solo")
     {
         "profile"
-    } else if path.starts_with("/live") {
-        "live"
     } else {
         ""
     }
@@ -281,15 +278,12 @@ pub fn Nav() -> impl IntoView {
     let active_hub =
         Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
 
-    // 4-hub primary buttons. `Live` is visually disabled (deferred feature).
-    let hub_btn_class = move |hub_id: &'static str, disabled: bool| -> Memo<String> {
-        let active_hub = active_hub.clone();
+    // Primary hub buttons.
+    let hub_btn_class = move |hub_id: &'static str| -> Memo<String> {
         Memo::new(move |_| {
             let active = active_hub.get() == hub_id;
             let base = "px-4 py-2 rounded-md font-imperial text-[10px] uppercase tracking-[0.18em] transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
-            if disabled {
-                format!("{base} text-dimmed pointer-events-none opacity-50")
-            } else if active {
+            if active {
                 format!("{base} bg-accent text-accent-contrast font-semibold cursor-pointer")
             } else {
                 format!("{base} text-muted hover:text-secondary cursor-pointer")
@@ -297,10 +291,9 @@ pub fn Nav() -> impl IntoView {
         })
     };
 
-    let strategy_btn_cls = hub_btn_class("strategy", false);
-    let live_btn_cls = hub_btn_class("live", true);
-    let history_btn_cls = hub_btn_class("history", false);
-    let profile_btn_cls = hub_btn_class("profile", false);
+    let strategy_btn_cls = hub_btn_class("strategy");
+    let history_btn_cls = hub_btn_class("history");
+    let profile_btn_cls = hub_btn_class("profile");
 
     view! {
         <header class="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-divider">
@@ -312,15 +305,11 @@ pub fn Nav() -> impl IntoView {
                         <CompanionSigil region=region.clone() />
                     </A>
 
-                    // 4 primary hubs
+                    // Primary hubs
                     <nav class="hidden md:flex items-center gap-1" aria-label="Primary">
                         <A href="/draft" attr:class=move || strategy_btn_cls.get()>
                             "Strategy"
                         </A>
-                        // Live hub disabled (deferred feature)
-                        <span class=move || live_btn_cls.get() aria-disabled="true" title="Live coming soon">
-                            "Live"
-                        </span>
                         <A href="/stats" attr:class=move || history_btn_cls.get()>
                             "History"
                         </A>
@@ -331,19 +320,14 @@ pub fn Nav() -> impl IntoView {
 
                     <div class="flex-1" />
 
-                    // Right cluster: ModeToggle (auth-only) · ThemeToggle · Notifications · User menu
+                    // Right cluster: ModeToggle (auth-only) · Notifications · User menu
+                    // (Release 1 ships a single theme, so there is no theme toggle.)
                     <div class="flex items-center gap-3">
                         <Suspense fallback=|| ()>
                             {move || Suspend::new(async move {
                                 match user.await {
-                                    Ok(Some(u)) => {
-                                        let theme = u.theme.clone();
-                                        view! {
-                                            <ModeToggle mode=u.mode />
-                                            <ThemeToggle initial_theme=theme />
-                                        }.into_any()
-                                    },
-                                    _ => view! { <ThemeToggle /> }.into_any(),
+                                    Ok(Some(u)) => view! { <ModeToggle mode=u.mode /> }.into_any(),
+                                    _ => ().into_any(),
                                 }
                             })}
                         </Suspense>
@@ -518,7 +502,7 @@ pub fn Nav() -> impl IntoView {
                 // ── Sub-nav strip — driven by use_location() ──
                 {move || {
                     let hub = active_hub.get();
-                    if hub.is_empty() || hub == "live" {
+                    if hub.is_empty() {
                         view! { <div class="hidden" /> }.into_any()
                     } else {
                         let routes: &[(&str, &str)] = HUB_ROUTES

@@ -21,6 +21,28 @@ pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
+/// Whether the current user belongs to a team. Drives the empty state of the
+/// tree list (no team: point to the roster page; team but no trees: point to
+/// the create form).
+#[server]
+pub async fn user_has_team() -> Result<bool, ServerFnError> {
+    use crate::server::auth::AuthSession;
+    use crate::server::db;
+    use std::sync::Arc;
+    use surrealdb::{engine::local::Db, Surreal};
+
+    let auth: AuthSession = leptos_axum::extract().await?;
+    let Some(user) = auth.user else {
+        return Ok(false);
+    };
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let team_id = db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(team_id.is_some())
+}
+
 #[server]
 pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
     use crate::server::auth::AuthSession;
@@ -299,6 +321,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     // Resources
     let champions_resource = Resource::new(|| (), |_| get_champions_for_tree());
     let trees = Resource::new(|| (), |_| list_trees());
+    let has_team = Resource::new(|| (), |_| user_has_team());
 
     // Reactive resource for tree nodes — depends on selected_tree_id
     let nodes_resource = Resource::new(
@@ -786,15 +809,27 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         <h3 class="text-muted text-xs font-semibold uppercase tracking-wider px-1">"Your Trees"</h3>
                         <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                             {move || trees.get().map(|result| match result {
-                                Ok(list) if list.is_empty() => view! {
-                                    <div class="text-center py-6">
-                                        <p class="text-dimmed text-sm mb-3">"No draft trees yet"</p>
-                                        <p class="text-dimmed text-xs mb-4">"Create or join a team to get started."</p>
-                                        <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
-                                            "Go to Team"
-                                        </a>
-                                    </div>
-                                }.into_any(),
+                                Ok(list) if list.is_empty() => {
+                                    let in_team = matches!(has_team.get(), Some(Ok(true)));
+                                    if in_team {
+                                        view! {
+                                            <div class="text-center py-6">
+                                                <p class="text-muted text-sm mb-2">"No draft trees yet"</p>
+                                                <p class="text-muted text-xs">"Name a tree above and press Create Tree. Your team's trees will be listed here."</p>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="text-center py-6">
+                                                <p class="text-muted text-sm mb-3">"No draft trees yet"</p>
+                                                <p class="text-muted text-xs mb-4">"Draft trees are shared with your team. Create or join a team to get started."</p>
+                                                <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
+                                                    "Go to Team Roster"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }
                                 Ok(list) => view! {
                                     <div class="flex flex-col gap-1.5">
                                         {list.into_iter().map(|t| {
@@ -899,7 +934,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             return view! {
                                 <div class="flex-1 flex items-center justify-center">
                                     <div class="text-center">
-                                        <div class="text-dimmed text-6xl mb-4">"&#x1f333;"</div>
+                                        <div class="text-dimmed text-6xl mb-4" aria-hidden="true">"\u{1f333}"</div>
                                         <p class="text-muted text-lg">"Select or create a tree to start planning"</p>
                                     </div>
                                 </div>
