@@ -360,11 +360,7 @@ fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoV
 }
 
 #[component]
-fn NavCard(
-    href: &'static str,
-    title: &'static str,
-    desc: &'static str,
-) -> impl IntoView {
+fn NavCard(href: &'static str, title: &'static str, desc: &'static str) -> impl IntoView {
     view! {
         <A href=href attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
             <div class="bg-elevated border border-outline/50 border-l-4 border-l-accent rounded-xl p-5 hover:bg-surface transition-colors cursor-pointer h-full">

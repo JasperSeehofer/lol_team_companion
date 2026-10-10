@@ -1,4 +1,6 @@
-use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{
+    EmptyState, ErrorBanner, SkeletonCard, SkeletonLine, ToastContext, ToastKind,
+};
 use crate::models::action_item::ActionItem;
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -217,7 +219,9 @@ pub fn ActionItemsPage() -> impl IntoView {
                 Ok(_) => {
                     set_new_text.set(String::new());
                     set_new_assignee.set(String::new());
-                    toast.show.run((ToastKind::Success, "Action item added".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Action item added".into()));
                     items.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -227,7 +231,11 @@ pub fn ActionItemsPage() -> impl IntoView {
 
     let change_status = move |id: String, status: String| {
         leptos::task::spawn_local(async move {
-            let msg = if status == "done" { "Marked complete" } else { "Status updated" };
+            let msg = if status == "done" {
+                "Marked complete"
+            } else {
+                "Status updated"
+            };
             match update_item_status(id, status).await {
                 Ok(_) => {
                     items.refetch();

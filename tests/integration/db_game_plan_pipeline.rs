@@ -82,7 +82,9 @@ async fn test_get_draft_for_prefill_found() {
 async fn test_get_draft_for_prefill_not_found() {
     let db = common::test_db().await;
 
-    let result = db::get_draft_for_prefill(&db, "draft:nonexistent").await.unwrap();
+    let result = db::get_draft_for_prefill(&db, "draft:nonexistent")
+        .await
+        .unwrap();
     assert!(result.is_none(), "Expected None for nonexistent draft_id");
 }
 
@@ -166,5 +168,8 @@ async fn test_get_game_plans_for_draft_empty() {
     .unwrap();
 
     let plans = db::get_game_plans_for_draft(&db, &draft_id).await.unwrap();
-    assert!(plans.is_empty(), "Expected empty vec for draft with no game plans");
+    assert!(
+        plans.is_empty(),
+        "Expected empty vec for draft with no game plans"
+    );
 }

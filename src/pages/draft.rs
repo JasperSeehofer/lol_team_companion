@@ -1,10 +1,17 @@
 use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape, SectionHead};
+use crate::components::region::{
+    Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape,
+    SectionHead,
+};
 use crate::components::skeleton::PageLoading;
-use crate::components::ui::{EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
-use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
+use crate::components::ui::{
+    EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+};
+use crate::models::champion::{
+    note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES,
+};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
 use crate::models::opponent::{Opponent, OpponentPlayerIntel};
 use crate::models::series::Series;
@@ -324,8 +331,14 @@ pub async fn get_fearless_champions(
 /// Get champion pool entries for all starters on the user's team.
 /// Returns Vec<(username, role, pool_entries)>.
 #[server]
-pub async fn get_team_pools(
-) -> Result<Vec<(String, String, Vec<crate::models::champion::ChampionPoolEntry>)>, ServerFnError> {
+pub async fn get_team_pools() -> Result<
+    Vec<(
+        String,
+        String,
+        Vec<crate::models::champion::ChampionPoolEntry>,
+    )>,
+    ServerFnError,
+> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -469,7 +482,9 @@ pub async fn get_opponent_intel_full(
         // Mastery data — gracefully absent when API key missing or no PUUID.
         let mastery_data = if riot::has_api_key() {
             if let Some(ref puuid) = player.riot_puuid {
-                match riot::fetch_champion_masteries(puuid, riot::platform_route_from_str("EUW")).await {
+                match riot::fetch_champion_masteries(puuid, riot::platform_route_from_str("EUW"))
+                    .await
+                {
                     Ok(masteries) => masteries.into_iter().take(10).collect(),
                     Err(_) => Vec::new(),
                 }
@@ -692,7 +707,11 @@ pub async fn get_pool_notes_for_champions(
         .collect())
 }
 
-fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>], roles: &[Option<String>]) -> Vec<DraftAction> {
+fn build_actions(
+    slots: Vec<Option<String>>,
+    slot_comments: &[Option<String>],
+    roles: &[Option<String>],
+) -> Vec<DraftAction> {
     slots
         .into_iter()
         .enumerate()
@@ -753,7 +772,11 @@ const TIERS: &[&str] = &["S+", "S", "A", "B", "C", "D"];
 /// * `role_overrides` - Manual slot→role assignment overrides (keyed by slot index)
 pub fn compute_slot_warnings(
     slots: &[Option<String>],
-    pools: &[(String, String, Vec<crate::models::champion::ChampionPoolEntry>)],
+    pools: &[(
+        String,
+        String,
+        Vec<crate::models::champion::ChampionPoolEntry>,
+    )],
     champions: &HashMap<String, crate::models::champion::Champion>,
     our_side: &str,
     role_overrides: &HashMap<usize, String>,
@@ -762,10 +785,8 @@ pub fn compute_slot_warnings(
 
     // Build a reverse lookup: canonical Data Dragon ID -> Champion
     // This is needed because pool entries store canonical IDs, but champions map uses display names.
-    let id_to_champion: HashMap<&str, &Champion> = champions
-        .values()
-        .map(|c| (c.id.as_str(), c))
-        .collect();
+    let id_to_champion: HashMap<&str, &Champion> =
+        champions.values().map(|c| (c.id.as_str(), c)).collect();
 
     // Our-side pick slot indices and their conventional role mapping
     // Draft order: pick1=top, pick2=jungle, pick3=mid, pick4=bot, pick5=support
@@ -801,9 +822,9 @@ pub fn compute_slot_warnings(
         };
 
         // Find the player whose role matches
-        let player = pools.iter().find(|(_, player_role, _)| {
-            normalize_role(player_role) == normalize_role(role)
-        });
+        let player = pools
+            .iter()
+            .find(|(_, player_role, _)| normalize_role(player_role) == normalize_role(role));
         let (username, _, pool_entries) = match player {
             Some(p) => p,
             None => continue, // no player for this role
@@ -856,10 +877,7 @@ pub fn compute_slot_warnings(
             .find(|tag| !covered_classes.contains(tag.as_str()));
 
         if let Some(class) = missing_class {
-            result[slot_idx] = Some((
-                username.clone(),
-                format!("No {} coverage", class),
-            ));
+            result[slot_idx] = Some((username.clone(), format!("No {} coverage", class)));
         }
         // If all classes are covered (no gap), no warning despite champion not being in pool
     }
@@ -898,9 +916,11 @@ pub async fn set_draft_mode_pref(mode: String) -> Result<(), ServerFnError> {
     }
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::set_user_draft_mode(&db, &user.id, &mode)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -946,9 +966,7 @@ pub fn DraftPage() -> impl IntoView {
 
     // Mode preference — signal-driven, persisted via set_draft_mode_pref server fn (18-08)
     // Initialised from auth_user resource; resolve_mode() applies region-coupled default when "auto".
-    let (mode_current, set_mode_current) = signal(
-        resolve_mode("auto", &region, "draft")
-    );
+    let (mode_current, set_mode_current) = signal(resolve_mode("auto", &region, "draft"));
     // Keep mode_current synced with DB value when auth_user loads/refetches
     let region_for_mode = region.clone();
     Effect::new(move |_| {
@@ -1157,7 +1175,10 @@ pub fn DraftPage() -> impl IntoView {
                 if !d_opp.is_empty() {
                     set_opponent.set(d_opp.clone());
                     if let Some(Ok(opps)) = opponents_list.get_untracked() {
-                        if let Some(matched) = opps.iter().find(|o| o.id.as_deref() == Some(d_opp.as_str())) {
+                        if let Some(matched) = opps
+                            .iter()
+                            .find(|o| o.id.as_deref() == Some(d_opp.as_str()))
+                        {
                             set_opp_filter_text.set(matched.name.clone());
                             set_selected_opponent_id.set(d_opp.clone());
                         } else {
@@ -1253,11 +1274,7 @@ pub fn DraftPage() -> impl IntoView {
     });
 
     let used_champions = move || {
-        let mut used: Vec<String> = draft_slots
-            .get()
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut used: Vec<String> = draft_slots.get().into_iter().flatten().collect();
         // In fearless mode, also include champions used in prior series games
         for champ in fearless_used.get() {
             if !used.contains(&champ) {
@@ -1298,9 +1315,14 @@ pub fn DraftPage() -> impl IntoView {
         // Auto-guess role for pick slots only (Phase 8)
         let (_, kind, _) = slot_meta(slot_idx);
         if kind == "pick" {
-            let guessed = champions_resource.get_untracked()
+            let guessed = champions_resource
+                .get_untracked()
                 .and_then(|r| r.ok())
-                .and_then(|champs| champs.into_iter().find(|c| c.name == champion_name || c.id == champion_name))
+                .and_then(|champs| {
+                    champs
+                        .into_iter()
+                        .find(|c| c.name == champion_name || c.id == champion_name)
+                })
                 .map(|c| guess_role_from_tags(&c.tags).to_string())
                 .unwrap_or_else(|| "mid".to_string());
             set_role_assignments.update(|roles| {
@@ -1400,7 +1422,10 @@ pub fn DraftPage() -> impl IntoView {
     let do_save = move |_| {
         let name = draft_name.get_untracked();
         if name.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Give this draft a name before saving.".into()));
+            toast.show.run((
+                ToastKind::Error,
+                "Give this draft a name before saving.".into(),
+            ));
             return;
         }
         let opp = opponent.get_untracked();
@@ -1413,11 +1438,29 @@ pub fn DraftPage() -> impl IntoView {
         let acts_json = serde_json::to_string(&actions).unwrap_or_default();
         let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
         let tags_json = serde_json::to_string(&tags.get_untracked()).unwrap_or_default();
-        let wc = { let s = win_conditions.get_untracked(); if s.is_empty() { None } else { Some(s) } };
-        let wo = { let s = watch_out.get_untracked(); if s.is_empty() { None } else { Some(s) } };
+        let wc = {
+            let s = win_conditions.get_untracked();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        };
+        let wo = {
+            let s = watch_out.get_untracked();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        };
         let existing_id = loaded_draft_id.get_untracked();
         let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-        let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
+        let g_num = if s_id.is_some() {
+            Some(active_game_number.get_untracked())
+        } else {
+            None
+        };
 
         leptos::task::spawn_local(async move {
             let opp_opt = if opp.is_empty() { None } else { Some(opp) };
@@ -1425,8 +1468,18 @@ pub fn DraftPage() -> impl IntoView {
 
             if let Some(draft_id) = existing_id {
                 match update_draft(
-                    draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
-                    tags_json, wc, wo, s_id, g_num,
+                    draft_id,
+                    name,
+                    opp_opt,
+                    acts_json,
+                    cmts_json,
+                    rate,
+                    Some(side),
+                    tags_json,
+                    wc,
+                    wo,
+                    s_id,
+                    g_num,
                 )
                 .await
                 {
@@ -1438,8 +1491,18 @@ pub fn DraftPage() -> impl IntoView {
                 }
             } else {
                 match save_draft(
-                    name, opp_opt, team_opt, acts_json, cmts_json, rate, Some(side),
-                    tags_json, wc, wo, s_id, g_num,
+                    name,
+                    opp_opt,
+                    team_opt,
+                    acts_json,
+                    cmts_json,
+                    rate,
+                    Some(side),
+                    tags_json,
+                    wc,
+                    wo,
+                    s_id,
+                    g_num,
                 )
                 .await
                 {
@@ -1514,19 +1577,41 @@ pub fn DraftPage() -> impl IntoView {
             let acts_json = serde_json::to_string(&actions).unwrap_or_default();
             let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
             let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
-            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
-            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
+            let wc = if wc_val.is_empty() {
+                None
+            } else {
+                Some(wc_val)
+            };
+            let wo = if wo_val.is_empty() {
+                None
+            } else {
+                Some(wo_val)
+            };
             let opp_opt = if opp.is_empty() { None } else { Some(opp) };
             let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-            let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
+            let g_num = if s_id.is_some() {
+                Some(active_game_number.get_untracked())
+            } else {
+                None
+            };
 
             use wasm_bindgen::prelude::*;
             let cb = Closure::once(move || {
                 if let Some(draft_id) = existing_id {
                     leptos::task::spawn_local(async move {
                         let _ = update_draft(
-                            draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
-                            tags_json, wc, wo, s_id, g_num,
+                            draft_id,
+                            name,
+                            opp_opt,
+                            acts_json,
+                            cmts_json,
+                            rate,
+                            Some(side),
+                            tags_json,
+                            wc,
+                            wo,
+                            s_id,
+                            g_num,
                         )
                         .await;
                         set_auto_save_status.set("saved");
@@ -1550,15 +1635,18 @@ pub fn DraftPage() -> impl IntoView {
     let (role_overrides, set_role_overrides) = signal(HashMap::<usize, String>::new());
 
     let warning_slots_memo = Memo::new(move |_| {
-        let slots = draft_slots.get();       // tracked
-        let side = our_side.get();           // tracked
+        let slots = draft_slots.get(); // tracked
+        let side = our_side.get(); // tracked
         let overrides = role_overrides.get(); // tracked
-        let pools = team_pools.get()
+        let pools = team_pools.get().and_then(|r| r.ok()).unwrap_or_default();
+        let champs = champions_resource
+            .get()
             .and_then(|r| r.ok())
-            .unwrap_or_default();
-        let champs = champions_resource.get()
-            .and_then(|r| r.ok())
-            .map(|v| v.into_iter().map(|c| (c.name.clone(), c)).collect::<HashMap<_, _>>())
+            .map(|v| {
+                v.into_iter()
+                    .map(|c| (c.name.clone(), c))
+                    .collect::<HashMap<_, _>>()
+            })
             .unwrap_or_default();
         compute_slot_warnings(&slots, &pools, &champs, &side, &overrides)
     });
@@ -4111,9 +4199,9 @@ fn DraftLedgerView(
     //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,12,14
     // Using canonical pick indices for side columns (5 picks each).
     let blue_pick_slots: &[usize] = &[6, 9, 10, 17, 18];
-    let red_pick_slots:  &[usize] = &[7, 8, 11, 16, 19];
-    let blue_ban_slots:  &[usize] = &[0, 2, 4, 13, 15];
-    let red_ban_slots:   &[usize] = &[1, 3, 5, 12, 14];
+    let red_pick_slots: &[usize] = &[7, 8, 11, 16, 19];
+    let blue_ban_slots: &[usize] = &[0, 2, 4, 13, 15];
+    let red_ban_slots: &[usize] = &[1, 3, 5, 12, 14];
 
     if is_pandemonium {
         view! {
@@ -4419,27 +4507,45 @@ mod tests {
     fn champion_in_pool_no_warning() {
         // Player has Darius in pool -> picking Darius = no warning
         let mut champs = HashMap::new();
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Darius".to_string()); // Blue pick 1 = top
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[6].is_none(), "Champion in pool should not trigger warning");
+        assert!(
+            result[6].is_none(),
+            "Champion in pool should not trigger warning"
+        );
     }
 
     #[test]
     fn champion_not_in_pool_with_class_gap_warns() {
         // Player has only Fighters, picks a Mage (not in pool + class gap)
         let mut champs = HashMap::new();
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
         champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Syndra".to_string()); // Blue pick 1 = top
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[6].is_some(), "Not-in-pool champion with class gap should warn");
+        assert!(
+            result[6].is_some(),
+            "Not-in-pool champion with class gap should warn"
+        );
         let (name, detail) = result[6].as_ref().unwrap();
         assert_eq!(name, "TopPlayer");
         assert!(detail.contains("Mage"), "Should mention the missing class");
@@ -4450,14 +4556,23 @@ mod tests {
         // Player has Darius (Fighter) in pool, picks Garen (also Fighter, not in pool)
         // No class gap because Fighter is already covered
         let mut champs = HashMap::new();
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
         champs.insert("Garen".to_string(), make_champion("Garen", vec!["Fighter"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Garen".to_string());
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[6].is_none(), "No class gap = no warning even if champion not in pool");
+        assert!(
+            result[6].is_none(),
+            "No class gap = no warning even if champion not in pool"
+        );
     }
 
     #[test]
@@ -4469,16 +4584,25 @@ mod tests {
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[7] = Some("Syndra".to_string()); // Red pick 1 (not our side when blue)
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[7].is_none(), "Opponent-side slots should not have warnings");
+        assert!(
+            result[7].is_none(),
+            "Opponent-side slots should not have warnings"
+        );
     }
 
     #[test]
     fn side_switch_changes_checked_slots() {
         let mut champs = HashMap::new();
         champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Syndra".to_string()); // Blue pick 1
         slots[7] = Some("Syndra".to_string()); // Red pick 1
@@ -4492,7 +4616,13 @@ mod tests {
 
     #[test]
     fn empty_inputs_no_panic() {
-        let result = compute_slot_warnings(&vec![None; 20], &[], &HashMap::new(), "blue", &HashMap::new());
+        let result = compute_slot_warnings(
+            &vec![None; 20],
+            &[],
+            &HashMap::new(),
+            "blue",
+            &HashMap::new(),
+        );
         assert_eq!(result.len(), 20);
         assert!(result.iter().all(|w| w.is_none()));
     }

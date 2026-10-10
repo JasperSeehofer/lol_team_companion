@@ -43,26 +43,26 @@ pub struct MatchParticipant {
     pub vision_score: i32,
     pub damage: i32,
     pub gold_earned: i32,
-    pub items: [i32; 6],      // item0-item5 (NOT item6/trinket)
+    pub items: [i32; 6], // item0-item5 (NOT item6/trinket)
     pub win: bool,
 }
 
 /// Timeline event categories for UI filtering
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum EventCategory {
-    Objective,  // dragon, baron, herald
-    Tower,      // tower, inhibitor
-    Kill,       // champion kills, first blood, multikills
-    Ward,       // ward placements (user's own only)
-    Teamfight,  // 4+ participants within 10s window
-    Recall,     // champion recalls (per D-07)
+    Objective, // dragon, baron, herald
+    Tower,     // tower, inhibitor
+    Kill,      // champion kills, first blood, multikills
+    Ward,      // ward placements (user's own only)
+    Teamfight, // 4+ participants within 10s window
+    Recall,    // champion recalls (per D-07)
 }
 
 /// A single processed timeline event
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TimelineEvent {
     pub timestamp_ms: i64,
-    pub event_type: String,     // "CHAMPION_KILL", "BUILDING_KILL", "ELITE_MONSTER_KILL", "WARD_PLACED", "ITEM_UNDO", "TEAMFIGHT"
+    pub event_type: String, // "CHAMPION_KILL", "BUILDING_KILL", "ELITE_MONSTER_KILL", "WARD_PLACED", "ITEM_UNDO", "TEAMFIGHT"
     pub category: EventCategory,
     pub team_id: Option<i32>,
     pub killer_participant_id: Option<i32>,
@@ -97,11 +97,11 @@ pub struct PerformanceStats {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MatchDetail {
     pub match_id: String,
-    pub game_duration: i32,     // seconds
+    pub game_duration: i32, // seconds
     pub game_mode: String,
     pub participants: Vec<MatchParticipant>,
     pub timeline_events: Vec<TimelineEvent>,
-    pub user_participant_id: i32,  // which participant is the current user
+    pub user_participant_id: i32, // which participant is the current user
     pub user_puuid: String,
     pub performance: PerformanceStats,
 }
@@ -133,7 +133,7 @@ pub struct RankedSnapshot {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PersonalGoal {
     pub id: Option<String>,
-    pub goal_type: String,    // "rank_target" | "cs_per_min" | "deaths_per_game"
+    pub goal_type: String, // "rank_target" | "cs_per_min" | "deaths_per_game"
     pub target_value: String, // "DIAMOND:IV" | "7.5" | "4" (D-09 encoding)
 }
 

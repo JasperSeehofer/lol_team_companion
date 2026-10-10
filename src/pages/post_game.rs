@@ -173,14 +173,10 @@ pub async fn create_review(review_json: String) -> Result<(String, usize), Serve
     let review_id = db::save_post_game_learning(&surreal, review)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
-    let items_created = db::batch_create_action_items_from_review(
-        &surreal,
-        &team_id,
-        &review_id,
-        &improvements,
-    )
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let items_created =
+        db::batch_create_action_items_from_review(&surreal, &team_id, &review_id, &improvements)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
     Ok((review_id, items_created))
 }
 
@@ -207,14 +203,10 @@ pub async fn update_review(review_json: String) -> Result<usize, ServerFnError> 
     db::update_post_game_learning(&surreal, review)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
-    let items_created = db::batch_create_action_items_from_review(
-        &surreal,
-        &team_id,
-        &review_id,
-        &improvements,
-    )
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let items_created =
+        db::batch_create_action_items_from_review(&surreal, &team_id, &review_id, &improvements)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
     Ok(items_created)
 }
 
@@ -430,7 +422,9 @@ pub fn PostGamePage() -> impl IntoView {
         if url_review_loaded.get_untracked() {
             return;
         }
-        let Some(target_id) = url_review_id() else { return };
+        let Some(target_id) = url_review_id() else {
+            return;
+        };
         if let Some(Ok(list)) = reviews.get() {
             if let Some(r) = list.iter().find(|r| r.id.as_deref() == Some(&target_id)) {
                 load_review(r);
@@ -526,7 +520,9 @@ pub fn PostGamePage() -> impl IntoView {
                 match update_review(json).await {
                     Ok(n_items) => {
                         action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
-                        toast.show.run((ToastKind::Success, "Review updated".into()));
+                        toast
+                            .show
+                            .run((ToastKind::Success, "Review updated".into()));
                         reviews.refetch();
                     }
                     Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -552,7 +548,9 @@ pub fn PostGamePage() -> impl IntoView {
             match delete_review(review_id).await {
                 Ok(_) => {
                     clear_editor();
-                    toast.show.run((ToastKind::Success, "Review deleted".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Review deleted".into()));
                     reviews.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),

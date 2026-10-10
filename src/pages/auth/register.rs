@@ -94,17 +94,13 @@ pub fn RegisterPage() -> impl IntoView {
     });
 
     let error = move || {
-        register
-            .value()
-            .get()
-            .and_then(|r| r.err())
-            .map(|_| {
-                // UI-SPEC line 689 copywriting: invite-specific error
-                // message regardless of the underlying ServerFnError.
-                "This invite link is invalid or has already been used. \
+        register.value().get().and_then(|r| r.err()).map(|_| {
+            // UI-SPEC line 689 copywriting: invite-specific error
+            // message regardless of the underlying ServerFnError.
+            "This invite link is invalid or has already been used. \
                  Contact your captain for a new one."
-                    .to_string()
-            })
+                .to_string()
+        })
     };
 
     view! {

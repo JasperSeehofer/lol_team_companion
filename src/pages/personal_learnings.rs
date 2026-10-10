@@ -37,7 +37,9 @@ pub async fn get_learning(id: String) -> Result<Option<PersonalLearning>, Server
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let db =
         use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
@@ -67,7 +69,9 @@ pub async fn save_learning(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let surreal =
         use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
@@ -79,16 +83,36 @@ pub async fn save_learning(
         user_id: user.id,
         title,
         learning_type,
-        champion: if champion.is_empty() { None } else { Some(champion) },
-        opponent: if opponent.is_empty() { None } else { Some(opponent) },
+        champion: if champion.is_empty() {
+            None
+        } else {
+            Some(champion)
+        },
+        opponent: if opponent.is_empty() {
+            None
+        } else {
+            Some(opponent)
+        },
         what_happened,
         what_i_learned,
         next_time,
         tags,
-        win_loss: if win_loss.is_empty() { None } else { Some(win_loss) },
-        match_riot_id: if match_riot_id.is_empty() { None } else { Some(match_riot_id) },
+        win_loss: if win_loss.is_empty() {
+            None
+        } else {
+            Some(win_loss)
+        },
+        match_riot_id: if match_riot_id.is_empty() {
+            None
+        } else {
+            Some(match_riot_id)
+        },
         game_timestamp_ms: game_timestamp_ms.parse::<i64>().ok(),
-        event_name: if event_name.is_empty() { None } else { Some(event_name) },
+        event_name: if event_name.is_empty() {
+            None
+        } else {
+            Some(event_name)
+        },
         created_at: None,
     };
 
@@ -119,7 +143,9 @@ pub async fn update_learning(
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let surreal =
         use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
@@ -131,16 +157,36 @@ pub async fn update_learning(
         user_id: user.id,
         title,
         learning_type,
-        champion: if champion.is_empty() { None } else { Some(champion) },
-        opponent: if opponent.is_empty() { None } else { Some(opponent) },
+        champion: if champion.is_empty() {
+            None
+        } else {
+            Some(champion)
+        },
+        opponent: if opponent.is_empty() {
+            None
+        } else {
+            Some(opponent)
+        },
         what_happened,
         what_i_learned,
         next_time,
         tags,
-        win_loss: if win_loss.is_empty() { None } else { Some(win_loss) },
-        match_riot_id: if match_riot_id.is_empty() { None } else { Some(match_riot_id) },
+        win_loss: if win_loss.is_empty() {
+            None
+        } else {
+            Some(win_loss)
+        },
+        match_riot_id: if match_riot_id.is_empty() {
+            None
+        } else {
+            Some(match_riot_id)
+        },
         game_timestamp_ms: game_timestamp_ms.parse::<i64>().ok(),
-        event_name: if event_name.is_empty() { None } else { Some(event_name) },
+        event_name: if event_name.is_empty() {
+            None
+        } else {
+            Some(event_name)
+        },
         created_at: None,
     };
 
@@ -157,7 +203,9 @@ pub async fn delete_learning(id: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let _user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let db =
         use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
@@ -792,36 +840,13 @@ pub fn NewLearningPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             let result = if editing {
                 update_learning(
-                    edit_id,
-                    title_val,
-                    lt,
-                    champ,
-                    opp,
-                    wh,
-                    wil,
-                    nt,
-                    tags_json,
-                    wl,
-                    mrid,
-                    gts,
-                    en,
+                    edit_id, title_val, lt, champ, opp, wh, wil, nt, tags_json, wl, mrid, gts, en,
                 )
                 .await
                 .map(|_| String::new())
             } else {
                 save_learning(
-                    title_val,
-                    lt,
-                    champ,
-                    opp,
-                    wh,
-                    wil,
-                    nt,
-                    tags_json,
-                    wl,
-                    mrid,
-                    gts,
-                    en,
+                    title_val, lt, champ, opp, wh, wil, nt, tags_json, wl, mrid, gts, en,
                 )
                 .await
             };
@@ -837,7 +862,9 @@ pub fn NewLearningPage() -> impl IntoView {
                     }
                 }
                 Err(e) => {
-                    save_error.set(Some(format!("Failed to save. Check your connection and try again. ({e})")));
+                    save_error.set(Some(format!(
+                        "Failed to save. Check your connection and try again. ({e})"
+                    )));
                 }
             }
         });

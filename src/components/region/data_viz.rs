@@ -64,13 +64,18 @@ pub fn Sparkline(
     let range = (max_val - min_val).max(1.0);
     let n = data.len();
 
-    let points: Vec<(f64, f64)> = data.iter().enumerate().map(|(i, &v)| {
-        let x = pad + (i as f64 / (n - 1).max(1) as f64) * (w - pad * 2.0);
-        let y = h - pad - ((v - min_val) / range) * (h - pad * 2.0);
-        (x, y)
-    }).collect();
+    let points: Vec<(f64, f64)> = data
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let x = pad + (i as f64 / (n - 1).max(1) as f64) * (w - pad * 2.0);
+            let y = h - pad - ((v - min_val) / range) * (h - pad * 2.0);
+            (x, y)
+        })
+        .collect();
 
-    let polyline_pts = points.iter()
+    let polyline_pts = points
+        .iter()
         .map(|(x, y)| format!("{:.1},{:.1}", x, y))
         .collect::<Vec<_>>()
         .join(" ");
@@ -81,8 +86,10 @@ pub fn Sparkline(
     let polygon_pts = format!(
         "{} {:.1},{:.1} {:.1},{:.1}",
         polyline_pts,
-        last.0, h - pad,
-        first.0, h - pad
+        last.0,
+        h - pad,
+        first.0,
+        h - pad
     );
 
     view! {
@@ -118,9 +125,7 @@ pub fn Sparkline(
 /// Filled segments use `bg-accent`; unfilled use `bg-elevated`.
 /// Each segment ~24px wide × 8px tall with 2px gap.
 #[component]
-pub fn MoodMeter(
-    value: f64,
-) -> impl IntoView {
+pub fn MoodMeter(value: f64) -> impl IntoView {
     let clamped = value.clamp(0.0, 1.0);
     let filled = (clamped * 5.0).round() as usize;
 

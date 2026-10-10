@@ -2,9 +2,7 @@ use crate::common;
 
 use lol_team_companion::server::db;
 
-async fn setup(
-    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
-) -> (String, String) {
+async fn setup(db: &surrealdb::Surreal<surrealdb::engine::local::Db>) -> (String, String) {
     let user_id = db::create_user(
         db,
         "scout".into(),
@@ -43,10 +41,16 @@ async fn test_create_opponent_with_players() {
     .unwrap();
 
     // Returns correct IDs
-    assert!(opponent_id.starts_with("opponent:"), "opponent_id should start with 'opponent:'");
+    assert!(
+        opponent_id.starts_with("opponent:"),
+        "opponent_id should start with 'opponent:'"
+    );
     assert_eq!(player_ids.len(), 5, "should create exactly 5 player slots");
     for pid in &player_ids {
-        assert!(pid.starts_with("opponent_player:"), "player_id should start with 'opponent_player:'");
+        assert!(
+            pid.starts_with("opponent_player:"),
+            "player_id should start with 'opponent_player:'"
+        );
     }
 
     // Verify opponent + 5 players exist in the DB
@@ -86,15 +90,10 @@ async fn test_update_opponent_player_intel() {
         ("support".into(), None),
     ];
 
-    let (opponent_id, player_ids) = db::create_opponent_with_players(
-        &db,
-        &team_id,
-        "IntelOpponent".into(),
-        None,
-        players,
-    )
-    .await
-    .unwrap();
+    let (opponent_id, player_ids) =
+        db::create_opponent_with_players(&db, &team_id, "IntelOpponent".into(), None, players)
+            .await
+            .unwrap();
 
     let target_player_id = &player_ids[2]; // mid player
 
@@ -129,10 +128,7 @@ async fn test_update_opponent_player_intel() {
         .find(|p| p.id.as_deref() == Some(target_player_id.as_str()))
         .expect("target player should exist");
 
-    assert_eq!(
-        updated_player.riot_puuid,
-        Some("test-puuid-abc123".into())
-    );
+    assert_eq!(updated_player.riot_puuid, Some("test-puuid-abc123".into()));
     assert_eq!(updated_player.recent_champions.len(), 3);
     assert!(
         updated_player.mastery_data_json.is_some(),
@@ -161,15 +157,10 @@ async fn test_create_opponent_with_empty_summoner_names() {
         ("support".into(), Some("SupportSummoner".into())),
     ];
 
-    let (opponent_id, player_ids) = db::create_opponent_with_players(
-        &db,
-        &team_id,
-        "PartialOpponent".into(),
-        None,
-        players,
-    )
-    .await
-    .unwrap();
+    let (opponent_id, player_ids) =
+        db::create_opponent_with_players(&db, &team_id, "PartialOpponent".into(), None, players)
+            .await
+            .unwrap();
 
     assert_eq!(player_ids.len(), 5);
 

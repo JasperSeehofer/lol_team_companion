@@ -165,10 +165,7 @@ pub async fn set_champion_meta_tag(
 }
 
 #[server]
-pub async fn get_notes(
-    champion: String,
-    role: String,
-) -> Result<Vec<ChampionNote>, ServerFnError> {
+pub async fn get_notes(champion: String, role: String) -> Result<Vec<ChampionNote>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -368,7 +365,13 @@ pub fn ChampionPoolPage() -> impl IntoView {
 
     let has_team = Resource::new(
         || (),
-        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+        |_| async {
+            crate::pages::team::dashboard::get_team_dashboard()
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        },
     );
     let pool = Resource::new(|| (), |_| get_pool());
     let champions_resource = Resource::new(|| (), |_| get_pool_champions());
@@ -407,7 +410,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 Ok(_) => {
                     add_input_signal.set(String::new());
                     pool.refetch();
-                    toast.show.run((ToastKind::Success, "Champion added to pool".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Champion added to pool".into()));
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
@@ -482,7 +487,11 @@ pub fn ChampionPoolPage() -> impl IntoView {
 
     let edit_note = Callback::new(move |note: ChampionNote| {
         if note.note_type == "matchup" {
-            let opponent = note.title.strip_prefix("vs ").unwrap_or(&note.title).to_string();
+            let opponent = note
+                .title
+                .strip_prefix("vs ")
+                .unwrap_or(&note.title)
+                .to_string();
             matchup_opponent_value.set(opponent);
         } else {
             matchup_opponent_value.set(String::new());

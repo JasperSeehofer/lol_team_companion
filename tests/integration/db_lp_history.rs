@@ -3,14 +3,9 @@ use crate::common;
 use lol_team_companion::server::db;
 
 async fn make_user(d: &surrealdb::Surreal<surrealdb::engine::local::Db>) -> String {
-    db::create_user(
-        d,
-        "lp_user".into(),
-        "lp@example.com".into(),
-        "hash".into(),
-    )
-    .await
-    .unwrap()
+    db::create_user(d, "lp_user".into(), "lp@example.com".into(), "hash".into())
+        .await
+        .unwrap()
 }
 
 async fn insert_snapshot(
@@ -20,10 +15,7 @@ async fn insert_snapshot(
     division: &str,
     lp: i32,
 ) {
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     d.query(
         "CREATE ranked_snapshot SET \
          user = type::record('user', $u), \

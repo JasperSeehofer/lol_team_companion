@@ -38,10 +38,12 @@ pub fn Btn(
     };
 
     // Focus ring (G-12 — mandatory on all interactive elements)
-    let focus_classes = "focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
+    let focus_classes =
+        "focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
 
-    move || if is_pandemonium {
-        let (bg_class, extra_style) = match var.as_str() {
+    move || {
+        if is_pandemonium {
+            let (bg_class, extra_style) = match var.as_str() {
             "primary" => (
                 "bg-accent text-accent-contrast rounded-none",
                 "box-shadow: 3px 3px 0 var(--accent-2, var(--color-accent)), 6px 6px 0 var(--accent-3, var(--color-accent));",
@@ -51,23 +53,24 @@ pub fn Btn(
             "ghost" => ("bg-transparent text-secondary hover:text-primary rounded-none", ""),
             _ => ("bg-accent text-accent-contrast rounded-none", ""),
         };
-        let btn_class = format!(
+            let btn_class = format!(
             "inline-flex items-center gap-2 {} font-mono uppercase tracking-[0.12em] cursor-pointer transition-colors {} {}",
             size_classes, bg_class, focus_classes
         );
-        view! {
-            <button
-                type="button"
-                class=btn_class
-                style=extra_style
-                on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
-            >
-                {children()}
-            </button>
-        }.into_any()
-    } else {
-        // Demacia
-        let (btn_class, btn_style) = match var.as_str() {
+            view! {
+                <button
+                    type="button"
+                    class=btn_class
+                    style=extra_style
+                    on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
+                >
+                    {children()}
+                </button>
+            }
+            .into_any()
+        } else {
+            // Demacia
+            let (btn_class, btn_style) = match var.as_str() {
             "primary" => (
                 format!(
                     "inline-flex items-center gap-2 {} font-imperial uppercase tracking-[0.14em] rounded cursor-pointer transition-colors {}",
@@ -104,16 +107,18 @@ pub fn Btn(
                 "background: linear-gradient(180deg, var(--gold-1, var(--color-accent)) 0%, var(--gold-2, var(--color-accent)) 50%, var(--gold-3, var(--color-accent)) 100%); color: var(--ink, var(--t-accent-contrast)); border: 1px solid var(--gold-deep, var(--border-outline));".to_string(),
             ),
         };
-        view! {
-            <button
-                type="button"
-                class=btn_class
-                style=btn_style
-                on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
-            >
-                {children()}
-            </button>
-        }.into_any()
+            view! {
+                <button
+                    type="button"
+                    class=btn_class
+                    style=btn_style
+                    on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
+                >
+                    {children()}
+                </button>
+            }
+            .into_any()
+        }
     }
 }
 
@@ -216,10 +221,7 @@ pub fn ModeToggle(
 /// Every tone maps to the semantic status tokens defined in input.css
 /// (`--color-success`, `--color-warning`, `--color-danger`, `--color-info`).
 #[component]
-pub fn Badge(
-    #[prop(optional, into)] tone: Option<String>,
-    children: ChildrenFn,
-) -> impl IntoView {
+pub fn Badge(#[prop(optional, into)] tone: Option<String>, children: ChildrenFn) -> impl IntoView {
     let tone_class = match tone.as_deref().unwrap_or("neutral") {
         "accent" => "bg-accent text-accent-contrast",
         "danger" => "bg-danger/15 text-danger",

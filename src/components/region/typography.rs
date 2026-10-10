@@ -12,10 +12,7 @@ use leptos::prelude::*;
 /// Font family from `--font-display` (Cormorant Garamond / Cinzel per region CSS var swap).
 /// Region-neutral: font swap is controlled by `[data-theme]` CSS variable.
 #[component]
-pub fn Display(
-    #[prop(optional, into)] size: Option<String>,
-    children: Children,
-) -> impl IntoView {
+pub fn Display(#[prop(optional, into)] size: Option<String>, children: Children) -> impl IntoView {
     let size_class = match size.as_deref().unwrap_or("lg") {
         "xl" => "text-[64px] leading-[1.05] font-medium",
         "md" => "text-[30px] leading-[1.05] font-medium",
@@ -69,10 +66,7 @@ pub fn H(
 /// Small eyebrow label. JetBrains Mono, uppercase, wide tracking.
 /// Region-neutral (same appearance both regions).
 #[component]
-pub fn Eyebrow(
-    children: Children,
-    #[prop(optional, into)] class: Option<String>,
-) -> impl IntoView {
+pub fn Eyebrow(children: Children, #[prop(optional, into)] class: Option<String>) -> impl IntoView {
     view! {
         <div class=format!(
             "font-mono text-[10px] uppercase tracking-[0.16em] text-muted {}",
@@ -86,10 +80,7 @@ pub fn Eyebrow(
 /// Monospace number/data label. Tabular nums for aligned data display.
 /// Region-neutral.
 #[component]
-pub fn Mono(
-    children: Children,
-    #[prop(optional, into)] class: Option<String>,
-) -> impl IntoView {
+pub fn Mono(children: Children, #[prop(optional, into)] class: Option<String>) -> impl IntoView {
     view! {
         <span class=format!("font-mono tabular-nums {}", class.unwrap_or_default())>
             {children()}
@@ -104,13 +95,11 @@ pub fn Mono(
 /// Uses `ChildrenFn` (not `Children`) because both region arms call children() —
 /// per 18-RESEARCH.md Pitfall 1 and leptos-patterns rule 19.
 #[component]
-pub fn Glitch(
-    region: String,
-    children: ChildrenFn,
-) -> impl IntoView {
+pub fn Glitch(region: String, children: ChildrenFn) -> impl IntoView {
     let is_pandemonium = region == "pandemonium";
-    move || if is_pandemonium {
-        view! {
+    move || {
+        if is_pandemonium {
+            view! {
             <span
                 class="font-glitch tracking-[0.18em] text-[10px] uppercase"
                 style="color: var(--color-accent); text-shadow: -2px -2px 0 var(--accent-2), 2px 2px 0 var(--t-accent);"
@@ -118,11 +107,13 @@ pub fn Glitch(
                 {children()}
             </span>
         }.into_any()
-    } else {
-        view! {
-            <span class="font-mono uppercase text-[10px] tracking-[0.16em] text-muted">
-                {children()}
-            </span>
-        }.into_any()
+        } else {
+            view! {
+                <span class="font-mono uppercase text-[10px] tracking-[0.16em] text-muted">
+                    {children()}
+                </span>
+            }
+            .into_any()
+        }
     }
 }

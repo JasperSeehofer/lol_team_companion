@@ -193,21 +193,8 @@ pub async fn save_comp_as_draft(
     let comments: Vec<String> = vec![String::new(); 20];
 
     db::save_draft(
-        &db_ctx,
-        &team_id,
-        &user.id,
-        name,
-        opponent,
-        None,
-        comments,
-        actions,
-        None,
-        side,
-        tags,
-        None,
-        None,
-        None,
-        None,
+        &db_ctx, &team_id, &user.id, name, opponent, None, comments, actions, None, side, tags,
+        None, None, None, None,
     )
     .await
     .map_err(|e| ServerFnError::new(e.to_string()))
@@ -242,9 +229,7 @@ fn role_icon_url(role: &str) -> &'static str {
 }
 
 fn champion_image_url(champion_name: &str) -> String {
-    format!(
-        "https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png"
-    )
+    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png")
 }
 
 fn tier_label(tier: &str) -> &'static str {
@@ -272,11 +257,7 @@ fn tier_badge_class(tier: &str) -> &'static str {
 fn comfort_stars(level: u8) -> String {
     let filled = level.min(5) as usize;
     let empty = 5 - filled;
-    format!(
-        "{}{}",
-        "\u{2605}".repeat(filled),
-        "\u{2606}".repeat(empty)
-    )
+    format!("{}{}", "\u{2605}".repeat(filled), "\u{2606}".repeat(empty))
 }
 
 /// Compute composition tags from selected champions + Data Dragon champion data.
@@ -286,10 +267,8 @@ fn compute_comp_tags(
 ) -> Vec<String> {
     use std::collections::HashMap;
 
-    let champ_map: HashMap<&str, &Champion> = all_champions
-        .iter()
-        .map(|c| (c.name.as_str(), c))
-        .collect();
+    let champ_map: HashMap<&str, &Champion> =
+        all_champions.iter().map(|c| (c.name.as_str(), c)).collect();
 
     let picked: Vec<(&str, Option<&&Champion>)> = selected
         .iter()
@@ -332,7 +311,14 @@ fn compute_comp_tags(
 
     // "split-push" - contains known split-pushers
     let split_pushers = [
-        "Fiora", "Tryndamere", "Jax", "Camille", "Gwen", "Yorick", "Nasus", "Shen",
+        "Fiora",
+        "Tryndamere",
+        "Jax",
+        "Camille",
+        "Gwen",
+        "Yorick",
+        "Nasus",
+        "Shen",
     ];
     let has_split = picked
         .iter()
@@ -353,8 +339,21 @@ fn compute_comp_tags(
 
     // "scaling" - 3+ late-game scalers
     let scalers = [
-        "Kayle", "Kassadin", "Vayne", "Jinx", "Kog'Maw", "Veigar", "Senna", "Aphelios",
-        "Zeri", "Smolder", "Viktor", "Azir", "Ryze", "Cassiopeia", "Vladimir",
+        "Kayle",
+        "Kassadin",
+        "Vayne",
+        "Jinx",
+        "Kog'Maw",
+        "Veigar",
+        "Senna",
+        "Aphelios",
+        "Zeri",
+        "Smolder",
+        "Viktor",
+        "Azir",
+        "Ryze",
+        "Cassiopeia",
+        "Vladimir",
     ];
     let scaler_count = picked
         .iter()

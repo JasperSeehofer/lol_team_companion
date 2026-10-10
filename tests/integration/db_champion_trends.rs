@@ -29,10 +29,7 @@ async fn insert_match_pm(
     damage: i32,
     win: bool,
 ) {
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     d.query(
         "CREATE match SET match_id = $mid, queue_id = $qid, game_duration = $dur, \
          game_end = time::now()",
@@ -110,7 +107,10 @@ async fn get_champion_trends_excludes_aram() {
     let d = common::test_db().await;
     let u = make_user(&d).await;
     // ARAM = queue_id 450 — must be excluded from champion trends (D-19)
-    insert_match_pm(&d, "ARAM1", &u, 450, 1200, "Ezreal", 8, 3, 6, 100, 25000, true).await;
+    insert_match_pm(
+        &d, "ARAM1", &u, 450, 1200, "Ezreal", 8, 3, 6, 100, 25000, true,
+    )
+    .await;
     let trends = db::get_champion_trends(&d, &u, None).await.unwrap();
     assert!(
         trends.iter().all(|t| t.champion != "Ezreal"),
@@ -122,12 +122,21 @@ async fn get_champion_trends_excludes_aram() {
 async fn get_champion_trends_includes_solo_and_flex() {
     let d = common::test_db().await;
     let u = make_user(&d).await;
-    insert_match_pm(&d, "SOLO1", &u, 420, 1800, "Yasuo", 5, 4, 7, 180, 19000, true).await;
-    insert_match_pm(&d, "FLEX1", &u, 440, 1800, "Yasuo", 6, 3, 8, 200, 21000, true).await;
+    insert_match_pm(
+        &d, "SOLO1", &u, 420, 1800, "Yasuo", 5, 4, 7, 180, 19000, true,
+    )
+    .await;
+    insert_match_pm(
+        &d, "FLEX1", &u, 440, 1800, "Yasuo", 6, 3, 8, 200, 21000, true,
+    )
+    .await;
     let trends = db::get_champion_trends(&d, &u, None).await.unwrap();
     let yasuo = trends
         .iter()
         .find(|t| t.champion == "Yasuo")
         .expect("Yasuo trend must be present");
-    assert_eq!(yasuo.games, 2, "both solo and flex games must be aggregated");
+    assert_eq!(
+        yasuo.games, 2,
+        "both solo and flex games must be aggregated"
+    );
 }

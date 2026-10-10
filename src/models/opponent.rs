@@ -64,15 +64,13 @@ impl OpponentPlayer {
 
         // OTP: top champion strictly > 60% of games
         let otp_champion = if total > 0 {
-            champion_frequencies
-                .first()
-                .and_then(|(name, count)| {
-                    if *count as f64 / total as f64 > 0.6 {
-                        Some(name.clone())
-                    } else {
-                        None
-                    }
-                })
+            champion_frequencies.first().and_then(|(name, count)| {
+                if *count as f64 / total as f64 > 0.6 {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
         } else {
             None
         };
@@ -124,10 +122,7 @@ impl OpponentPlayer {
 
     /// Count of unique champions in recent_champions.
     pub fn pool_size(&self) -> usize {
-        self.recent_champions
-            .iter()
-            .collect::<HashSet<_>>()
-            .len()
+        self.recent_champions.iter().collect::<HashSet<_>>().len()
     }
 }
 
@@ -234,7 +229,9 @@ mod tests {
     #[test]
     fn test_comfort_picks_top_3_with_percentages() {
         // Ahri x4, Lux x3, Zed x2, Syndra x1 (total=10)
-        let champs = vec!["Ahri", "Ahri", "Ahri", "Ahri", "Lux", "Lux", "Lux", "Zed", "Zed", "Syndra"];
+        let champs = vec![
+            "Ahri", "Ahri", "Ahri", "Ahri", "Lux", "Lux", "Lux", "Zed", "Zed", "Syndra",
+        ];
         let player = make_player(champs);
         let picks = player.comfort_picks();
         assert_eq!(picks.len(), 3);
@@ -283,6 +280,9 @@ mod tests {
     #[test]
     fn test_is_stale_empty_string_is_false() {
         let now = make_now("2026-03-23T00:00:00Z");
-        assert!(!is_stale_with_now("", now), "Empty string should not be stale");
+        assert!(
+            !is_stale_with_now("", now),
+            "Empty string should not be stale"
+        );
     }
 }

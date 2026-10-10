@@ -75,7 +75,13 @@ mod tests {
 
     #[test]
     fn champion_pool_entry_tiers_round_trip() {
-        for tier in ["comfort", "match_ready", "scrim_ready", "practicing", "to_practice"] {
+        for tier in [
+            "comfort",
+            "match_ready",
+            "scrim_ready",
+            "practicing",
+            "to_practice",
+        ] {
             let entry = ChampionPoolEntry {
                 id: None,
                 user_id: "user:u1".into(),

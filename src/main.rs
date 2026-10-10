@@ -107,9 +107,7 @@ async fn main() {
                     // back to InitialTheme::default() ("demacia") when
                     // the task-local is unset (e.g. requests that
                     // bypass the leptos routes, like /healthz).
-                    let theme = REQUEST_THEME
-                        .try_with(|t| t.clone())
-                        .unwrap_or_default();
+                    let theme = REQUEST_THEME.try_with(|t| t.clone()).unwrap_or_default();
                     provide_context(theme);
                 }
             },

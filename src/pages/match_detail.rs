@@ -19,9 +19,11 @@ pub async fn fetch_match_detail(
     }
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let surreal =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     // Cache hit path
     if let Some((participants, timeline_events, game_duration, game_mode)) =
@@ -195,11 +197,13 @@ fn ItemIcon(item_id: i32) -> impl IntoView {
                 title=format!("Item {item_id}")
                 alt=format!("Item {item_id}")
             />
-        }.into_any()
+        }
+        .into_any()
     } else {
         view! {
             <div class="w-6 h-6 rounded bg-elevated border border-divider/30" aria-hidden="true" />
-        }.into_any()
+        }
+        .into_any()
     }
 }
 
@@ -285,10 +289,16 @@ fn TeamScoreboard(
     };
 
     let result_text = if team_win { "Victory" } else { "Defeat" };
-    let result_color = if team_win { "text-success" } else { "text-danger" };
+    let result_color = if team_win {
+        "text-success"
+    } else {
+        "text-danger"
+    };
     let header_class = format!("{header_bg} px-4 py-3 flex items-center justify-between");
-    let eyebrow_class = format!("font-imperial uppercase tracking-[0.18em] text-[10px] {eyebrow_color}");
-    let result_class = format!("font-imperial uppercase tracking-[0.18em] text-[10px] {result_color}");
+    let eyebrow_class =
+        format!("font-imperial uppercase tracking-[0.18em] text-[10px] {eyebrow_color}");
+    let result_class =
+        format!("font-imperial uppercase tracking-[0.18em] text-[10px] {result_color}");
 
     view! {
         <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
@@ -362,7 +372,8 @@ fn PerformanceBar(
         "Below average" => "text-danger",
         _ => "text-muted",
     };
-    let verdict_class = format!("font-imperial uppercase tracking-wider text-[10px] w-24 shrink-0 {verdict_color}");
+    let verdict_class =
+        format!("font-imperial uppercase tracking-wider text-[10px] w-24 shrink-0 {verdict_color}");
 
     view! {
         <div class="flex items-center gap-3 mb-3">

@@ -206,13 +206,21 @@ async fn create_seed_team(
                 if lol_team_companion::server::riot::has_api_key() {
                     // Rate-limit: 150ms between calls
                     tokio::time::sleep(Duration::from_millis(150)).await;
-                    match lol_team_companion::server::riot::get_puuid(riot_name, "EUW", lol_team_companion::server::riot::platform_route_from_str("EUW")).await {
+                    match lol_team_companion::server::riot::get_puuid(
+                        riot_name,
+                        "EUW",
+                        lol_team_companion::server::riot::platform_route_from_str("EUW"),
+                    )
+                    .await
+                    {
                         Ok(puuid) => {
                             if let Err(e) =
                                 db::update_user_riot(db, id.clone(), puuid, riot_name.to_string())
                                     .await
                             {
-                                eprintln!("    Warning: could not link Riot account for {email}: {e}");
+                                eprintln!(
+                                    "    Warning: could not link Riot account for {email}: {e}"
+                                );
                             }
                         }
                         Err(e) => {
@@ -234,17 +242,16 @@ async fn create_seed_team(
 
     // First user creates the team (becomes owner + member)
     let owner_id = &user_ids[0];
-    let team_id = match db::create_team(db, owner_id, team_name.to_string(), "EUW".to_string())
-        .await
-    {
-        Ok(id) => {
-            println!("  Created team {team_name} → {id}");
-            id
-        }
-        Err(e) => {
-            panic!("Failed to create team {team_name}: {e}");
-        }
-    };
+    let team_id =
+        match db::create_team(db, owner_id, team_name.to_string(), "EUW".to_string()).await {
+            Ok(id) => {
+                println!("  Created team {team_name} → {id}");
+                id
+            }
+            Err(e) => {
+                panic!("Failed to create team {team_name}: {e}");
+            }
+        };
 
     // Add remaining users as team members
     for user_id in user_ids.iter().skip(1) {
@@ -316,7 +323,11 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
 
         // --- Champion notes ---
         let champ0 = champs[0];
-        let champ1 = if champs.len() > 1 { champs[1] } else { champs[0] };
+        let champ1 = if champs.len() > 1 {
+            champs[1]
+        } else {
+            champs[0]
+        };
         let notes = [
             ChampionNote {
                 id: None,
@@ -377,17 +388,46 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
             team_id: team_id.to_string(),
             draft_id: Some(d_id.clone()),
             name: format!("{team_name} vs Beta — Teamfight Plan"),
-            our_champions: vec!["Darius".to_string(), "Hecarim".to_string(), "Azir".to_string(), "Jinx".to_string(), "Thresh".to_string()],
-            enemy_champions: vec!["Camille".to_string(), "Vi".to_string(), "Syndra".to_string(), "Caitlyn".to_string(), "Leona".to_string()],
-            win_conditions: vec!["Control teamfights".to_string(), "Peel for Jinx in fights".to_string()],
+            our_champions: vec![
+                "Darius".to_string(),
+                "Hecarim".to_string(),
+                "Azir".to_string(),
+                "Jinx".to_string(),
+                "Thresh".to_string(),
+            ],
+            enemy_champions: vec![
+                "Camille".to_string(),
+                "Vi".to_string(),
+                "Syndra".to_string(),
+                "Caitlyn".to_string(),
+                "Leona".to_string(),
+            ],
+            win_conditions: vec![
+                "Control teamfights".to_string(),
+                "Peel for Jinx in fights".to_string(),
+            ],
             objective_priority: vec!["Dragon".to_string(), "Baron".to_string()],
-            teamfight_strategy: "Thresh hook initiates, Hecarim follow-up engage, Darius pulls stragglers".to_string(),
-            early_game: Some("Level 1 invade potential with Hecarim. Control early river vision.".to_string()),
-            top_strategy: Some("Darius — trade when E is on cooldown. Win lane and join teamfights.".to_string()),
-            jungle_strategy: Some("Hecarim — clear fast, path toward mid to enable Azir.".to_string()),
-            mid_strategy: Some("Azir — farm to 3 items. Do not die. Control vision around mid.".to_string()),
-            bot_strategy: Some("Jinx — stay safe early, farm up to powerspike at 2 items.".to_string()),
-            support_strategy: Some("Thresh — catch priority with hooks. Save lantern for carries.".to_string()),
+            teamfight_strategy:
+                "Thresh hook initiates, Hecarim follow-up engage, Darius pulls stragglers"
+                    .to_string(),
+            early_game: Some(
+                "Level 1 invade potential with Hecarim. Control early river vision.".to_string(),
+            ),
+            top_strategy: Some(
+                "Darius — trade when E is on cooldown. Win lane and join teamfights.".to_string(),
+            ),
+            jungle_strategy: Some(
+                "Hecarim — clear fast, path toward mid to enable Azir.".to_string(),
+            ),
+            mid_strategy: Some(
+                "Azir — farm to 3 items. Do not die. Control vision around mid.".to_string(),
+            ),
+            bot_strategy: Some(
+                "Jinx — stay safe early, farm up to powerspike at 2 items.".to_string(),
+            ),
+            support_strategy: Some(
+                "Thresh — catch priority with hooks. Save lantern for carries.".to_string(),
+            ),
             notes: Some("Watch out for Syndra burst — CC chain before she can 100-0.".to_string()),
             win_condition_tag: Some("teamfight".to_string()),
         };
@@ -411,18 +451,48 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
             team_id: team_id.to_string(),
             draft_id: Some(d_id.clone()),
             name: format!("{team_name} vs Alpha — Split Push Plan"),
-            our_champions: vec!["Camille".to_string(), "Vi".to_string(), "Orianna".to_string(), "Caitlyn".to_string(), "Lulu".to_string()],
-            enemy_champions: vec!["Darius".to_string(), "Hecarim".to_string(), "Azir".to_string(), "Jinx".to_string(), "Thresh".to_string()],
-            win_conditions: vec!["Camille split push top".to_string(), "Orianna ball control in teamfights".to_string()],
-            objective_priority: vec!["Rift Herald".to_string(), "Towers".to_string(), "Baron".to_string()],
-            teamfight_strategy: "Orianna ultimate into Vi W for engage. Lulu shield carries.".to_string(),
-            early_game: Some("Vi invade red buff. Camille look for level 2 trade with E.".to_string()),
-            top_strategy: Some("Camille — split push, draw pressure, teleport to teamfights.".to_string()),
+            our_champions: vec![
+                "Camille".to_string(),
+                "Vi".to_string(),
+                "Orianna".to_string(),
+                "Caitlyn".to_string(),
+                "Lulu".to_string(),
+            ],
+            enemy_champions: vec![
+                "Darius".to_string(),
+                "Hecarim".to_string(),
+                "Azir".to_string(),
+                "Jinx".to_string(),
+                "Thresh".to_string(),
+            ],
+            win_conditions: vec![
+                "Camille split push top".to_string(),
+                "Orianna ball control in teamfights".to_string(),
+            ],
+            objective_priority: vec![
+                "Rift Herald".to_string(),
+                "Towers".to_string(),
+                "Baron".to_string(),
+            ],
+            teamfight_strategy: "Orianna ultimate into Vi W for engage. Lulu shield carries."
+                .to_string(),
+            early_game: Some(
+                "Vi invade red buff. Camille look for level 2 trade with E.".to_string(),
+            ),
+            top_strategy: Some(
+                "Camille — split push, draw pressure, teleport to teamfights.".to_string(),
+            ),
             jungle_strategy: Some("Vi — pressure mid-jungle corridor. Herald setup.".to_string()),
-            mid_strategy: Some("Orianna — poke and follow flanks. Hold ball on Vi for engage.".to_string()),
+            mid_strategy: Some(
+                "Orianna — poke and follow flanks. Hold ball on Vi for engage.".to_string(),
+            ),
             bot_strategy: Some("Caitlyn — trap placement under tower. Farm safely.".to_string()),
-            support_strategy: Some("Lulu — keep carries alive, polymorph engage threats.".to_string()),
-            notes: Some("If Darius ults Camille she needs to disengage. Do not 5v5 early.".to_string()),
+            support_strategy: Some(
+                "Lulu — keep carries alive, polymorph engage threats.".to_string(),
+            ),
+            notes: Some(
+                "If Darius ults Camille she needs to disengage. Do not 5v5 early.".to_string(),
+            ),
             win_condition_tag: Some("split-push".to_string()),
         };
         match db::save_game_plan(db, plan, &owner_id).await {
@@ -459,7 +529,9 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
                 "Practice Thresh hook timing".to_string(),
                 "Review Baron vision setup".to_string(),
             ],
-            open_notes: Some("Overall solid execution. Need to work on late-game decision-making.".to_string()),
+            open_notes: Some(
+                "Overall solid execution. Need to work on late-game decision-making.".to_string(),
+            ),
             created_by: owner_id.clone(),
             win_loss: Some("win".to_string()),
             rating: Some(4),
@@ -489,7 +561,10 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
                 "Practice Orianna ball placement for Vi W".to_string(),
                 "Review Camille TP decision points".to_string(),
             ],
-            open_notes: Some("Good macro execution but micro was shaky. Keep practicing the TP timing.".to_string()),
+            open_notes: Some(
+                "Good macro execution but micro was shaky. Keep practicing the TP timing."
+                    .to_string(),
+            ),
             created_by: owner_id.clone(),
             win_loss: Some("loss".to_string()),
             rating: Some(3),
@@ -515,9 +590,7 @@ async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
             "Need to close games faster when ahead".to_string(),
             "Overstayed in fights when outnumbered".to_string(),
         ],
-        action_items: vec![
-            "Practice early surrender of bad fights".to_string(),
-        ],
+        action_items: vec!["Practice early surrender of bad fights".to_string()],
         open_notes: Some("Scrim session — solid effort, keep the momentum.".to_string()),
         created_by: owner_id.clone(),
         win_loss: Some("win".to_string()),
@@ -640,7 +713,10 @@ async fn create_opponent_profiles(db: &Surreal<Db>, team_id: &str) {
     .await
     {
         Ok((opp_id, player_ids)) => {
-            println!("    Created opponent 'Beta Dragons' → {opp_id} ({} players)", player_ids.len());
+            println!(
+                "    Created opponent 'Beta Dragons' → {opp_id} ({} players)",
+                player_ids.len()
+            );
         }
         Err(e) => {
             eprintln!("    Warning: opponent creation: {e}");

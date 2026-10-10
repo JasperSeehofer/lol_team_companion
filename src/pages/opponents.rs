@@ -110,7 +110,11 @@ pub async fn delete_opponent_action(id: String) -> Result<(), ServerFnError> {
 }
 
 #[server]
-pub async fn add_player(opponent_id: String, name: String, role: String) -> Result<String, ServerFnError> {
+pub async fn add_player(
+    opponent_id: String,
+    name: String,
+    role: String,
+) -> Result<String, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -149,16 +153,9 @@ pub async fn save_player(
     };
     let notes_opt = if notes.is_empty() { None } else { Some(notes) };
 
-    db::save_opponent_player_info(
-        &surreal,
-        &id,
-        name,
-        role,
-        summoner_opt,
-        notes_opt,
-    )
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    db::save_opponent_player_info(&surreal, &id, name, role, summoner_opt, notes_opt)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
 }
 
 #[server]
@@ -253,8 +250,8 @@ pub async fn create_opponent_with_players_fn(
         None => return Err(ServerFnError::new("No team")),
     };
 
-    let players: Vec<(String, Option<String>)> = serde_json::from_str(&players_json)
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let players: Vec<(String, Option<String>)> =
+        serde_json::from_str(&players_json).map_err(|e| ServerFnError::new(e.to_string()))?;
 
     let (opponent_id, player_ids) =
         db::create_opponent_with_players(&surreal, &team_id, name, None, players)
@@ -313,8 +310,7 @@ pub async fn fetch_player_intel_fn(
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     // Compute role distribution: count occurrences of each team_position
-    let mut role_counts: std::collections::HashMap<String, u32> =
-        std::collections::HashMap::new();
+    let mut role_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     for (_champion, position) in &intel.champion_with_role {
         if !position.is_empty() {
             *role_counts.entry(position.clone()).or_insert(0) += 1;
@@ -369,19 +365,18 @@ pub fn OpponentsPage() -> impl IntoView {
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
 
     // Auth redirect + mode detection
-    Effect::new(move || {
-        match user.get() {
-            Some(Ok(None)) => {
-                #[cfg(feature = "hydrate")]
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/auth/login");
-                }
+    Effect::new(move || match user.get() {
+        Some(Ok(None)) =>
+        {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
             }
-            Some(Ok(Some(u))) => {
-                is_solo_mode.set(u.mode == "solo");
-            }
-            _ => {}
         }
+        Some(Ok(Some(u))) => {
+            is_solo_mode.set(u.mode == "solo");
+        }
+        _ => {}
     });
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
@@ -394,7 +389,13 @@ pub fn OpponentsPage() -> impl IntoView {
     // Team check for NoTeamState
     let has_team = Resource::new(
         || (),
-        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+        |_| async {
+            crate::pages::team::dashboard::get_team_dashboard()
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        },
     );
 
     let opponents = Resource::new(|| (), |_| get_opponents());
@@ -418,7 +419,9 @@ pub fn OpponentsPage() -> impl IntoView {
                 Ok(()) => {
                     selected_id.set(None);
                     opponents.refetch();
-                    toast.show.run((ToastKind::Success, "Opponent deleted".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Opponent deleted".into()));
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
@@ -673,11 +676,15 @@ fn CreationForm(
         }
 
         // Build players_json: Vec<(role, Option<riot_id>)>
-        let players: Vec<(String, Option<String>)> = ROLES.iter().enumerate().map(|(i, (role_key, _))| {
-            let v = inputs_vals[i].trim().to_string();
-            let opt = if v.is_empty() { None } else { Some(v) };
-            (role_key.to_string(), opt)
-        }).collect();
+        let players: Vec<(String, Option<String>)> = ROLES
+            .iter()
+            .enumerate()
+            .map(|(i, (role_key, _))| {
+                let v = inputs_vals[i].trim().to_string();
+                let opt = if v.is_empty() { None } else { Some(v) };
+                (role_key.to_string(), opt)
+            })
+            .collect();
 
         let players_json = serde_json::to_string(&players).unwrap_or_default();
         let inputs_vals_clone = inputs_vals.clone();
@@ -687,7 +694,10 @@ fn CreationForm(
             match create_opponent_with_players_fn(name, players_json).await {
                 Ok((opponent_id, player_ids)) => {
                     saving.set(false);
-                    toast.show.run((ToastKind::Success, "Opponent saved and players fetched".into()));
+                    toast.show.run((
+                        ToastKind::Success,
+                        "Opponent saved and players fetched".into(),
+                    ));
                     let done_id = opponent_id.clone();
 
                     // Sequential fetch for players that have a riot ID
@@ -821,9 +831,7 @@ fn OpponentDetail(
 
     // Build ordered players vec matching ROLES order
     let players_by_role: [Option<OpponentPlayer>; 5] = {
-        let find_player = |role_key: &str| {
-            players.iter().find(|p| p.role == role_key).cloned()
-        };
+        let find_player = |role_key: &str| players.iter().find(|p| p.role == role_key).cloned();
         [
             find_player("top"),
             find_player("jungle"),
@@ -879,9 +887,14 @@ fn OpponentDetail(
             refreshing_all.set(false);
             on_player_change();
             if success_count == 5 {
-                toast.show.run((ToastKind::Success, "All players refreshed".into()));
+                toast
+                    .show
+                    .run((ToastKind::Success, "All players refreshed".into()));
             } else if success_count > 0 {
-                toast.show.run((ToastKind::Success, format!("{success_count}/5 players refreshed")));
+                toast.show.run((
+                    ToastKind::Success,
+                    format!("{success_count}/5 players refreshed"),
+                ));
             }
         });
     };
@@ -1067,9 +1080,8 @@ fn PlayerCard(
     }
     .to_string();
 
-    let p_summoner: RwSignal<String> = RwSignal::new(
-        player.riot_summoner_name.clone().unwrap_or_default(),
-    );
+    let p_summoner: RwSignal<String> =
+        RwSignal::new(player.riot_summoner_name.clone().unwrap_or_default());
     let pool_expanded: RwSignal<bool> = RwSignal::new(false);
 
     // Compute intel once from player data
@@ -1105,7 +1117,10 @@ fn PlayerCard(
         let pid = player_id_refresh.clone();
         let summoner = p_summoner.get_untracked();
         if summoner.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Enter a summoner name (Name#Tag) first".into()));
+            toast.show.run((
+                ToastKind::Error,
+                "Enter a summoner name (Name#Tag) first".into(),
+            ));
             return;
         }
         fetch_state.set(FetchState::Fetching);

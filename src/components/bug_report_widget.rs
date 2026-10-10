@@ -291,8 +291,12 @@ fn BugReportWidgetInner(
             use wasm_bindgen::closure::Closure;
             use wasm_bindgen::JsCast;
 
-            let Some(win) = web_sys::window() else { return; };
-            let Some(doc) = win.document() else { return; };
+            let Some(win) = web_sys::window() else {
+                return;
+            };
+            let Some(doc) = win.document() else {
+                return;
+            };
 
             if let Some(body) = doc.body() {
                 let _ = body.style().set_property("cursor", "crosshair");
@@ -304,8 +308,8 @@ fn BugReportWidgetInner(
             // Click-capture closure. We attach in CAPTURE phase so we
             // intercept before any bubble-phase `on:click` handlers
             // attached to tagged elements.
-            let click_cb = Closure::<dyn Fn(web_sys::MouseEvent)>::new(
-                move |ev: web_sys::MouseEvent| {
+            let click_cb =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
                     let target = match ev.target() {
                         Some(t) => t,
                         None => return,
@@ -334,8 +338,7 @@ fn BugReportWidgetInner(
                     element_label.set(label);
                     widget_state.set(WidgetState::Editing);
                     exit_select_mode();
-                },
-            );
+                });
 
             let opts = web_sys::AddEventListenerOptions::new();
             opts.set_capture(true);
@@ -355,10 +358,8 @@ fn BugReportWidgetInner(
                     }
                 },
             );
-            let _ = win.add_event_listener_with_callback(
-                "keydown",
-                esc_cb.as_ref().unchecked_ref(),
-            );
+            let _ =
+                win.add_event_listener_with_callback("keydown", esc_cb.as_ref().unchecked_ref());
             esc_handle.set_value(Some(esc_cb));
         }
     };

@@ -281,16 +281,10 @@ fn canvas_size(roots: &[LayoutNode]) -> (f64, f64) {
 fn edge_base_style(state: NodeState, side: Option<EdgeSide>) -> &'static str {
     match (state, side) {
         // Ghost lineage: faint, dashed-feel, regardless of side.
-        (NodeState::Ghost, _) => {
-            "stroke: var(--color-muted); stroke-width: 1; opacity: 0.25"
-        }
+        (NodeState::Ghost, _) => "stroke: var(--color-muted); stroke-width: 1; opacity: 0.25",
         // Side-tinted edges (when diff actions exist).
-        (_, Some(EdgeSide::Us)) => {
-            "stroke: var(--color-info); stroke-width: 1.5; opacity: 0.7"
-        }
-        (_, Some(EdgeSide::Them)) => {
-            "stroke: var(--color-danger); stroke-width: 1.5; opacity: 0.7"
-        }
+        (_, Some(EdgeSide::Us)) => "stroke: var(--color-info); stroke-width: 1.5; opacity: 0.7",
+        (_, Some(EdgeSide::Them)) => "stroke: var(--color-danger); stroke-width: 1.5; opacity: 0.7",
         // Alternate / fallback.
         _ => "stroke: var(--color-secondary); stroke-width: 1.5; opacity: 0.6",
     }

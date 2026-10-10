@@ -58,10 +58,7 @@ pub async fn export_open_reports(
 pub fn render_inbox(reports: &[BugReport]) -> String {
     let total_open = reports.len();
     let bug_count = reports.iter().filter(|r| r.category == "bug").count();
-    let wishlist_count = reports
-        .iter()
-        .filter(|r| r.category == "wishlist")
-        .count();
+    let wishlist_count = reports.iter().filter(|r| r.category == "wishlist").count();
 
     let mut out = String::new();
     out.push_str("---\n");
@@ -210,10 +207,7 @@ mod tests {
         let r = vec![report("bug", &"x".repeat(120), "2026-05-26T10:00:00Z")];
         let out = render_inbox(&r);
         // The H2 line should contain only 60 x's.
-        let h2_line = out
-            .lines()
-            .find(|l| l.starts_with("## [bug]"))
-            .unwrap();
+        let h2_line = out.lines().find(|l| l.starts_with("## [bug]")).unwrap();
         let snippet = h2_line
             .trim_start_matches("## [bug] ")
             .split(" — ")
@@ -234,10 +228,8 @@ mod tests {
         use surrealdb::engine::local::Mem;
         use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
-        let path = std::env::temp_dir().join(format!(
-            "bug_report_test_{}_writes.md",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("bug_report_test_{}_writes.md", std::process::id()));
         // Clean any leftover from a previous aborted run.
         let _ = std::fs::remove_file(&path);
 
@@ -306,14 +298,10 @@ mod tests {
 
         // /proc is a read-only kernel filesystem on Linux — create_dir_all
         // on an arbitrary subdir under it MUST fail with an IO error.
-        let path =
-            std::path::PathBuf::from("/proc/this-cannot-be-written-to/bug-reports.md");
+        let path = std::path::PathBuf::from("/proc/this-cannot-be-written-to/bug-reports.md");
 
         let result = export_open_reports(&Arc::new(db), &path).await;
-        assert!(
-            result.is_err(),
-            "expected Err on unwritable path, got Ok"
-        );
+        assert!(result.is_err(), "expected Err on unwritable path, got Ok");
         assert!(
             matches!(result, Err(ExportError::Io(_))),
             "expected ExportError::Io variant on unwritable path"

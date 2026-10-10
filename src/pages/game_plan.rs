@@ -1,7 +1,9 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
 use crate::components::region::HeraldicDivider;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{
+    ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+};
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
@@ -169,9 +171,7 @@ pub async fn get_draft_for_prefill(
 /// Returns Some(plan_id) if at least one plan exists, or None if none do.
 /// Used for duplicate detection in the "Prep for This Draft" CTA.
 #[server]
-pub async fn check_draft_has_game_plan(
-    draft_id: String,
-) -> Result<Option<String>, ServerFnError> {
+pub async fn check_draft_has_game_plan(draft_id: String) -> Result<Option<String>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -268,7 +268,9 @@ pub async fn delete_checklist_template_fn(id: String) -> Result<(), ServerFnErro
 }
 
 #[server]
-pub async fn get_plan_checklist(plan_id: String) -> Result<Option<ChecklistInstance>, ServerFnError> {
+pub async fn get_plan_checklist(
+    plan_id: String,
+) -> Result<Option<ChecklistInstance>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -347,9 +349,9 @@ pub async fn start_post_game_review(
     plan_id: String,
     draft_id: Option<String>,
 ) -> Result<String, ServerFnError> {
+    use crate::models::game_plan::PostGameLearning;
     use crate::server::auth::AuthSession;
     use crate::server::db;
-    use crate::models::game_plan::PostGameLearning;
     use std::sync::Arc;
     use surrealdb::{engine::local::Db, Surreal};
 
@@ -746,12 +748,17 @@ pub fn GamePlanPage() -> impl IntoView {
             if plan_id_applied.get() {
                 return;
             }
-            let Some(ref target_id) = plan_id_from_url else { return };
+            let Some(ref target_id) = plan_id_from_url else {
+                return;
+            };
             if target_id.is_empty() {
                 return;
             }
             if let Some(Ok(list)) = plans.get() {
-                if let Some(plan) = list.into_iter().find(|p| p.id.as_deref() == Some(target_id.as_str())) {
+                if let Some(plan) = list
+                    .into_iter()
+                    .find(|p| p.id.as_deref() == Some(target_id.as_str()))
+                {
                     load_plan.run(plan);
                     plan_id_applied.set(true);
                 }
@@ -910,21 +917,65 @@ pub fn GamePlanPage() -> impl IntoView {
             let plan = GamePlan {
                 id: existing_id,
                 team_id: String::new(),
-                draft_id: if draft_val.is_empty() { None } else { Some(draft_val) },
+                draft_id: if draft_val.is_empty() {
+                    None
+                } else {
+                    Some(draft_val)
+                },
                 name: name_val,
                 our_champions: our_vals.into_iter().filter(|s| !s.is_empty()).collect(),
                 enemy_champions: enemy_vals.into_iter().filter(|s| !s.is_empty()).collect(),
-                win_conditions: wc_val.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-                objective_priority: obj_val.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                win_conditions: wc_val
+                    .lines()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
+                objective_priority: obj_val
+                    .lines()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
                 teamfight_strategy: tf_val,
-                early_game: if eg_val.is_empty() { None } else { Some(eg_val) },
-                top_strategy: if strats_val[0].is_empty() { None } else { Some(strats_val[0].clone()) },
-                jungle_strategy: if strats_val[1].is_empty() { None } else { Some(strats_val[1].clone()) },
-                mid_strategy: if strats_val[2].is_empty() { None } else { Some(strats_val[2].clone()) },
-                bot_strategy: if strats_val[3].is_empty() { None } else { Some(strats_val[3].clone()) },
-                support_strategy: if strats_val[4].is_empty() { None } else { Some(strats_val[4].clone()) },
-                notes: if notes_val.is_empty() { None } else { Some(notes_val) },
-                win_condition_tag: if wct_val.is_empty() { None } else { Some(wct_val) },
+                early_game: if eg_val.is_empty() {
+                    None
+                } else {
+                    Some(eg_val)
+                },
+                top_strategy: if strats_val[0].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[0].clone())
+                },
+                jungle_strategy: if strats_val[1].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[1].clone())
+                },
+                mid_strategy: if strats_val[2].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[2].clone())
+                },
+                bot_strategy: if strats_val[3].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[3].clone())
+                },
+                support_strategy: if strats_val[4].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[4].clone())
+                },
+                notes: if notes_val.is_empty() {
+                    None
+                } else {
+                    Some(notes_val)
+                },
+                win_condition_tag: if wct_val.is_empty() {
+                    None
+                } else {
+                    Some(wct_val)
+                },
             };
             let plan_json = serde_json::to_string(&plan).unwrap_or_default();
 
@@ -965,7 +1016,9 @@ pub fn GamePlanPage() -> impl IntoView {
                     if !is_update && !id.is_empty() {
                         set_editing_id.set(Some(id));
                     }
-                    toast.show.run((ToastKind::Success, "Game plan saved".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Game plan saved".into()));
                     plans.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -978,7 +1031,9 @@ pub fn GamePlanPage() -> impl IntoView {
             match delete_plan(plan_id).await {
                 Ok(_) => {
                     clear_editor.run(());
-                    toast.show.run((ToastKind::Success, "Game plan deleted".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Game plan deleted".into()));
                     plans.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -1002,7 +1057,10 @@ pub fn GamePlanPage() -> impl IntoView {
         set_obj_priority.set(obj.join("\n"));
         set_teamfight.set(tf);
         set_early_game.set(eg);
-        toast.show.run((ToastKind::Success, "Template generated! Customize to your strategy.".into()));
+        toast.show.run((
+            ToastKind::Success,
+            "Template generated! Customize to your strategy.".into(),
+        ));
     };
 
     // Pre-clone for multiple move closures in view!
@@ -1673,10 +1731,7 @@ pub fn GamePlanPage() -> impl IntoView {
 // ---------------------------------------------------------------------------
 
 #[component]
-fn ChecklistSection(
-    editing_id: ReadSignal<Option<String>>,
-    toast: ToastContext,
-) -> impl IntoView {
+fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext) -> impl IntoView {
     let (checklist_open, set_checklist_open) = signal(false);
     let (checklist_items, set_checklist_items) = signal(Vec::<String>::new());
     let (checklist_checked, set_checklist_checked) = signal(Vec::<bool>::new());
@@ -1730,7 +1785,10 @@ fn ChecklistSection(
         set_checklist_items.set(tmpl.items.clone());
         set_checklist_checked.set(vec![false; tmpl.items.len()]);
         set_checklist_instance_id.set(None); // Will create new on save
-        toast.show.run((ToastKind::Success, format!("Loaded template: {}", tmpl.name)));
+        toast.show.run((
+            ToastKind::Success,
+            format!("Loaded template: {}", tmpl.name),
+        ));
     });
 
     let do_save_checklist = move |_| {
@@ -1740,12 +1798,17 @@ fn ChecklistSection(
         let instance_id = checklist_instance_id.get_untracked();
 
         if items.is_empty() {
-            toast.show.run((ToastKind::Error, "No checklist items to save.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "No checklist items to save.".into()));
             return;
         }
 
         let Some(pid) = plan_id else {
-            toast.show.run((ToastKind::Error, "Save the plan first before adding a checklist.".into()));
+            toast.show.run((
+                ToastKind::Error,
+                "Save the plan first before adding a checklist.".into(),
+            ));
             return;
         };
 
@@ -1754,7 +1817,9 @@ fn ChecklistSection(
                 // Update existing
                 let checked_json = serde_json::to_string(&checked).unwrap_or_default();
                 match update_checklist(iid, checked_json).await {
-                    Ok(_) => toast.show.run((ToastKind::Success, "Checklist updated!".into())),
+                    Ok(_) => toast
+                        .show
+                        .run((ToastKind::Success, "Checklist updated!".into())),
                     Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             } else {
@@ -1763,7 +1828,9 @@ fn ChecklistSection(
                 match create_plan_checklist(pid, None, items_json).await {
                     Ok(id) => {
                         set_checklist_instance_id.set(Some(id));
-                        toast.show.run((ToastKind::Success, "Checklist created!".into()));
+                        toast
+                            .show
+                            .run((ToastKind::Success, "Checklist created!".into()));
                     }
                     Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
@@ -1774,14 +1841,18 @@ fn ChecklistSection(
     let do_save_as_template = move |_| {
         let items = checklist_items.get_untracked();
         if items.is_empty() {
-            toast.show.run((ToastKind::Error, "No items to save as template.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "No items to save as template.".into()));
             return;
         }
         let items_json = serde_json::to_string(&items).unwrap_or_default();
         leptos::task::spawn_local(async move {
             match save_checklist_template("Pre-Game Checklist".to_string(), items_json).await {
                 Ok(_) => {
-                    toast.show.run((ToastKind::Success, "Saved as template!".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Saved as template!".into()));
                     templates.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),

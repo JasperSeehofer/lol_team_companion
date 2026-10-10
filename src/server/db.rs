@@ -423,15 +423,10 @@ pub async fn add_champion_note(
         .await?
         .check()?;
     let created: Option<IdRecord> = r.take(0)?;
-    Ok(created
-        .map(|r| r.id.to_sql())
-        .unwrap_or_default())
+    Ok(created.map(|r| r.id.to_sql()).unwrap_or_default())
 }
 
-pub async fn update_champion_note(
-    db: &Surreal<Db>,
-    note: ChampionNote,
-) -> DbResult<()> {
+pub async fn update_champion_note(db: &Surreal<Db>, note: ChampionNote) -> DbResult<()> {
     let note_id = note.id.unwrap_or_default();
     let note_key = note_id
         .strip_prefix("champion_note:")
@@ -447,10 +442,7 @@ pub async fn update_champion_note(
     Ok(())
 }
 
-pub async fn delete_champion_note(
-    db: &Surreal<Db>,
-    note_id: &str,
-) -> DbResult<()> {
+pub async fn delete_champion_note(db: &Surreal<Db>, note_id: &str) -> DbResult<()> {
     let note_key = note_id
         .strip_prefix("champion_note:")
         .unwrap_or(note_id)
@@ -487,16 +479,13 @@ pub async fn get_champion_stats_for_user(
 
     let mut by_champ: HashMap<String, Vec<(f64, f64, f64, f64, bool)>> = HashMap::new();
     for row in &rows {
-        by_champ
-            .entry(row.champion.clone())
-            .or_default()
-            .push((
-                row.kills as f64,
-                row.deaths as f64,
-                row.assists as f64,
-                row.cs as f64,
-                row.win,
-            ));
+        by_champ.entry(row.champion.clone()).or_default().push((
+            row.kills as f64,
+            row.deaths as f64,
+            row.assists as f64,
+            row.cs as f64,
+            row.win,
+        ));
     }
 
     let mut results: Vec<ChampionStatSummary> = by_champ
@@ -1469,8 +1458,7 @@ pub async fn store_matches_with_synced_by(
     synced_by_user_id: Option<&str>,
 ) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    let synced_by_key = synced_by_user_id
-        .map(|s| s.strip_prefix("user:").unwrap_or(s).to_string());
+    let synced_by_key = synced_by_user_id.map(|s| s.strip_prefix("user:").unwrap_or(s).to_string());
 
     for m in matches {
         let mut r = db
@@ -1811,10 +1799,7 @@ pub async fn delete_game_plan(db: &Surreal<Db>, plan_id: &str) -> DbResult<()> {
 
 /// Fetch a single draft with its actions for prefilling a game plan.
 /// Returns `None` if no draft with the given ID exists.
-pub async fn get_draft_for_prefill(
-    db: &Surreal<Db>,
-    draft_id: &str,
-) -> DbResult<Option<Draft>> {
+pub async fn get_draft_for_prefill(db: &Surreal<Db>, draft_id: &str) -> DbResult<Option<Draft>> {
     let draft_key = draft_id
         .strip_prefix("draft:")
         .unwrap_or(draft_id)
@@ -1838,10 +1823,7 @@ pub async fn get_draft_for_prefill(
 
 /// Find all game plans that reference the given draft ID.
 /// The `game_plan.draft` field stores the full record ID string (e.g. `"draft:abc123"`).
-pub async fn get_game_plans_for_draft(
-    db: &Surreal<Db>,
-    draft_id: &str,
-) -> DbResult<Vec<GamePlan>> {
+pub async fn get_game_plans_for_draft(db: &Surreal<Db>, draft_id: &str) -> DbResult<Vec<GamePlan>> {
     let mut r = db
         .query("SELECT * FROM game_plan WHERE draft = $draft_id ORDER BY created_at DESC")
         .bind(("draft_id", draft_id.to_string()))
@@ -1999,7 +1981,10 @@ pub async fn get_analytics(
     let mut reviews_by_plan: HashMap<String, Vec<PostGameLearning>> = HashMap::new();
     for review in reviews {
         if let Some(ref plan_id) = review.game_plan_id {
-            reviews_by_plan.entry(plan_id.clone()).or_default().push(review);
+            reviews_by_plan
+                .entry(plan_id.clone())
+                .or_default()
+                .push(review);
         }
     }
 
@@ -2011,12 +1996,21 @@ pub async fn get_analytics(
             None => continue,
         };
         let plan_reviews = reviews_by_plan.remove(&plan_id).unwrap_or_default();
-        let wins = plan_reviews.iter().filter(|r| r.win_loss.as_deref() == Some("win")).count();
-        let losses = plan_reviews.iter().filter(|r| r.win_loss.as_deref() == Some("loss")).count();
-        let ratings: Vec<f32> = plan_reviews.iter()
+        let wins = plan_reviews
+            .iter()
+            .filter(|r| r.win_loss.as_deref() == Some("win"))
+            .count();
+        let losses = plan_reviews
+            .iter()
+            .filter(|r| r.win_loss.as_deref() == Some("loss"))
+            .count();
+        let ratings: Vec<f32> = plan_reviews
+            .iter()
             .filter_map(|r| r.rating.map(|v| v as f32))
             .collect();
-        let avg_rating = if ratings.is_empty() { None } else {
+        let avg_rating = if ratings.is_empty() {
+            None
+        } else {
             Some(ratings.iter().sum::<f32>() / ratings.len() as f32)
         };
 
@@ -2050,12 +2044,21 @@ pub async fn get_analytics(
         }
     }
 
-    let tag_summaries: Vec<StrategyTagSummary> = tag_map.into_iter()
+    let tag_summaries: Vec<StrategyTagSummary> = tag_map
+        .into_iter()
         .map(|(tag, (games_played, wins, losses, ratings))| {
-            let avg_rating = if ratings.is_empty() { None } else {
+            let avg_rating = if ratings.is_empty() {
+                None
+            } else {
                 Some(ratings.iter().sum::<f32>() / ratings.len() as f32)
             };
-            StrategyTagSummary { tag, games_played, wins, losses, avg_rating }
+            StrategyTagSummary {
+                tag,
+                games_played,
+                wins,
+                losses,
+                avg_rating,
+            }
         })
         .collect();
 
@@ -2271,10 +2274,7 @@ impl From<DbBanPriority> for BanPriority {
 }
 
 pub async fn get_ban_priorities(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<BanPriority>> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
         .query("SELECT * FROM ban_priority WHERE team = type::record('team', $team_key) ORDER BY rank ASC")
         .bind(("team_key", team_key))
@@ -2288,13 +2288,12 @@ pub async fn set_ban_priorities(
     team_id: &str,
     priorities: Vec<BanPriority>,
 ) -> DbResult<()> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // Delete old + create new in transaction
-    let mut query = String::from("BEGIN TRANSACTION; DELETE ban_priority WHERE team = type::record('team', $team_key);");
+    let mut query = String::from(
+        "BEGIN TRANSACTION; DELETE ban_priority WHERE team = type::record('team', $team_key);",
+    );
     for (i, _) in priorities.iter().enumerate() {
         query.push_str(&format!(
             " CREATE ban_priority SET team = type::record('team', $team_key), champion = $champ_{i}, rank = $rank_{i}, reason = $reason_{i};"
@@ -2378,10 +2377,7 @@ pub async fn create_opponent(
     name: String,
     notes: Option<String>,
 ) -> DbResult<String> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut response = db
         .query("CREATE opponent SET name = $name, team = type::record('team', $team_key), notes = $notes")
         .bind(("name", name))
@@ -2396,12 +2392,11 @@ pub async fn create_opponent(
 }
 
 pub async fn list_opponents(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Opponent>> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
-        .query("SELECT * FROM opponent WHERE team = type::record('team', $team_key) ORDER BY name ASC")
+        .query(
+            "SELECT * FROM opponent WHERE team = type::record('team', $team_key) ORDER BY name ASC",
+        )
         .bind(("team_key", team_key))
         .await?;
     let rows: Vec<DbOpponent> = r.take(0).unwrap_or_default();
@@ -2556,11 +2551,13 @@ pub async fn update_opponent_player_champions(
         .strip_prefix("opponent_player:")
         .unwrap_or(player_id)
         .to_string();
-    db.query("UPDATE type::record('opponent_player', $player_key) SET recent_champions = $champions")
-        .bind(("player_key", player_key))
-        .bind(("champions", champions))
-        .await?
-        .check()?;
+    db.query(
+        "UPDATE type::record('opponent_player', $player_key) SET recent_champions = $champions",
+    )
+    .bind(("player_key", player_key))
+    .bind(("champions", champions))
+    .await?
+    .check()?;
     Ok(())
 }
 
@@ -2577,10 +2574,7 @@ pub async fn create_opponent_with_players(
     notes: Option<String>,
     players: Vec<(String, Option<String>)>,
 ) -> DbResult<(String, Vec<String>)> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // Step 1: Create the opponent record
     let mut opp_resp = db
@@ -2869,10 +2863,7 @@ pub async fn get_team_matchup_notes(
     team_id: &str,
     champion: &str,
 ) -> DbResult<Vec<(String, ChampionNote)>> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // Get all team member user IDs and usernames
     let mut r = db
@@ -2965,10 +2956,7 @@ pub async fn create_action_item(
     }
 }
 
-pub async fn list_action_items(
-    db: &Surreal<Db>,
-    team_id: &str,
-) -> DbResult<Vec<ActionItem>> {
+pub async fn list_action_items(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<ActionItem>> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
         .query(
@@ -2980,10 +2968,7 @@ pub async fn list_action_items(
     Ok(items.into_iter().map(ActionItem::from).collect())
 }
 
-pub async fn list_open_action_items(
-    db: &Surreal<Db>,
-    team_id: &str,
-) -> DbResult<Vec<ActionItem>> {
+pub async fn list_open_action_items(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<ActionItem>> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
         .query(
@@ -3006,10 +2991,8 @@ pub async fn batch_create_action_items_from_review(
     }
     // Fetch existing open/in_progress action items for dedup
     let existing = list_open_action_items(db, team_id).await?;
-    let open_texts: std::collections::HashSet<String> = existing
-        .iter()
-        .map(|i| i.text.to_lowercase())
-        .collect();
+    let open_texts: std::collections::HashSet<String> =
+        existing.iter().map(|i| i.text.to_lowercase()).collect();
 
     let mut created = 0usize;
     for text in improvements {
@@ -3171,10 +3154,7 @@ pub async fn create_bug_report(
     Ok(())
 }
 
-pub async fn list_bug_reports(
-    db: &Surreal<Db>,
-    status: Option<&str>,
-) -> DbResult<Vec<BugReport>> {
+pub async fn list_bug_reports(db: &Surreal<Db>, status: Option<&str>) -> DbResult<Vec<BugReport>> {
     let mut r = match status {
         Some(s) => {
             db.query(
@@ -3237,14 +3217,8 @@ pub async fn create_team_note(
     username: &str,
     content: String,
 ) -> DbResult<String> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     let mut response = db
         .query("CREATE team_note SET team = type::record('team', $team_key), author = type::record('user', $user_key), author_name = $author_name, content = $content")
@@ -3262,10 +3236,7 @@ pub async fn create_team_note(
 }
 
 pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     let mut response = db
         .query("SELECT *, <string>created_at AS created_at FROM team_note WHERE team = type::record('team', $team_key) ORDER BY pinned DESC, created_at DESC")
@@ -3277,10 +3248,7 @@ pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Te
 }
 
 pub async fn list_pinned_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
-    let team_key = team_id
-        .strip_prefix("team:")
-        .unwrap_or(team_id)
-        .to_string();
+    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     let mut response = db
         .query("SELECT *, <string>created_at AS created_at FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true ORDER BY created_at DESC")
@@ -3305,11 +3273,7 @@ pub async fn update_team_note(db: &Surreal<Db>, note_id: &str, content: String) 
     Ok(())
 }
 
-pub async fn toggle_pin_team_note(
-    db: &Surreal<Db>,
-    note_id: &str,
-    pinned: bool,
-) -> DbResult<()> {
+pub async fn toggle_pin_team_note(db: &Surreal<Db>, note_id: &str, pinned: bool) -> DbResult<()> {
     let note_key = note_id
         .strip_prefix("team_note:")
         .unwrap_or(note_id)
@@ -3561,11 +3525,7 @@ pub async fn get_win_condition_stats_vs_opponent(
     // Build draft id -> opponent lookup
     let draft_opponent: HashMap<String, String> = drafts
         .iter()
-        .filter_map(|d| {
-            d.opponent
-                .as_ref()
-                .map(|opp| (d.id.to_sql(), opp.clone()))
-        })
+        .filter_map(|d| d.opponent.as_ref().map(|opp| (d.id.to_sql(), opp.clone())))
         .collect();
 
     // Build match outcome lookup
@@ -3590,7 +3550,10 @@ pub async fn get_win_condition_stats_vs_opponent(
         .filter_map(|p| {
             p.win_condition_tag.as_ref().map(|tag| {
                 let plan_sql = p.id.to_sql();
-                let opp = p.draft.as_ref().and_then(|did| draft_opponent.get(did).cloned());
+                let opp = p
+                    .draft
+                    .as_ref()
+                    .and_then(|did| draft_opponent.get(did).cloned());
                 (plan_sql, (tag.clone(), opp))
             })
         })
@@ -3912,13 +3875,13 @@ pub fn compute_pool_gaps(
     champions: &[Champion],
     opponent_champions: &[String],
 ) -> Vec<PoolGapWarning> {
-    const ALL_CLASSES: &[&str] = &[
-        "Fighter", "Mage", "Assassin", "Tank", "Marksman", "Support",
-    ];
+    const ALL_CLASSES: &[&str] = &["Fighter", "Mage", "Assassin", "Tank", "Marksman", "Support"];
 
     // Build champion class lookup: champion_id -> Vec<class>
-    let class_map: HashMap<&str, &[String]> =
-        champions.iter().map(|c| (c.id.as_str(), c.tags.as_slice())).collect();
+    let class_map: HashMap<&str, &[String]> = champions
+        .iter()
+        .map(|c| (c.id.as_str(), c.tags.as_slice()))
+        .collect();
 
     // Build username lookup
     let username_map: HashMap<&str, &str> = members
@@ -4004,10 +3967,7 @@ pub fn compute_pool_gaps(
 /// Fetch all summary data for the team dashboard in a single batched query.
 ///
 /// Returns `Ok(DashboardSummary::default())` if the team has no data or user has no team.
-pub async fn get_dashboard_summary(
-    db: &Surreal<Db>,
-    team_id: &str,
-) -> DbResult<DashboardSummary> {
+pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<DashboardSummary> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // 5-statement batched query (per RESEARCH.md Example 2)
@@ -4209,18 +4169,22 @@ pub fn aggregate_champion_performance(
     let mut map: HashMap<String, ChampionPerformanceSummary> = HashMap::new();
 
     for champ in draft_champions {
-        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
-            champion: champ.clone(),
-            ..Default::default()
-        });
+        let entry = map
+            .entry(champ.clone())
+            .or_insert_with(|| ChampionPerformanceSummary {
+                champion: champ.clone(),
+                ..Default::default()
+            });
         entry.games_in_draft += 1;
     }
 
     for (champ, win) in match_stats {
-        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
-            champion: champ.clone(),
-            ..Default::default()
-        });
+        let entry = map
+            .entry(champ.clone())
+            .or_insert_with(|| ChampionPerformanceSummary {
+                champion: champ.clone(),
+                ..Default::default()
+            });
         entry.games_in_match += 1;
         if *win {
             entry.wins_in_match += 1;
@@ -4228,18 +4192,22 @@ pub fn aggregate_champion_performance(
     }
 
     for champ in plan_champions {
-        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
-            champion: champ.clone(),
-            ..Default::default()
-        });
+        let entry = map
+            .entry(champ.clone())
+            .or_insert_with(|| ChampionPerformanceSummary {
+                champion: champ.clone(),
+                ..Default::default()
+            });
         entry.games_in_plan += 1;
     }
 
     for (champ, win) in post_game_champ_outcomes {
-        let entry = map.entry(champ.clone()).or_insert_with(|| ChampionPerformanceSummary {
-            champion: champ.clone(),
-            ..Default::default()
-        });
+        let entry = map
+            .entry(champ.clone())
+            .or_insert_with(|| ChampionPerformanceSummary {
+                champion: champ.clone(),
+                ..Default::default()
+            });
         if *win {
             entry.post_game_wins += 1;
         } else {
@@ -4385,8 +4353,10 @@ pub async fn get_champion_performance_summary(
     }
 
     let draft_champions: Vec<String> = draft_rows.into_iter().map(|r| r.champion).collect();
-    let match_stats: Vec<(String, bool)> =
-        match_rows.into_iter().map(|r| (r.champion, r.win)).collect();
+    let match_stats: Vec<(String, bool)> = match_rows
+        .into_iter()
+        .map(|r| (r.champion, r.win))
+        .collect();
     let plan_champions: Vec<String> = plan_rows
         .into_iter()
         .flat_map(|r| r.our_champions)
@@ -4535,8 +4505,10 @@ pub async fn get_team_champion_performance(
         return Ok(Vec::new());
     }
 
-    let match_stats: Vec<(String, bool)> =
-        match_rows.into_iter().map(|r| (r.champion, r.win)).collect();
+    let match_stats: Vec<(String, bool)> = match_rows
+        .into_iter()
+        .map(|r| (r.champion, r.win))
+        .collect();
     let draft_champions: Vec<String> = draft_rows.into_iter().map(|r| r.champion).collect();
     let plan_champions: Vec<String> = plan_rows
         .into_iter()
@@ -4852,15 +4824,16 @@ pub async fn get_solo_matches(
 
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     // Alias RecordId fields + include game_end for ORDER BY (Rule 40: ORDER BY field must be in SELECT)
-    const BASE_SELECT: &str =
-        "SELECT id, match.match_id AS match_id, <string>user AS user_id, \
+    const BASE_SELECT: &str = "SELECT id, match.match_id AS match_id, <string>user AS user_id, \
          <string>match.game_end AS game_end, \
          champion, kills, deaths, assists, cs, vision_score, damage, win \
          FROM player_match WHERE user = type::record('user', $user_key)";
 
     let rows: Vec<DbSoloMatch> = if let Some(qid) = queue_filter {
         let mut result = db
-            .query(format!("{BASE_SELECT} AND match.queue_id = $queue_id ORDER BY game_end DESC LIMIT $limit"))
+            .query(format!(
+                "{BASE_SELECT} AND match.queue_id = $queue_id ORDER BY game_end DESC LIMIT $limit"
+            ))
             .bind(("user_key", user_key))
             .bind(("queue_id", qid))
             .bind(("limit", limit))
@@ -4903,10 +4876,7 @@ pub async fn get_lp_history(
     cutoff: Option<String>, // ISO datetime string (UTC); None = all-time
 ) -> DbResult<Vec<crate::models::match_data::RankedSnapshot>> {
     use crate::models::match_data::rank_score;
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbLpRow {
@@ -4972,14 +4942,9 @@ pub async fn upsert_personal_goal(
 ) -> DbResult<()> {
     // Validate goal_type — defence in depth; server fn validates first (T-15-01).
     if !matches!(goal_type, "rank_target" | "cs_per_min" | "deaths_per_game") {
-        return Err(DbError::Other(format!(
-            "invalid goal_type: {goal_type}"
-        )));
+        return Err(DbError::Other(format!("invalid goal_type: {goal_type}")));
     }
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     // DELETE + CREATE in a transaction ensures upsert semantics atomically (set_ban_priorities pattern).
     db.query(
         "BEGIN TRANSACTION; \
@@ -5008,10 +4973,7 @@ pub async fn compute_goal_progress(
     user_id: &str,
 ) -> DbResult<crate::models::match_data::GoalProgressPayload> {
     use crate::models::match_data::{rank_score, GoalProgress, GoalProgressPayload, PersonalGoal};
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbGoalRow {
@@ -5170,10 +5132,7 @@ pub async fn get_champion_trends(
     cutoff: Option<String>, // ISO datetime string (UTC); None = all-time
 ) -> DbResult<Vec<crate::models::match_data::ChampionTrend>> {
     use std::collections::HashMap;
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbTrendRow {
@@ -5230,15 +5189,12 @@ pub async fn get_champion_trends(
             // Per-game KDA averaged: (K+A)/max(D,1) — handles zero-deaths (D-discretion).
             let kda_sum: f32 = games
                 .iter()
-                .map(|g| {
-                    (g.kills as f32 + g.assists as f32) / (g.deaths as f32).max(1.0)
-                })
+                .map(|g| (g.kills as f32 + g.assists as f32) / (g.deaths as f32).max(1.0))
                 .sum();
             let avg_kda = if n > 0 { kda_sum / n as f32 } else { 0.0 };
             // CS/min: total_cs / (total_duration_sec / 60.0) — seconds-based (Pitfall 1).
             let total_cs: f32 = games.iter().map(|g| g.cs as f32).sum();
-            let total_minutes: f32 =
-                games.iter().map(|g| g.game_duration as f32 / 60.0).sum();
+            let total_minutes: f32 = games.iter().map(|g| g.game_duration as f32 / 60.0).sum();
             let cs_per_min = if total_minutes > 0.0 {
                 total_cs / total_minutes
             } else {
@@ -5327,7 +5283,9 @@ pub async fn get_cached_match_detail(
         .await?;
 
     let detail: Option<DbMatchDetail> = result.take(0)?;
-    let Some(detail) = detail else { return Ok(None) };
+    let Some(detail) = detail else {
+        return Ok(None);
+    };
 
     let participants: Vec<crate::models::match_data::MatchParticipant> =
         serde_json::from_str(&detail.participants_json)
@@ -5522,10 +5480,7 @@ pub async fn list_personal_learnings(
     db: &Surreal<Db>,
     user_id: &str,
 ) -> DbResult<Vec<PersonalLearning>> {
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let mut r = db
         .query("SELECT * FROM personal_learning WHERE user = type::record('user', $user_key) ORDER BY created_at DESC")
         .bind(("user_key", user_key))
@@ -5581,7 +5536,9 @@ pub async fn delete_personal_learning(db: &Surreal<Db>, id: &str) -> DbResult<()
 mod tests {
     use super::*;
     use crate::models::champion::{Champion, ChampionPoolEntry};
-    use crate::models::game_plan::{ActionItemPreview, DashboardSummary, PostGamePreview, PoolGapWarning};
+    use crate::models::game_plan::{
+        ActionItemPreview, DashboardSummary, PoolGapWarning, PostGamePreview,
+    };
 
     fn make_champion(id: &str, name: &str, tags: Vec<&str>) -> Champion {
         Champion {
@@ -5625,8 +5582,13 @@ mod tests {
             make_pool_entry("user:u1", "Renekton", "top"),
         ];
         let warnings = compute_pool_gaps(&top_pool, &members, &champions, &[]);
-        assert!(!warnings.is_empty(), "Should warn about Fighter dominance (4/4 entries are Fighter = 100%)");
-        let has_dominant = warnings.iter().any(|w| w.dominant_class.as_deref() == Some("Fighter"));
+        assert!(
+            !warnings.is_empty(),
+            "Should warn about Fighter dominance (4/4 entries are Fighter = 100%)"
+        );
+        let has_dominant = warnings
+            .iter()
+            .any(|w| w.dominant_class.as_deref() == Some("Fighter"));
         assert!(has_dominant, "Should have a Fighter dominant class warning");
 
         // 3 Fighters + 1 Marksman = 75% Fighter => still dominant
@@ -5637,7 +5599,9 @@ mod tests {
             make_pool_entry("user:u1", "Jinx", "top"),
         ];
         let warnings2 = compute_pool_gaps(&mixed_pool, &members, &champions, &[]);
-        let has_dominant2 = warnings2.iter().any(|w| w.dominant_class.as_deref() == Some("Fighter"));
+        let has_dominant2 = warnings2
+            .iter()
+            .any(|w| w.dominant_class.as_deref() == Some("Fighter"));
         assert!(has_dominant2, "3/4 Fighter (75%) should be dominant");
     }
 
@@ -5659,10 +5623,13 @@ mod tests {
         // Opponents play Tank champions
         let opponent_champions = vec!["TankChamp".to_string()];
         let warnings = compute_pool_gaps(&pool, &members, &champions, &opponent_champions);
-        let has_tank_warning = warnings.iter().any(|w| {
-            w.missing_classes.contains(&"Tank".to_string()) && w.opponent_escalated
-        });
-        assert!(has_tank_warning, "Should warn about missing Tank coverage with opponent escalation");
+        let has_tank_warning = warnings
+            .iter()
+            .any(|w| w.missing_classes.contains(&"Tank".to_string()) && w.opponent_escalated);
+        assert!(
+            has_tank_warning,
+            "Should warn about missing Tank coverage with opponent escalation"
+        );
     }
 
     #[test]
@@ -5687,34 +5654,41 @@ mod tests {
         let members = vec![("user:u1".to_string(), "Player1".to_string())];
         let warnings = compute_pool_gaps(&pool, &members, &champions, &[]);
         // No class dominates (each is 1/6 = 16.7%), no missing classes with opponent escalation
-        assert!(warnings.is_empty() || warnings.iter().all(|w| !w.opponent_escalated && w.dominant_class.is_none()),
-            "Balanced pool should have no dominant class or opponent-escalated warnings");
+        assert!(
+            warnings.is_empty()
+                || warnings
+                    .iter()
+                    .all(|w| !w.opponent_escalated && w.dominant_class.is_none()),
+            "Balanced pool should have no dominant class or opponent-escalated warnings"
+        );
     }
 
     #[test]
     fn test_dashboard_summary_assembly() {
         // Test that DashboardSummary can be constructed and all fields populate correctly
         let action_items = vec![
-            ActionItemPreview { id: "action_item:1".into(), text: "Review baron fight".into() },
-            ActionItemPreview { id: "action_item:2".into(), text: "Improve vision".into() },
-        ];
-        let post_games = vec![
-            PostGamePreview {
-                id: "pgl:1".into(),
-                improvements: vec!["Better rotations".into()],
-                created_at: Some("2026-03-14T20:00:00Z".into()),
+            ActionItemPreview {
+                id: "action_item:1".into(),
+                text: "Review baron fight".into(),
+            },
+            ActionItemPreview {
+                id: "action_item:2".into(),
+                text: "Improve vision".into(),
             },
         ];
-        let pool_warnings = vec![
-            PoolGapWarning {
-                user_id: "user:u1".into(),
-                username: "Player1".into(),
-                role: "top".into(),
-                dominant_class: Some("Fighter".into()),
-                missing_classes: vec![],
-                opponent_escalated: false,
-            },
-        ];
+        let post_games = vec![PostGamePreview {
+            id: "pgl:1".into(),
+            improvements: vec!["Better rotations".into()],
+            created_at: Some("2026-03-14T20:00:00Z".into()),
+        }];
+        let pool_warnings = vec![PoolGapWarning {
+            user_id: "user:u1".into(),
+            username: "Player1".into(),
+            role: "top".into(),
+            dominant_class: Some("Fighter".into()),
+            missing_classes: vec![],
+            opponent_escalated: false,
+        }];
         let summary = DashboardSummary {
             open_action_item_count: 5,
             recent_action_items: action_items.clone(),
@@ -5745,17 +5719,18 @@ mod tests {
 
     #[test]
     fn test_aggregate_champion_performance() {
-        let draft_champions = vec!["Jinx".to_string(), "Jinx".to_string(), "Caitlyn".to_string()];
+        let draft_champions = vec![
+            "Jinx".to_string(),
+            "Jinx".to_string(),
+            "Caitlyn".to_string(),
+        ];
         let match_stats = vec![
             ("Jinx".to_string(), true),
             ("Jinx".to_string(), false),
             ("Caitlyn".to_string(), true),
         ];
         let plan_champions = vec!["Jinx".to_string()];
-        let post_game_outcomes = vec![
-            ("Jinx".to_string(), true),
-            ("Caitlyn".to_string(), false),
-        ];
+        let post_game_outcomes = vec![("Jinx".to_string(), true), ("Caitlyn".to_string(), false)];
 
         let result = aggregate_champion_performance(
             &draft_champions,
@@ -5766,7 +5741,10 @@ mod tests {
 
         assert!(!result.is_empty(), "Should return some results");
 
-        let jinx = result.iter().find(|s| s.champion == "Jinx").expect("Should have Jinx");
+        let jinx = result
+            .iter()
+            .find(|s| s.champion == "Jinx")
+            .expect("Should have Jinx");
         assert_eq!(jinx.games_in_draft, 2);
         assert_eq!(jinx.games_in_match, 2);
         assert_eq!(jinx.wins_in_match, 1);
@@ -5774,7 +5752,10 @@ mod tests {
         assert_eq!(jinx.post_game_wins, 1);
         assert_eq!(jinx.post_game_losses, 0);
 
-        let caitlyn = result.iter().find(|s| s.champion == "Caitlyn").expect("Should have Caitlyn");
+        let caitlyn = result
+            .iter()
+            .find(|s| s.champion == "Caitlyn")
+            .expect("Should have Caitlyn");
         assert_eq!(caitlyn.games_in_draft, 1);
         assert_eq!(caitlyn.games_in_match, 1);
         assert_eq!(caitlyn.wins_in_match, 1);
@@ -5800,8 +5781,14 @@ mod tests {
         ];
         let result = aggregate_champion_performance(&[], &match_stats, &[], &[]);
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].champion, "Caitlyn", "Caitlyn has 3 games, should be first");
-        assert_eq!(result[1].champion, "Jinx", "Jinx has 1 game, should be second");
+        assert_eq!(
+            result[0].champion, "Caitlyn",
+            "Caitlyn has 3 games, should be first"
+        );
+        assert_eq!(
+            result[1].champion, "Jinx",
+            "Jinx has 1 game, should be second"
+        );
     }
 
     #[test]
@@ -5845,7 +5832,10 @@ mod tests {
             ("Scale".to_string(), Some("TeamB".to_string()), false),
         ];
         let result = filter_win_condition_stats(&data, "TeamA");
-        assert!(result.is_empty(), "No plans against TeamA should mean empty results");
+        assert!(
+            result.is_empty(),
+            "No plans against TeamA should mean empty results"
+        );
     }
 
     #[test]
@@ -5863,17 +5853,14 @@ mod tests {
     #[test]
     fn dedup_filters_matching_open_items() {
         use std::collections::HashSet;
-        let open_texts: HashSet<String> = [
-            "fix baron calls".to_string(),
-            "ward river".to_string(),
-        ]
-        .into_iter()
-        .collect();
+        let open_texts: HashSet<String> = ["fix baron calls".to_string(), "ward river".to_string()]
+            .into_iter()
+            .collect();
         let improvements = vec![
-            "Fix Baron Calls".to_string(),    // matches (case-insensitive) → skip
+            "Fix Baron Calls".to_string(),      // matches (case-insensitive) → skip
             "Improve dragon setup".to_string(), // new → create
-            "  ".to_string(),                  // whitespace → skip
-            "ward river".to_string(),          // exact match → skip
+            "  ".to_string(),                   // whitespace → skip
+            "ward river".to_string(),           // exact match → skip
         ];
         let mut created = 0usize;
         for text in &improvements {

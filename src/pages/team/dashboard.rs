@@ -360,8 +360,8 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
 // ---------------------------------------------------------------------------
 
 #[server]
-pub async fn get_all_team_notes(
-) -> Result<Vec<crate::models::team_note::TeamNote>, ServerFnError> {
+pub async fn get_all_team_notes() -> Result<Vec<crate::models::team_note::TeamNote>, ServerFnError>
+{
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -501,7 +501,8 @@ pub async fn get_open_action_items_summary(
 }
 
 #[server]
-pub async fn get_post_game_panel() -> Result<Vec<crate::models::game_plan::PostGamePreview>, ServerFnError> {
+pub async fn get_post_game_panel(
+) -> Result<Vec<crate::models::game_plan::PostGamePreview>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -530,7 +531,8 @@ pub async fn get_post_game_panel() -> Result<Vec<crate::models::game_plan::PostG
 }
 
 #[server]
-pub async fn get_pool_gap_panel() -> Result<Vec<crate::models::game_plan::PoolGapWarning>, ServerFnError> {
+pub async fn get_pool_gap_panel(
+) -> Result<Vec<crate::models::game_plan::PoolGapWarning>, ServerFnError> {
     use crate::server::auth::AuthSession;
     use crate::server::db;
     use std::sync::Arc;
@@ -589,9 +591,11 @@ pub async fn set_team_dashboard_mode_pref(mode: String) -> Result<(), ServerFnEr
     }
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::set_user_team_dashboard_mode(&db, &user.id, &mode)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -605,19 +609,18 @@ pub fn TeamDashboard() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
 
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-    Effect::new(move || {
-        match auth_user.get() {
-            Some(Ok(None)) => {
-                #[cfg(feature = "hydrate")]
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/auth/login");
-                }
+    Effect::new(move || match auth_user.get() {
+        Some(Ok(None)) =>
+        {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
             }
-            Some(Ok(Some(u))) => {
-                is_solo_mode.set(u.mode == "solo");
-            }
-            _ => {}
         }
+        Some(Ok(Some(u))) => {
+            is_solo_mode.set(u.mode == "solo");
+        }
+        _ => {}
     });
 
     let dashboard = Resource::new(|| (), |_| get_team_dashboard());
@@ -1702,4 +1705,3 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
         </div>
     }
 }
-

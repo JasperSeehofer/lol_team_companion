@@ -309,9 +309,7 @@ pub async fn fetch_ranked_data(
         .collect())
 }
 
-use crate::models::match_data::{
-    EventCategory, MatchParticipant, PerformanceStats, TimelineEvent,
-};
+use crate::models::match_data::{EventCategory, MatchParticipant, PerformanceStats, TimelineEvent};
 
 pub struct FullMatchData {
     pub match_id: String,
@@ -425,8 +423,7 @@ pub async fn fetch_full_match_detail(
         .map(|(i, e)| (i, e.timestamp_ms, e.involved_participants.clone()))
         .collect();
 
-    let mut teamfight_indices: std::collections::HashSet<usize> =
-        std::collections::HashSet::new();
+    let mut teamfight_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
     for (i, (idx, ts, _)) in kill_events.iter().enumerate() {
         let mut unique_ids: std::collections::HashSet<i32> = std::collections::HashSet::new();
         let mut window_indices = vec![*idx];
@@ -526,7 +523,7 @@ fn classify_event(
         "CHAMPION_KILL" => Some(EventCategory::Kill),
         "WARD_PLACED" => Some(EventCategory::Ward),
         "ITEM_UNDO" => Some(EventCategory::Recall), // Riot API uses ITEM_UNDO for recalls (per D-07)
-        _ => None, // skip GAME_END, ITEM_PURCHASED, etc.
+        _ => None,                                  // skip GAME_END, ITEM_PURCHASED, etc.
     }
 }
 
@@ -569,9 +566,9 @@ pub fn compute_performance(
 
     // Lane opponent: same position, opposite team
     let lane_opponent = if !user.team_position.is_empty() {
-        participants.iter().find(|p| {
-            p.team_id != user.team_id && p.team_position == user.team_position
-        })
+        participants
+            .iter()
+            .find(|p| p.team_id != user.team_id && p.team_position == user.team_position)
     } else {
         None
     };
@@ -744,7 +741,7 @@ mod tests {
         }
 
         let perf = compute_performance(&all_participants, 1, 1800); // 30 min game
-        // User did 20000 damage out of total (20000 + 9*15000 = 155000)
+                                                                    // User did 20000 damage out of total (20000 + 9*15000 = 155000)
         let expected_share = 20000.0_f32 / 155000.0 * 100.0;
         assert!((perf.damage_share_pct - expected_share).abs() < 0.1);
         assert!((perf.cs_per_min - (200.0_f32 / 30.0)).abs() < 0.1);

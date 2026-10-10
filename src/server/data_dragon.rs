@@ -18,19 +18,33 @@ pub fn normalize_champion_name(input: &str, champions: &[Champion]) -> Option<St
 
     // Pass 2: case-insensitive display name match
     let input_lower = input.to_lowercase();
-    if let Some(c) = champions.iter().find(|c| c.name.to_lowercase() == input_lower) {
+    if let Some(c) = champions
+        .iter()
+        .find(|c| c.name.to_lowercase() == input_lower)
+    {
         return Some(c.id.clone());
     }
 
     // Pass 3: fuzzy match — strip non-alphanumeric chars and lowercase both
-    let input_stripped: String = input.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+    let input_stripped: String = input
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .to_lowercase();
     if input_stripped.is_empty() {
         return None;
     }
-    champions.iter().find(|c| {
-        let id_stripped: String = c.id.chars().filter(|ch| ch.is_alphanumeric()).collect::<String>().to_lowercase();
-        id_stripped == input_stripped
-    }).map(|c| c.id.clone())
+    champions
+        .iter()
+        .find(|c| {
+            let id_stripped: String =
+                c.id.chars()
+                    .filter(|ch| ch.is_alphanumeric())
+                    .collect::<String>()
+                    .to_lowercase();
+            id_stripped == input_stripped
+        })
+        .map(|c| c.id.clone())
 }
 
 #[cfg(test)]
@@ -75,17 +89,38 @@ mod tests {
         let champs = sample_champions();
 
         // exact ID match
-        assert_eq!(normalize_champion_name("KSante", &champs), Some("KSante".into()));
-        assert_eq!(normalize_champion_name("Jinx", &champs), Some("Jinx".into()));
+        assert_eq!(
+            normalize_champion_name("KSante", &champs),
+            Some("KSante".into())
+        );
+        assert_eq!(
+            normalize_champion_name("Jinx", &champs),
+            Some("Jinx".into())
+        );
 
         // case-insensitive display name match
-        assert_eq!(normalize_champion_name("K'Sante", &champs), Some("KSante".into()));
-        assert_eq!(normalize_champion_name("aurelion sol", &champs), Some("AurelionSol".into()));
-        assert_eq!(normalize_champion_name("JINX", &champs), Some("Jinx".into()));
+        assert_eq!(
+            normalize_champion_name("K'Sante", &champs),
+            Some("KSante".into())
+        );
+        assert_eq!(
+            normalize_champion_name("aurelion sol", &champs),
+            Some("AurelionSol".into())
+        );
+        assert_eq!(
+            normalize_champion_name("JINX", &champs),
+            Some("Jinx".into())
+        );
 
         // fuzzy stripped lowercase match
-        assert_eq!(normalize_champion_name("ksante", &champs), Some("KSante".into()));
-        assert_eq!(normalize_champion_name("bel'veth", &champs), Some("Belveth".into()));
+        assert_eq!(
+            normalize_champion_name("ksante", &champs),
+            Some("KSante".into())
+        );
+        assert_eq!(
+            normalize_champion_name("bel'veth", &champs),
+            Some("Belveth".into())
+        );
 
         // no match
         assert_eq!(normalize_champion_name("NotAChampion", &champs), None);

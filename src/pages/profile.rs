@@ -91,7 +91,9 @@ pub async fn save_region(region: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let db =
         use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::set_user_region(&db, &user.id, &region)
@@ -150,7 +152,9 @@ pub fn ProfilePage() -> impl IntoView {
     Effect::new(move || {
         if let Some(result) = update_profile_action.value().get() {
             match result {
-                Ok(()) => toast.show.run((ToastKind::Success, "Profile updated".into())),
+                Ok(()) => toast
+                    .show
+                    .run((ToastKind::Success, "Profile updated".into())),
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         }
@@ -160,7 +164,9 @@ pub fn ProfilePage() -> impl IntoView {
     Effect::new(move || {
         if let Some(result) = link_riot.value().get() {
             match result {
-                Ok(()) => toast.show.run((ToastKind::Success, "Riot account linked".into())),
+                Ok(()) => toast
+                    .show
+                    .run((ToastKind::Success, "Riot account linked".into())),
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         }

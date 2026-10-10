@@ -3,7 +3,9 @@ use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::region::*;
 use crate::components::tree_graph::TreeGraph;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{
+    ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+};
 use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
 use leptos::prelude::*;
@@ -338,7 +340,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let do_create_tree = Callback::new(move |_: ()| {
         let name = new_tree_name.get_untracked();
         if name.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Enter a tree name.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "Enter a tree name.".into()));
             return;
         }
         let opp = new_tree_opponent.get_untracked();
@@ -552,7 +556,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
         let parent = adding_branch_to.get_untracked();
         let label = new_branch_label.get_untracked();
         if label.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Enter a branch label.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "Enter a branch label.".into()));
             return;
         }
         let tree_id_for_select = tree_id.clone();

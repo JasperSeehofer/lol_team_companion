@@ -1,8 +1,5 @@
 use leptos::prelude::*;
-use leptos_router::{
-    components::A,
-    hooks::use_location,
-};
+use leptos_router::{components::A, hooks::use_location};
 
 use crate::app::InitialTheme;
 use crate::components::region::CompanionSigil;
@@ -18,7 +15,9 @@ pub async fn set_user_mode(mode: String) -> Result<(), ServerFnError> {
     use surrealdb::{engine::local::Db, Surreal};
 
     let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let user = auth
+        .user
+        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
     let db =
         use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
     db::set_user_mode(&db, &user.id, &mode)
@@ -208,9 +207,7 @@ fn hub_for_path(path: &str) -> &'static str {
         || path.starts_with("/analytics")
     {
         "history"
-    } else if path.starts_with("/profile")
-        || path.starts_with("/team")
-        || path.starts_with("/solo")
+    } else if path.starts_with("/profile") || path.starts_with("/team") || path.starts_with("/solo")
     {
         "profile"
     } else {
@@ -275,8 +272,7 @@ pub fn Nav() -> impl IntoView {
 
     // Reactive hub derivation from current URL path.
     let location = use_location();
-    let active_hub =
-        Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
+    let active_hub = Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
 
     // Primary hub buttons.
     let hub_btn_class = move |hub_id: &'static str| -> Memo<String> {

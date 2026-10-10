@@ -3,14 +3,9 @@ use crate::common;
 use lol_team_companion::server::db;
 
 async fn make_user(d: &surrealdb::Surreal<surrealdb::engine::local::Db>, name: &str) -> String {
-    db::create_user(
-        d,
-        name.into(),
-        format!("{name}@example.com"),
-        "hash".into(),
-    )
-    .await
-    .unwrap()
+    db::create_user(d, name.into(), format!("{name}@example.com"), "hash".into())
+        .await
+        .unwrap()
 }
 
 /// Insert a match and a corresponding player_match row for the given user.
@@ -26,10 +21,7 @@ async fn insert_match_with_player(
     assists: i32,
     cs: i32,
 ) {
-    let user_key = user_id
-        .strip_prefix("user:")
-        .unwrap_or(user_id)
-        .to_string();
+    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     d.query(
         "CREATE match SET match_id = $mid, queue_id = $qid, game_duration = $dur, \
          game_end = time::now()",
@@ -70,7 +62,10 @@ async fn goal_progress_zero_games_insufficient() {
         .unwrap();
     let p = db::compute_goal_progress(&d, &u).await.unwrap();
     let cs = p.cs.expect("cs goal should be present");
-    assert!(cs.current_value.is_none(), "zero games must be insufficient");
+    assert!(
+        cs.current_value.is_none(),
+        "zero games must be insufficient"
+    );
     assert_eq!(cs.game_count, 0);
 }
 
@@ -110,10 +105,7 @@ async fn goal_progress_seven_games_aggregates() {
     let p = db::compute_goal_progress(&d, &u).await.unwrap();
     let cs = p.cs.expect("cs goal");
     let deaths = p.deaths.expect("deaths goal");
-    assert!(
-        cs.current_value.is_some(),
-        "≥ 5 games must produce a value"
-    );
+    assert!(cs.current_value.is_some(), "≥ 5 games must produce a value");
     assert_eq!(cs.game_count, 7);
     assert!(deaths.current_value.is_some());
     assert_eq!(deaths.game_count, 7);

@@ -98,19 +98,18 @@ pub fn RosterPage() -> impl IntoView {
     // Auth redirect + mode detection
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-    Effect::new(move || {
-        match auth_user.get() {
-            Some(Ok(None)) => {
-                #[cfg(feature = "hydrate")]
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/auth/login");
-                }
+    Effect::new(move || match auth_user.get() {
+        Some(Ok(None)) =>
+        {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
             }
-            Some(Ok(Some(u))) => {
-                is_solo_mode.set(u.mode == "solo");
-            }
-            _ => {}
         }
+        Some(Ok(Some(u))) => {
+            is_solo_mode.set(u.mode == "solo");
+        }
+        _ => {}
     });
 
     // Toast for create_team errors (success redirects to dashboard)
@@ -129,7 +128,9 @@ pub fn RosterPage() -> impl IntoView {
     Effect::new(move || {
         if let Some(result) = link_riot.value().get() {
             match result {
-                Ok(()) => toast.show.run((ToastKind::Success, "Riot account linked".into())),
+                Ok(()) => toast
+                    .show
+                    .run((ToastKind::Success, "Riot account linked".into())),
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         }

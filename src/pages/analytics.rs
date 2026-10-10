@@ -17,8 +17,8 @@ pub async fn get_analytics_data() -> Result<AnalyticsPayload, ServerFnError> {
         .user
         .ok_or_else(|| ServerFnError::new("Not logged in"))?;
 
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db =
+        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
 
     // Return empty payload if user has no team (per CLAUDE.md rule 44)
     let team_id = match db::get_user_team_id(&db, &user.id)

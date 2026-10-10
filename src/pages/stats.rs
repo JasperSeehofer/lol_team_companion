@@ -525,9 +525,7 @@ pub fn StatsPage() -> impl IntoView {
 
 /// Imperial display headline: "A week of {wins} victories and {losses} defeats."
 #[component]
-fn BattleLogHeadline(
-    stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>,
-) -> impl IntoView {
+fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) -> impl IntoView {
     view! {
         <Suspense fallback=move || view! {
             <h1 class="font-display italic text-primary text-[40px] sm:text-[56px] leading-tight">
@@ -1172,7 +1170,11 @@ fn ChampionTrendsSection() -> impl IntoView {
         let is_active = move || sort_col.get() == target;
         let arrow = move || {
             if is_active() {
-                if sort_dir_desc.get() { " \u{25BE}" } else { " \u{25B4}" }
+                if sort_dir_desc.get() {
+                    " \u{25BE}"
+                } else {
+                    " \u{25B4}"
+                }
             } else {
                 " \u{25BE}"
             }

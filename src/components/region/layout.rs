@@ -28,8 +28,9 @@ pub fn Card(
     let var_is_gilt = var == "gilt";
     let var_is_zine = var == "zine";
 
-    move || if is_pandemonium {
-        view! {
+    move || {
+        if is_pandemonium {
+            view! {
             <div class="bg-surface border border-outline/30 rounded-none p-6 relative">
                 {if var_is_zine {
                     view! {
@@ -45,14 +46,14 @@ pub fn Card(
                 {children()}
             </div>
         }.into_any()
-    } else {
-        // Demacia
-        let box_shadow = if var_is_gilt {
-            "box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 15%, transparent);"
         } else {
-            ""
-        };
-        view! {
+            // Demacia
+            let box_shadow = if var_is_gilt {
+                "box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 15%, transparent);"
+            } else {
+                ""
+            };
+            view! {
             <div
                 class="bg-surface border border-outline/50 rounded-xl p-6 relative"
                 style=box_shadow
@@ -70,6 +71,7 @@ pub fn Card(
                 {children()}
             </div>
         }.into_any()
+        }
     }
 }
 
@@ -108,7 +110,8 @@ pub fn SectionHead(
                 </div>
                 <RiotTape width=240 label="SECTION" />
             </div>
-        }.into_any()
+        }
+        .into_any()
     } else {
         // Demacia — pre-build optional views outside view!
         let eyebrow_view = eyebrow.map(|e| view! { <Eyebrow>{e}</Eyebrow> });
@@ -124,7 +127,8 @@ pub fn SectionHead(
                 </div>
                 <HeraldicDivider width=240 />
             </div>
-        }.into_any()
+        }
+        .into_any()
     }
 }
 
@@ -132,10 +136,7 @@ pub fn SectionHead(
 /// Region-neutral — pure attribute passthrough.
 /// Useful for component-level snapshot tests and isolated regional compositions.
 #[component]
-pub fn Themed(
-    region: String,
-    children: ChildrenFn,
-) -> impl IntoView {
+pub fn Themed(region: String, children: ChildrenFn) -> impl IntoView {
     view! {
         <div data-theme=region>
             {children()}

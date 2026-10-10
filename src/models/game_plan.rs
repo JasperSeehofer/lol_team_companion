@@ -39,9 +39,9 @@ pub struct PostGameLearning {
     pub open_notes: Option<String>,
     pub created_by: String,
     #[serde(default)]
-    pub win_loss: Option<String>,   // "win" | "loss" | None
+    pub win_loss: Option<String>, // "win" | "loss" | None
     #[serde(default)]
-    pub rating: Option<u8>,         // 1-5 stars | None
+    pub rating: Option<u8>, // 1-5 stars | None
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -210,26 +210,23 @@ mod tests {
     fn dashboard_summary_populated_round_trips() {
         let summary = DashboardSummary {
             open_action_item_count: 3,
-            recent_action_items: vec![
-                ActionItemPreview { id: "ai:1".into(), text: "Review baron fight".into() },
-            ],
-            recent_post_games: vec![
-                PostGamePreview {
-                    id: "pg:1".into(),
-                    improvements: vec!["Better vision control".into()],
-                    created_at: Some("2026-03-14T20:00:00Z".into()),
-                },
-            ],
-            pool_gap_warnings: vec![
-                PoolGapWarning {
-                    user_id: "user:u1".into(),
-                    username: "Player1".into(),
-                    role: "top".into(),
-                    dominant_class: Some("Fighter".into()),
-                    missing_classes: vec!["Tank".into()],
-                    opponent_escalated: true,
-                },
-            ],
+            recent_action_items: vec![ActionItemPreview {
+                id: "ai:1".into(),
+                text: "Review baron fight".into(),
+            }],
+            recent_post_games: vec![PostGamePreview {
+                id: "pg:1".into(),
+                improvements: vec!["Better vision control".into()],
+                created_at: Some("2026-03-14T20:00:00Z".into()),
+            }],
+            pool_gap_warnings: vec![PoolGapWarning {
+                user_id: "user:u1".into(),
+                username: "Player1".into(),
+                role: "top".into(),
+                dominant_class: Some("Fighter".into()),
+                missing_classes: vec!["Tank".into()],
+                opponent_escalated: true,
+            }],
             drafts_without_game_plan: 2,
             game_plans_without_post_game: 1,
         };
