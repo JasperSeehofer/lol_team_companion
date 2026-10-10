@@ -2,7 +2,7 @@
 //!
 //! Runs once in main.rs after init_db and before axum::serve.
 //! Writes the path passed by main.rs (default
-//! `./.planning/INBOX/bug-reports.md`) with YAML front-matter
+//! `./docs/inbox/bug-reports.md`) with YAML front-matter
 //! and one ## heading per open report. Failures are logged and
 //! swallowed (D-04.5); never block server start.
 //!
@@ -15,6 +15,10 @@ use thiserror::Error;
 
 use crate::models::bug_report::BugReport;
 use crate::server::db;
+
+/// Default export path when `BUG_REPORT_INBOX_PATH` is not set.
+/// Relative to the server's working directory; git-ignored.
+pub const DEFAULT_INBOX_PATH: &str = "./docs/inbox/bug-reports.md";
 
 #[derive(Debug, Error)]
 pub enum ExportError {
@@ -163,6 +167,11 @@ mod tests {
             created_at: Some(created.into()),
             status: "open".into(),
         }
+    }
+
+    #[test]
+    fn default_inbox_path_lives_under_docs() {
+        assert_eq!(DEFAULT_INBOX_PATH, "./docs/inbox/bug-reports.md");
     }
 
     #[test]

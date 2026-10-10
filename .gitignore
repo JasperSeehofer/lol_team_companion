@@ -10,11 +10,14 @@ e2e/test-results/
 # Claude Design source bundle (extracted from share link; do not commit binary blobs)
 .local-design-source/
 
-# Bug-report inbox is rewritten on every server start (Phase 19-03 startup hook)
-.planning/INBOX/bug-reports.md
-
 # Playwright MCP scratch directory (tool-generated)
 .playwright-mcp/
 
 # Gardener custodial report (regenerated each run)
 .gardener-notes.md
+
+# Bug-report inbox is rewritten on every server start (src/server/bug_report_export.rs)
+docs/inbox/
+
+# Playwright output at repo root (stray runs outside e2e/)
+/test-results/

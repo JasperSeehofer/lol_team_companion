@@ -48,12 +48,16 @@ async fn main() {
         .await
         .expect("Failed to initialize SurrealDB");
 
-    // Phase 19 D-04 — auto-export open bug reports to the Claude inbox.
+    // Phase 19 D-04 — auto-export open bug reports to the triage inbox.
     // Runs once, synchronously, after DB init and before axum::serve.
     // Write failures are logged and swallowed (D-04.5).
     let inbox_path = std::env::var("BUG_REPORT_INBOX_PATH")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from("./.planning/INBOX/bug-reports.md"));
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from(
+                lol_team_companion::server::bug_report_export::DEFAULT_INBOX_PATH,
+            )
+        });
     if let Err(e) =
         lol_team_companion::server::bug_report_export::export_open_reports(&surreal_db, &inbox_path)
             .await
