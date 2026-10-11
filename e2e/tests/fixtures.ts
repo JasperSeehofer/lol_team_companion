@@ -138,20 +138,15 @@ const PLACEHOLDER_PNG = Buffer.from(
 );
 
 /**
- * Champion art comes from the app's own image endpoint (`/img/champion/...`,
- * which fetches from Data Dragon once per patch) and role icons still come
- * from CommunityDragon. The page "load" event waits for every image, so one
- * stalled upstream request (common through the cloud-session proxy) used to
- * time out `page.goto` at random. Tests serve a placeholder instead: they
- * check our pages, not the image source. (`smoke.spec.ts` checks the
- * endpoint itself.)
+ * Champion and item art comes from the app's own image endpoint
+ * (`/img/champion/...`, which fetches from Data Dragon once per patch); the
+ * browser loads nothing from a third party (role icons are typographic). The
+ * page "load" event waits for every image, so one stalled upstream fetch
+ * (common through the cloud-session proxy) used to time out `page.goto` at
+ * random. Tests serve a placeholder instead: they check our pages, not the
+ * image source. (`smoke.spec.ts` checks the endpoint itself.)
  */
 async function stubExternalImages(page: Page): Promise<void> {
-  await page.route(
-    /^https:\/\/(ddragon\.leagueoflegends\.com|raw\.communitydragon\.org)\//,
-    (route) =>
-      route.fulfill({ status: 200, contentType: "image/png", body: PLACEHOLDER_PNG })
-  );
   await page.route(/\/img\/(champion|item)\//, (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: PLACEHOLDER_PNG })
   );

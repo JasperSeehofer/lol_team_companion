@@ -24,9 +24,24 @@ const SECTIONS = [
   "badge",
   "table",
   "tabs",
+  "toggles",
+  "keycap",
+  "callout",
+  "toast",
+  "empty",
+  "skeleton",
+  "tooltip",
+  "dialog",
+  "menu",
+  "command",
+  "avatar",
+  "markers",
+  "readout",
   "draft",
   "prep",
-  "feedback",
+  "legend",
+  "canvas",
+  "timeline",
 ];
 
 const PANIC = /panicked at|Option::unwrap\(\) on None|unreachable/;
@@ -64,7 +79,8 @@ for (const width of [1280, 400]) {
     for (const id of SECTIONS) {
       const section = adminPage.locator(`[data-gallery="${id}"]`);
       await expect(section, `section ${id}`).toBeVisible();
-      await expect(section.locator("h2")).toHaveCount(1);
+      // Exactly one visible section heading (closed dialogs hold their own h2).
+      await expect(section.locator("h2:visible")).toHaveCount(1);
       await section.scrollIntoViewIfNeeded();
       const shot = await section.screenshot({ animations: "disabled" });
       await test.info().attach(`${id}-${width}.png`, { body: shot, contentType: "image/png" });
@@ -161,4 +177,177 @@ test("the draft example follows the tournament order", async ({ adminPage }) => 
   const current = adminPage.locator('[data-gallery="draft"] section [aria-current="step"]');
   await expect(current).toHaveCount(1);
   await expect(current).toHaveAttribute("aria-label", /Step 19, Blue pick 5, Support: selecting now/);
+});
+
+test("dialog: focus moves in, Escape closes and focus returns", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const open = adminPage.getByTestId("open-dialog");
+  const dialog = adminPage.locator('dialog[data-dialog="gallery-dialog"]');
+  await open.focus();
+  await adminPage.keyboard.press("Enter");
+  await expect(dialog).toHaveAttribute("open", "");
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(dialog).toHaveAttribute("aria-labelledby", "gallery-dialog-title");
+  expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+  // Tab stays inside the modal.
+  for (let i = 0; i < 6; i++) await adminPage.keyboard.press("Tab");
+  expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+  await adminPage.keyboard.press("Escape");
+  await expect(dialog).not.toHaveAttribute("open", "");
+  await expect(open).toBeFocused();
+});
+
+test("confirm dialog: Cancel has focus first for destructive actions", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  await adminPage.getByTestId("open-confirm").click();
+  const dialog = adminPage.locator('dialog[data-dialog="gallery-confirm"]');
+  await expect(dialog).toHaveAttribute("open", "");
+  await expect(dialog.locator('[data-confirm="cancel"]')).toBeFocused();
+  await adminPage.keyboard.press("Tab");
+  await expect(dialog.locator('[data-confirm="confirm"]')).toBeFocused();
+  await adminPage.keyboard.press("Enter");
+  await expect(dialog).not.toHaveAttribute("open", "");
+  await expect(adminPage.getByTestId("dialog-result")).toHaveText(/Plan deleted/);
+});
+
+test("menu: arrows, typeahead, Escape and selection", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const button = adminPage.locator("#gallery-menu-button");
+  await expect(button).toHaveAttribute("aria-haspopup", "menu");
+  await button.focus();
+  await adminPage.keyboard.press("ArrowDown");
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+  await expect(adminPage.locator("#gallery-menu-item-0")).toBeFocused();
+  await adminPage.keyboard.press("ArrowDown");
+  await expect(adminPage.locator("#gallery-menu-item-1")).toBeFocused();
+  // Item 2 is disabled and skipped.
+  await adminPage.keyboard.press("ArrowDown");
+  await expect(adminPage.locator("#gallery-menu-item-3")).toBeFocused();
+  await adminPage.keyboard.press("d");
+  await expect(adminPage.locator("#gallery-menu-item-4")).toBeFocused();
+  await adminPage.keyboard.press("Home");
+  await expect(adminPage.locator("#gallery-menu-item-0")).toBeFocused();
+  await adminPage.keyboard.press("Escape");
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(button).toBeFocused();
+  await expect(adminPage.locator("#gallery-menu-menu")).toBeHidden();
+
+  await adminPage.keyboard.press("Enter");
+  await expect(adminPage.locator("#gallery-menu-item-0")).toBeFocused();
+  await adminPage.keyboard.press("Enter");
+  await expect(adminPage.getByTestId("menu-result")).toHaveText("Chose: duplicate");
+  await expect(button).toBeFocused();
+});
+
+test("command bar: Ctrl+K opens it, typing filters, Enter goes", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const bar = adminPage.locator('dialog[data-dialog="command-bar"]');
+  await adminPage.keyboard.press("Control+k");
+  await expect(bar).toHaveAttribute("open", "");
+  const input = bar.locator('[role="combobox"]');
+  await expect(input).toBeFocused();
+  await adminPage.keyboard.type("roster");
+  const options = bar.locator('[role="option"]');
+  await expect(options.first()).toHaveText(/Roster/);
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await expect(input).toHaveAttribute("aria-activedescendant", /command-bar-opt-/);
+  await adminPage.keyboard.press("Escape");
+  await expect(bar).not.toHaveAttribute("open", "");
+
+  // The gallery instance runs a command without a link.
+  await adminPage.getByTestId("open-command").click();
+  const gal = adminPage.locator('dialog[data-dialog="gallery-command"]');
+  await expect(gal).toHaveAttribute("open", "");
+  await adminPage.keyboard.type("toast");
+  await adminPage.keyboard.press("Enter");
+  await expect(gal).not.toHaveAttribute("open", "");
+  await expect(adminPage.getByTestId("command-result")).toHaveText("Ran: toast");
+
+  // Arrow keys move the active option, and Enter follows a link.
+  await adminPage.keyboard.press("Control+k");
+  await expect(bar).toHaveAttribute("open", "");
+  await adminPage.keyboard.type("roster");
+  await adminPage.keyboard.press("Enter");
+  await adminPage.waitForURL("**/team/roster");
+});
+
+test("segmented control and switch work from the keyboard", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const group = adminPage.locator('[data-segmented="gal-mode"]');
+  await expect(group).toHaveAttribute("role", "radiogroup");
+  const team = adminPage.locator("#gal-mode-seg-1");
+  const solo = adminPage.locator("#gal-mode-seg-0");
+  await expect(team).toHaveAttribute("aria-checked", "true");
+  await expect(solo).toHaveAttribute("tabindex", "-1");
+  await team.focus();
+  await adminPage.keyboard.press("ArrowLeft");
+  await expect(solo).toHaveAttribute("aria-checked", "true");
+  await expect(solo).toBeFocused();
+  await expect(adminPage.getByTestId("segmented-value")).toHaveText("Workspace: solo");
+  await adminPage.keyboard.press("ArrowLeft");
+  await expect(team).toHaveAttribute("aria-checked", "true");
+  await adminPage.keyboard.press("Home");
+  await expect(solo).toHaveAttribute("aria-checked", "true");
+
+  const sw = adminPage.locator('[data-testid="switch-demo"] [role="switch"]');
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await sw.focus();
+  await adminPage.keyboard.press("Space");
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await adminPage.keyboard.press("Enter");
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+});
+
+test("tooltip shows on focus, describes its control and hides on Escape", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const trigger = adminPage.getByTestId("tooltip-trigger");
+  await expect(trigger).toHaveAttribute("aria-describedby", "tip-info");
+  const tip = adminPage.locator("#tip-info");
+  await expect(tip).toHaveAttribute("role", "tooltip");
+  await trigger.focus();
+  await expect(tip).toBeVisible();
+  await adminPage.keyboard.press("Escape");
+  await expect(tip).toBeHidden();
+});
+
+test("toast with Undo runs the action and the region is polite", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const region = adminPage.locator('section[aria-label="Notifications"] ol');
+  await expect(region).toHaveAttribute("aria-live", "polite");
+  await adminPage.getByTestId("toast-undo").click();
+  await expect(adminPage.getByTestId("toast-result")).toHaveText("Note deleted");
+  const toast = region.locator("li", { hasText: "Team note deleted." });
+  await expect(toast).toBeVisible();
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(adminPage.getByTestId("toast-result")).toHaveText("Note restored by Undo");
+  await expect(toast).toHaveCount(0);
+});
+
+test("timeline scrub: slider keys and moments", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const slider = adminPage.locator('[data-testid="timeline-demo"] [role="slider"]');
+  await expect(slider).toHaveAttribute("aria-valuenow", "1025");
+  await expect(slider).toHaveAttribute("aria-valuetext", "17:05, moment: Pick-off");
+  await slider.focus();
+  await adminPage.keyboard.press("l");
+  await expect(slider).toHaveAttribute("aria-valuenow", "1450");
+  await adminPage.keyboard.press("Shift+ArrowLeft");
+  await expect(slider).toHaveAttribute("aria-valuenow", "1440");
+  await adminPage.keyboard.press("j");
+  await expect(slider).toHaveAttribute("aria-valuenow", "1020");
+  await adminPage.keyboard.press("Home");
+  await expect(slider).toHaveAttribute("aria-valuenow", "0");
+});
+
+test("champion avatars use the app's image endpoint only", async ({ adminPage }) => {
+  const external: string[] = [];
+  adminPage.on("request", (r) => {
+    const u = new URL(r.url());
+    if (!["127.0.0.1", "localhost"].includes(u.hostname)) external.push(r.url());
+  });
+  await openGallery(adminPage);
+  const img = adminPage.locator('[data-gallery="avatar"] img').first();
+  await expect(img).toHaveAttribute("src", /^\/img\/champion\/.+\/icon/);
+  await expect(adminPage.locator('[data-gallery="markers"] [data-role="Jungle"]').first()).toContainText("JGL");
+  expect(external, external.join("\n")).toEqual([]);
 });

@@ -248,7 +248,7 @@ fn clear_timer(timers: StoredValue<Vec<(u64, i32)>>, id: u64) {
 ///
 /// A11y: see [`ToastProvider`].
 #[component]
-fn ToastItem(
+pub(crate) fn ToastItem(
     entry: ToastEntry,
     dismiss: Callback<u64>,
     pause: Callback<u64>,

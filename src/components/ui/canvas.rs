@@ -305,8 +305,10 @@ pub fn CanvasFrame(
     let ticks_top = top
         .into_iter()
         .map(|(pos, label, _)| {
+            // The last label sits left of its tick so it never leaves the frame.
+            let shift = if pos > 99.9 { "-translate-x-full items-end" } else { "-translate-x-1/2 items-center" };
             view! {
-                <span class="absolute bottom-0 flex -translate-x-1/2 flex-col items-center gap-0.5" style=format!("left: {pos:.3}%;")>
+                <span class=format!("absolute bottom-0 flex flex-col gap-0.5 {shift}") style=format!("left: {pos:.3}%;")>
                     <span class="figures text-caption leading-none text-muted">{label}</span>
                     {(!is_ref).then(|| view! { <span class="h-1.5 w-px bg-muted"></span> })}
                 </span>
@@ -348,16 +350,19 @@ pub fn CanvasFrame(
             </svg>
         }
     });
+    // Ticks hang off the canvas box itself, so they always line up with it.
     view! {
-        <figure class="grid grid-cols-[2.25rem_minmax(0,1fr)] grid-rows-[1.5rem_auto_auto]" data-canvas-frame="true">
-            <span aria-hidden="true"></span>
-            <div class="relative" aria-hidden="true">{ticks_top}{ref_ticks_top}</div>
-            <div class="relative mr-1" aria-hidden="true">{ticks_left}{ref_ticks_left}</div>
-            <div class=area>
-                {texture_view}
-                <div class="relative size-full">{children()}</div>
+        <figure class="flex min-w-0 flex-col pl-10 pt-6" data-canvas-frame="true">
+            <div class="relative">
+                <div class="absolute inset-x-0 bottom-full h-6" aria-hidden="true">{ticks_top}{ref_ticks_top}</div>
+                <div class="absolute inset-y-0 right-full w-10 pr-1" aria-hidden="true">
+                    <div class="relative size-full">{ticks_left}{ref_ticks_left}</div>
+                </div>
+                <div class=area>
+                    {texture_view}
+                    <div class="relative size-full">{children()}</div>
+                </div>
             </div>
-            <span aria-hidden="true"></span>
             <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 pt-2">
                 <figcaption class="text-caption text-muted">{caption}</figcaption>
                 {scale.map(|s| s.run())}
@@ -449,7 +454,7 @@ pub fn Annotation(
             <svg class=format!("pointer-events-none h-10 w-14 overflow-visible {}", placement.leader()) viewBox="0 0 56 40" aria-hidden="true">
                 <polyline points="0,40 40,0 56,0" class="fill-none stroke-secondary" stroke-width="1.5" />
             </svg>
-            <div class=format!("w-max max-w-56 border border-rule bg-ink-2 px-2.5 py-1.5 {}", placement.note())>
+            <div class=format!("w-max max-w-[min(14rem,40vw)] border border-rule bg-ink-2 px-2.5 py-1.5 {}", placement.note())>
                 {title.map(|t| view! { <p class="eyebrow mb-0.5">{t}</p> })}
                 {at.map(|a| view! { <span class="sr-only">{format!("At {a}: ")}</span> })}
                 <p class="note text-body leading-snug text-primary">{children()}</p>

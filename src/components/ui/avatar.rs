@@ -140,7 +140,9 @@ pub fn ChampionAvatar(
     Effect::new(move |_| {
         #[cfg(feature = "hydrate")]
         if let Some(img) = img_ref.get() {
-            if img.complete() && img.natural_width() == 0 {
+            // A lazy image that has not started yet is also "complete" with
+            // no size; only a request that ran (currentSrc set) has failed.
+            if img.complete() && img.natural_width() == 0 && !img.current_src().is_empty() {
                 failed.set(true);
             }
         }

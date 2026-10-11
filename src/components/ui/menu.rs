@@ -317,7 +317,7 @@ pub fn Menu(
         .collect_view();
 
     view! {
-        <div class="relative inline-block" data-menu=id>
+        <div class="relative inline-block h-fit" data-menu=id>
             <button
                 id=button_id.clone()
                 type="button"

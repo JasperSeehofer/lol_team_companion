@@ -5,6 +5,8 @@ pub mod auth;
 pub mod champion_pool;
 pub mod closed_beta;
 pub mod design;
+pub mod design_domain;
+pub mod design_interaction;
 pub mod draft;
 pub mod game_plan;
 pub mod home;

@@ -144,8 +144,14 @@ pub fn TimelineScrub(
         .map(|i| {
             let m = i * major;
             let p = pct(m * 60, duration);
+            // Every other label is dropped on phones so they never collide.
+            let shift = match (p > 99.9, i % 2 == 1) {
+                (true, _) => "-translate-x-full",
+                (false, true) => "-translate-x-1/2 max-sm:hidden",
+                (false, false) => "-translate-x-1/2",
+            };
             view! {
-                <span class="absolute top-3 -translate-x-1/2 figures text-caption leading-none text-muted first:translate-x-0" style=format!("left: {p:.3}%;")>
+                <span class=format!("absolute top-3 figures text-caption leading-none text-muted {shift}") style=format!("left: {p:.3}%;")>
                     {format!("{m}:00")}
                 </span>
                 <span class="absolute top-0 h-2.5 w-px bg-secondary" style=format!("left: {p:.3}%;")></span>
@@ -179,7 +185,9 @@ pub fn TimelineScrub(
                             <span class=stem></span>
                             <span class=text>
                                 <b class="figures mr-1 font-medium text-primary">{fmt_clock(m.at)}</b>
-                                {m.label.clone()}
+                                // On phones the flag shows only the time; the
+                                // current moment is named in the readout above.
+                                <span class="max-sm:hidden">{m.label.clone()}</span>
                             </span>
                         </span>
                     }

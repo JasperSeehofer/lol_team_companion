@@ -13,13 +13,20 @@ use crate::components::ui::tokens::{
     contrast_by_name, css_value, TokenGroup, GALLERY_PAIRS, TOKENS,
 };
 use crate::components::ui::{
-    Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, DraftSequence, DraftSlot,
-    Edge, EmptyState, ErrorBanner, Field, FieldSize, Force, HeadingLevel, InputKind, Keycap, Layer,
-    Pad, PageHeader, PageShell, PageWidth, PrepSequence, PrepState, PrepStep, RowLink,
-    SectionHeader, Select, SelectOption, SkeletonCard, SkeletonLine, StatusMessage, Surface,
-    TabItem, TabPanel, Table, Tabs, Td, Text, TextField, TextRole, Th, Tone, Tr,
+    AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, DraftSequence,
+    DraftSlot, Edge, Field, FieldSize, Force, HeadingLevel, InputKind, Keycap, Layer, Pad,
+    PageHeader, PageShell, PageWidth, PrepSequence, PrepState, PrepStep, RowLink, SectionHeader,
+    Select, SelectOption, Surface, TabItem, TabPanel, Table, Tabs, Td, Text, TextField, TextRole,
+    Th, Tone, Tr, UserAvatar,
 };
 use crate::error_template::NotFound;
+use crate::pages::design_domain::{
+    AvatarSection, CanvasSection, LegendSection, MarkersSection, ReadoutSection, TimelineSection,
+};
+use crate::pages::design_interaction::{
+    CalloutSection, CommandSection, DialogSection, EmptySection, KeycapSection, MenuSection,
+    SkeletonSection, ToastSection, TogglesSection, TooltipSection,
+};
 
 /// Whether the caller may see the gallery: always in dev, else admins only.
 #[server]
@@ -44,9 +51,24 @@ const SECTIONS: &[(&str, &str)] = &[
     ("badge", "Badge"),
     ("table", "Table"),
     ("tabs", "Tabs"),
+    ("toggles", "Segmented and switch"),
+    ("keycap", "Keycap"),
+    ("callout", "Callout"),
+    ("toast", "Toast"),
+    ("empty", "Empty state"),
+    ("skeleton", "Skeleton"),
+    ("tooltip", "Tooltip"),
+    ("dialog", "Dialog"),
+    ("menu", "Menu"),
+    ("command", "Command bar"),
+    ("avatar", "Champion avatar"),
+    ("markers", "Role, side, result"),
+    ("readout", "Stat readout"),
     ("draft", "Tournament draft"),
     ("prep", "Prep sequence"),
-    ("feedback", "Feedback (legacy)"),
+    ("legend", "Legend block"),
+    ("canvas", "Canvas frame"),
+    ("timeline", "Timeline scrub"),
 ];
 
 #[component]
@@ -64,7 +86,7 @@ pub fn DesignGalleryPage() -> impl IntoView {
 
 /// One gallery section: anchor, `data-gallery` hook for screenshots, h2.
 #[component]
-fn GallerySection(
+pub(crate) fn GallerySection(
     id: &'static str,
     title: &'static str,
     #[prop(into)] lede: String,
@@ -83,7 +105,7 @@ fn GallerySection(
 
 /// A sample with a state label under it.
 #[component]
-fn Sample(#[prop(into)] label: String, children: Children) -> impl IntoView {
+pub(crate) fn Sample(#[prop(into)] label: String, children: Children) -> impl IntoView {
     view! {
         <div class="flex flex-col items-start gap-2">
             {children()}
@@ -102,7 +124,7 @@ fn Gallery() -> impl IntoView {
                 meta=|| view! {
                     <span>"Direction C \u{201c}Survey\u{201d}"</span>
                     <span class="text-rule" aria-hidden="true">"/"</span>
-                    <span>"Batch 1 primitives and tokens"</span>
+                    <span>"Tokens and primitives, batches 1 to 3"</span>
                     <span class="text-rule" aria-hidden="true">"/"</span>
                     <span>"All content on this page is fixture text"</span>
                 }
@@ -127,9 +149,24 @@ fn Gallery() -> impl IntoView {
             <BadgeSection />
             <TableSection />
             <TabsSection />
+            <TogglesSection />
+            <KeycapSection />
+            <CalloutSection />
+            <ToastSection />
+            <EmptySection />
+            <SkeletonSection />
+            <TooltipSection />
+            <DialogSection />
+            <MenuSection />
+            <CommandSection />
+            <AvatarSection />
+            <MarkersSection />
+            <ReadoutSection />
             <DraftSection />
             <PrepSection />
-            <FeedbackSection />
+            <LegendSection />
+            <CanvasSection />
+            <TimelineSection />
         </PageShell>
     }
 }
@@ -293,7 +330,7 @@ fn SpaceSection() -> impl IntoView {
                     <div class="flex flex-wrap items-end gap-6">
                         <Sample label="0 \u{00b7} structure"><span class="block size-14 border border-outline bg-ink-1"></span></Sample>
                         <Sample label="3px \u{00b7} controls"><span class="block size-14 rounded-ctl border border-outline bg-ink-2"></span></Sample>
-                        <Sample label="round \u{00b7} avatars"><span class="block size-14 rounded-full border border-outline bg-ink-3"></span></Sample>
+                        <Sample label="round \u{00b7} avatars"><UserAvatar name="Round" size=AvatarSize::Xl /></Sample>
                     </div>
                 </div>
                 <div>
@@ -751,28 +788,6 @@ fn PrepSection() -> impl IntoView {
             <div class="max-w-2xl">
                 <p class="eyebrow mb-2">"Prep for 19:00 \u{00b7} scrim vs Beta Dragons"</p>
                 <PrepSequence label="Preparation steps" steps=steps />
-            </div>
-        </GallerySection>
-    }
-}
-
-#[component]
-fn FeedbackSection() -> impl IntoView {
-    view! {
-        <GallerySection id="feedback" title="Feedback (legacy)" lede="ErrorBanner, StatusMessage, EmptyState and skeletons, restyled onto the tokens until batch 2 replaces them with Callout, Toast, EmptyState and Skeleton.">
-            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <ErrorBanner message="Could not load the opponent dossier. Try again in a moment.".to_string() />
-                <StatusMessage message="Plan saved.".to_string() />
-                <EmptyState
-                    message="No draft plans yet. Plans you save on the draft page appear here, newest first."
-                    cta_label="Open the draft page"
-                    cta_href="#feedback"
-                />
-                <div class="flex flex-col gap-2" aria-label="Loading example">
-                    <SkeletonLine width="w-1/3" />
-                    <SkeletonLine />
-                    <SkeletonCard height="h-16" />
-                </div>
             </div>
         </GallerySection>
     }
