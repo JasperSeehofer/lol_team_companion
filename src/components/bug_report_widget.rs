@@ -154,31 +154,31 @@ pub fn BugReportWidget() -> impl IntoView {
         HIDDEN_PREFIXES.iter().any(|prefix| p.starts_with(prefix))
     };
 
-    let is_authed = move || matches!(user.get(), Some(Ok(Some(_))));
-
-    let widget_visible = move || is_authed() && !on_pathname_excluded();
-
-    // NOTE: deliberately NOT wrapped in <Suspense>. This widget lives in
-    // the global app shell (app.rs), so its hydration runs on every route.
-    // A <Suspense> here paints its fallback before the SSR-serialized
-    // `user` resource resolves on the first hydration pass, while SSR
-    // already emitted the full widget DOM — a racy structural mismatch
-    // that panics tachys hydration and freezes ALL WASM handlers on the
-    // page ("sometimes unresponsive"). The plain <Show> reads the
-    // serialized resource value synchronously and matches SSR. The Leptos
-    // "reading resource outside <Suspense>" console warning is benign
-    // here precisely because the value is serialized from SSR. Do not
-    // re-add <Suspense> around this widget (regression: 837a859).
+    // The signed-in check awaits the resource inside <Suspense> through
+    // `Suspend`, the pattern the nav uses in the same shell. (An earlier
+    // version put a reactive `user.get()` <Show> directly inside
+    // <Suspense>, which raced the first hydration pass and panicked; a
+    // version without <Suspense> hydrated but logged Leptos' "resource read
+    // outside <Suspense>" warning, regression spec BUG-04.) `Suspend`
+    // resolves from the value serialized by the server, so both passes
+    // render the same tree.
     view! {
-        <Show when=widget_visible fallback=|| ()>
-            <BugReportWidgetInner
-                widget_state=widget_state
-                report_kind=report_kind
-                report_text=report_text
-                element_label=element_label
-                submit_error=submit_error
-            />
-        </Show>
+        <Suspense fallback=|| ()>
+            {move || Suspend::new(async move {
+                let authed = matches!(user.await, Ok(Some(_)));
+                view! {
+                    <Show when=move || authed && !on_pathname_excluded() fallback=|| ()>
+                        <BugReportWidgetInner
+                            widget_state=widget_state
+                            report_kind=report_kind
+                            report_text=report_text
+                            element_label=element_label
+                            submit_error=submit_error
+                        />
+                    </Show>
+                }
+            })}
+        </Suspense>
     }
 }
 
