@@ -10,6 +10,7 @@ use crate::components::ui::{
 };
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
+use crate::pages::navigate::{navigator, replace_url};
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -469,6 +470,8 @@ pub fn PostGamePage() -> impl IntoView {
         opened.set_value(true);
     });
 
+    // The open review's id goes in the address so a reload or link reopens it.
+    let nav = navigator();
     let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
         let review = ed.build();
         let json = serde_json::to_string(&review).unwrap_or_default();
@@ -482,6 +485,8 @@ pub fn PostGamePage() -> impl IntoView {
             match res {
                 Ok((id, n)) => {
                     if !is_update && !id.is_empty() {
+                        opened.set_value(true);
+                        replace_url(nav, &format!("/post-game?review_id={id}"));
                         ed.id.set(Some(id));
                     }
                     created_items.set((n > 0).then_some(n));
@@ -495,6 +500,8 @@ pub fn PostGamePage() -> impl IntoView {
         });
     });
     let new_review = Callback::new(move |_: leptos::ev::MouseEvent| {
+        opened.set_value(true);
+        replace_url(nav, "/post-game");
         ed.clear();
         created_items.set(None);
     });
@@ -506,6 +513,7 @@ pub fn PostGamePage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match delete_review(id).await {
                 Ok(()) => {
+                    replace_url(nav, "/post-game");
                     ed.clear();
                     created_items.set(None);
                     reviews.refetch();
@@ -573,7 +581,7 @@ pub fn PostGamePage() -> impl IntoView {
                         title=if n == 1 { "1 action item created".to_string() } else { format!("{n} action items created") }
                         action=move || view! { <Button size=ButtonSize::Sm href="/action-items">"Open action items"</Button> }
                     >
-                        "Each line under Action items became an item the team can track."
+                        "New lines under To improve and Action items became items the team can track."
                     </Callout>
                 </div>
             })}
@@ -603,7 +611,14 @@ pub fn PostGamePage() -> impl IntoView {
                                                         variant=ButtonVariant::Quiet
                                                         full_width=true
                                                         pressed=Signal::derive(move || ed.id.get().as_deref() == Some(id.as_str()))
-                                                        on_click=Callback::new(move |_| { created_items.set(None); ed.load(&r2); })
+                                                        on_click=Callback::new(move |_| {
+                                                            created_items.set(None);
+                                                            ed.load(&r2);
+                                                            opened.set_value(true);
+                                                            if let Some(id) = r2.id.as_deref() {
+                                                                replace_url(nav, &format!("/post-game?review_id={id}"));
+                                                            }
+                                                        })
                                                     >
                                                         <span class="flex w-full min-w-0 items-center gap-2 text-left">
                                                             {match result {
@@ -633,7 +648,7 @@ pub fn PostGamePage() -> impl IntoView {
                             <Field id="review-well" label="What went well" hint="One point per line.">
                                 <TextField value=ed.went_well rows=7 placeholder="Dragon control around 14 minutes" />
                             </Field>
-                            <Field id="review-improve" label="To improve" hint="One point per line.">
+                            <Field id="review-improve" label="To improve" hint="One point per line; each new point also becomes an action item.">
                                 <TextField value=ed.improve rows=7 placeholder="Vision before Baron" />
                             </Field>
                             <Field id="review-actions" label="Action items" hint="Each line becomes an action item when you save.">

@@ -26,6 +26,7 @@ use crate::models::opponent::Opponent;
 use crate::models::series::Series;
 use crate::models::team::Team;
 use crate::pages::game_plan::check_draft_has_game_plan;
+use crate::pages::navigate::{go, navigator, replace_url};
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -1086,20 +1087,6 @@ fn opponent_name(value: &str, list: &[Opponent]) -> Option<String> {
     )
 }
 
-/// A client-side navigation function that can be called later (from an
-/// event handler or after an await), captured while the component runs.
-/// Browser only: on the server there is nothing to navigate (and a local
-/// stored value must not cross threads).
-#[derive(Clone, Copy)]
-struct Nav {
-    #[cfg(feature = "hydrate")]
-    f: StoredValue<NavFn, LocalStorage>,
-}
-
-/// The router's navigate function, shareable.
-#[cfg(feature = "hydrate")]
-type NavFn = std::rc::Rc<dyn Fn(&str)>;
-
 /// A scouted player's name: the name, else the Riot ID, else a placeholder.
 fn player_name(p: &crate::models::opponent::OpponentPlayer) -> String {
     if !p.name.trim().is_empty() {
@@ -1109,29 +1096,6 @@ fn player_name(p: &crate::models::opponent::OpponentPlayer) -> String {
         .clone()
         .filter(|n| !n.trim().is_empty())
         .unwrap_or_else(|| "Unnamed player".to_string())
-}
-
-fn navigator() -> Nav {
-    #[cfg(feature = "hydrate")]
-    {
-        let navigate = leptos_router::hooks::use_navigate();
-        let f: std::rc::Rc<dyn Fn(&str)> =
-            std::rc::Rc::new(move |p: &str| navigate(p, Default::default()));
-        Nav {
-            f: StoredValue::new_local(f),
-        }
-    }
-    #[cfg(not(feature = "hydrate"))]
-    Nav {}
-}
-
-fn go(nav: Nav, path: &str) {
-    #[cfg(feature = "hydrate")]
-    {
-        let _ = nav.f.try_with_value(|f| f(path));
-    }
-    #[cfg(not(feature = "hydrate"))]
-    let _ = (nav, path);
 }
 
 /// Shared page plumbing the editor's parts need.
@@ -1347,7 +1311,7 @@ fn DraftEditor(
                     ed.loaded_id.set(Some(id.clone()));
                     toast.push.run(Toast::success("Draft saved"));
                     cx.drafts.refetch();
-                    go(nav, &format!("/draft?draft_id={id}"));
+                    replace_url(nav, &format!("/draft?draft_id={id}"));
                 }
                 Err(e) => {
                     cx.save_state.set(SaveState::Dirty);

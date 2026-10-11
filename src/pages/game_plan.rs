@@ -15,6 +15,7 @@ use crate::components::ui::{
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
+use crate::pages::navigate::{navigator, replace_url};
 use leptos::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -563,14 +564,19 @@ impl PlanEd {
         if !new_plan {
             return;
         }
-        if !d.name.is_empty() {
+        // Suggestions fill only what is still empty.
+        if !d.name.is_empty() && self.name.get_untracked().trim().is_empty() {
             self.name.set(format!("{} plan", d.name));
         }
         if let Some(t) = most_common_tag(&d.tags) {
-            self.tag.set(t);
+            if self.tag.get_untracked().is_empty() {
+                self.tag.set(t);
+            }
         }
         if let Some(wc) = d.win_conditions.clone().filter(|w| !w.is_empty()) {
-            self.win.set(wc);
+            if self.win.get_untracked().trim().is_empty() {
+                self.win.set(wc);
+            }
         }
         for a in d
             .actions
@@ -669,7 +675,11 @@ pub fn GamePlanPage() -> impl IntoView {
             return;
         }
         if let Some(Ok(Some(d))) = prefill.get() {
-            ed.clear();
+            // Start from a clean editor unless this is already a new plan
+            // (then keep what the user typed while the draft loaded).
+            if ed.id.get_untracked().is_some() {
+                ed.clear();
+            }
             ed.apply_draft(&d, true);
             prefilled.set_value(true);
         }
@@ -737,10 +747,16 @@ pub fn GamePlanPage() -> impl IntoView {
             cb.forget();
         }
     });
+    // The open plan's id goes in the address so a reload or link reopens it.
+    let nav = navigator();
     let open_plan = Callback::new(move |p: GamePlan| {
         loaded_snapshot.set_value(Some(p.clone()));
         save_state.set("saved");
         ed.load(&p);
+        opened.set_value(true);
+        if let Some(id) = p.id.as_deref() {
+            replace_url(nav, &format!("/game-plan?plan_id={id}"));
+        }
     });
 
     let name_error = RwSignal::new(None::<String>);
@@ -763,6 +779,8 @@ pub fn GamePlanPage() -> impl IntoView {
             match res {
                 Ok(id) => {
                     if !is_update {
+                        opened.set_value(true);
+                        replace_url(nav, &format!("/game-plan?plan_id={id}"));
                         ed.id.set(Some(id));
                     }
                     loaded_snapshot.set_value(Some(ed.build(false)));
@@ -777,6 +795,8 @@ pub fn GamePlanPage() -> impl IntoView {
         });
     });
     let new_plan = Callback::new(move |_: leptos::ev::MouseEvent| {
+        opened.set_value(true);
+        replace_url(nav, "/game-plan");
         ed.clear();
         loaded_snapshot.set_value(None);
         save_state.set("");
@@ -790,6 +810,7 @@ pub fn GamePlanPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match delete_plan(id).await {
                 Ok(()) => {
+                    replace_url(nav, "/game-plan");
                     ed.clear();
                     loaded_snapshot.set_value(None);
                     save_state.set("");

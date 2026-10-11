@@ -12,6 +12,7 @@ pub mod game_plan;
 pub mod home;
 pub mod legal;
 pub mod match_detail;
+pub mod navigate;
 pub mod opponents;
 pub mod personal_learnings;
 pub mod post_game;
