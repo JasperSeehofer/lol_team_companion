@@ -289,18 +289,24 @@ fn TeamScoreboard(
     user_participant_id: i32,
     team_color: &'static str, // "blue" or "red"
 ) -> impl IntoView {
-    // Use semantic info (lapis blue) for friendly side, danger (oxblood red) for enemy side.
+    // Side colours for the side (blue / red), never status colours.
     let (header_bg, eyebrow_color) = if team_color == "blue" {
-        ("bg-info/15 border-b border-info/30", "text-info")
+        (
+            "bg-side-blue-deep border-b border-side-blue/50",
+            "text-primary",
+        )
     } else {
-        ("bg-danger/15 border-b border-danger/30", "text-danger")
+        (
+            "bg-side-red-deep border-b border-side-red/50",
+            "text-primary",
+        )
     };
 
     let result_text = if team_win { "Victory" } else { "Defeat" };
     let result_color = if team_win {
-        "text-success"
+        "text-win"
     } else {
-        "text-danger"
+        "text-secondary"
     };
     let header_class = format!("{header_bg} px-4 py-3 flex items-center justify-between");
     let eyebrow_class =
@@ -684,7 +690,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                                         .unwrap_or(false);
 
                                     let result_word = if user_win { "Victory" } else { "Defeat" };
-                                    let result_color = if user_win { "text-success" } else { "text-danger" };
+                                    let result_color = if user_win { "text-win" } else { "text-secondary" };
                                     let result_eyebrow_class = format!("font-mono uppercase tracking-[0.18em] text-caption {result_color}");
 
                                     let perf = d_stored.with_value(|d| d.performance.clone());

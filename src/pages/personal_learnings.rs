@@ -233,7 +233,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                 <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
                     <div class="flex flex-col gap-2">
                         <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                            "The journal"
+                            "History"
                         </span>
                         <h1 class="font-display text-primary text-3xl">"Personal learnings"</h1>
                         <p class="text-muted text-sm">"Your private post-game reflections."</p>
@@ -343,7 +343,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                             // No learnings at all
                                             return view! {
                                                 <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
-                                                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Empty journal"</span>
+                                                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Personal learnings"</span>
                                                     <h2 class="font-display text-primary text-2xl mt-2">"No learnings yet"</h2>
                                                     <p class="text-muted text-sm mt-3 mb-6 max-w-md mx-auto">
                                                         "Write your first reflection after a game. Start from a match or create one here."

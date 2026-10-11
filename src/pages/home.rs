@@ -146,7 +146,7 @@ pub fn HomePage() -> impl IntoView {
 
     // D-14: Unauthenticated visitors are redirected to /closed-beta.
     // Authenticated users with no team are redirected to /team/roster.
-    // Authenticated team members see the Strategy Room dashboard.
+    // Authenticated team members see the overview dashboard.
     Effect::new(move || {
         if let Some(Ok(data)) = dashboard.get() {
             if !data.logged_in {
@@ -234,10 +234,10 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
 
     view! {
         <div class="max-w-5xl mx-auto py-6 flex flex-col gap-8">
-            // Strategy Room hero header
+            // Page header
             <header>
                 <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">
-                    "The Strategy Room"
+                    "Overview"
                 </div>
                 <h1 class="font-display text-display leading-tight text-primary mt-1">
                     "Welcome back, " <span class="text-accent">{data.username.clone()}</span>

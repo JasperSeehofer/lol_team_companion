@@ -437,7 +437,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
             <div class="max-w-6xl mx-auto">
                 // Header
                 <header class="mb-8">
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">"The drafting tower"</div>
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">"Team"</div>
                     <h1 class="font-display text-[40px] leading-tight text-primary mt-1">"Team Builder"</h1>
                     <p class="text-muted text-sm mt-2">"Explore team compositions from your champion pools"</p>
                 </header>
@@ -778,7 +778,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                         // Save as Draft section
                         <div class="bg-elevated rounded-xl border border-outline/50 p-6">
-                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Inscribe"</div>
+                            <div class="eyebrow">"Save"</div>
                             <h2 class="font-display text-2xl text-primary mb-4">"Save as Draft"</h2>
                             <div class="flex flex-col md:flex-row gap-4 items-end">
                                 <div class="flex-1">

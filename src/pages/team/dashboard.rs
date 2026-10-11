@@ -1031,9 +1031,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             let date_str = m.game_end.unwrap_or_else(|| "Unknown".into());
                                                             view! {
                                                                 <div class=if win {
-                                                                    "flex items-center gap-3 bg-info/10 border border-info/30 rounded-xl px-4 py-2.5"
+                                                                    "flex items-center gap-3 border border-win/50 rounded-ctl px-4 py-2.5"
                                                                 } else {
-                                                                    "flex items-center gap-3 bg-danger/10 border border-danger/30 rounded-xl px-4 py-2.5"
+                                                                    "flex items-center gap-3 border border-rule rounded-ctl px-4 py-2.5"
                                                                 }>
                                                                     <img src=champ_img alt=m.champion.clone() class="w-8 h-8 rounded-ctl" />
                                                                     <div class="flex-1 min-w-0">
@@ -1044,13 +1044,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                         <span class="text-dimmed text-xs font-mono">{date_str}</span>
                                                                     </div>
                                                                     <span class="text-secondary text-sm font-mono tabular-nums">{kda}</span>
-                                                                    <span class=if win {
-                                                                        "font-mono uppercase tracking-[0.18em] text-caption text-info bg-info/20 rounded-md px-2 py-0.5"
-                                                                    } else {
-                                                                        "font-mono uppercase tracking-[0.18em] text-caption text-danger bg-danger/20 rounded-md px-2 py-0.5"
-                                                                    }>
-                                                                        {if win { "W" } else { "L" }}
-                                                                    </span>
+                                                                    <crate::components::ui::ResultGlyph result=crate::components::ui::GameResult::from_win(win) />
                                                                 </div>
                                                             }
                                                         }).collect_view()}

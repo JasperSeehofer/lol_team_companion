@@ -120,7 +120,7 @@ pub fn RosterPage() -> impl IntoView {
             <div class="max-w-3xl mx-auto">
                 <header class="mb-6">
                     <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">
-                        "Founding the banner"
+                        "Team"
                     </div>
                     <h1 class="font-display text-[40px] leading-tight text-primary mt-1">
                         "Team Roster"
@@ -160,7 +160,7 @@ pub fn RosterPage() -> impl IntoView {
 
                 // Create Team — Card.plain
                 <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Found"</div>
+                    <div class="eyebrow">"New team"</div>
                     <h2 class="font-display text-2xl text-primary mb-4">"Create a New Team"</h2>
                     <ActionForm action=create_team_action>
                         <div class="flex flex-col gap-4">
@@ -203,7 +203,7 @@ pub fn RosterPage() -> impl IntoView {
 
                 // Join Existing Team — Card.plain
                 <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Enlist"</div>
+                    <div class="eyebrow">"Join"</div>
                     <h2 class="font-display text-2xl text-primary mb-1">"Join an Existing Team"</h2>
                     <p class="text-muted text-sm mb-4">"Search for a team by name and request to join."</p>
 

@@ -343,7 +343,7 @@ pub fn StatsPage() -> impl IntoView {
                         </span>
                         <BattleLogHeadline stats=stats />
                         <p class="font-display text-secondary text-base mt-1 max-w-[640px]">
-                            "Each match is a chapter. Click a row to read the recap; the day's lesson sits in the right margin."
+                            "Your recent games. Select a row to see its recap on the right."
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -527,7 +527,7 @@ pub fn StatsPage() -> impl IntoView {
     }
 }
 
-/// Imperial display headline: "A week of {wins} victories and {losses} defeats."
+/// Display headline: "A week of {wins} wins and {losses} losses."
 #[component]
 fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) -> impl IntoView {
     view! {
@@ -549,9 +549,9 @@ fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) 
                 view! {
                     <h1 class="font-display text-primary text-[40px] sm:text-[56px] leading-tight">
                         "A week of "
-                        <span class="text-success">{format!("{wins} victories")}</span>
+                        <span class="text-win">{format!("{wins} wins")}</span>
                         " and "
-                        <span class="text-danger">{format!("{losses} defeats")}</span>
+                        <span class="text-secondary">{format!("{losses} losses")}</span>
                         "."
                     </h1>
                 }.into_any()
@@ -795,9 +795,9 @@ fn StatsContent(
                                         } else {
                                             "grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-4 items-center py-4 px-3 -mx-3 border-b border-divider/30 last:border-b-0 hover:bg-overlay/30 cursor-pointer transition-all duration-200 text-left focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                         };
-                                        let bar_class = if win { "bg-success self-stretch rounded-sm" } else { "bg-danger self-stretch rounded-sm" };
+                                        let bar_class = if win { "bg-win self-stretch" } else { "border border-loss self-stretch" };
                                         let result_word = if win { "Victory" } else { "Defeat" };
-                                        let result_color = if win { "text-success" } else { "text-danger" };
+                                        let result_color = if win { "text-win" } else { "text-secondary" };
                                         let chevron = if is_active { "\u{25BC}" } else { "\u{25B6}" };
                                         let _ = idx;
 
@@ -922,7 +922,7 @@ fn StatsContent(
                             Some(m) => {
                                 let win = m.win;
                                 let result_word = if win { "Victory" } else { "Defeat" };
-                                let result_color = if win { "text-success" } else { "text-danger" };
+                                let result_color = if win { "text-win" } else { "text-secondary" };
                                 let primary = m.players.first().cloned();
                                 let players_for_detail = m.players.clone();
                                 let q_label = queue_label(m.queue_id);
@@ -982,7 +982,7 @@ fn StatsContent(
                                                     <FolioStatTone
                                                         label="Result".to_string()
                                                         value={if win { "Won".to_string() } else { "Lost".to_string() }}
-                                                        tone={if win { "text-success" } else { "text-danger" }}
+                                                        tone={if win { "text-win" } else { "text-secondary" }}
                                                     />
                                                 </div>
                                             }
@@ -1029,7 +1029,7 @@ fn StatsContent(
                                                         {players_for_detail.into_iter().map(|p| {
                                                             let icon_url = champion_icon_url(&p.champion);
                                                             let kda_str = format!("{}/{}/{}", p.kills, p.deaths, p.assists);
-                                                            let p_result_cls = if p.win { "text-success" } else { "text-danger" };
+                                                            let p_result_cls = if p.win { "text-win" } else { "text-secondary" };
                                                             let p_result = if p.win { "Won" } else { "Lost" };
                                                             view! {
                                                                 <tr class="border-b border-divider/20 last:border-0">

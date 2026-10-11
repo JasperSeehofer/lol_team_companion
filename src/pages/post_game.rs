@@ -904,7 +904,7 @@ pub fn PostGamePage() -> impl IntoView {
                     </div>
 
                     // Structured feedback
-                    <div class="grid grid-cols-3 gap-4" data-feedback-label="Post game → Patterns">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3" data-feedback-label="Post game → Patterns">
                         // What went well
                         <div class="border-t border-rule pt-4 flex flex-col gap-2">
                             <label class="eyebrow">"What went well"</label>

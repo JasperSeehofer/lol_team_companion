@@ -43,7 +43,7 @@ rule pulse 'animate-pulse' '^src/components/ui/skeleton\.rs$' \
 rule ornament 'Cinzel|font-imperial|font-glitch|VT323|canvas-grain|FleurDeLis|GiltCorner|HeraldicDivider|RiotTape|CompanionSigil|[Pp]andemonium' '' \
   'retired ornament or theme'
 # Typographic marks (stars, check, cross) are allowed; pictographs are not.
-rule emoji '[\x{1F300}-\x{1FAFF}\x{2B50}\x{2B55}\x{FE0F}]|(?![\x{2605}\x{2606}\x{2713}\x{2715}\x{2717}])[\x{2600}-\x{27BF}]|\\u\{(?!(?:2605|2606|2713|2715|2717)\})(1F[0-9A-Fa-f]{3}|2[67][0-9A-Fa-f]{2}|FE0F)\}' '' \
+rule emoji '[\x{1F300}-\x{1FAFF}\x{2B50}\x{2B55}\x{FE0F}]|(?![\x{2605}\x{2606}\x{2713}\x{2715}\x{2717}])[\x{2600}-\x{27BF}]|\\u\{(?!(?:2605|2606|2713|2715|2717)\})(1[Ff][0-9A-Fa-f]{3}|2[67][0-9A-Fa-f]{2}|[Ff][Ee]0[Ff])\}' '' \
   'emoji in UI strings; use words or an SVG'
 rule region 'region\s*==|(?<![_\w])region=|InitialTheme|data-theme' '' \
   'theme branching is gone; there is one theme'

@@ -883,7 +883,6 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             return view! {
                                 <div class="flex-1 flex items-center justify-center">
                                     <div class="text-center">
-                                        <div class="text-dimmed text-6xl mb-4" aria-hidden="true">"\u{1f333}"</div>
                                         <p class="text-muted text-lg">"Select or create a tree to start planning"</p>
                                     </div>
                                 </div>

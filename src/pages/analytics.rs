@@ -56,23 +56,11 @@ enum SortDir {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-/// Map strategy tags to semantic-token color pairs (bg+border classes, text class).
-///
-/// All raw color literals (red/blue/violet/orange/emerald/cyan/amber) were
-/// retired in plan 17-04 in favour of theme-aware semantic tokens. The mapping
-/// preserves the editorial intent (warm/cool/neutral) while allowing the
-/// tokens to recolor without code changes.
-fn tag_colors(tag: &str) -> (&'static str, &'static str) {
-    match tag {
-        "teamfight" => ("bg-danger/10 border border-danger/30", "text-danger"),
-        "split-push" => ("bg-info/10 border border-info/30", "text-info"),
-        "poke" => ("bg-accent/10 border border-accent/30", "text-accent"),
-        "engage" => ("bg-warning/10 border border-warning/30", "text-warning"),
-        "protect-the-adc" => ("bg-success/10 border border-success/30", "text-success"),
-        "scaling" => ("bg-info/10 border border-info/30", "text-info"),
-        "skirmish" => ("bg-warning/10 border border-warning/30", "text-warning"),
-        _ => ("bg-elevated border border-divider", "text-muted"),
-    }
+/// Classes for a strategy tag (bg+border classes, text class). Tags are
+/// categories, so they share one neutral style; status and side colours
+/// mean something else (docs/DESIGN.md section 4).
+fn tag_colors(_tag: &str) -> (&'static str, &'static str) {
+    ("bg-ink-2 border border-outline/60", "text-secondary")
 }
 
 fn stars_display(rating: Option<u8>) -> String {
@@ -131,10 +119,10 @@ pub fn AnalyticsPage() -> impl IntoView {
     view! {
         <div class="bg-base min-h-screen">
             <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-                // Imperial header
+                // Page header
                 <div class="flex flex-col gap-2 mb-6">
                     <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                        "The ledger"
+                        "History"
                     </span>
                     <h1 class="font-display text-primary text-3xl">"Analytics"</h1>
                     <p class="text-muted text-sm">"Track strategy effectiveness and plan outcomes."</p>
@@ -371,9 +359,9 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                             </span>
                                                                         </td>
                                                                         <td class="px-4 py-4 text-center font-mono text-sm tabular-nums">
-                                                                            <span class="text-success">{wins}</span>
+                                                                            <span class="text-win">{wins}</span>
                                                                             <span class="text-muted mx-1">"-"</span>
-                                                                            <span class="text-danger">{losses}</span>
+                                                                            <span class="text-secondary">{losses}</span>
                                                                         </td>
                                                                         <td class="px-4 py-4 text-center text-sm text-accent">
                                                                             {rating_to_stars(avg_rating)}
@@ -397,8 +385,8 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                                                 <div>
                                                                                                     {reviews_inner.into_iter().map(|review| {
                                                                                                         let outcome_class = match review.win_loss.as_deref() {
-                                                                                                            Some("win") => "text-success",
-                                                                                                            Some("loss") => "text-danger",
+                                                                                                            Some("win") => "text-win",
+                                                                                                            Some("loss") => "text-secondary",
                                                                                                             _ => "text-muted",
                                                                                                         };
                                                                                                         let outcome_label = match review.win_loss.as_deref() {
