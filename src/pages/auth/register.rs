@@ -155,8 +155,8 @@ pub fn RegisterPage() -> impl IntoView {
 
     view! {
         <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
-            <p class="overline">"Closed beta \u{00b7} invitation"</p>
-            <h1 class="mt-3 font-display text-page font-semibold tracking-[-0.02em] text-primary">
+            <p class="eyebrow">"Closed beta \u{00b7} invitation"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">
                 "Create your account"
             </h1>
             <p class="mt-2 text-body text-secondary">
@@ -176,7 +176,7 @@ pub fn RegisterPage() -> impl IntoView {
                     <Field id="register-email" label="Email">
                         <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
                     </Field>
-                    <Field id="register-password" label="Password" hint="At least 10 characters.">
+                    <Field id="register-password" label="Password" hint="Use 10 or more characters.">
                         <TextField kind=InputKind::Password name="password" required=true minlength=10 autocomplete="new-password" />
                     </Field>
 

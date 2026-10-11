@@ -28,8 +28,8 @@ pub fn SectionHead(
     }
 }
 
-/// Legacy eyebrow label: the `overline` text role.
+/// Legacy eyebrow label: the `eyebrow` text role.
 #[component]
 pub fn Eyebrow(children: Children, #[prop(optional, into)] class: String) -> impl IntoView {
-    view! { <p class=format!("overline {class}")>{children()}</p> }
+    view! { <p class=format!("eyebrow {class}")>{children()}</p> }
 }

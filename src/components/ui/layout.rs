@@ -94,8 +94,8 @@ pub fn PageHeader(
     view! {
         <header class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pb-4 mb-6 border-b border-rule">
             <div class="min-w-0">
-                {eyebrow.map(|e| view! { <p class="overline">{e}</p> })}
-                <h1 class="mt-2 font-display text-page font-semibold tracking-[-0.02em] text-primary text-balance">
+                {eyebrow.map(|e| view! { <p class="eyebrow">{e}</p> })}
+                <h1 class="mt-2 font-display text-headline font-semibold tracking-[-0.02em] text-primary text-balance">
                     {title}
                 </h1>
                 {meta.map(|m| view! {
@@ -144,7 +144,7 @@ pub fn SectionHeader(
     view! {
         <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 mb-4">
             <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 min-w-0">
-                {eyebrow.map(|e| view! { <p class="overline w-full">{e}</p> })}
+                {eyebrow.map(|e| view! { <p class="eyebrow w-full">{e}</p> })}
                 {heading}
                 {meta.map(|m| view! { <p class="text-label text-muted">{m}</p> })}
             </div>

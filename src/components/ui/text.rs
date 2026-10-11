@@ -37,14 +37,14 @@ impl TextRole {
     pub fn class(self) -> &'static str {
         match self {
             TextRole::Display => "font-display text-display font-semibold tracking-[-0.025em]",
-            TextRole::Page => "font-display text-page font-semibold tracking-[-0.02em]",
+            TextRole::Page => "font-display text-headline font-semibold tracking-[-0.02em]",
             TextRole::Title => "font-display text-title font-semibold tracking-[-0.01em]",
             TextRole::Heading => "font-display text-heading font-semibold",
             TextRole::Reading => "text-reading",
             TextRole::Body => "text-body",
             TextRole::Label => "text-label font-medium",
             TextRole::Caption => "text-caption",
-            TextRole::Overline => "overline",
+            TextRole::Overline => "eyebrow",
             TextRole::Figure => "figures text-body",
             TextRole::FigureLarge => "figures text-title font-semibold tracking-[-0.02em]",
             TextRole::Note => "note text-reading",

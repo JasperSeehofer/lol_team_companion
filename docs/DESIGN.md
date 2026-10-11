@@ -154,10 +154,10 @@ Self-hosted woff2 in `public/fonts/` (latin and latin-ext files per style, split
 | `text-reading` | 16 / 1.6 | Briefs, reviews, long notes (measure 60 to 75 ch) |
 | `text-heading` | 20 / 1.3 | Sub-section and panel titles (display face) |
 | `text-title` | 24 / 1.2 | Section titles, `<h2>` (display face) |
-| `text-page` | 32 / 1.1 | Page titles, `<h1>` (display face) |
+| `text-headline` | 32 / 1.1 | Page titles, `<h1>` (display face) |
 | `text-display` | 44 / 1.05 | One per page at most (landing, closed beta) |
 
-Role utilities: `overline` (mono 12px, 500, +0.08em tracking, caps, muted), `figures` (mono, tabular), `note` (serif italic). The `Text` primitive maps roles to these. Tailwind's own `text-xs` and up still exist (all at or above 12px); arbitrary `text-[Npx]` below 12px fails the lint.
+Role utilities: `eyebrow` (the overline role: mono 12px, 500, +0.08em tracking, caps, muted), `figures` (mono, tabular), `note` (serif italic). The `Text` primitive maps roles to these. Tailwind's own `text-xs` and up still exist (all at or above 12px); arbitrary `text-[Npx]` below 12px fails the lint.
 
 **Figures:** `body` sets `font-variant-numeric: tabular-nums`, so every number lines up (all three sans and serif faces have `tnum`; the mono is monospaced). Use `figures` for numbers that are the point (scores, fit, clock, gold).
 

@@ -93,8 +93,8 @@ pub fn LoginPage() -> impl IntoView {
 
     view! {
         <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
-            <p class="overline">"Closed beta"</p>
-            <h1 class="mt-3 font-display text-page font-semibold tracking-[-0.02em] text-primary">
+            <p class="eyebrow">"Closed beta"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">
                 "Sign in"
             </h1>
             <p class="mt-2 text-body text-secondary">

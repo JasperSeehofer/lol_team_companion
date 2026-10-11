@@ -263,8 +263,21 @@ pub fn Select(
     let force = force.map(Force::as_str);
     let class = join(&[CONTROL, size.class(), "appearance-none pr-9 cursor-pointer"]);
 
-    view! {
-        <div class="relative">
+    let option_views = options
+        .into_iter()
+        .map(|o| {
+            let selected = value.map(|v| v.get_untracked() == o.value).unwrap_or(false);
+            view! {
+                <option value=o.value selected=selected disabled=o.disabled>{o.label}</option>
+            }
+        })
+        .collect_view();
+    let aria_invalid = move || invalid.and_then(|i| i.get().then_some("true"));
+    let aria_described = move || described_by.and_then(|d| d.get());
+    // Only a bound select follows a signal; an unbound one keeps the
+    // browser's default (the first option) instead of an empty value.
+    let select = match value {
+        Some(v) => view! {
             <select
                 id=id
                 name=name
@@ -272,26 +285,36 @@ pub fn Select(
                 required=required
                 disabled=move || disabled.get()
                 aria-label=aria_label
-                aria-invalid=move || invalid.and_then(|i| i.get().then_some("true"))
-                aria-describedby=move || described_by.and_then(|d| d.get())
+                aria-invalid=aria_invalid
+                aria-describedby=aria_described
                 data-force=force
-                prop:value=move || value.map(|v| v.get()).unwrap_or_default()
-                on:change=move |ev| {
-                    if let Some(v) = value {
-                        v.set(event_target_value(&ev));
-                    }
-                }
+                prop:value=move || v.get()
+                on:change=move |ev| v.set(event_target_value(&ev))
             >
-                {options
-                    .into_iter()
-                    .map(|o| {
-                        let selected = value.map(|v| v.get_untracked() == o.value).unwrap_or(false);
-                        view! {
-                            <option value=o.value selected=selected disabled=o.disabled>{o.label}</option>
-                        }
-                    })
-                    .collect_view()}
+                {option_views}
             </select>
+        }
+        .into_any(),
+        None => view! {
+            <select
+                id=id
+                name=name
+                class=class
+                required=required
+                disabled=move || disabled.get()
+                aria-label=aria_label
+                aria-invalid=aria_invalid
+                aria-describedby=aria_described
+                data-force=force
+            >
+                {option_views}
+            </select>
+        }
+        .into_any(),
+    };
+    view! {
+        <div class="relative">
+            {select}
             <svg
                 class="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-muted"
                 viewBox="0 0 16 16"

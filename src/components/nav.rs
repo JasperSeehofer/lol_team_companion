@@ -351,7 +351,7 @@ pub fn Nav() -> impl IntoView {
                                             class="absolute right-0 mt-2 w-80 overflow-hidden rounded-ctl border border-rule bg-ink-2 shadow-overlay z-(--z-popover)"
                                             style:display=move || if notif_open.get() { "block" } else { "none" }
                                         >
-                                            <p class="border-b border-rule px-4 py-3 overline">"Join requests"</p>
+                                            <p class="border-b border-rule px-4 py-3 eyebrow">"Join requests"</p>
                                             <div class="max-h-64 overflow-y-auto">
                                                 {reqs.into_iter().map(|req| {
                                                     let req_id_accept = req.id.clone();

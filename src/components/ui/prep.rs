@@ -100,7 +100,7 @@ pub fn PrepSequence(#[prop(into)] label: String, steps: Vec<PrepStep>) -> impl I
                     };
                     let status_class = match s.state {
                         PrepState::Done => "figures text-label text-success",
-                        PrepState::Next => "overline text-accent",
+                        PrepState::Next => "figures text-label font-semibold text-accent",
                         PrepState::Todo => "figures text-label text-muted",
                         PrepState::Attention => "figures text-label text-warning",
                     };

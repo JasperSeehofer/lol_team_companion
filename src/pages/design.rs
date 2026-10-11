@@ -152,7 +152,7 @@ fn TokensSection() -> impl IntoView {
                     .into_iter()
                     .map(|g| view! {
                         <div>
-                            <p class="overline mb-3">{g.label()}</p>
+                            <p class="eyebrow mb-3">{g.label()}</p>
                             <ul class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
                                 {TOKENS
                                     .iter()
@@ -275,7 +275,7 @@ fn SpaceSection() -> impl IntoView {
         <GallerySection id="space" title="Space, radius, motion" lede="A 4px spacing scale; radius 0 for structure, 3px for controls, round only for avatars and toggles; motion between 100 and 300ms, ease-out, nothing loops.">
             <div class="grid gap-8 lg:grid-cols-3">
                 <div>
-                    <p class="overline mb-3">"Spacing"</p>
+                    <p class="eyebrow mb-3">"Spacing"</p>
                     <ul class="flex flex-col gap-2">
                         {steps
                             .into_iter()
@@ -289,7 +289,7 @@ fn SpaceSection() -> impl IntoView {
                     </ul>
                 </div>
                 <div>
-                    <p class="overline mb-3">"Radius"</p>
+                    <p class="eyebrow mb-3">"Radius"</p>
                     <div class="flex flex-wrap items-end gap-6">
                         <Sample label="0 \u{00b7} structure"><span class="block size-14 border border-outline bg-ink-1"></span></Sample>
                         <Sample label="3px \u{00b7} controls"><span class="block size-14 rounded-ctl border border-outline bg-ink-2"></span></Sample>
@@ -297,7 +297,7 @@ fn SpaceSection() -> impl IntoView {
                     </div>
                 </div>
                 <div>
-                    <p class="overline mb-3">"Motion"</p>
+                    <p class="eyebrow mb-3">"Motion"</p>
                     <Table caption="Motion tokens" caption_hidden=true>
                         <tbody>
                             <Tr><Td header=true>"--dur-1"</Td><Td numeric=true>"100ms"</Td><Td muted=true>"press, colour"</Td></Tr>
@@ -333,7 +333,7 @@ fn LayoutSection() -> impl IntoView {
         <GallerySection id="layout" title="Layout" lede="PageShell and PageHeader frame this page (its title is the page's h1). SectionHeader gives every section a real heading. Surface draws nothing unless asked: layers by tone, edges by meaning.">
             <div class="flex flex-col gap-8">
                 <div>
-                    <p class="overline mb-3">"SectionHeader"</p>
+                    <p class="eyebrow mb-3">"SectionHeader"</p>
                     <Surface layer=Layer::Ink1 pad=Pad::Lg>
                         <SectionHeader
                             title="Opponent dossier"
@@ -348,7 +348,7 @@ fn LayoutSection() -> impl IntoView {
                     </Surface>
                 </div>
                 <div>
-                    <p class="overline mb-3">"Surface layers"</p>
+                    <p class="eyebrow mb-3">"Surface layers"</p>
                     <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                         {layers
                             .into_iter()
@@ -361,7 +361,7 @@ fn LayoutSection() -> impl IntoView {
                     </div>
                 </div>
                 <div>
-                    <p class="overline mb-3">"Surface edges"</p>
+                    <p class="eyebrow mb-3">"Surface edges"</p>
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-5">
                         {edges
                             .into_iter()
@@ -427,15 +427,15 @@ fn ButtonSection() -> impl IntoView {
     view! {
         <GallerySection id="button" title="Button" lede="Four variants, three sizes. Primary is the one next thing to do per view. Hover, focus and pressed are forced here; loading disables and sets aria-busy.">
             <div class="flex flex-col gap-8">
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto p-1">
                     <div class="grid min-w-[44rem] grid-cols-[7rem_repeat(6,minmax(0,1fr))] items-center gap-x-4 gap-y-5">
                         <span></span>
-                        <span class="overline">"Default"</span>
-                        <span class="overline">"Hover"</span>
-                        <span class="overline">"Focus"</span>
-                        <span class="overline">"Pressed"</span>
-                        <span class="overline">"Disabled"</span>
-                        <span class="overline">"Loading"</span>
+                        <span class="eyebrow">"Default"</span>
+                        <span class="eyebrow">"Hover"</span>
+                        <span class="eyebrow">"Focus"</span>
+                        <span class="eyebrow">"Pressed"</span>
+                        <span class="eyebrow">"Disabled"</span>
+                        <span class="eyebrow">"Loading"</span>
                         {variants
                             .into_iter()
                             .map(|(v, name)| view! {
@@ -691,7 +691,7 @@ fn DraftSection() -> impl IntoView {
             <div class="flex flex-col gap-10">
                 <DraftSequence champions=champions roles=roles current=19 />
                 <div>
-                    <p class="overline mb-3">"DraftSlot states"</p>
+                    <p class="eyebrow mb-3">"DraftSlot states"</p>
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <Sample label="Empty (not reached)">
                             <DraftSlot step=TOURNAMENT_ORDER[19] state=SlotState::Empty role=Some("Support".to_string()) />
@@ -708,7 +708,7 @@ fn DraftSection() -> impl IntoView {
                     </div>
                 </div>
                 <div>
-                    <p class="overline mb-3">"Interactive (M3 makes slots buttons on the draft page)"</p>
+                    <p class="eyebrow mb-3">"Interactive (M3 makes slots buttons on the draft page)"</p>
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <DraftSlot step=TOURNAMENT_ORDER[0] state=SlotState::Locked champion=Some("Yasuo".to_string()) on_select=Some(on_select) />
                         <DraftSlot step=TOURNAMENT_ORDER[7] state=SlotState::Locked champion=Some("Lee Sin".to_string()) role=Some("Jungle".to_string()) on_select=Some(on_select) />
@@ -749,7 +749,7 @@ fn PrepSection() -> impl IntoView {
     view! {
         <GallerySection id="prep" title="Prep sequence" lede="The Match Day pattern: what to do next, in order. Done steps recede, the next step is emphasised and links to where it is done, steps that need attention say why.">
             <div class="max-w-2xl">
-                <p class="overline mb-2">"Prep for 19:00 \u{00b7} scrim vs Beta Dragons"</p>
+                <p class="eyebrow mb-2">"Prep for 19:00 \u{00b7} scrim vs Beta Dragons"</p>
                 <PrepSequence label="Preparation steps" steps=steps />
             </div>
         </GallerySection>

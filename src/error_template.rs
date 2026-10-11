@@ -15,8 +15,8 @@ pub fn NotFound() -> impl IntoView {
 
     view! {
         <PageShell width=PageWidth::Reading class="pt-16">
-            <p class="overline">"Error 404"</p>
-            <h1 class="mt-3 font-display text-page font-semibold tracking-[-0.02em] text-primary">"Page not found"</h1>
+            <p class="eyebrow">"Error 404"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">"Page not found"</h1>
             <p class="mt-4 max-w-prose text-reading text-secondary">
                 "The page you are looking for does not exist or has moved. Check the address, or head back to the start."
             </p>
@@ -55,8 +55,8 @@ pub fn ErrorTemplate(
 
     view! {
         <PageShell width=PageWidth::Reading class="pt-16">
-            <p class="overline">"Error"</p>
-            <h1 class="mt-3 font-display text-page font-semibold text-primary">"Something went wrong"</h1>
+            <p class="eyebrow">"Error"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold text-primary">"Something went wrong"</h1>
             <ul class="mt-6 border-y border-rule py-4 text-body">
                 {error_list}
             </ul>

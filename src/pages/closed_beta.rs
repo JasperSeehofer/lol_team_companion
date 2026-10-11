@@ -46,8 +46,8 @@ pub fn ClosedBetaPage() -> impl IntoView {
     ];
     view! {
         <PageShell width=PageWidth::Standard class="pt-12 sm:pt-24">
-            <p class="overline">"Closed beta \u{00b7} by invitation"</p>
-            <h1 class="mt-4 max-w-3xl font-display text-page sm:text-display font-semibold tracking-[-0.025em] text-primary">
+            <p class="eyebrow">"Closed beta \u{00b7} by invitation"</p>
+            <h1 class="mt-4 max-w-3xl font-display text-headline sm:text-display font-semibold tracking-[-0.025em] text-primary">
                 "The coaching workspace for one team."
             </h1>
             <p class="mt-5 max-w-2xl text-reading text-secondary">
