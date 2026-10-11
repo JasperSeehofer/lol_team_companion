@@ -37,7 +37,7 @@ pub fn DatenschutzPage() -> impl IntoView {
                     </div>
                     <ul class="text-secondary text-sm mt-3 space-y-2 list-disc list-inside">
                         <li>"Logfiles \u{2014} server access logs, retention 14 days"</li>
-                        <li>"Registration \u{2014} username, email, hashed password, theme preference"</li>
+                        <li>"Registration \u{2014} username, email, hashed password"</li>
                         <li>"Hosting \u{2014} provider details and DPA"</li>
                         <li>"Betroffenenrechte \u{2014} Auskunft, Berichtigung, L\u{00f6}schung, Widerspruch"</li>
                     </ul>
