@@ -1,15 +1,29 @@
-//! Seed binary: populates the app with realistic test data.
+//! Seed tool: fills a database with demo data for local development.
 //!
-//! Run with: cargo run --features ssr --bin seed
-//! Requires: RIOT_API_KEY in .env (optional — falls back to static data)
-//! IMPORTANT: Stop the dev server first (SurrealKV exclusive lock)
+//!     cargo run --features ssr --bin seed            # seed ./data (or SURREAL_DATA_DIR)
+//!     cargo run --features ssr --bin seed -- --dry-run
+//!     cargo run --features ssr --bin seed -- --link-riot   # try to link Riot IDs (fictional names)
+//!
+//! Stop the server first: SurrealKV allows one process per data directory.
+//!
+//! Idempotent: every run first removes what an earlier run created (the
+//! accounts whose email starts with `seed-` and ends with `@example.com`,
+//! the teams they created and everything those teams own, and invites with
+//! the note `seed`), then creates it again. Nothing else is touched.
+//!
+//! What it creates: two teams of five players each (a leader plus four
+//! members, all assigned to starting roles), each with two drafts, two game
+//! plans linked to them, three post-game reviews (whose improvements become
+//! action items), a team note, champion pools and notes, and a scouting
+//! profile of the other team. Plus one invite code (25 uses, 30 days).
+//! Names are ordinary player handles; champion picks are real champions.
 
 use std::{env, time::Duration};
 use surrealdb::{engine::local::Db, Surreal};
 
 use lol_team_companion::{
     models::{
-        champion::{ChampionNote, ChampionPoolEntry},
+        champion::ChampionNote,
         draft::DraftAction,
         game_plan::{GamePlan, PostGameLearning},
     },
@@ -20,47 +34,130 @@ use lol_team_companion::{
     },
 };
 
-// ---------------------------------------------------------------------------
-// Static champion data per role
-// ---------------------------------------------------------------------------
+const PASSWORD: &str = "seedpass123";
+const ROLES: [&str; 5] = ["top", "jungle", "mid", "bot", "support"];
 
-const TOP_CHAMPS: &[&str] = &["Darius", "Camille", "Garen", "Fiora", "Aatrox"];
-const JG_CHAMPS: &[&str] = &["Hecarim", "Vi", "Amumu", "Khazix", "Gragas"];
-const MID_CHAMPS: &[&str] = &["Azir", "Syndra", "Lux", "Zed", "Orianna"];
-const BOT_CHAMPS: &[&str] = &["Jinx", "Caitlyn", "Jhin", "Aphelios", "Tristana"];
-const SUP_CHAMPS: &[&str] = &["Thresh", "Leona", "Nautilus", "Lulu", "Soraka"];
+/// A seeded player: email local part, username, Riot ID game name.
+struct Player {
+    login: &'static str,
+    username: &'static str,
+    riot_name: &'static str,
+}
 
-const TIERS: &[&str] = &["S", "A", "B"];
+struct TeamSpec {
+    name: &'static str,
+    region: &'static str,
+    players: [Player; 5],
+    /// Champion pool per role, in ROLES order.
+    pools: [&'static [&'static str]; 5],
+}
 
-// Ban phases in draft order: ban1 is 6 bans each side (3+3), pick phases follow
-const DRAFT_ACTIONS: &[(&str, &str, &str, i32)] = &[
-    // Phase 1 bans (3 blue, 3 red)
+const TEAMS: [TeamSpec; 2] = [
+    TeamSpec {
+        name: "Northgate Academy",
+        region: "EUW",
+        players: [
+            Player {
+                login: "seed-alpha-top",
+                username: "Linnea Voss",
+                riot_name: "LinVoss",
+            },
+            Player {
+                login: "seed-alpha-jg",
+                username: "Tomas Kral",
+                riot_name: "TKral",
+            },
+            Player {
+                login: "seed-alpha-mid",
+                username: "Yusuf Demir",
+                riot_name: "Ydemir",
+            },
+            Player {
+                login: "seed-alpha-bot",
+                username: "Ines Moreau",
+                riot_name: "InesM",
+            },
+            Player {
+                login: "seed-alpha-sup",
+                username: "Oskar Lind",
+                riot_name: "OLind",
+            },
+        ],
+        pools: [
+            &["Darius", "Camille", "Garen", "Fiora", "Aatrox"],
+            &["Hecarim", "Vi", "Amumu", "Khazix", "Gragas"],
+            &["Azir", "Syndra", "Lux", "Zed", "Orianna"],
+            &["Jinx", "Caitlyn", "Jhin", "Aphelios", "Tristana"],
+            &["Thresh", "Leona", "Nautilus", "Lulu", "Soraka"],
+        ],
+    },
+    TeamSpec {
+        name: "Riverside Rooks",
+        region: "EUW",
+        players: [
+            Player {
+                login: "seed-beta-top",
+                username: "Mara Ilic",
+                riot_name: "MaraI",
+            },
+            Player {
+                login: "seed-beta-jg",
+                username: "Jonas Berg",
+                riot_name: "JBerg",
+            },
+            Player {
+                login: "seed-beta-mid",
+                username: "Sofia Reyes",
+                riot_name: "SReyes",
+            },
+            Player {
+                login: "seed-beta-bot",
+                username: "Daniel Okafor",
+                riot_name: "DOkafor",
+            },
+            Player {
+                login: "seed-beta-sup",
+                username: "Hanna Wiik",
+                riot_name: "HWiik",
+            },
+        ],
+        pools: [
+            &["Renekton", "Gnar", "Jax", "Ornn", "KSante"],
+            &["LeeSin", "Sejuani", "Viego", "Maokai", "Elise"],
+            &["Ahri", "Viktor", "Sylas", "Taliyah", "Akali"],
+            &["Ezreal", "Kaisa", "Varus", "Xayah", "Ashe"],
+            &["Rakan", "Alistar", "Braum", "Nami", "Rell"],
+        ],
+    },
+];
+
+/// (phase, side, champion, order) for a full 20-step draft.
+type Step = (&'static str, &'static str, &'static str, i32);
+
+const DRAFT_1: &[Step] = &[
     ("ban1", "blue", "Zed", 1),
     ("ban1", "red", "Fiora", 2),
     ("ban1", "blue", "Khazix", 3),
     ("ban1", "red", "Lux", 4),
     ("ban1", "blue", "Tristana", 5),
     ("ban1", "red", "Lulu", 6),
-    // Phase 1 picks (blue 1, red 2, blue 2, red 2, blue 1)
     ("pick1", "blue", "Darius", 7),
-    ("pick1", "red", "Camille", 8),
-    ("pick1", "red", "Syndra", 9),
+    ("pick1", "red", "Gnar", 8),
+    ("pick1", "red", "Viktor", 9),
     ("pick1", "blue", "Azir", 10),
     ("pick1", "blue", "Jinx", 11),
-    ("pick1", "red", "Caitlyn", 12),
-    ("pick1", "red", "Leona", 13),
-    ("pick1", "blue", "Thresh", 14),
-    ("pick1", "blue", "Hecarim", 15),
-    ("pick1", "red", "Vi", 16),
-    // Phase 2 bans (2 red, 2 blue)
-    ("ban2", "red", "Orianna", 17),
-    ("ban2", "blue", "Amumu", 18),
-    ("ban2", "red", "Jhin", 19),
-    ("ban2", "blue", "Gragas", 20),
+    ("pick1", "red", "Ezreal", 12),
+    ("ban2", "red", "Orianna", 13),
+    ("ban2", "blue", "Sejuani", 14),
+    ("ban2", "red", "Jhin", 15),
+    ("ban2", "blue", "Rakan", 16),
+    ("pick2", "red", "Braum", 17),
+    ("pick2", "blue", "Thresh", 18),
+    ("pick2", "blue", "Hecarim", 19),
+    ("pick2", "red", "LeeSin", 20),
 ];
 
-// Second draft variant
-const DRAFT2_ACTIONS: &[(&str, &str, &str, i32)] = &[
+const DRAFT_2: &[Step] = &[
     ("ban1", "blue", "Aatrox", 1),
     ("ban1", "red", "Hecarim", 2),
     ("ban1", "blue", "Aphelios", 3),
@@ -68,107 +165,119 @@ const DRAFT2_ACTIONS: &[(&str, &str, &str, i32)] = &[
     ("ban1", "blue", "Soraka", 5),
     ("ban1", "red", "Thresh", 6),
     ("pick1", "blue", "Camille", 7),
-    ("pick1", "red", "Darius", 8),
-    ("pick1", "red", "Azir", 9),
+    ("pick1", "red", "Renekton", 8),
+    ("pick1", "red", "Ahri", 9),
     ("pick1", "blue", "Orianna", 10),
     ("pick1", "blue", "Caitlyn", 11),
-    ("pick1", "red", "Jhin", 12),
-    ("pick1", "red", "Nautilus", 13),
-    ("pick1", "blue", "Lulu", 14),
-    ("pick1", "blue", "Vi", 15),
-    ("pick1", "red", "Gragas", 16),
-    ("ban2", "red", "Zed", 17),
-    ("ban2", "blue", "Syndra", 18),
-    ("ban2", "red", "Fiora", 19),
-    ("ban2", "blue", "Tristana", 20),
+    ("pick1", "red", "Kaisa", 12),
+    ("ban2", "red", "Zed", 13),
+    ("ban2", "blue", "Viego", 14),
+    ("ban2", "red", "Leona", 15),
+    ("ban2", "blue", "Nami", 16),
+    ("pick2", "red", "Alistar", 17),
+    ("pick2", "blue", "Lulu", 18),
+    ("pick2", "blue", "Vi", 19),
+    ("pick2", "red", "Elise", 20),
 ];
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-
-    // Initialize tracing so DB startup messages are visible
-    use tracing_subscriber::EnvFilter;
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("warn".parse().unwrap()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "warn,lol_team_companion=info".parse().unwrap()),
+        )
         .init();
 
     let dry_run = env::args().any(|a| a == "--dry-run");
     let link_riot = env::args().any(|a| a == "--link-riot");
-    let riot = RiotClient::from_env();
     let data_dir = env::var("SURREAL_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
 
-    println!("Seed: initializing database from {data_dir}...");
-    let db = db::init_db(&data_dir)
-        .await
-        .expect("DB init failed — is the dev server still running? Stop it first.");
-
     if dry_run {
-        println!("[DRY RUN] Would clean up seed data and create 2 teams with 5 users each.");
+        println!("[dry run] Would open {data_dir}, remove earlier seed data and create:");
+        for t in &TEAMS {
+            let logins: Vec<String> = t
+                .players
+                .iter()
+                .map(|p| format!("{}@example.com", p.login))
+                .collect();
+            println!(
+                "  team {} ({}) with {}",
+                t.name,
+                t.region,
+                logins.join(", ")
+            );
+        }
+        println!(
+            "  per team: 2 drafts, 2 game plans, 3 reviews with action items, a team note, \
+             a scouting profile of the other team"
+        );
+        println!("  1 invite code (25 uses, 30 days)");
         return;
     }
 
-    // Phase 1: Clean up existing seed data
-    cleanup_seed_data(&db).await;
+    println!("Seed: opening {data_dir} ...");
+    let db = match db::init_db(&data_dir).await {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("Could not open the database at {data_dir}: {e}");
+            eprintln!(
+                "If the server (cargo leptos watch) is running, stop it and wait for it to exit: \
+                 SurrealKV allows one process per data directory."
+            );
+            std::process::exit(1);
+        }
+    };
 
-    // Phase 2: Create Team A (5 users)
-    let team_a_id = create_seed_team(
-        &db,
-        &riot,
-        link_riot,
-        "Alpha Wolves",
-        &[
-            ("seed-alpha-top", "SeedTop1", "EUW"),
-            ("seed-alpha-jg", "SeedJungle1", "EUW"),
-            ("seed-alpha-mid", "SeedMid1", "EUW"),
-            ("seed-alpha-bot", "SeedBot1", "EUW"),
-            ("seed-alpha-sup", "SeedSup1", "EUW"),
-        ],
-    )
-    .await;
+    if let Err(e) = cleanup(&db).await {
+        eprintln!("Cleanup of earlier seed data failed: {e}");
+        std::process::exit(1);
+    }
 
-    // Phase 3: Create Team B (5 users)
-    let team_b_id = create_seed_team(
-        &db,
-        &riot,
-        link_riot,
-        "Beta Dragons",
-        &[
-            ("seed-beta-top", "SeedTop2", "EUW"),
-            ("seed-beta-jg", "SeedJungle2", "EUW"),
-            ("seed-beta-mid", "SeedMid2", "EUW"),
-            ("seed-beta-bot", "SeedBot2", "EUW"),
-            ("seed-beta-sup", "SeedSup2", "EUW"),
-        ],
-    )
-    .await;
+    let riot = RiotClient::from_env();
+    let password_hash = hash_password(PASSWORD).expect("hash_password failed");
 
-    // Phase 4: Populate data for each team
-    populate_team_data(&db, &team_a_id, "Alpha Wolves").await;
-    populate_team_data(&db, &team_b_id, "Beta Dragons").await;
+    let mut teams = Vec::new();
+    for spec in &TEAMS {
+        match create_team(&db, spec, &password_hash, &riot, link_riot).await {
+            Ok(seeded) => teams.push(seeded),
+            Err(e) => {
+                eprintln!("Seeding {} failed: {e}", spec.name);
+                std::process::exit(1);
+            }
+        }
+    }
 
-    // Phase 5: Create opponent scouting profiles
-    create_opponent_profiles(&db, &team_a_id).await;
+    for (i, team) in teams.iter().enumerate() {
+        if let Err(e) = populate(&db, team, &TEAMS[i], &TEAMS[1 - i]).await {
+            eprintln!("Populating {} failed: {e}", team.name);
+            std::process::exit(1);
+        }
+    }
 
-    // Phase 6: One open invite code so new accounts can register locally.
     let invite_code = db::generate_invite_code();
-    let invite_expiry = chrono::Utc::now() + chrono::Duration::days(30);
     let invite = db::create_invite(
         &db,
         None,
         invite_code.clone(),
         25,
-        Some(invite_expiry),
+        Some(chrono::Utc::now() + chrono::Duration::days(30)),
         Some("seed".to_string()),
     )
     .await;
 
-    println!("\nSeed complete! Created 2 teams with full demo data.");
-    println!("Login with any seed account: seed-alpha-top@example.com / seedpass123");
+    println!("\nSeed complete. Logins (password for all: {PASSWORD}):");
+    for (spec, team) in TEAMS.iter().zip(&teams) {
+        println!("  {}:", team.name);
+        for (i, p) in spec.players.iter().enumerate() {
+            let lead = if i == 0 { ", team leader" } else { "" };
+            println!(
+                "    {}@example.com  ({}, {}{lead})",
+                p.login, p.username, ROLES[i]
+            );
+        }
+    }
     match invite {
         Ok(_) => println!(
             "Invite code (25 uses, 30 days): {invite_code}\n  Register at /auth/register?invite={invite_code}"
@@ -181,471 +290,149 @@ async fn main() {
 // Cleanup
 // ---------------------------------------------------------------------------
 
-async fn cleanup_seed_data(db: &Surreal<Db>) {
-    println!("Cleaning up existing seed data...");
-    let queries = [
-        "DELETE post_game_learning WHERE created_by IN (SELECT VALUE id FROM user WHERE string::starts_with(email, 'seed-'))",
-        "DELETE game_plan WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta'))",
-        "DELETE draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta')))",
-        "DELETE draft WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta'))",
-        "DELETE champion_note WHERE user IN (SELECT VALUE id FROM user WHERE string::starts_with(email, 'seed-'))",
-        "DELETE champion_pool WHERE user IN (SELECT VALUE id FROM user WHERE string::starts_with(email, 'seed-'))",
-        "DELETE team_member WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta'))",
-        "DELETE opponent_player WHERE opponent IN (SELECT VALUE id FROM opponent WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta')))",
-        "DELETE opponent WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta'))",
-        "DELETE team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta')",
-        "DELETE user WHERE string::starts_with(email, 'seed-')",
-        "DELETE invite WHERE note = 'seed'",
-    ];
-    for q in queries {
-        if let Err(e) = db.query(q).await {
-            eprintln!("  Warning during cleanup: {e}");
-        }
-    }
-    println!("  Cleanup done.");
+/// Remove everything an earlier run created, in one transaction: seed
+/// accounts, the teams they created and every record those teams or
+/// accounts own, and seed invites.
+async fn cleanup(db: &Surreal<Db>) -> Result<(), String> {
+    let q = "BEGIN TRANSACTION; \
+        LET $users = (SELECT VALUE id FROM user WHERE string::starts_with(email, 'seed-') AND string::ends_with(email, '@example.com')); \
+        LET $teams = (SELECT VALUE id FROM team WHERE created_by IN $users); \
+        LET $drafts = (SELECT VALUE id FROM draft WHERE team IN $teams); \
+        LET $trees = (SELECT VALUE id FROM draft_tree WHERE team IN $teams); \
+        LET $nodes = (SELECT VALUE id FROM draft_tree_node WHERE tree IN $trees); \
+        LET $opponents = (SELECT VALUE id FROM opponent WHERE team IN $teams); \
+        LET $replays = (SELECT VALUE id FROM replay WHERE team IN $teams); \
+        LET $boards = (SELECT VALUE id FROM board WHERE team IN $teams); \
+        DELETE draft_action WHERE draft IN $drafts; \
+        DELETE draft WHERE id IN $drafts; \
+        DELETE tree_node_action WHERE node IN $nodes; \
+        DELETE draft_tree_node WHERE id IN $nodes; \
+        DELETE draft_tree WHERE id IN $trees; \
+        DELETE opponent_player WHERE opponent IN $opponents; \
+        DELETE opponent WHERE id IN $opponents; \
+        DELETE replay_frame WHERE replay IN $replays; \
+        DELETE replay_event WHERE replay IN $replays; \
+        DELETE replay WHERE id IN $replays; \
+        DELETE board_version WHERE board IN $boards; \
+        DELETE board WHERE id IN $boards; \
+        DELETE game_plan WHERE team IN $teams; \
+        DELETE post_game_learning WHERE team IN $teams; \
+        DELETE action_item WHERE team IN $teams; \
+        DELETE team_note WHERE team IN $teams; \
+        DELETE series WHERE team IN $teams; \
+        DELETE ban_priority WHERE team IN $teams; \
+        DELETE checklist_template WHERE team IN $teams; \
+        DELETE checklist_instance WHERE team IN $teams; \
+        UPDATE match SET team_id = NONE WHERE team_id IN $teams; \
+        DELETE join_request WHERE team IN $teams OR user IN $users; \
+        DELETE team_member WHERE team IN $teams OR user IN $users; \
+        DELETE team WHERE id IN $teams; \
+        DELETE champion_pool WHERE user IN $users; \
+        DELETE champion_note WHERE user IN $users; \
+        DELETE personal_learning WHERE user IN $users; \
+        DELETE personal_goal WHERE user IN $users; \
+        DELETE ranked_snapshot WHERE user IN $users; \
+        DELETE player_match WHERE user IN $users; \
+        DELETE bug_report WHERE user IN $users; \
+        DELETE user WHERE id IN $users; \
+        DELETE invite WHERE note = 'seed'; \
+        COMMIT TRANSACTION;";
+    let response = db.query(q).await.map_err(|e| e.to_string())?;
+    db::check_tx(response).map_err(|e| e.to_string())?;
+    println!("Removed earlier seed data (if any).");
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Team + User creation
+// Teams and players
 // ---------------------------------------------------------------------------
 
-/// Creates a team with the given users. The first user becomes the team owner.
-/// Returns the team ID.
-async fn create_seed_team(
+struct SeededTeam {
+    name: &'static str,
+    id: String,
+    /// User IDs in ROLES order; the first is the leader.
+    members: Vec<String>,
+}
+
+async fn create_user(db: &Surreal<Db>, p: &Player, password_hash: &str) -> Result<String, String> {
+    let email = format!("{}@example.com", p.login);
+    match db::create_user(db, p.username.into(), email.clone(), password_hash.into()).await {
+        Ok(id) => Ok(id),
+        // A real account may already use this name; keep the seed going.
+        Err(db::DbError::Invalid(msg)) if msg.contains("username is taken") => {
+            let fallback = format!("{} (demo)", p.username);
+            db::create_user(db, fallback, email, password_hash.into())
+                .await
+                .map_err(|e| e.to_string())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+async fn create_team(
     db: &Surreal<Db>,
+    spec: &TeamSpec,
+    password_hash: &str,
     riot: &RiotClient,
     link_riot: bool,
-    team_name: &str,
-    users: &[(&str, &str, &str)], // (username, riot_name, tag)
-) -> String {
-    let password_hash = hash_password("seedpass123").expect("hash_password failed");
-
-    // Create all users first
-    let mut user_ids: Vec<String> = Vec::new();
-    for (username, riot_name, _tag) in users {
-        let email = format!("{username}@example.com");
-        match db::create_user(
-            db,
-            username.to_string(),
-            email.clone(),
-            password_hash.clone(),
-        )
-        .await
-        {
-            Ok(id) => {
-                println!("  Created user {email} → {id}");
-                // Seed accounts are fictional: they are not linked to Riot
-                // accounts (pass --link-riot to try anyway).
-                if link_riot && riot.is_configured() {
-                    tokio::time::sleep(Duration::from_millis(150)).await;
-                    match riot
-                        .get_puuid(riot_name, "EUW", riot::platform_for(&[Some("EUW")]))
-                        .await
-                    {
-                        Ok(puuid) => {
-                            if let Err(e) =
-                                db::update_user_riot(db, id.clone(), puuid, riot_name.to_string())
-                                    .await
-                            {
-                                eprintln!(
-                                    "    Warning: could not link Riot account for {email}: {e}"
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("    Warning: Riot API error for {riot_name}#EUW: {e}");
-                        }
+) -> Result<SeededTeam, String> {
+    let mut members = Vec::new();
+    for p in &spec.players {
+        let id = create_user(db, p, password_hash).await?;
+        db::set_user_region(db, &id, spec.region)
+            .await
+            .map_err(|e| e.to_string())?;
+        // Seed players are fictional; only link Riot IDs when asked to.
+        if link_riot && riot.is_configured() {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let platform = riot::platform_for(&[Some(spec.region)]);
+            match riot.get_puuid(p.riot_name, spec.region, platform).await {
+                Ok(puuid) => {
+                    let riot_id = format!("{}#{}", p.riot_name, spec.region);
+                    if let Err(e) = db::update_user_riot(db, id.clone(), puuid, riot_id).await {
+                        eprintln!("  Warning: could not link {}: {e}", p.riot_name);
                     }
                 }
-                user_ids.push(id);
-            }
-            Err(e) => {
-                eprintln!("  Error creating user {email}: {e}");
+                Err(e) => eprintln!("  Warning: Riot lookup for {} failed: {e}", p.riot_name),
             }
         }
+        members.push(id);
     }
 
-    if user_ids.is_empty() {
-        panic!("Failed to create any users for team {team_name}");
-    }
-
-    // First user creates the team (becomes owner + member)
-    let owner_id = &user_ids[0];
-    let team_id =
-        match db::create_team(db, owner_id, team_name.to_string(), "EUW".to_string()).await {
-            Ok(id) => {
-                println!("  Created team {team_name} → {id}");
-                id
-            }
-            Err(e) => {
-                panic!("Failed to create team {team_name}: {e}");
-            }
-        };
-
-    // Add remaining users as team members
-    for user_id in user_ids.iter().skip(1) {
-        if let Err(e) = db::join_team(db, user_id, &team_id).await {
-            eprintln!("  Warning: could not add user {user_id} to team {team_id}: {e}");
-        }
-    }
-
-    team_id
-}
-
-// ---------------------------------------------------------------------------
-// Data population
-// ---------------------------------------------------------------------------
-
-/// Gets the user IDs for all members of a team.
-async fn get_team_member_ids(db: &Surreal<Db>, team_id: &str) -> Vec<String> {
-    use serde::Deserialize;
-    use surrealdb::types::{RecordId, SurrealValue, ToSql};
-
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct MemberRow {
-        user: RecordId,
-    }
-
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let mut r = db
-        .query("SELECT user FROM team_member WHERE team = type::record('team', $team_key)")
-        .bind(("team_key", team_key))
+    let team_id = db::create_team(db, &members[0], spec.name.into(), spec.region.into())
         .await
-        .unwrap_or_else(|e| panic!("get_team_member_ids query failed: {e}"));
-
-    let rows: Vec<MemberRow> = r.take(0).unwrap_or_default();
-    rows.into_iter().map(|r| r.user.to_sql()).collect()
+        .map_err(|e| e.to_string())?;
+    for user_id in members.iter().skip(1) {
+        db::join_team(db, user_id, &team_id)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    for (user_id, role) in members.iter().zip(ROLES) {
+        db::assign_to_slot(db, &team_id, user_id, role)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    db::set_user_mode(db, &members[0], "team")
+        .await
+        .map_err(|e| e.to_string())?;
+    println!("Created team {} with {} players.", spec.name, members.len());
+    Ok(SeededTeam {
+        name: spec.name,
+        id: team_id,
+        members,
+    })
 }
 
-async fn populate_team_data(db: &Surreal<Db>, team_id: &str, team_name: &str) {
-    println!("  Populating data for team {team_name}...");
+// ---------------------------------------------------------------------------
+// Team data
+// ---------------------------------------------------------------------------
 
-    let member_ids = get_team_member_ids(db, team_id).await;
-    if member_ids.is_empty() {
-        eprintln!("  Warning: no members found for team {team_name}, skipping data population");
-        return;
-    }
-
-    let role_champs: &[&[&str]] = &[TOP_CHAMPS, JG_CHAMPS, MID_CHAMPS, BOT_CHAMPS, SUP_CHAMPS];
-    let roles = ["top", "jungle", "mid", "bot", "support"];
-
-    // --- Champion pool entries ---
-    for (i, user_id) in member_ids.iter().enumerate() {
-        let champs = role_champs[i % role_champs.len()];
-        let role = roles[i % roles.len()];
-        for (j, champ) in champs.iter().enumerate() {
-            let tier = TIERS[j % TIERS.len()].to_string();
-            let entry = ChampionPoolEntry {
-                id: None,
-                user_id: user_id.clone(),
-                champion: champ.to_string(),
-                role: role.to_string(),
-                tier,
-                notes: Some("Strong in current meta".to_string()),
-                comfort_level: Some((5 - (j % 5)) as u8),
-                meta_tag: Some("strong".to_string()),
-            };
-            if let Err(e) = save_champion_pool_entry(db, &entry).await {
-                eprintln!("    Warning: champion pool entry for {champ}: {e}");
-            }
-        }
-
-        // --- Champion notes ---
-        let champ0 = champs[0];
-        let champ1 = if champs.len() > 1 {
-            champs[1]
-        } else {
-            champs[0]
-        };
-        let notes = [
-            ChampionNote {
-                id: None,
-                user_id: user_id.clone(),
-                champion: champ0.to_string(),
-                role: role.to_string(),
-                note_type: "power_spike".to_string(),
-                title: "Level 6 spike".to_string(),
-                content: format!("{champ0} becomes very strong at level 6. Look for all-in after hitting 6."),
-                difficulty: Some(3),
-                created_at: None,
-            },
-            ChampionNote {
-                id: None,
-                user_id: user_id.clone(),
-                champion: champ1.to_string(),
-                role: role.to_string(),
-                note_type: "matchup".to_string(),
-                title: "Weak vs poke".to_string(),
-                content: format!("{champ1} struggles against long-range poke. Play safe early and wait for jungler."),
-                difficulty: Some(4),
-                created_at: None,
-            },
-        ];
-        for note in notes {
-            if let Err(e) = db::add_champion_note(db, user_id, note).await {
-                eprintln!("    Warning: champion note: {e}");
-            }
-        }
-    }
-
-    // --- Drafts (2-3 per team) ---
-    let owner_id = member_ids.first().cloned().unwrap_or_default();
-
-    let draft1_id = save_draft_from_actions(
-        db,
-        team_id,
-        &owner_id,
-        &format!("{team_name} vs Beta — Game 1"),
-        DRAFT_ACTIONS,
-    )
-    .await;
-
-    let draft2_id = save_draft_from_actions(
-        db,
-        team_id,
-        &owner_id,
-        &format!("{team_name} vs Alpha — Game 2"),
-        DRAFT2_ACTIONS,
-    )
-    .await;
-
-    // --- Game plans (linked to drafts) ---
-
-    let plan1_id = if let Some(ref d_id) = draft1_id {
-        let plan = GamePlan {
-            id: None,
-            team_id: team_id.to_string(),
-            draft_id: Some(d_id.clone()),
-            name: format!("{team_name} vs Beta — Teamfight Plan"),
-            our_champions: vec![
-                "Darius".to_string(),
-                "Hecarim".to_string(),
-                "Azir".to_string(),
-                "Jinx".to_string(),
-                "Thresh".to_string(),
-            ],
-            enemy_champions: vec![
-                "Camille".to_string(),
-                "Vi".to_string(),
-                "Syndra".to_string(),
-                "Caitlyn".to_string(),
-                "Leona".to_string(),
-            ],
-            win_conditions: vec![
-                "Control teamfights".to_string(),
-                "Peel for Jinx in fights".to_string(),
-            ],
-            objective_priority: vec!["Dragon".to_string(), "Baron".to_string()],
-            teamfight_strategy:
-                "Thresh hook initiates, Hecarim follow-up engage, Darius pulls stragglers"
-                    .to_string(),
-            early_game: Some(
-                "Level 1 invade potential with Hecarim. Control early river vision.".to_string(),
-            ),
-            top_strategy: Some(
-                "Darius — trade when E is on cooldown. Win lane and join teamfights.".to_string(),
-            ),
-            jungle_strategy: Some(
-                "Hecarim — clear fast, path toward mid to enable Azir.".to_string(),
-            ),
-            mid_strategy: Some(
-                "Azir — farm to 3 items. Do not die. Control vision around mid.".to_string(),
-            ),
-            bot_strategy: Some(
-                "Jinx — stay safe early, farm up to powerspike at 2 items.".to_string(),
-            ),
-            support_strategy: Some(
-                "Thresh — catch priority with hooks. Save lantern for carries.".to_string(),
-            ),
-            notes: Some("Watch out for Syndra burst — CC chain before she can 100-0.".to_string()),
-            win_condition_tag: Some("teamfight".to_string()),
-        };
-        match db::save_game_plan(db, plan, &owner_id).await {
-            Ok(id) => {
-                println!("    Created game plan → {id}");
-                Some(id)
-            }
-            Err(e) => {
-                eprintln!("    Warning: game plan 1: {e}");
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    let plan2_id = if let Some(ref d_id) = draft2_id {
-        let plan = GamePlan {
-            id: None,
-            team_id: team_id.to_string(),
-            draft_id: Some(d_id.clone()),
-            name: format!("{team_name} vs Alpha — Split Push Plan"),
-            our_champions: vec![
-                "Camille".to_string(),
-                "Vi".to_string(),
-                "Orianna".to_string(),
-                "Caitlyn".to_string(),
-                "Lulu".to_string(),
-            ],
-            enemy_champions: vec![
-                "Darius".to_string(),
-                "Hecarim".to_string(),
-                "Azir".to_string(),
-                "Jinx".to_string(),
-                "Thresh".to_string(),
-            ],
-            win_conditions: vec![
-                "Camille split push top".to_string(),
-                "Orianna ball control in teamfights".to_string(),
-            ],
-            objective_priority: vec![
-                "Rift Herald".to_string(),
-                "Towers".to_string(),
-                "Baron".to_string(),
-            ],
-            teamfight_strategy: "Orianna ultimate into Vi W for engage. Lulu shield carries."
-                .to_string(),
-            early_game: Some(
-                "Vi invade red buff. Camille look for level 2 trade with E.".to_string(),
-            ),
-            top_strategy: Some(
-                "Camille — split push, draw pressure, teleport to teamfights.".to_string(),
-            ),
-            jungle_strategy: Some("Vi — pressure mid-jungle corridor. Herald setup.".to_string()),
-            mid_strategy: Some(
-                "Orianna — poke and follow flanks. Hold ball on Vi for engage.".to_string(),
-            ),
-            bot_strategy: Some("Caitlyn — trap placement under tower. Farm safely.".to_string()),
-            support_strategy: Some(
-                "Lulu — keep carries alive, polymorph engage threats.".to_string(),
-            ),
-            notes: Some(
-                "If Darius ults Camille she needs to disengage. Do not 5v5 early.".to_string(),
-            ),
-            win_condition_tag: Some("split-push".to_string()),
-        };
-        match db::save_game_plan(db, plan, &owner_id).await {
-            Ok(id) => {
-                println!("    Created game plan → {id}");
-                Some(id)
-            }
-            Err(e) => {
-                eprintln!("    Warning: game plan 2: {e}");
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    // --- Post-game reviews (linked to game plans) ---
-    if let Some(ref gp_id) = plan1_id {
-        let review = PostGameLearning {
-            id: None,
-            team_id: team_id.to_string(),
-            match_riot_id: None,
-            game_plan_id: Some(gp_id.clone()),
-            draft_id: draft1_id.clone(),
-            what_went_well: vec![
-                "Hecarim engage was clean at Dragon fight".to_string(),
-                "Jinx stayed safe and converted teamfight damage".to_string(),
-            ],
-            improvements: vec![
-                "Need better vision control before Baron spawns".to_string(),
-                "Mid lane lost too much tempo after roaming".to_string(),
-            ],
-            action_items: vec![
-                "Practice Thresh hook timing".to_string(),
-                "Review Baron vision setup".to_string(),
-            ],
-            open_notes: Some(
-                "Overall solid execution. Need to work on late-game decision-making.".to_string(),
-            ),
-            created_by: owner_id.clone(),
-            win_loss: Some("win".to_string()),
-            rating: Some(4),
-        };
-        match db::save_post_game_learning(db, review).await {
-            Ok(id) => println!("    Created post-game review (win) → {id}"),
-            Err(e) => eprintln!("    Warning: post-game review 1: {e}"),
-        }
-    }
-
-    if let Some(ref gp_id) = plan2_id {
-        let review = PostGameLearning {
-            id: None,
-            team_id: team_id.to_string(),
-            match_riot_id: None,
-            game_plan_id: Some(gp_id.clone()),
-            draft_id: draft2_id.clone(),
-            what_went_well: vec![
-                "Camille split push drew consistent pressure".to_string(),
-                "Vi made good engages with Orianna ball".to_string(),
-            ],
-            improvements: vec![
-                "Lulu positioning was too aggressive in lane".to_string(),
-                "Teleport timing on Camille was late for one key fight".to_string(),
-            ],
-            action_items: vec![
-                "Practice Orianna ball placement for Vi W".to_string(),
-                "Review Camille TP decision points".to_string(),
-            ],
-            open_notes: Some(
-                "Good macro execution but micro was shaky. Keep practicing the TP timing."
-                    .to_string(),
-            ),
-            created_by: owner_id.clone(),
-            win_loss: Some("loss".to_string()),
-            rating: Some(3),
-        };
-        match db::save_post_game_learning(db, review).await {
-            Ok(id) => println!("    Created post-game review (loss) → {id}"),
-            Err(e) => eprintln!("    Warning: post-game review 2: {e}"),
-        }
-    }
-
-    // A third post-game review without a game plan (standalone)
-    let review3 = PostGameLearning {
-        id: None,
-        team_id: team_id.to_string(),
-        match_riot_id: None,
-        game_plan_id: None,
-        draft_id: None,
-        what_went_well: vec![
-            "Strong early game coordination".to_string(),
-            "Objective control was excellent".to_string(),
-        ],
-        improvements: vec![
-            "Need to close games faster when ahead".to_string(),
-            "Overstayed in fights when outnumbered".to_string(),
-        ],
-        action_items: vec!["Practice early surrender of bad fights".to_string()],
-        open_notes: Some("Scrim session — solid effort, keep the momentum.".to_string()),
-        created_by: owner_id.clone(),
-        win_loss: Some("win".to_string()),
-        rating: Some(5),
-    };
-    match db::save_post_game_learning(db, review3).await {
-        Ok(id) => println!("    Created post-game review (win, no plan) → {id}"),
-        Err(e) => eprintln!("    Warning: post-game review 3: {e}"),
-    }
-
-    println!("  Team {team_name} population complete.");
-}
-
-/// Save a draft using pre-defined action tuples.
-async fn save_draft_from_actions(
-    db: &Surreal<Db>,
-    team_id: &str,
-    user_id: &str,
-    name: &str,
-    action_tuples: &[(&str, &str, &str, i32)],
-) -> Option<String> {
-    let actions: Vec<DraftAction> = action_tuples
+fn actions(steps: &[Step]) -> Vec<DraftAction> {
+    steps
         .iter()
         .map(|(phase, side, champion, order)| DraftAction {
             id: None,
-            draft_id: String::new(), // will be set by DB
+            draft_id: String::new(),
             phase: phase.to_string(),
             side: side.to_string(),
             champion: champion.to_string(),
@@ -653,102 +440,246 @@ async fn save_draft_from_actions(
             comment: None,
             role: None,
         })
-        .collect();
+        .collect()
+}
 
-    match db::save_draft(
-        db,
-        team_id,
-        user_id,
-        name.to_string(),
-        None,
-        None,
-        vec![],
-        actions,
-        None,
-        "blue".to_string(),
-        vec!["teamfight".to_string()],
-        Some("Control teamfights and peel for carries".to_string()),
-        None,
-        None,
-        None,
-    )
-    .await
-    {
-        Ok(id) => {
-            println!("    Created draft '{name}' → {id}");
-            Some(id)
+fn picks(steps: &[Step], side: &str) -> Vec<String> {
+    steps
+        .iter()
+        .filter(|(phase, s, _, _)| phase.starts_with("pick") && *s == side)
+        .map(|(_, _, c, _)| c.to_string())
+        .collect()
+}
+
+/// (review linked to (plan, draft), result, rating, went well, improvements)
+type ReviewSpec = (
+    Option<(String, String)>,
+    &'static str,
+    u8,
+    Vec<String>,
+    Vec<String>,
+);
+
+async fn populate(
+    db: &Surreal<Db>,
+    team: &SeededTeam,
+    spec: &TeamSpec,
+    rival: &TeamSpec,
+) -> Result<(), String> {
+    let err = |e: db::DbError| e.to_string();
+    let leader = &team.members[0];
+
+    // Champion pools and two notes per player.
+    for (i, user_id) in team.members.iter().enumerate() {
+        let role = ROLES[i];
+        let pool = spec.pools[i];
+        for champ in pool {
+            db::add_to_champion_pool(db, user_id, champ.to_string(), role.to_string())
+                .await
+                .map_err(err)?;
         }
-        Err(e) => {
-            eprintln!("    Warning: draft '{name}': {e}");
-            None
+        for (j, champ) in pool.iter().take(3).enumerate() {
+            let tier = ["S", "A", "B"][j];
+            db::update_champion_tier(db, user_id, champ, role, tier.to_string())
+                .await
+                .map_err(err)?;
+            db::update_champion_comfort(db, user_id, champ, role, Some(5 - j as i64))
+                .await
+                .map_err(err)?;
+        }
+        let notes = [
+            (
+                "power_spike",
+                pool[0],
+                "Level 6 spike",
+                format!("{} wants the first all-in right after level 6.", pool[0]),
+            ),
+            (
+                "matchup",
+                pool[1],
+                "Into poke lanes",
+                format!(
+                    "{} struggles against long-range poke. Play for jungle help early.",
+                    pool[1]
+                ),
+            ),
+        ];
+        for (note_type, champ, title, content) in notes {
+            db::add_champion_note(
+                db,
+                user_id,
+                ChampionNote {
+                    id: None,
+                    user_id: user_id.clone(),
+                    champion: champ.to_string(),
+                    role: role.to_string(),
+                    note_type: note_type.to_string(),
+                    title: title.to_string(),
+                    content,
+                    difficulty: Some(3),
+                    created_at: None,
+                },
+            )
+            .await
+            .map_err(err)?;
         }
     }
-}
 
-// ---------------------------------------------------------------------------
-// Champion pool save helper (inline since db.rs doesn't have save_champion_pool_entry)
-// ---------------------------------------------------------------------------
+    // Two drafts against the rival, each with a linked game plan.
+    let mut plans = Vec::new();
+    for (n, steps) in [(1, DRAFT_1), (2, DRAFT_2)] {
+        let tag = if n == 1 { "teamfight" } else { "split-push" };
+        let draft_id = db::save_draft(
+            db,
+            &team.id,
+            leader,
+            format!("vs {} - Game {n}", rival.name),
+            Some(rival.name.to_string()),
+            Some("Scrim block, best of two.".to_string()),
+            vec![],
+            actions(steps),
+            None,
+            "blue".to_string(),
+            vec![tag.to_string()],
+            Some(if n == 1 {
+                "Group for dragons and fight on our power spikes".to_string()
+            } else {
+                "Side-lane pressure, then collapse on Baron".to_string()
+            }),
+            None,
+            None,
+            None,
+        )
+        .await
+        .map_err(err)?;
 
-async fn save_champion_pool_entry(
-    db: &Surreal<Db>,
-    entry: &ChampionPoolEntry,
-) -> Result<(), String> {
-    let user_key = entry
-        .user_id
-        .strip_prefix("user:")
-        .unwrap_or(&entry.user_id)
-        .to_string();
+        let plan = GamePlan {
+            id: None,
+            team_id: team.id.clone(),
+            draft_id: Some(draft_id.clone()),
+            name: format!("vs {} - Game {n} plan", rival.name),
+            our_champions: picks(steps, "blue"),
+            enemy_champions: picks(steps, "red"),
+            win_conditions: if n == 1 {
+                vec![
+                    "Win the dragon fights at 5 and 11 minutes".into(),
+                    "Keep the carry alive in teamfights".into(),
+                ]
+            } else {
+                vec![
+                    "Top lane pulls two players to the side".into(),
+                    "Trade objectives instead of contesting".into(),
+                ]
+            },
+            objective_priority: vec!["Dragon".into(), "Rift Herald".into(), "Baron".into()],
+            teamfight_strategy: if n == 1 {
+                "Front to back; engage only with the jungler in range".into()
+            } else {
+                "Pick fights in side-lane vision, avoid 5v5 in mid".into()
+            },
+            early_game: Some("Ward the enemy raptors by 1:20; first recall on cannon wave.".into()),
+            top_strategy: Some("Hold the wave near our tower until jungle arrives.".into()),
+            jungle_strategy: Some("Full clear, then path toward bot for the dragon.".into()),
+            mid_strategy: Some("Shove and move to river on enemy jungler sightings.".into()),
+            bot_strategy: Some("Play for level 2 and freeze when ahead.".into()),
+            support_strategy: Some("Roam mid after first back if bot is safe.".into()),
+            notes: Some("Review the first 10 minutes together after the game.".into()),
+            win_condition_tag: Some(tag.into()),
+        };
+        let plan_id = db::save_game_plan(db, plan, leader).await.map_err(err)?;
+        plans.push((plan_id, draft_id));
+    }
 
-    db.query(
-        "CREATE champion_pool SET user = type::record('user', $user_key), champion = $champion, role = $role, tier = $tier, notes = $notes, comfort_level = $comfort_level, meta_tag = $meta_tag",
-    )
-    .bind(("user_key", user_key))
-    .bind(("champion", entry.champion.clone()))
-    .bind(("role", entry.role.clone()))
-    .bind(("tier", entry.tier.clone()))
-    .bind(("notes", entry.notes.clone()))
-    .bind(("comfort_level", entry.comfort_level.map(|v| v as i64)))
-    .bind(("meta_tag", entry.meta_tag.clone()))
-    .await
-    .map_err(|e| e.to_string())?
-    .check()
-    .map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Opponent profiles
-// ---------------------------------------------------------------------------
-
-async fn create_opponent_profiles(db: &Surreal<Db>, team_id: &str) {
-    println!("  Creating opponent scouting profiles...");
-
-    let players: Vec<(String, Option<String>)> = vec![
-        ("top".to_string(), Some("EnemyTop1".to_string())),
-        ("jungle".to_string(), Some("EnemyJungle1".to_string())),
-        ("mid".to_string(), Some("EnemyMid1".to_string())),
-        ("bot".to_string(), Some("EnemyBot1".to_string())),
-        ("support".to_string(), Some("EnemySup1".to_string())),
+    // Three reviews: two linked to the plans, one standalone scrim review.
+    // Improvements become action items (a repeated one only once).
+    let reviews: [ReviewSpec; 3] = [
+        (
+            Some(plans[0].clone()),
+            "win",
+            4,
+            vec![
+                "Dragon setup was on time".into(),
+                "Clean engage at 22 minutes".into(),
+            ],
+            vec![
+                "Ward Baron pit before it spawns".into(),
+                "Mid tempo after the first roam".into(),
+            ],
+        ),
+        (
+            Some(plans[1].clone()),
+            "loss",
+            3,
+            vec!["Top drew two players repeatedly".into()],
+            vec![
+                "Teleport timing for side-lane fights".into(),
+                "Support positioning in lane".into(),
+            ],
+        ),
+        (
+            None,
+            "win",
+            5,
+            vec!["Strong early coordination".into()],
+            vec![
+                "Close the game when ahead".into(),
+                "Ward Baron pit before it spawns".into(),
+            ],
+        ),
     ];
+    for (link, result, rating, went_well, improvements) in reviews {
+        db::create_review_with_action_items(
+            db,
+            PostGameLearning {
+                id: None,
+                team_id: team.id.clone(),
+                match_riot_id: None,
+                game_plan_id: link.as_ref().map(|(p, _)| p.clone()),
+                draft_id: link.as_ref().map(|(_, d)| d.clone()),
+                what_went_well: went_well,
+                improvements,
+                action_items: vec![],
+                open_notes: Some("Discussed in the post-scrim call.".to_string()),
+                created_by: leader.clone(),
+                win_loss: Some(result.to_string()),
+                rating: Some(rating),
+            },
+        )
+        .await
+        .map_err(err)?;
+    }
 
-    match db::create_opponent_with_players(
+    db::create_team_note(
         db,
-        team_id,
-        "Beta Dragons".to_string(),
-        Some("Main rivals — strong teamfighting and dragon control".to_string()),
+        &team.id,
+        leader,
+        spec.players[0].username,
+        "Scrims Tuesday and Thursday 19:00. VOD review Sunday.".to_string(),
+    )
+    .await
+    .map_err(err)?;
+
+    // Scouting profile of the rival team.
+    let players: Vec<(String, Option<String>)> = ROLES
+        .iter()
+        .zip(&rival.players)
+        .map(|(role, p)| {
+            (
+                role.to_string(),
+                Some(format!("{}#{}", p.riot_name, rival.region)),
+            )
+        })
+        .collect();
+    db::create_opponent_with_players(
+        db,
+        &team.id,
+        rival.name.to_string(),
+        Some("Regular scrim partner. Strong early skirmishes around the jungle.".to_string()),
         players,
     )
     .await
-    {
-        Ok((opp_id, player_ids)) => {
-            println!(
-                "    Created opponent 'Beta Dragons' → {opp_id} ({} players)",
-                player_ids.len()
-            );
-        }
-        Err(e) => {
-            eprintln!("    Warning: opponent creation: {e}");
-        }
-    }
+    .map_err(err)?;
+
+    println!("Populated {}.", team.name);
+    Ok(())
 }
