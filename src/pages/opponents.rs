@@ -1,4 +1,14 @@
-use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
+//! Opponents: the team's scouting dossiers. The list shows each opponent
+//! with its evidence (players, scouted games) and when it was last
+//! surveyed; the detail holds the players by role, scouting notes and the
+//! Riot intel refresh. Images come only from `/img/...`.
+
+use crate::components::ui::{
+    AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar,
+    ConfirmDialog, ConfirmTone, Density, Dialog, EmptySize, EmptyState, Field, HeadingLevel,
+    NoTeamState, PageHeader, PageShell, Role, RoleLabel, SectionHeader, Skeleton, SkeletonGroup,
+    SkeletonShape, TextField, Toast, ToastContext,
+};
 use crate::models::opponent::{is_stale, Opponent, OpponentPlayer};
 use crate::models::utils::format_timestamp;
 use leptos::prelude::*;
@@ -299,36 +309,127 @@ pub async fn fetch_player_intel_fn(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, PartialEq)]
-enum FetchState {
-    Idle,
-    Fetching,
-    Success,
-    Error(String),
+/// One row of the dossier list: the opponent and the evidence behind it.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct OpponentDossier {
+    pub opponent: Opponent,
+    pub players: usize,
+    /// Games in the scouted match history, summed over players.
+    pub games_scouted: usize,
+    /// "3 days ago" (computed on the server), `None` if never surveyed.
+    pub surveyed: Option<String>,
+    /// Surveyed a week or more ago.
+    pub stale: bool,
 }
 
-const ROLES: [(&str, &str); 5] = [
-    ("top", "Top"),
-    ("jungle", "Jungle"),
-    ("mid", "Mid"),
-    ("bot", "Bot"),
-    ("support", "Support"),
-];
+/// The team's opponents with player counts, scouted games and the date of
+/// the latest survey.
+#[server]
+pub async fn get_opponent_dossiers() -> Result<Vec<OpponentDossier>, ServerFnError> {
+    use crate::server::{authz, db};
+
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
+    };
+    let list = db::list_opponents(&ctx.db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let mut out = Vec::with_capacity(list.len());
+    for opponent in list {
+        let id = opponent.id.clone().unwrap_or_default();
+        let players = db::get_opponent(&ctx.db, &team_id, &id)
+            .await
+            .map_err(authz::server_err)?
+            .map(|(_, p)| p)
+            .unwrap_or_default();
+        let latest = players
+            .iter()
+            .filter_map(|p| p.last_fetched.clone())
+            .filter(|s| !s.is_empty())
+            .max();
+        out.push(OpponentDossier {
+            players: players
+                .iter()
+                .filter(|p| !p.name.is_empty() || p.riot_summoner_name.is_some())
+                .count(),
+            games_scouted: players.iter().map(|p| p.recent_champions.len()).sum(),
+            surveyed: latest.as_deref().map(format_timestamp),
+            stale: latest.as_deref().map(is_stale).unwrap_or(false),
+            opponent,
+        });
+    }
+    Ok(out)
+}
 
 // ---------------------------------------------------------------------------
-// Components
+// Helpers
 // ---------------------------------------------------------------------------
+
+/// Roles in roster order, as stored on opponent players.
+const ROLES: [&str; 5] = ["top", "jungle", "mid", "bot", "support"];
+
+fn valid_riot_id(s: &str) -> bool {
+    let s = s.trim();
+    s.is_empty()
+        || matches!(s.split_once('#'), Some((a, b)) if !a.trim().is_empty() && !b.trim().is_empty())
+}
+
+/// A scouted player's name: the name, else the Riot ID, else a placeholder.
+fn player_name(p: &OpponentPlayer) -> String {
+    if !p.name.trim().is_empty() {
+        return p.name.clone();
+    }
+    p.riot_summoner_name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| "Unnamed player".to_string())
+}
+
+fn position_label(pos: &str) -> &str {
+    match pos {
+        "TOP" => "Top",
+        "JUNGLE" => "Jungle",
+        "MIDDLE" => "Mid",
+        "BOTTOM" => "Bot",
+        "UTILITY" => "Support",
+        other => other,
+    }
+}
+
+const RIOT_BUDGET_NOTE: &str = "Refreshing reads the player's last 20 games and champion mastery from Riot: about 23 requests per player. The server shares one request budget across the app, so a refresh can be refused for a minute when it is used up.";
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+/// "5 players, 12 games" for a dossier row.
+fn evidence_line(players: usize, games: usize) -> String {
+    let p = match players {
+        0 => return "No players yet".to_string(),
+        1 => "1 player".to_string(),
+        n => format!("{n} players"),
+    };
+    match games {
+        0 => format!("{p}, no games"),
+        1 => format!("{p}, 1 game"),
+        g => format!("{p}, {g} games"),
+    }
+}
+
+/// "surveyed 3 days ago" (flagged when a week or older) or "never surveyed".
+fn surveyed_line(surveyed: Option<&str>, stale: bool) -> String {
+    match surveyed {
+        Some(s) if stale => format!("surveyed {s}, over a week"),
+        Some(s) => format!("surveyed {s}"),
+        None => "never surveyed".to_string(),
+    }
+}
 
 #[component]
 pub fn OpponentsPage() -> impl IntoView {
     let user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-    let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-
-    // Auth redirect + mode detection
+    let solo = RwSignal::new(false);
     Effect::new(move || match user.get() {
         Some(Ok(None)) =>
         {
@@ -337,20 +438,12 @@ pub fn OpponentsPage() -> impl IntoView {
                 let _ = window.location().set_href("/auth/login");
             }
         }
-        Some(Ok(Some(u))) => {
-            is_solo_mode.set(u.mode == "solo");
-        }
+        Some(Ok(Some(u))) => solo.set(u.mode == "solo"),
         _ => {}
     });
 
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-
-    // return_to query param: when navigated from draft page
     let params = leptos_router::hooks::use_query_map();
-    let return_to = move || params.read().get("return_to").unwrap_or_default();
-    let return_draft_id = move || params.read().get("draft_id").unwrap_or_default();
-
-    // Team check for NoTeamState
+    let dossiers = Resource::new(|| (), |_| get_opponent_dossiers());
     let has_team = Resource::new(
         || (),
         |_| async {
@@ -361,958 +454,603 @@ pub fn OpponentsPage() -> impl IntoView {
                 .is_some()
         },
     );
-
-    let opponents = Resource::new(|| (), |_| get_opponents());
-    let selected_id: RwSignal<Option<String>> = RwSignal::new(None);
-    let creating: RwSignal<bool> = RwSignal::new(false);
-
-    // Detail resource: refetch when selected_id changes
+    let selected = RwSignal::new(None::<String>);
     let detail = Resource::new(
-        move || selected_id.get(),
-        move |id| async move {
+        move || selected.get(),
+        |id| async move {
             match id {
                 Some(id) => get_opponent_detail(id).await,
                 None => Ok(None),
             }
         },
     );
+    let creating = RwSignal::new(false);
 
-    let on_delete = Callback::new(move |id: String| {
-        leptos::task::spawn_local(async move {
-            match delete_opponent_action(id).await {
-                Ok(()) => {
-                    selected_id.set(None);
-                    opponents.refetch();
-                    toast
-                        .show
-                        .run((ToastKind::Success, "Opponent deleted".into()));
-                }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+    let back_to_draft = move || {
+        (params.read().get("return_to").as_deref() == Some("draft")).then(|| {
+            match params.read().get("draft_id").filter(|d| !d.is_empty()) {
+                Some(d) => format!("/draft?draft_id={d}"),
+                None => "/draft".to_string(),
             }
-        });
-    });
-
-    let gate_view = move || {
-        if is_solo_mode.get() {
-            Some(view! {
-                <div class="bg-base min-h-screen">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-                        <h1 class="font-display text-primary text-3xl mb-6">"Opponents"</h1>
-                        <div class="max-w-2xl py-8 text-center">
-                            <div class="bg-elevated border border-divider rounded-xl p-6">
-                                <h2 class="font-display text-primary text-xl mb-2">"Team feature"</h2>
-                                <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
-                                <button
-                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                    on:click=move |_| {
-                                        leptos::task::spawn_local(async move {
-                                            let _ = crate::components::nav::set_user_mode("team".to_string()).await;
-                                            #[cfg(feature = "hydrate")]
-                                            if let Some(window) = web_sys::window() {
-                                                let _ = window.location().reload();
-                                            }
-                                        });
-                                    }
-                                >
-                                    "Switch to Team Mode"
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            })
-        } else {
-            None
-        }
+        })
     };
 
+    let on_deleted = Callback::new(move |_: ()| {
+        selected.set(None);
+        dossiers.refetch();
+    });
+    let on_changed = Callback::new(move |_: ()| {
+        detail.refetch();
+        dossiers.refetch();
+    });
+    let on_created = Callback::new(move |id: String| {
+        dossiers.refetch();
+        selected.set(Some(id));
+    });
+
     view! {
-        {gate_view}
-        <div class="bg-base min-h-screen" style:display=move || if is_solo_mode.get() { "none" } else { "" }>
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-
-            // Back to Draft link (when navigated from draft page via Add New Opponent)
-            {move || {
-                if return_to() == "draft" {
-                    let draft_id = return_draft_id();
-                    let href = if draft_id.is_empty() {
-                        "/draft".to_string()
-                    } else {
-                        format!("/draft?draft_id={}", draft_id)
-                    };
-                    view! {
-                        <a href=href class="inline-flex items-center gap-1 text-sm text-accent hover:underline mb-4 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">
-                            <span>"\u{2190} Back to Draft"</span>
-                        </a>
-                    }.into_any()
-                } else {
-                    view! { <div></div> }.into_any()
+        <PageShell density=Density::Compact attr:data-feedback-label="Opponents">
+            <PageHeader
+                title="Opponents"
+                eyebrow="Scouting"
+                meta=move || view! { <span>"A dossier per team you play: the players, what they play, and your notes."</span> }
+                actions=move || view! {
+                    {move || back_to_draft().map(|href| view! { <Button variant=ButtonVariant::Quiet href=href>"Back to the draft"</Button> })}
+                    <Button on_click=Callback::new(move |_| creating.set(true)) attr:data-testid="new-opponent">"New opponent"</Button>
                 }
-            }}
-
-            <div class="flex items-center justify-between mb-6">
-                <h1 class="font-display text-primary text-3xl">"Opponents"</h1>
-                <button
-                    on:click=move |_| {
-                        selected_id.set(None);
-                        creating.set(true);
-                    }
-                    class="bg-accent text-accent-contrast hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                >
-                    "+ New Opponent"
-                </button>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                // Left column: opponent list (Card.plain)
-                <div class="lg:col-span-1">
-                    <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
-                        <div class="px-4 py-3 border-b border-divider">
-                            <h2 class="font-mono uppercase tracking-wider text-xs text-muted">"All Opponents"</h2>
-                        </div>
-                        <Suspense fallback=move || view! { <div class="p-4 flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
-                            {move || Suspend::new(async move {
-                                match opponents.await {
-                                    Ok(list) => {
-                                        if list.is_empty() {
-                                            let user_has_team = has_team.get().unwrap_or(false);
-                                            if user_has_team {
-                                                view! {
-                                                    <EmptyState
-                                                        message="No opponents scouted yet — add an opponent team to start tracking their picks and bans"
-                                                        cta_label="Add Opponent"
-                                                        cta_href="#add-opponent"
-                                                    />
-                                                }.into_any()
-                                            } else {
-                                                view! { <NoTeamState /> }.into_any()
-                                            }
-                                        } else {
-                                            let items = list.into_iter().map(|opp| {
-                                                let opp_id = opp.id.clone().unwrap_or_default();
-                                                let opp_id_click = opp_id.clone();
-                                                let opp_name = opp.name.clone();
-                                                view! {
-                                                    <button
-                                                        on:click=move |_| {
-                                                            creating.set(false);
-                                                            selected_id.set(Some(opp_id_click.clone()));
-                                                        }
-                                                        class=move || {
-                                                            let base = "w-full text-left px-4 py-3 border-b border-divider/60 hover:bg-surface transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
-                                                            let is_sel = selected_id.get().as_deref() == Some(opp_id.as_str());
-                                                            if is_sel {
-                                                                format!("{base} bg-surface border-l-4 border-l-accent")
-                                                            } else {
-                                                                base.to_string()
-                                                            }
-                                                        }
-                                                    >
-                                                        <span class="text-primary text-sm font-medium">{opp_name}</span>
-                                                    </button>
-                                                }
-                                            }).collect_view();
-                                            view! { <div>{items}</div> }.into_any()
-                                        }
+            />
+            {move || if solo.get() {
+                view! {
+                    <EmptyState
+                        title="Opponents are a team feature"
+                        level=HeadingLevel::H2
+                        message="Scouting dossiers belong to a team. Switch to team mode to see and edit your team's opponents."
+                        action=move || view! {
+                            <Button on_click=Callback::new(move |_| {
+                                leptos::task::spawn_local(async move {
+                                    let _ = crate::components::nav::set_user_mode("team".to_string()).await;
+                                    #[cfg(feature = "hydrate")]
+                                    if let Some(window) = web_sys::window() {
+                                        let _ = window.location().reload();
                                     }
-                                    Err(e) => view! {
-                                        <div class="p-4 bg-danger/10 border border-danger/30 text-danger rounded-lg text-sm m-4">{e.to_string()}</div>
-                                    }.into_any(),
-                                }
-                            })}
-                        </Suspense>
-                    </div>
-                </div>
-
-                // Right column: creation form, detail panel, or placeholder
-                <div class="lg:col-span-2">
-                    {move || {
-                        if creating.get() {
-                            view! {
-                                <CreationForm
-                                    on_done=move |new_id: String| {
-                                        creating.set(false);
-                                        selected_id.set(Some(new_id));
-                                        opponents.refetch();
-                                    }
-                                    on_discard=move || creating.set(false)
-                                />
-                            }.into_any()
-                        } else {
-                            view! {
-                                <Suspense fallback=move || view! { <SkeletonCard height="h-64" /> }>
-                                    {move || Suspend::new(async move {
-                                        match detail.await {
-                                            Ok(Some((opp, players))) => {
-                                                view! {
-                                                    <OpponentDetail
-                                                        opponent=opp
-                                                        players=players
-                                                        on_save_done=move || {
-                                                            opponents.refetch();
-                                                            detail.refetch();
-                                                            toast.show.run((ToastKind::Success, "Opponent updated".into()));
-                                                        }
-                                                        on_delete=on_delete
-                                                        on_player_change=move || detail.refetch()
-                                                    />
-                                                }.into_any()
-                                            }
-                                            Ok(None) => {
-                                                view! {
-                                                    <div class="bg-elevated border border-divider rounded-xl p-8 text-center text-muted">
-                                                        "Select an opponent from the list or create a new one."
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                            Err(e) => view! {
-                                                <div class="bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-3 text-sm">{e.to_string()}</div>
-                                            }.into_any(),
-                                        }
-                                    })}
-                                </Suspense>
-                            }.into_any()
+                                });
+                            })>"Switch to team mode"</Button>
                         }
-                    }}
-                </div>
-            </div>
-            </div>
-        </div>
+                    />
+                }.into_any()
+            } else {
+                view! {
+                    <div class="grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
+                        <section aria-labelledby="dossiers-heading" class="flex min-w-0 flex-col gap-3">
+                            <SectionHeader title="Dossiers" id="dossiers-heading" />
+                            <Suspense fallback=|| view! { <SkeletonGroup label="Loading opponents"><Skeleton shape=SkeletonShape::Line lines=4 /></SkeletonGroup> }>
+                                {move || dossiers.get().map(|r| match r {
+                                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The opponents did not load."</Callout> }.into_any(),
+                                    Ok(list) if list.is_empty() => {
+                                        if matches!(has_team.get(), Some(false)) {
+                                            view! { <NoTeamState /> }.into_any()
+                                        } else {
+                                            view! {
+                                                <EmptyState size=EmptySize::Compact message="No opponents yet. Add a team you will play; with their Riot IDs the dossier fills with the champions they play." />
+                                            }.into_any()
+                                        }
+                                    }
+                                    Ok(list) => view! {
+                                        <ul class="flex flex-col border-t border-rule" data-testid="dossier-list">
+                                            {list.into_iter().map(|d| {
+                                                let id = d.opponent.id.clone().unwrap_or_default();
+                                                let id_click = id.clone();
+                                                let evidence = evidence_line(d.players, d.games_scouted);
+                                                let surveyed = surveyed_line(d.surveyed.as_deref(), d.stale);
+                                                let stale = d.stale;
+                                                view! {
+                                                    <li class="border-b border-rule">
+                                                        <Button
+                                                            variant=ButtonVariant::Quiet
+                                                            size=ButtonSize::Lg
+                                                            full_width=true
+                                                            pressed=Signal::derive(move || selected.get().as_deref() == Some(id.as_str()))
+                                                            on_click=Callback::new(move |_| { creating.set(false); selected.set(Some(id_click.clone())); })
+                                                        >
+                                                            <span class="flex w-full min-w-0 flex-col items-start text-left leading-tight">
+                                                                <span class="w-full truncate text-label">{d.opponent.name.clone()}</span>
+                                                                <span class="w-full truncate text-caption font-normal text-muted">
+                                                                    {evidence}" \u{b7} "
+                                                                    <span class=if stale { "text-warning" } else { "" }>{surveyed}</span>
+                                                                </span>
+                                                            </span>
+                                                        </Button>
+                                                    </li>
+                                                }
+                                            }).collect_view()}
+                                        </ul>
+                                    }.into_any(),
+                                })}
+                            </Suspense>
+                        </section>
+                        <div class="min-w-0">
+                            <Suspense fallback=|| view! { <SkeletonGroup label="Loading the dossier"><Skeleton shape=SkeletonShape::Block size="h-64 w-full" /></SkeletonGroup> }>
+                                {move || detail.get().map(|r| match r {
+                                    Ok(Some((opp, players))) => view! {
+                                        <OpponentDetail opponent=opp players=players on_changed=on_changed on_deleted=on_deleted />
+                                    }.into_any(),
+                                    Ok(None) => view! {
+                                        <EmptyState
+                                            title="No dossier open"
+                                            level=HeadingLevel::H2
+                                            message="Choose an opponent from the list, or add a new one. A dossier shows each player's role, recent champions and mastery, with the date it was last surveyed."
+                                        />
+                                    }.into_any(),
+                                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The dossier did not load."</Callout> }.into_any(),
+                                })}
+                            </Suspense>
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+            <NewOpponentDialog open=creating on_created=on_created />
+        </PageShell>
     }
 }
 
-// ---------------------------------------------------------------------------
-// CreationForm component
-// ---------------------------------------------------------------------------
-
+/// Name and five Riot IDs; creating fetches each player's games.
 #[component]
-fn CreationForm(
-    on_done: impl Fn(String) + Copy + Send + Sync + 'static,
-    on_discard: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
+fn NewOpponentDialog(open: RwSignal<bool>, on_created: Callback<String>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-
-    let team_name: RwSignal<String> = RwSignal::new(String::new());
-    let name_error: RwSignal<Option<String>> = RwSignal::new(None);
-    let saving: RwSignal<bool> = RwSignal::new(false);
-
-    // Per-role input signals: [top, jungle, mid, bot, support]
-    let role_inputs: [RwSignal<String>; 5] = [
-        RwSignal::new(String::new()),
-        RwSignal::new(String::new()),
-        RwSignal::new(String::new()),
-        RwSignal::new(String::new()),
-        RwSignal::new(String::new()),
-    ];
-    let validation_errors: [RwSignal<Option<String>>; 5] = [
-        RwSignal::new(None),
-        RwSignal::new(None),
-        RwSignal::new(None),
-        RwSignal::new(None),
-        RwSignal::new(None),
-    ];
-
-    let on_save_fetch = move |_| {
-        // Validate team name
-        let name = team_name.get_untracked();
-        if name.trim().is_empty() {
-            name_error.set(Some("Team name is required".into()));
+    let name = RwSignal::new(String::new());
+    let name_error = RwSignal::new(None::<String>);
+    let ids: [RwSignal<String>; 5] = std::array::from_fn(|_| RwSignal::new(String::new()));
+    let errors: [RwSignal<Option<String>>; 5] = std::array::from_fn(|_| RwSignal::new(None));
+    let saving = RwSignal::new(false);
+    let create = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let n = name.get_untracked();
+        if n.trim().is_empty() {
+            name_error.set(Some("Name the team.".into()));
             return;
         }
         name_error.set(None);
-
-        // Validate Riot ID fields
-        let mut has_error = false;
-        let mut inputs_vals: Vec<String> = Vec::new();
+        let mut bad = false;
         for i in 0..5 {
-            let val = role_inputs[i].get_untracked();
-            if !val.trim().is_empty() && !val.contains('#') {
-                validation_errors[i].set(Some("Use Name#Tag format (e.g. Faker#KR1)".into()));
-                has_error = true;
-            } else {
-                validation_errors[i].set(None);
-            }
-            inputs_vals.push(val);
+            let ok = valid_riot_id(&ids[i].get_untracked());
+            errors[i].set((!ok).then(|| "Use Name#Tag, for example Faker#KR1.".to_string()));
+            bad |= !ok;
         }
-        if has_error {
+        if bad {
             return;
         }
-
-        // Build players_json: Vec<(role, Option<riot_id>)>
+        let riot: Vec<String> = ids
+            .iter()
+            .map(|s| s.get_untracked().trim().to_string())
+            .collect();
         let players: Vec<(String, Option<String>)> = ROLES
             .iter()
-            .enumerate()
-            .map(|(i, (role_key, _))| {
-                let v = inputs_vals[i].trim().to_string();
-                let opt = if v.is_empty() { None } else { Some(v) };
-                (role_key.to_string(), opt)
-            })
+            .zip(riot.iter())
+            .map(|(r, id)| (r.to_string(), (!id.is_empty()).then(|| id.clone())))
             .collect();
-
-        let players_json = serde_json::to_string(&players).unwrap_or_default();
-        let inputs_vals_clone = inputs_vals.clone();
-
+        let json = serde_json::to_string(&players).unwrap_or_default();
         saving.set(true);
         leptos::task::spawn_local(async move {
-            match create_opponent_with_players_fn(name, players_json).await {
-                Ok((opponent_id, player_ids)) => {
-                    saving.set(false);
-                    toast.show.run((
-                        ToastKind::Success,
-                        "Opponent saved and players fetched".into(),
-                    ));
-                    let done_id = opponent_id.clone();
-
-                    // Sequential fetch for players that have a riot ID
-                    for (i, player_id) in player_ids.into_iter().enumerate() {
-                        let riot_id = inputs_vals_clone.get(i).cloned().unwrap_or_default();
-                        let riot_id = riot_id.trim().to_string();
-                        if !riot_id.is_empty() {
-                            let _ = fetch_player_intel_fn(player_id, riot_id).await;
+            match create_opponent_with_players_fn(n.trim().to_string(), json).await {
+                Ok((oid, player_ids)) => {
+                    open.set(false);
+                    name.set(String::new());
+                    for s in ids {
+                        s.set(String::new());
+                    }
+                    on_created.run(oid.clone());
+                    let mut fetched = 0;
+                    let mut failed = 0;
+                    for (pid, rid) in player_ids.into_iter().zip(riot.into_iter()) {
+                        if rid.is_empty() {
+                            continue;
+                        }
+                        match fetch_player_intel_fn(pid, rid).await {
+                            Ok(()) => fetched += 1,
+                            Err(_) => failed += 1,
                         }
                     }
-
-                    on_done(done_id);
+                    on_created.run(oid);
+                    saving.set(false);
+                    let msg = match (fetched, failed) {
+                        (0, 0) => "Opponent added. Add Riot IDs to fill the dossier.".to_string(),
+                        (f, 0) => format!("Opponent added; {f} players surveyed."),
+                        (f, x) => format!("Opponent added; {f} players surveyed, {x} could not be fetched (check the Riot ID or try again later)."),
+                    };
+                    toast.push.run(Toast::success(msg));
                 }
                 Err(e) => {
                     saving.set(false);
-                    toast.show.run((ToastKind::Error, format!("{e}")));
+                    toast
+                        .push
+                        .run(Toast::error(format!("Could not add the opponent: {e}")));
                 }
             }
         });
-    };
-
+    });
     view! {
-        <div class="bg-elevated border border-divider rounded-xl p-6">
-            <h2 class="font-mono uppercase tracking-wider text-xs text-muted mb-4">"New Opponent Team"</h2>
-
-            // Team name input
-            <div class="mb-4">
-                <input
-                    type="text"
-                    placeholder="Opponent team name..."
-                    prop:value=move || team_name.get()
-                    on:input=move |ev| team_name.set(event_target_value(&ev))
-                    class="w-full text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                />
-                {move || {
-                    if let Some(err) = name_error.get() {
-                        view! { <p class="text-xs text-danger mt-1">{err}</p> }.into_any()
-                    } else {
-                        view! { <span></span> }.into_any()
-                    }
-                }}
-            </div>
-
-            // 5 role rows
-            <div class="flex flex-col gap-2 mb-4">
-                {ROLES.iter().enumerate().map(|(i, (_, role_display))| {
-                    let role_sig = role_inputs[i];
-                    let err_sig = validation_errors[i];
-                    let role_label = *role_display;
+        <Dialog
+            id="new-opponent"
+            open=open
+            title="New opponent"
+            description="Riot IDs are optional; with them the dossier fills with each player's recent champions."
+            dismiss_on_scrim=false
+            footer=move || view! {
+                <Button variant=ButtonVariant::Secondary on_click=Callback::new(move |_| open.set(false))>"Cancel"</Button>
+                <Button variant=ButtonVariant::Primary on_click=create loading=Signal::derive(move || saving.get())>"Add opponent"</Button>
+            }
+        >
+            <div class="flex flex-col gap-4 px-5 py-4">
+                <Field id="opp-new-name" label="Team name" required=true error=Signal::derive(move || name_error.get())>
+                    <TextField value=name placeholder="Riverside Rooks" />
+                </Field>
+                {ROLES.iter().enumerate().map(|(i, r)| {
+                    let role = Role::parse(r).map(|x| x.label()).unwrap_or(r);
                     view! {
-                        <div>
-                            <div class="flex items-center gap-2 py-1">
-                                <span class="w-20 text-sm text-secondary font-medium">{role_label}</span>
-                                <input
-                                    type="text"
-                                    placeholder="Name#Tag (e.g. Faker#KR1)"
-                                    prop:value=move || role_sig.get()
-                                    on:input=move |ev| role_sig.set(event_target_value(&ev))
-                                    class="flex-1 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                />
-                            </div>
-                            {move || {
-                                if let Some(err) = err_sig.get() {
-                                    view! { <p class="text-xs text-danger ml-22 pl-2">{err}</p> }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }
-                            }}
-                        </div>
+                        <Field id=format!("opp-new-{r}") label=format!("{role} Riot ID") error=Signal::derive(move || errors[i].get())>
+                            <TextField value=ids[i] placeholder="Name#Tag" />
+                        </Field>
                     }
                 }).collect_view()}
             </div>
-
-            // Footer buttons
-            <div class="flex justify-end gap-3 mt-4">
-                <button
-                    on:click=move |_| on_discard()
-                    class="text-muted hover:text-secondary text-sm px-4 py-2 rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                >
-                    "Discard Form"
-                </button>
-                <button
-                    on:click=on_save_fetch
-                    disabled=move || saving.get()
-                    class=move || {
-                        let base = "bg-accent text-accent-contrast text-sm px-4 py-2 rounded-lg font-semibold hover:bg-accent-hover cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors";
-                        if saving.get() {
-                            format!("{base} opacity-50 cursor-not-allowed")
-                        } else {
-                            base.to_string()
-                        }
-                    }
-                >
-                    {move || if saving.get() { "Saving..." } else { "Save & Fetch" }}
-                </button>
-            </div>
-        </div>
+        </Dialog>
     }
 }
 
-// ---------------------------------------------------------------------------
-// OpponentDetail component
-// ---------------------------------------------------------------------------
-
+/// One opponent's dossier: name, notes, players by role.
 #[component]
 fn OpponentDetail(
     opponent: Opponent,
     players: Vec<OpponentPlayer>,
-    on_save_done: impl Fn() + Copy + Send + Sync + 'static,
-    on_delete: Callback<String>,
-    on_player_change: impl Fn() + Copy + Send + Sync + 'static,
+    on_changed: Callback<()>,
+    on_deleted: Callback<()>,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let opp_id = opponent.id.clone().unwrap_or_default();
-    let opp_id_save = opp_id.clone();
-    let opp_id_delete = opp_id.clone();
-
+    let id = StoredValue::new(opponent.id.clone().unwrap_or_default());
     let name = RwSignal::new(opponent.name.clone());
     let notes = RwSignal::new(opponent.notes.clone().unwrap_or_default());
-    let confirm_delete = RwSignal::new(false);
-    let refreshing_all: RwSignal<bool> = RwSignal::new(false);
+    let confirm = RwSignal::new(false);
+    let refreshing = RwSignal::new(false);
+    let players = StoredValue::new(players);
 
-    // Per-role fetch states (5 slots matching ROLES order)
-    let fetch_states: [RwSignal<FetchState>; 5] = [
-        RwSignal::new(FetchState::Idle),
-        RwSignal::new(FetchState::Idle),
-        RwSignal::new(FetchState::Idle),
-        RwSignal::new(FetchState::Idle),
-        RwSignal::new(FetchState::Idle),
-    ];
-
-    // Build ordered players vec matching ROLES order
-    let players_by_role: [Option<OpponentPlayer>; 5] = {
-        let find_player = |role_key: &str| players.iter().find(|p| p.role == role_key).cloned();
-        [
-            find_player("top"),
-            find_player("jungle"),
-            find_player("mid"),
-            find_player("bot"),
-            find_player("support"),
-        ]
-    };
-
-    let players_stored = StoredValue::new(players_by_role);
-
-    let on_save = move |_| {
-        let id = opp_id_save.clone();
-        let n = name.get_untracked();
-        let nt = notes.get_untracked();
-        leptos::task::spawn_local(async move {
-            match save_opponent(id, n, nt).await {
-                Ok(()) => on_save_done(),
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-            }
-        });
-    };
-
-    let on_refresh_all = move |_| {
-        let players_snap = players_stored.get_value();
-        refreshing_all.set(true);
-        for state in fetch_states.iter() {
-            state.set(FetchState::Idle);
-        }
-        let fetch_states_clone = fetch_states;
-        leptos::task::spawn_local(async move {
-            let mut success_count = 0u32;
-            for (i, maybe_player) in players_snap.iter().enumerate() {
-                if let Some(player) = maybe_player {
-                    if let Some(riot_id) = &player.riot_summoner_name {
-                        if !riot_id.trim().is_empty() {
-                            let pid = player.id.clone().unwrap_or_default();
-                            let rid = riot_id.clone();
-                            fetch_states_clone[i].set(FetchState::Fetching);
-                            match fetch_player_intel_fn(pid, rid).await {
-                                Ok(()) => {
-                                    fetch_states_clone[i].set(FetchState::Success);
-                                    success_count += 1;
-                                }
-                                Err(e) => {
-                                    fetch_states_clone[i].set(FetchState::Error(e.to_string()));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            refreshing_all.set(false);
-            on_player_change();
-            if success_count == 5 {
-                toast
-                    .show
-                    .run((ToastKind::Success, "All players refreshed".into()));
-            } else if success_count > 0 {
-                toast.show.run((
-                    ToastKind::Success,
-                    format!("{success_count}/5 players refreshed"),
-                ));
-            }
-        });
-    };
-
-    view! {
-        <div class="bg-elevated border border-divider rounded-xl">
-            // Header
-            <div class="px-6 py-4 border-b border-divider flex items-center justify-between gap-2 flex-wrap">
-                <input
-                    type="text"
-                    prop:value=move || name.get()
-                    on:input=move |ev| name.set(event_target_value(&ev))
-                    class="flex-1 min-w-48 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    placeholder="Team name..."
-                />
-                <div class="flex gap-2 shrink-0">
-                    <button
-                        on:click=on_save
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    >
-                        "Save"
-                    </button>
-                    <button
-                        on:click=on_refresh_all
-                        disabled=move || refreshing_all.get()
-                        class="text-muted hover:text-secondary text-sm px-3 py-2 rounded-lg disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    >
-                        {move || if refreshing_all.get() { "Refreshing..." } else { "Refresh All" }}
-                    </button>
-                    {move || {
-                        let id = opp_id_delete.clone();
-                        if confirm_delete.get() {
-                            view! {
-                                <div class="flex gap-1 items-center">
-                                    <span class="text-sm text-secondary self-center">"Confirm delete?"</span>
-                                    <button
-                                        on:click=move |_| {
-                                            on_delete.run(id.clone());
-                                            confirm_delete.set(false);
-                                        }
-                                        class="bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 text-sm font-semibold px-3 py-2 rounded-lg transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
-                                    >
-                                        "Delete"
-                                    </button>
-                                    <button
-                                        on:click=move |_| confirm_delete.set(false)
-                                        class="text-muted hover:text-secondary text-sm px-3 py-2 rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                    >
-                                        "Keep Opponent"
-                                    </button>
-                                </div>
-                            }.into_any()
-                        } else {
-                            view! {
-                                <button
-                                    on:click=move |_| confirm_delete.set(true)
-                                    class="text-danger text-sm hover:opacity-80 cursor-pointer px-2 py-1 rounded-md focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
-                                >
-                                    "Delete"
-                                </button>
-                            }.into_any()
-                        }
-                    }}
-                </div>
-            </div>
-
-            // Notes
-            <div class="px-6 py-4 border-b border-divider">
-                <label class="block font-mono uppercase tracking-wider text-xs text-muted mb-2">"Notes"</label>
-                <textarea
-                    prop:value=move || notes.get()
-                    on:input=move |ev| notes.set(event_target_value(&ev))
-                    rows="2"
-                    class="w-full text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-y"
-                    placeholder="General scouting notes..."
-                />
-            </div>
-
-            // 5 PlayerCard rows
-            <div class="px-6 py-4 flex flex-col gap-3">
-                {ROLES.iter().enumerate().map(|(i, (role_key, role_display))| {
-                    let maybe_player = players_stored.with_value(|p| p[i].clone());
-                    let fs = fetch_states[i];
-                    let opp_id_for_slot = opp_id.clone();
-                    let role_key_str = role_key.to_string();
-                    let role_display_str = role_display.to_string();
-                    match maybe_player {
-                        Some(player) => view! {
-                            <PlayerCard
-                                player=player
-                                fetch_state=fs
-                                on_change=on_player_change
-                            />
-                        }.into_any(),
-                        None => view! {
-                            <EmptyRoleSlot
-                                role_key=role_key_str
-                                role_display=role_display_str
-                                opponent_id=opp_id_for_slot
-                                on_added=on_player_change
-                            />
-                        }.into_any(),
-                    }
-                }).collect_view()}
-            </div>
-        </div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// EmptyRoleSlot — shown when a role has no player yet
-// ---------------------------------------------------------------------------
-
-#[component]
-fn EmptyRoleSlot(
-    role_key: String,
-    role_display: String,
-    opponent_id: String,
-    on_added: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let riot_id_input: RwSignal<String> = RwSignal::new(String::new());
-
-    let role_key_clone = role_key.clone();
-    let opponent_id_clone = opponent_id.clone();
-
-    let on_add = move |_| {
-        let riot_id = riot_id_input.get_untracked();
-        let oid = opponent_id_clone.clone();
-        let rk = role_key_clone.clone();
-        leptos::task::spawn_local(async move {
-            let name = riot_id.trim().to_string();
-            match add_player(oid, name, rk).await {
-                Ok(_) => on_added(),
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-            }
-        });
-    };
-
-    view! {
-        <div class="bg-surface border border-outline rounded-xl p-4">
-            <div class="flex items-center gap-2 flex-wrap">
-                <span class="w-20 text-sm font-semibold text-secondary">{role_display}</span>
-                <input
-                    type="text"
-                    placeholder="Name#Tag (e.g. Faker#KR1)"
-                    prop:value=move || riot_id_input.get()
-                    on:input=move |ev| riot_id_input.set(event_target_value(&ev))
-                    class="flex-1 min-w-32 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                />
-                <button
-                    on:click=on_add
-                    class="text-xs text-secondary hover:text-primary bg-elevated border border-divider px-3 py-2 rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                >
-                    "+ Add"
-                </button>
-            </div>
-        </div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// PlayerCard component
-// ---------------------------------------------------------------------------
-
-#[component]
-fn PlayerCard(
-    player: OpponentPlayer,
-    fetch_state: RwSignal<FetchState>,
-    on_change: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let player_id = player.id.clone().unwrap_or_default();
-    let player_id_refresh = player_id.clone();
-
-    let role_display = match player.role.as_str() {
-        "top" => "Top",
-        "jungle" => "Jungle",
-        "mid" => "Mid",
-        "bot" => "Bot",
-        "support" => "Support",
-        _ => &player.role,
-    }
-    .to_string();
-
-    let p_summoner: RwSignal<String> =
-        RwSignal::new(player.riot_summoner_name.clone().unwrap_or_default());
-    let pool_expanded: RwSignal<bool> = RwSignal::new(false);
-
-    // Compute intel once from player data
-    let intel = player.compute_intel();
-    let otp_champion = intel.otp_champion.clone();
-    let mastery_data = player.mastery_data();
-    let last_fetched = player.last_fetched.clone();
-    let recent_champions = player.recent_champions.clone();
-    let comfort_picks = player.comfort_picks();
-    let role_distribution = player.role_distribution();
-    let pool_sz = player.pool_size();
-
-    // Build mastery lookup: champion_name -> (level, points)
-    let mastery_map: std::collections::HashMap<String, (i32, i32)> = mastery_data
-        .iter()
-        .map(|(name, level, pts)| (name.clone(), (*level, *pts)))
-        .collect();
-
-    // Sort champions by mastery points descending
-    let mut sorted_champions = recent_champions.clone();
-    sorted_champions.sort_by(|a, b| {
-        let pa = mastery_map.get(a).map(|(_, pts)| *pts).unwrap_or(0);
-        let pb = mastery_map.get(b).map(|(_, pts)| *pts).unwrap_or(0);
-        pb.cmp(&pa)
-    });
-    // Deduplicate while preserving mastery-sorted order
-    let mut seen = std::collections::HashSet::new();
-    sorted_champions.retain(|c| seen.insert(c.clone()));
-
-    let mastery_map_stored = StoredValue::new(mastery_map);
-
-    let on_refresh = move |_| {
-        let pid = player_id_refresh.clone();
-        let summoner = p_summoner.get_untracked();
-        if summoner.trim().is_empty() {
-            toast.show.run((
-                ToastKind::Error,
-                "Enter a summoner name (Name#Tag) first".into(),
-            ));
+    let save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let (i, n, t) = (id.get_value(), name.get_untracked(), notes.get_untracked());
+        if n.trim().is_empty() {
+            toast.push.run(Toast::error("The team needs a name."));
             return;
         }
-        fetch_state.set(FetchState::Fetching);
-        let summoner_clone = summoner.clone();
         leptos::task::spawn_local(async move {
-            match fetch_player_intel_fn(pid, summoner_clone).await {
+            match save_opponent(i, n, t).await {
                 Ok(()) => {
-                    fetch_state.set(FetchState::Success);
-                    on_change();
-                    // Auto-clear success after 3s
-                    #[cfg(feature = "hydrate")]
-                    {
-                        use wasm_bindgen::prelude::*;
-                        let cb = Closure::once(move || {
-                            fetch_state.set(FetchState::Idle);
-                        });
-                        if let Some(win) = web_sys::window() {
-                            let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
-                                cb.as_ref().unchecked_ref(),
-                                3000,
-                            );
-                        }
-                        cb.forget();
-                    }
+                    on_changed.run(());
+                    toast.push.run(Toast::success("Dossier saved"));
                 }
-                Err(e) => {
-                    fetch_state.set(FetchState::Error(e.to_string()));
-                }
+                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
             }
         });
-    };
-
-    // Recency badge text and class
-    let recency_display = match &last_fetched {
-        None => None,
-        Some(lf) if lf.is_empty() => None,
-        Some(lf) => Some((format_timestamp(lf), is_stale(lf))),
-    };
+    });
+    let delete = Callback::new(move |_| {
+        let i = id.get_value();
+        leptos::task::spawn_local(async move {
+            match delete_opponent_action(i).await {
+                Ok(()) => {
+                    on_deleted.run(());
+                    toast.push.run(Toast::success("Opponent deleted"));
+                }
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not delete: {e}"))),
+            }
+        });
+    });
+    let refresh_all = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let list: Vec<(String, String)> = players.with_value(|ps| {
+            ps.iter()
+                .filter_map(|p| {
+                    Some((
+                        p.id.clone()?,
+                        p.riot_summoner_name
+                            .clone()
+                            .filter(|r| !r.trim().is_empty())?,
+                    ))
+                })
+                .collect()
+        });
+        if list.is_empty() {
+            toast.push.run(Toast::info("No player has a Riot ID yet."));
+            return;
+        }
+        refreshing.set(true);
+        leptos::task::spawn_local(async move {
+            let total = list.len();
+            let mut ok = 0;
+            let mut last_err = None;
+            for (pid, rid) in list {
+                match fetch_player_intel_fn(pid, rid).await {
+                    Ok(()) => ok += 1,
+                    Err(e) => last_err = Some(e.to_string()),
+                }
+            }
+            refreshing.set(false);
+            on_changed.run(());
+            match last_err {
+                None => toast
+                    .push
+                    .run(Toast::success(format!("{ok} of {total} players surveyed"))),
+                Some(e) => toast.push.run(Toast::error(format!(
+                    "{ok} of {total} players surveyed. Last error: {e}"
+                ))),
+            }
+        });
+    });
 
     view! {
-        <div class="bg-surface border border-outline rounded-xl p-4">
-            // Row 1: header
-            <div class="flex items-center gap-2 mb-3 flex-wrap">
-                <span class="text-sm font-semibold text-secondary">{role_display}</span>
-
-                // OTP badge
-                {otp_champion.as_ref().map(|champ| {
-                    let champ = champ.clone();
-                    view! {
-                        <span class="text-xs bg-warning/15 text-warning border border-warning/30 rounded-md px-2 py-0.5">
-                            "OTP: "{champ}
-                        </span>
-                    }
-                })}
-
-                // Recency badge
-                {match recency_display {
-                    None => view! {
-                        <span class="text-xs text-dimmed">"Never fetched"</span>
-                    }.into_any(),
-                    Some((text, stale)) => view! {
-                        <span class=if stale { "text-xs text-warning" } else { "text-xs text-muted" }>
-                            "Last fetched: "{text}
-                        </span>
-                    }.into_any(),
-                }}
-
-                // Refresh icon button
-                <button
-                    on:click=on_refresh
-                    title="Refresh player data"
-                    class="ml-auto w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-secondary hover:bg-elevated transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                >
-                    {move || {
-                        if fetch_state.get() == FetchState::Fetching {
-                            view! {
-                                <svg class="animate-spin w-4 h-4 text-muted" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                            }.into_any()
-                        } else {
-                            // Refresh/reload icon (two arrows in circle)
-                            view! {
-                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                            }.into_any()
-                        }
-                    }}
-                </button>
-            </div>
-
-            // Row 2: Riot ID input + fetch status icon
-            <div class="mb-3">
-                <div class="flex items-center gap-2">
-                    <input
-                        type="text"
-                        placeholder="Name#Tag (e.g. Faker#KR1)"
-                        prop:value=move || p_summoner.get()
-                        on:input=move |ev| p_summoner.set(event_target_value(&ev))
-                        class="flex-1 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    />
-                    // Fetch status icon
-                    {move || match fetch_state.get() {
-                        FetchState::Idle => view! { <span></span> }.into_any(),
-                        FetchState::Fetching => view! {
-                            <svg class="animate-spin w-4 h-4 text-muted shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        }.into_any(),
-                        FetchState::Success => view! {
-                            <span class="text-success w-4 h-4 text-sm shrink-0">"✓"</span>
-                        }.into_any(),
-                        FetchState::Error(_) => view! {
-                            <span class="text-danger w-4 h-4 text-sm shrink-0">"✗"</span>
-                        }.into_any(),
-                    }}
+        <article aria-labelledby="dossier-heading" class="flex min-w-0 flex-col gap-8" data-testid="dossier">
+            <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule pb-3">
+                <h2 id="dossier-heading" class="font-display text-title font-semibold text-primary">{move || name.get()}</h2>
+                <div class="flex flex-wrap gap-2">
+                    <Button size=ButtonSize::Sm on_click=refresh_all loading=Signal::derive(move || refreshing.get())>"Refresh from Riot"</Button>
+                    <Button size=ButtonSize::Sm variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm.set(true))>"Delete"</Button>
                 </div>
-                // Error message below input
-                {move || match fetch_state.get() {
-                    FetchState::Error(msg) => view! {
-                        <p class="text-xs text-danger mt-1">{msg}</p>
-                    }.into_any(),
-                    _ => view! { <span></span> }.into_any(),
-                }}
             </div>
+            <p class="max-w-prose text-caption text-muted">{RIOT_BUDGET_NOTE}</p>
+            <section aria-labelledby="dossier-notes-heading" class="flex flex-col gap-4">
+                <SectionHeader title="Team" id="dossier-notes-heading" level=HeadingLevel::H3 />
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                    <Field id="opp-name" label="Name">
+                        <TextField value=name />
+                    </Field>
+                    <Field id="opp-notes" label="Scouting notes">
+                        <TextField value=notes rows=3 placeholder="How they draft, where they play, what they avoid" />
+                    </Field>
+                </div>
+                <div><Button variant=ButtonVariant::Primary on_click=save>"Save dossier"</Button></div>
+            </section>
+            <section aria-labelledby="dossier-players-heading" class="flex flex-col gap-3">
+                <SectionHeader title="Players" id="dossier-players-heading" level=HeadingLevel::H3 />
+                <ul class="flex flex-col border-t border-rule">
+                    {ROLES.iter().map(|role| {
+                        let player = players.with_value(|ps| ps.iter().find(|p| Role::parse(&p.role) == Role::parse(role)).cloned());
+                        match player {
+                            // A slot created with the dossier but never filled.
+                            Some(p) if p.name.trim().is_empty() && p.riot_summoner_name.as_deref().unwrap_or("").is_empty() => view! {
+                                <EmptyRole role=role opponent_id=id.get_value() existing=p.id.clone() on_changed=on_changed />
+                            }.into_any(),
+                            Some(p) => view! { <PlayerRow player=p on_changed=on_changed /> }.into_any(),
+                            None => view! { <EmptyRole role=role opponent_id=id.get_value() on_changed=on_changed /> }.into_any(),
+                        }
+                    }).collect_view()}
+                </ul>
+            </section>
+            <ConfirmDialog
+                id="delete-opponent"
+                open=confirm
+                title="Delete this opponent?"
+                message="The dossier and its players are deleted. Drafts against them keep the name."
+                confirm_label="Delete opponent"
+                tone=ConfirmTone::Destructive
+                on_confirm=delete
+            />
+        </article>
+    }
+}
 
-            // Row 3: Champion pills (sorted by mastery points)
-            {if sorted_champions.is_empty() {
-                view! { <span></span> }.into_any()
+/// A role without a player: add one by Riot ID (or a name). `existing` is
+/// the empty slot record the dossier was created with, filled in place.
+#[component]
+fn EmptyRole(
+    role: &'static str,
+    opponent_id: String,
+    #[prop(default = None)] existing: Option<String>,
+    on_changed: Callback<()>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let value = RwSignal::new(String::new());
+    let label = Role::parse(role).map(|r| r.label()).unwrap_or(role);
+    let opp = StoredValue::new(opponent_id);
+    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let v = value.get_untracked().trim().to_string();
+        if v.is_empty() {
+            toast
+                .push
+                .run(Toast::error("Enter the player's Riot ID or name."));
+            return;
+        }
+        let o = opp.get_value();
+        let slot = existing.clone();
+        leptos::task::spawn_local(async move {
+            // "Name#Tag" is a Riot ID; anything else is a display name.
+            let (name, riot) = if v.contains('#') {
+                (String::new(), v)
             } else {
-                let pills = sorted_champions.iter().map(|champ_name| {
-                    let name = champ_name.clone();
-                    let level_display = mastery_map_stored.with_value(|m| {
-                        m.get(&name).map(|(lvl, _)| format!(" M{}", lvl))
-                    });
-                    let display = match level_display {
-                        Some(suffix) => format!("{}{}", name, suffix),
-                        None => name,
-                    };
-                    view! {
-                        <span class="text-xs bg-elevated border border-divider text-secondary rounded-md px-2 py-1">
-                            {display}
-                        </span>
+                (v, String::new())
+            };
+            let result = match slot {
+                Some(pid) => save_player(pid, name, role.to_string(), riot, String::new()).await,
+                None => match add_player(o, name.clone(), role.to_string()).await {
+                    Ok(pid) if !riot.is_empty() => {
+                        save_player(pid, name, role.to_string(), riot, String::new()).await
                     }
-                }).collect_view();
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(e),
+                },
+            };
+            match result {
+                Ok(()) => {
+                    on_changed.run(());
+                    toast
+                        .push
+                        .run(Toast::success(format!("{label} player added")));
+                }
+                Err(e) => toast.push.run(Toast::error(format!("Could not add: {e}"))),
+            }
+        });
+    });
+    view! {
+        <li class="grid grid-cols-1 items-end gap-2 border-b border-rule py-3 sm:grid-cols-[3rem_minmax(0,1fr)_auto]" data-role=role>
+            {Role::parse(role).map(|r| view! { <span class="pb-2"><RoleLabel role=r /></span> })}
+            <Field id=format!("opp-add-{role}") label=format!("{label} player")>
+                <TextField value=value placeholder="Name#Tag or a name" />
+            </Field>
+            <Button on_click=add>"Add player"</Button>
+        </li>
+    }
+}
+
+/// A scouted player: Riot ID, recent champions with mastery, role mix.
+#[component]
+fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let pid = StoredValue::new(player.id.clone().unwrap_or_default());
+    let riot_id = RwSignal::new(player.riot_summoner_name.clone().unwrap_or_default());
+    let pname = StoredValue::new(player.name.clone());
+    let prole = StoredValue::new(player.role.clone());
+    let pnotes = StoredValue::new(player.notes.clone().unwrap_or_default());
+    let fetching = RwSignal::new(false);
+    let error = RwSignal::new(None::<String>);
+    let confirm = RwSignal::new(false);
+    let intel = player.compute_intel();
+    let mastery: std::collections::HashMap<String, i32> = player
+        .mastery_data()
+        .into_iter()
+        .map(|(c, l, _)| (c, l))
+        .collect();
+    let games = player.recent_champions.len();
+    let roles = player.role_distribution();
+    let surveyed = player.last_fetched.clone().filter(|s| !s.is_empty());
+    let stale = surveyed.as_deref().map(is_stale).unwrap_or(false);
+    let display = player_name(&player);
+    let role = Role::parse(&player.role);
+
+    let refresh = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let rid = riot_id.get_untracked().trim().to_string();
+        if !valid_riot_id(&rid) || rid.is_empty() {
+            error.set(Some("Use Name#Tag, for example Faker#KR1.".into()));
+            return;
+        }
+        error.set(None);
+        fetching.set(true);
+        let id = pid.get_value();
+        leptos::task::spawn_local(async move {
+            // Keep the Riot ID with the player, then read their games.
+            let _ = save_player(
+                id.clone(),
+                pname.get_value(),
+                prole.get_value(),
+                rid.clone(),
+                pnotes.get_value(),
+            )
+            .await;
+            match fetch_player_intel_fn(id, rid).await {
+                Ok(()) => {
+                    on_changed.run(());
+                    toast.push.run(Toast::success("Player surveyed"));
+                }
+                Err(e) => error.set(Some(e.to_string())),
+            }
+            fetching.set(false);
+        });
+    });
+    let remove = Callback::new(move |_| {
+        let id = pid.get_value();
+        leptos::task::spawn_local(async move {
+            match remove_player(id).await {
+                Ok(()) => {
+                    on_changed.run(());
+                    toast.push.run(Toast::success("Player removed"));
+                }
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not remove: {e}"))),
+            }
+        });
+    });
+    let field_id = format!("opp-riot-{}", player.role);
+    view! {
+        <li class="flex flex-col gap-3 border-b border-rule py-4" data-role=player.role.clone()>
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {role.map(|r| view! { <RoleLabel role=r /> })}
+                <span class="font-display text-heading font-semibold text-primary">{display}</span>
+                <span class=if stale { "text-caption text-warning" } else { "text-caption text-muted" }>
+                    {match &surveyed {
+                        Some(s) => format!("Surveyed {}{}", format_timestamp(s), if stale { " (over a week)" } else { "" }),
+                        None => "Never surveyed".to_string(),
+                    }}
+                </span>
+                <span class="figures text-caption text-muted">{match games { 0 => "no games".to_string(), 1 => "1 game".to_string(), n => format!("{n} games") }}</span>
+            </div>
+            {if intel.champion_frequencies.is_empty() {
+                view! { <p class="text-label text-secondary">"No champions yet. Add the Riot ID and refresh to read their last 20 games."</p> }.into_any()
+            } else {
                 view! {
-                    <div class="flex flex-wrap gap-1 mb-3">
-                        {pills}
-                    </div>
+                    <ul class="flex flex-wrap gap-x-4 gap-y-2" aria-label="Most played in scouted games">
+                        {intel.champion_frequencies.iter().take(8).map(|(c, n)| {
+                            let level = mastery.get(c).copied();
+                            view! {
+                                <li class="inline-flex items-center gap-1.5">
+                                    <ChampionAvatar name=c.clone() size=AvatarSize::Sm decorative=true />
+                                    <span class="text-label text-primary">{c.clone()}</span>
+                                    <span class="figures text-caption text-muted">{format!("\u{00d7}{n}")}</span>
+                                    {level.map(|l| view! { <span class="figures text-caption text-muted">{format!("M{l}")}</span> })}
+                                </li>
+                            }
+                        }).collect_view()}
+                    </ul>
                 }.into_any()
             }}
-
-            // Row 4: Pool Analysis (collapsible)
-            <div>
-                <button
-                    on:click=move |_| pool_expanded.update(|v| *v = !*v)
-                    class="text-xs text-muted hover:text-secondary cursor-pointer flex items-center gap-1 rounded-md focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                >
-                    {move || if pool_expanded.get() { "Pool Analysis \u{25be}" } else { "Pool Analysis \u{25b8}" }}
-                </button>
-                {move || {
-                    if pool_expanded.get() {
-                        let has_data = pool_sz > 0 || !comfort_picks.is_empty();
-                        if has_data {
-                            // Role distribution display
-                            let role_dist_text = if role_distribution.is_empty() {
-                                String::new()
-                            } else {
-                                let total_matches: u32 = role_distribution.iter().map(|(_, c)| c).sum();
-                                let mut parts: Vec<String> = role_distribution.iter().map(|(role, count)| {
-                                    let display = match role.as_str() {
-                                        "TOP" => "Top",
-                                        "JUNGLE" => "Jungle",
-                                        "MIDDLE" => "Mid",
-                                        "BOTTOM" => "Bot",
-                                        "UTILITY" => "Support",
-                                        _ => role.as_str(),
-                                    };
-                                    let pct = if total_matches > 0 {
-                                        (*count as f32 / total_matches as f32 * 100.0).round() as u32
-                                    } else {
-                                        0
-                                    };
-                                    format!("{} {}%", display, pct)
-                                }).collect();
-                                parts.sort();
-                                parts.join(" / ")
-                            };
-
-                            // Comfort picks display
-                            let comfort_text = if comfort_picks.is_empty() {
-                                String::new()
-                            } else {
-                                comfort_picks.iter()
-                                    .map(|(name, pct)| format!("{} {:.0}%", name, pct))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            };
-
-                            let plural = if pool_sz != 1 { "s" } else { "" };
-
-                            view! {
-                                <div class="mt-2 text-xs text-muted space-y-0.5">
-                                    <p>"Pool: "{pool_sz}" champion"{plural}</p>
-                                    {if !role_dist_text.is_empty() {
-                                        view! { <p>"Roles: "{role_dist_text}</p> }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }}
-                                    {if !comfort_text.is_empty() {
-                                        view! { <p>"Comfort: "{comfort_text}</p> }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }}
-                                </div>
-                            }.into_any()
-                        } else {
-                            view! {
-                                <p class="text-xs text-muted mt-2">"Fetch player data to see pool analysis."</p>
-                            }.into_any()
-                        }
-                    } else {
-                        view! { <span></span> }.into_any()
-                    }
-                }}
+            {(intel.otp_champion.is_some() || !roles.is_empty()).then(|| {
+                let total: u32 = roles.iter().map(|(_, c)| c).sum();
+                let mut mix: Vec<(String, u32)> = roles.clone();
+                mix.sort_by(|a, b| b.1.cmp(&a.1));
+                let mix_text = mix.iter().map(|(r, c)| format!("{} {}%", position_label(r), if total > 0 { c * 100 / total } else { 0 })).collect::<Vec<_>>().join(", ");
+                view! {
+                    <p class="flex flex-wrap gap-x-4 text-caption text-secondary">
+                        {intel.otp_champion.clone().map(|c| view! { <span class="text-warning">{format!("One-trick: {c}")}</span> })}
+                        {(!mix_text.is_empty()).then(|| view! { <span>"Roles played: " {mix_text}</span> })}
+                    </p>
+                }
+            })}
+            <div class="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                <Field id=field_id label="Riot ID" error=Signal::derive(move || error.get())>
+                    <TextField value=riot_id placeholder="Name#Tag" />
+                </Field>
+                <Button on_click=refresh loading=Signal::derive(move || fetching.get())>"Refresh"</Button>
+                <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| confirm.set(true))>"Remove"</Button>
             </div>
-        </div>
+            <ConfirmDialog
+                id="remove-player"
+                open=confirm
+                title="Remove this player?"
+                message="The player and their scouted games leave the dossier."
+                confirm_label="Remove player"
+                tone=ConfirmTone::Destructive
+                on_confirm=remove
+            />
+        </li>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evidence_line_counts_players_and_games() {
+        assert_eq!(evidence_line(0, 4), "No players yet");
+        assert_eq!(evidence_line(1, 1), "1 player, 1 game");
+        assert_eq!(evidence_line(5, 0), "5 players, no games");
+        assert_eq!(evidence_line(5, 100), "5 players, 100 games");
+    }
+
+    #[test]
+    fn surveyed_line_flags_stale_dossiers() {
+        assert_eq!(surveyed_line(None, false), "never surveyed");
+        assert_eq!(
+            surveyed_line(Some("2 days ago"), false),
+            "surveyed 2 days ago"
+        );
+        assert_eq!(
+            surveyed_line(Some("9 days ago"), true),
+            "surveyed 9 days ago, over a week"
+        );
     }
 }
