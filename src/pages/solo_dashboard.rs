@@ -74,13 +74,13 @@ pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
         .to_string();
 
     authz::rate_limit(crate::server::rate_limit::Bucket::Riot).await?;
-    authz::user_cooldown("solo_sync", &user, std::time::Duration::from_secs(60))?;
-
     let riot_client = authz::riot()?;
     // Match history plus the ranked lookup.
     riot_client
         .ensure_headroom(riot::MATCH_HISTORY_REQUESTS + 1)
         .map_err(authz::server_err)?;
+    // After the budget check, so "Riot is busy" does not also start the cooldown.
+    authz::user_cooldown("solo_sync", &user, std::time::Duration::from_secs(60))?;
     let platform = riot::platform_for(&[user.riot_region.as_deref()]);
 
     let matches = riot_client

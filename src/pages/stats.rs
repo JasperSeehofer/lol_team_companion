@@ -100,10 +100,6 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
             ))
         }
     };
-    // A team sync makes ~21 Riot calls per linked player: once a minute per
-    // team (not per member, so five members cannot run five syncs).
-    authz::team_cooldown("team_sync", &team_id, std::time::Duration::from_secs(60))?;
-
     let members = db::get_roster_puuids(&surreal, &team_id)
         .await
         .map_err(authz::server_err)?;
@@ -119,6 +115,11 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
     riot_client
         .ensure_headroom(linked * riot::MATCH_HISTORY_REQUESTS)
         .map_err(authz::server_err)?;
+    // A team sync makes ~21 Riot calls per linked player: once a minute per
+    // team (not per member, so five members cannot run five syncs). Taken
+    // after the budget check so a "Riot is busy" answer does not lock the
+    // team out as well.
+    authz::team_cooldown("team_sync", &team_id, std::time::Duration::from_secs(60))?;
 
     let queue_label = match queue_id {
         Some(420) => "Solo/Duo",
