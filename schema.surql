@@ -459,7 +459,8 @@ DEFINE INDEX IF NOT EXISTS checklist_instance_plan ON checklist_instance FIELDS 
 -- Indexes on the scope fields that tenant-scoped reads filter on (M6).
 -- Plain (non-unique) indexes are safe to add to an existing database here.
 DEFINE INDEX IF NOT EXISTS team_member_team ON team_member FIELDS team;
-DEFINE INDEX IF NOT EXISTS team_member_user ON team_member FIELDS user;
+-- team_member.user has a UNIQUE index (one team per user), added by
+-- migration 6 after it resolved legacy multi-memberships.
 DEFINE INDEX IF NOT EXISTS join_request_team ON join_request FIELDS team;
 DEFINE INDEX IF NOT EXISTS join_request_user ON join_request FIELDS user;
 DEFINE INDEX IF NOT EXISTS match_team ON match FIELDS team_id;

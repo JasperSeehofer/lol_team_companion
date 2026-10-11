@@ -1072,11 +1072,19 @@ pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResu
             "You are already a member of this team".into(),
         ));
     }
+    // The unique index on team_member.user rejects a second team.
     db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'sub'")
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
         .await?
-        .check()?;
+        .check()
+        .map_err(|e| {
+            if e.to_string().contains("team_member_user_unique") {
+                DbError::Invalid("That player already belongs to a team.".into())
+            } else {
+                DbError::Surreal(e)
+            }
+        })?;
     Ok(())
 }
 

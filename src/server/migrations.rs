@@ -89,6 +89,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "string_ids_to_record_links",
         step: Step::Rust(|db| Box::pin(string_ids_to_record_links(db))),
     },
+    Migration {
+        version: 6,
+        name: "one_team_per_user_unique",
+        step: Step::Rust(|db| Box::pin(one_team_per_user_unique(db))),
+    },
 ];
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -371,5 +376,63 @@ async fn string_ids_to_record_links(db: &Surreal<Db>) -> DbResult<()> {
         .await?
         .check()?;
     }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct MembershipRow {
+    id: RecordId,
+    user: RecordId,
+    team: RecordId,
+    leads: bool,
+}
+
+/// Enforce "a user belongs to at most one team" in the database with a
+/// unique index on `team_member.user` (until now only the application
+/// checked it, under a process lock).
+///
+/// Users created before M1 can have several memberships. For each such user
+/// one membership is kept: the team they lead if there is one, otherwise the
+/// oldest membership (the one `get_user_team_id` already resolved to, so
+/// what the user sees does not change). The others are deleted and logged.
+async fn one_team_per_user_unique(db: &Surreal<Db>) -> DbResult<()> {
+    let mut r = db
+        .query(
+            "SELECT id, user, team, (team.created_by = user) AS leads FROM team_member ORDER BY id ASC",
+        )
+        .await?;
+    let rows: Vec<MembershipRow> = r.take(0)?;
+
+    let mut by_user: std::collections::BTreeMap<String, Vec<&MembershipRow>> =
+        std::collections::BTreeMap::new();
+    for row in &rows {
+        by_user.entry(row.user.to_sql()).or_default().push(row);
+    }
+    for (user, memberships) in by_user {
+        if memberships.len() < 2 {
+            continue;
+        }
+        let keep = memberships
+            .iter()
+            .find(|m| m.leads)
+            .unwrap_or(&memberships[0])
+            .id
+            .to_sql();
+        for m in memberships.iter().filter(|m| m.id.to_sql() != keep) {
+            tracing::warn!(%user, team = %m.team.to_sql(), kept = %keep,
+                "removed an extra team membership (one team per user)");
+            db.query("DELETE type::record('team_member', $key)")
+                .bind(("key", record_key(&m.id.to_sql(), "team_member")))
+                .await?
+                .check()?;
+        }
+    }
+
+    db.query(
+        "REMOVE INDEX IF EXISTS team_member_user ON team_member; \
+         DEFINE INDEX IF NOT EXISTS team_member_user_unique ON team_member FIELDS user UNIQUE;",
+    )
+    .await?
+    .check()?;
     Ok(())
 }

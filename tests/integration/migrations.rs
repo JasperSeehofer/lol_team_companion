@@ -48,7 +48,10 @@ async fn scope_fields_are_indexed() {
             "user",
             &["email_unique", "username_lc_unique", "user_riot_puuid"],
         ),
-        ("team_member", &["team_member_team", "team_member_user"]),
+        (
+            "team_member",
+            &["team_member_team", "team_member_user_unique"],
+        ),
         ("draft", &["draft_team"]),
         ("draft_action", &["draft_action_draft"]),
         ("game_plan", &["game_plan_team"]),
@@ -321,4 +324,49 @@ async fn string_ids_become_record_links() {
     let reviews = db::list_post_game_learnings(&db, "team:t").await.unwrap();
     assert_eq!(reviews[0].game_plan_id.as_deref(), Some("game_plan:p"));
     assert_eq!(reviews[0].draft_id.as_deref(), Some("draft:d"));
+}
+
+#[tokio::test]
+async fn extra_memberships_are_resolved_before_the_unique_index() {
+    let db = baseline_only().await;
+    db.query(
+        "CREATE user:a SET username = 'a', email = 'a@example.com', password_hash = 'h'; \
+         CREATE user:b SET username = 'b', email = 'b@example.com', password_hash = 'h'; \
+         CREATE team:one SET name = 'One', region = 'EUW', created_by = user:b; \
+         CREATE team:two SET name = 'Two', region = 'EUW', created_by = user:a; \
+         CREATE team_member:m1 SET team = team:one, user = user:a, role = 'sub'; \
+         CREATE team_member:m2 SET team = team:two, user = user:a, role = 'sub'; \
+         CREATE team_member:m3 SET team = team:one, user = user:b, role = 'sub'; \
+         CREATE team_member:m4 SET team = team:two, user = user:b, role = 'sub';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    migrations::run(&db).await.unwrap();
+
+    // a leads team two: that membership stays. b leads team one.
+    assert_eq!(
+        db::get_user_team_id(&db, "user:a")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("team:two")
+    );
+    assert_eq!(
+        db::get_user_team_id(&db, "user:b")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("team:one")
+    );
+    let info = info_for_table(&db, "team_member").await;
+    assert!(info.contains("team_member_user_unique"), "{info}");
+    assert!(!info.contains("team_member_user ON"), "{info}");
+
+    // The database now refuses a second membership on its own.
+    match db::join_team(&db, "user:a", "team:one").await {
+        Err(DbError::Invalid(msg)) => assert!(msg.contains("already belongs"), "{msg}"),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
 }
