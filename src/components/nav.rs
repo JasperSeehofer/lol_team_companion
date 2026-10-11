@@ -1,7 +1,10 @@
 use leptos::prelude::*;
 use leptos_router::{components::A, hooks::use_location};
 
-use crate::components::ui::{Button, ButtonSize, ButtonVariant};
+use crate::components::ui::{
+    AvatarSize, Button, ButtonSize, ButtonVariant, Command, CommandBar, Menu, MenuAlign, MenuItem,
+    Segment, SegmentSize, SegmentedControl, UserAvatar,
+};
 use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};
 use crate::pages::team::dashboard::handle_join_request;
@@ -18,67 +21,65 @@ pub async fn set_user_mode(mode: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
+/// The Solo / Team workspace switch in the nav.
 #[component]
 pub fn ModeToggle(mode: String) -> impl IntoView {
-    let current_mode = RwSignal::new(mode);
-
-    let on_click_solo = move |_| {
-        let m = current_mode.get_untracked();
-        if m == "solo" {
-            return;
-        }
-        current_mode.set("solo".to_string());
+    let value = RwSignal::new(mode);
+    let on_change = Callback::new(move |m: String| {
         leptos::task::spawn_local(async move {
-            let _ = set_user_mode("solo".to_string()).await;
+            let _ = set_user_mode(m).await;
             #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
                 let _ = window.location().reload();
             }
         });
-    };
-
-    let on_click_team = move |_| {
-        let m = current_mode.get_untracked();
-        if m == "team" {
-            return;
-        }
-        current_mode.set("team".to_string());
-        leptos::task::spawn_local(async move {
-            let _ = set_user_mode("team".to_string()).await;
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().reload();
-            }
-        });
-    };
-
-    let btn = move |active: bool| {
-        if active {
-            "h-7 cursor-pointer rounded-[2px] bg-ink-3 px-3 text-label font-semibold text-primary"
-        } else {
-            "h-7 cursor-pointer rounded-[2px] px-3 text-label text-muted transition-colors hover:text-primary"
-        }
-    };
+    });
     view! {
-        <div role="group" aria-label="Workspace" class="hidden sm:inline-flex items-stretch gap-0.5 rounded-ctl border border-rule p-0.5">
-            <button
-                type="button"
-                class=move || btn(current_mode.get() == "solo")
-                aria-pressed=move || (current_mode.get() == "solo").to_string()
-                on:click=on_click_solo
-            >
-                "Solo"
-            </button>
-            <button
-                type="button"
-                class=move || btn(current_mode.get() == "team")
-                aria-pressed=move || (current_mode.get() == "team").to_string()
-                on:click=on_click_team
-            >
-                "Team"
-            </button>
+        <div class="hidden sm:block">
+            <SegmentedControl
+                id="workspace"
+                label="Workspace"
+                options=vec![Segment::new("solo", "Solo"), Segment::new("team", "Team")]
+                value=value
+                size=SegmentSize::Sm
+                on_change=on_change
+            />
         </div>
     }
+}
+
+/// Every page the command bar can jump to: the hub routes plus home.
+fn route_commands(is_admin: bool) -> Vec<Command> {
+    let mut out = vec![Command::go("Home", "/").hint("Companion")];
+    for (hub, routes) in HUB_ROUTES {
+        let hint = match *hub {
+            "strategy" => "Strategy",
+            "history" => "History",
+            _ => "Profile",
+        };
+        for (path, label) in routes.iter() {
+            let words = match *path {
+                "/draft" => "pick ban picks bans",
+                "/tree-drafter" => "tree branches draft",
+                "/champion-pool" => "pool champions tiers",
+                "/post-game" => "review debrief",
+                "/opponents" => "scouting dossier enemy",
+                "/stats" => "matches games history",
+                "/team/roster" => "members players join",
+                _ => "",
+            };
+            out.push(Command::go(*label, *path).hint(hint).keywords(words));
+        }
+    }
+    if is_admin {
+        out.push(Command::go("Invites", "/admin/invites").hint("Admin"));
+        out.push(
+            Command::go("Design system", "/design")
+                .hint("Admin")
+                .keywords("gallery primitives tokens"),
+        );
+    }
+    out
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
@@ -220,20 +221,17 @@ fn sub_class(active: bool) -> &'static str {
     }
 }
 
-const MENU_ITEM: &str = "block px-4 py-2.5 text-body text-secondary transition-colors hover:bg-ink-3 hover:text-primary";
-
 #[component]
 pub fn Nav() -> impl IntoView {
     let logout_action = ServerAction::<Logout>::new();
-    let menu_open = RwSignal::new(false);
     let notif_open = RwSignal::new(false);
+    let command_open = RwSignal::new(false);
 
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
     let notifications = Resource::new(|| (), |_| get_notifications());
 
     let close_all = move || {
-        menu_open.set(false);
         notif_open.set(false);
     };
 
@@ -269,7 +267,7 @@ pub fn Nav() -> impl IntoView {
         });
     }
 
-    let any_dropdown_open = move || menu_open.get() || notif_open.get();
+    let any_dropdown_open = move || notif_open.get();
 
     let location = use_location();
     let active_hub = Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
@@ -333,7 +331,6 @@ pub fn Nav() -> impl IntoView {
                                             type="button"
                                             on:click=move |_| {
                                                 notif_open.update(|v| *v = !*v);
-                                                menu_open.set(false);
                                             }
                                             class="relative inline-flex h-8 items-center gap-2 rounded-ctl px-2 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary cursor-pointer"
                                             aria-expanded=move || notif_open.get().to_string()
@@ -402,73 +399,78 @@ pub fn Nav() -> impl IntoView {
                             }}
                         </Suspense>
 
-                        // User menu, or sign-in links.
-                        <div class="relative">
-                            <Suspense fallback=move || view! {
-                                <span class="text-label text-muted">"\u{2026}"</span>
-                            }>
-                                {move || Suspend::new(async move {
-                                    match user.await {
-                                        Ok(Some(u)) => view! {
+                        // Command bar trigger, user menu, or sign-in links.
+                        <Suspense fallback=move || view! {
+                            <span class="text-label text-muted">"\u{2026}"</span>
+                        }>
+                            {move || Suspend::new(async move {
+                                match user.await {
+                                    Ok(Some(u)) => {
+                                        let name = u.username.clone();
+                                        let name_for_trigger = StoredValue::new(name.clone());
+                                        let mut items = vec![
+                                            MenuItem::link("profile", "Profile", "/profile"),
+                                            MenuItem::link("pool", "Champion pool", "/champion-pool"),
+                                        ];
+                                        // Admin links only for admins; the pages check on the server too.
+                                        if u.is_admin {
+                                            items.push(MenuItem::link("invites", "Invites", "/admin/invites"));
+                                            items.push(MenuItem::link("design", "Design system", "/design"));
+                                        }
+                                        items.push(MenuItem::new("sign-out", "Sign out").danger());
+                                        let on_select = Callback::new(move |id: String| {
+                                            if id == "sign-out" {
+                                                logout_action.dispatch(Logout {});
+                                            }
+                                        });
+                                        let commands = route_commands(u.is_admin);
+                                        view! {
                                             <button
                                                 type="button"
-                                                on:click=move |_| {
-                                                    menu_open.update(|v| *v = !*v);
-                                                    notif_open.set(false);
-                                                }
-                                                class="flex h-8 items-center gap-2 rounded-ctl px-1.5 text-secondary transition-colors hover:bg-ink-3 hover:text-primary cursor-pointer"
-                                                aria-expanded=move || menu_open.get().to_string()
-                                                aria-haspopup="true"
+                                                class="inline-flex h-8 cursor-pointer items-center gap-2 rounded-ctl border border-rule px-2 text-label text-muted transition-colors hover:border-outline hover:text-primary"
+                                                aria-keyshortcuts="Control+K Meta+K"
+                                                aria-haspopup="dialog"
+                                                data-testid="command-trigger"
+                                                on:click=move |_| command_open.set(true)
                                             >
-                                                // Avatar initial (round is reserved for avatars).
-                                                <span class="grid size-7 place-items-center rounded-full bg-ink-3 text-caption font-semibold uppercase text-secondary" aria-hidden="true"> // lint:allow(rounded-full)
-                                                    {u.username.chars().next().unwrap_or('?').to_string()}
-                                                </span>
-                                                <span class="hidden sm:inline text-label font-medium">{u.username}</span>
-                                                <svg class="size-3.5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                                <svg class="size-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                                                    <circle cx="7" cy="7" r="4.5" />
+                                                    <path d="M10.5 10.5L14 14" stroke-linecap="round" />
                                                 </svg>
+                                                <span class="sr-only lg:not-sr-only">"Go to"</span>
+                                                <kbd class="hidden rounded-ctl border border-outline/70 px-1 text-caption leading-4 text-muted sm:inline-block" aria-hidden="true">"Ctrl K"</kbd>
                                             </button>
-                                            <div
-                                                class="absolute right-0 mt-2 w-48 overflow-hidden rounded-ctl border border-rule bg-ink-2 shadow-overlay z-(--z-popover)"
-                                                style:display=move || if menu_open.get() { "block" } else { "none" }
-                                            >
-                                                <A href="/profile" attr:class=MENU_ITEM on:click=move |_| menu_open.set(false)>
-                                                    "Profile"
-                                                </A>
-                                                <A href="/champion-pool" attr:class=MENU_ITEM on:click=move |_| menu_open.set(false)>
-                                                    "Champion pool"
-                                                </A>
-                                                // Admin links only for admins; the pages check on the server too.
-                                                {u.is_admin.then(|| view! {
-                                                    <A href="/admin/invites" attr:class=MENU_ITEM on:click=move |_| menu_open.set(false)>
-                                                        "Invites"
-                                                    </A>
-                                                    <A href="/design" attr:class=MENU_ITEM on:click=move |_| menu_open.set(false)>
-                                                        "Design system"
-                                                    </A>
-                                                })}
-                                                <div class="border-t border-rule"></div>
-                                                <ActionForm action=logout_action>
-                                                    <button
-                                                        type="submit"
-                                                        class="block w-full cursor-pointer px-4 py-2.5 text-left text-body text-danger transition-colors hover:bg-ink-3"
-                                                    >
-                                                        "Sign out"
-                                                    </button>
-                                                </ActionForm>
-                                            </div>
-                                        }.into_any(),
-                                        _ => view! {
-                                            <div class="flex items-center gap-2">
-                                                <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
-                                                <Button href="/closed-beta" variant=ButtonVariant::Primary>"Request access"</Button>
-                                            </div>
-                                        }.into_any(),
+                                            <CommandBar id="command-bar" open=command_open commands=commands />
+                                            <Menu
+                                                id="user-menu"
+                                                label=format!("Account menu, {name}")
+                                                items=items
+                                                on_select=on_select
+                                                align=MenuAlign::End
+                                                variant=ButtonVariant::Quiet
+                                                size=ButtonSize::Md
+                                                trigger=move || {
+                                                    let n = name_for_trigger.get_value();
+                                                    view! {
+                                                        <UserAvatar name=n.clone() size=AvatarSize::Sm />
+                                                        <span class="hidden text-label font-medium sm:inline">{n}</span>
+                                                        <svg class="size-3.5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    }
+                                                }
+                                            />
+                                        }.into_any()
                                     }
-                                })}
-                            </Suspense>
-                        </div>
+                                    _ => view! {
+                                        <div class="flex items-center gap-2">
+                                            <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
+                                            <Button href="/closed-beta" variant=ButtonVariant::Primary>"Request access"</Button>
+                                        </div>
+                                    }.into_any(),
+                                }
+                            })}
+                        </Suspense>
                     </div>
                 </div>
 

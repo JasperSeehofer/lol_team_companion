@@ -1,11 +1,15 @@
-//! Shim: `ModeToggle`, a small segmented control for page modes.
-//! Batch 2's `SegmentedControl` replaces it.
+//! Shim: `ModeToggle` keeps its old props and renders the batch 2
+//! `SegmentedControl` (radiogroup with roving tabindex). M3/M5 move the
+//! callers to `SegmentedControl` directly and delete this file.
 
 use leptos::prelude::*;
 
+use crate::components::ui::{Segment, SegmentSize, SegmentedControl};
+
 /// Segmented mode switch. `options` are `(value, label)` pairs.
 ///
-/// Buttons expose their state with `aria-pressed`; the group is labelled.
+/// A11y: a `SegmentedControl` (`role="radiogroup"` named by `label`,
+/// `role="radio"` segments, arrow keys move and select).
 #[component]
 pub fn ModeToggle(
     /// Current mode value.
@@ -15,32 +19,25 @@ pub fn ModeToggle(
     #[prop(optional, into)] label: Option<String>,
 ) -> impl IntoView {
     let label = label.unwrap_or_else(|| "View".to_string());
+    let value = RwSignal::new(current.get_untracked());
+    Effect::new(move |_| {
+        let c = current.get();
+        if value.get_untracked() != c {
+            value.set(c);
+        }
+    });
+    let segments = options
+        .into_iter()
+        .map(|(v, l)| Segment::new(v, l))
+        .collect::<Vec<_>>();
     view! {
-        <div role="group" aria-label=label class="inline-flex items-stretch gap-0.5 rounded-ctl border border-outline p-0.5">
-            {options
-                .into_iter()
-                .map(|(value, text)| {
-                    let v_class = value.clone();
-                    let v_aria = value.clone();
-                    let v_click = value.clone();
-                    view! {
-                        <button
-                            type="button"
-                            class=move || {
-                                if current.get() == v_class {
-                                    "h-7 cursor-pointer rounded-[2px] bg-ink-3 px-3 text-label font-semibold text-primary"
-                                } else {
-                                    "h-7 cursor-pointer rounded-[2px] px-3 text-label text-muted transition-colors hover:text-primary"
-                                }
-                            }
-                            aria-pressed=move || (current.get() == v_aria).to_string()
-                            on:click=move |_| on_select.run(v_click.clone())
-                        >
-                            {text}
-                        </button>
-                    }
-                })
-                .collect_view()}
-        </div>
+        <SegmentedControl
+            id="page-mode"
+            label=label
+            options=segments
+            value=value
+            size=SegmentSize::Md
+            on_change=on_select
+        />
     }
 }
