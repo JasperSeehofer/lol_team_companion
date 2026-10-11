@@ -101,7 +101,7 @@ DEFINE FIELD IF NOT EXISTS our_side ON draft TYPE string DEFAULT 'blue';
 DEFINE FIELD IF NOT EXISTS tags ON draft TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS win_conditions ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS watch_out ON draft TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS series_id ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS series_id ON draft TYPE option<record<series>>;
 DEFINE FIELD IF NOT EXISTS game_number ON draft TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
@@ -118,7 +118,7 @@ DEFINE FIELD IF NOT EXISTS role ON draft_action TYPE option<string>;
 -- Game plans
 DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON game_plan TYPE string DEFAULT '';
-DEFINE FIELD OVERWRITE draft ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS draft ON game_plan TYPE option<record<draft>>;
 DEFINE FIELD IF NOT EXISTS team ON game_plan TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS our_champions ON game_plan TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS enemy_champions ON game_plan TYPE array<string> DEFAULT [];
@@ -140,8 +140,8 @@ DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::n
 DEFINE TABLE IF NOT EXISTS post_game_learning SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON post_game_learning TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS match_riot_id ON post_game_learning TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS game_plan_id ON post_game_learning TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS draft_id ON post_game_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_plan_id ON post_game_learning TYPE option<record<game_plan>>;
+DEFINE FIELD IF NOT EXISTS draft_id ON post_game_learning TYPE option<record<draft>>;
 DEFINE FIELD IF NOT EXISTS what_went_well ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS improvements ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS action_items ON post_game_learning TYPE array<string>;
@@ -232,7 +232,7 @@ DEFINE FIELD IF NOT EXISTS role_distribution_json ON opponent_player TYPE option
 DEFINE TABLE IF NOT EXISTS series SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON series TYPE string;
 DEFINE FIELD IF NOT EXISTS team ON series TYPE record<team>;
-DEFINE FIELD IF NOT EXISTS opponent_id ON series TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS opponent_id ON series TYPE option<record<opponent>>;
 DEFINE FIELD IF NOT EXISTS opponent_name ON series TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS format ON series TYPE string DEFAULT 'bo1';
 DEFINE FIELD IF NOT EXISTS is_fearless ON series TYPE bool DEFAULT false;
@@ -243,7 +243,7 @@ DEFINE FIELD IF NOT EXISTS created_at ON series TYPE datetime DEFAULT time::now(
 -- Action items (from post-game reviews)
 DEFINE TABLE IF NOT EXISTS action_item SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON action_item TYPE record<team>;
-DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<record<post_game_learning>>;
 DEFINE FIELD IF NOT EXISTS text ON action_item TYPE string;
 DEFINE FIELD IF NOT EXISTS status ON action_item TYPE string DEFAULT 'open';
 DEFINE FIELD IF NOT EXISTS assigned_to ON action_item TYPE option<string>;
@@ -269,8 +269,8 @@ DEFINE FIELD IF NOT EXISTS created_at ON checklist_template TYPE datetime DEFAUL
 -- Checklist instances (per-game)
 DEFINE TABLE IF NOT EXISTS checklist_instance SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON checklist_instance TYPE record<team>;
-DEFINE FIELD IF NOT EXISTS game_plan_id ON checklist_instance TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS template_id ON checklist_instance TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_plan_id ON checklist_instance TYPE option<record<game_plan>>;
+DEFINE FIELD IF NOT EXISTS template_id ON checklist_instance TYPE option<record<checklist_template>>;
 DEFINE FIELD IF NOT EXISTS items ON checklist_instance TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS checked ON checklist_instance TYPE array<bool> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS created_at ON checklist_instance TYPE datetime DEFAULT time::now();
@@ -374,6 +374,15 @@ DEFINE FIELD IF NOT EXISTS status ON bug_report TYPE string DEFAULT 'open'
   ASSERT $value IN ['open', 'triaged', 'closed'];
 DEFINE INDEX IF NOT EXISTS bug_report_status_created
   ON bug_report FIELDS status, created_at;
+
+-- Record links (M6). These fields held record IDs as strings before M6;
+-- migration 5 converted existing values and tightened the types above.
+-- action_item.assigned_to stays a string: it holds the assignee's username as
+-- picked on the page, not a record ID.
+DEFINE INDEX IF NOT EXISTS draft_series ON draft FIELDS series_id;
+DEFINE INDEX IF NOT EXISTS game_plan_draft ON game_plan FIELDS draft;
+DEFINE INDEX IF NOT EXISTS post_game_learning_plan ON post_game_learning FIELDS game_plan_id;
+DEFINE INDEX IF NOT EXISTS checklist_instance_plan ON checklist_instance FIELDS game_plan_id;
 
 -- Indexes on the scope fields that tenant-scoped reads filter on (M6).
 -- Plain (non-unique) indexes are safe to add to an existing database here.

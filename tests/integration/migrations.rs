@@ -232,3 +232,88 @@ async fn migrations_must_be_in_order() {
     ];
     assert!(migrations::run_list(&db, OUT_OF_ORDER).await.is_err());
 }
+
+#[test]
+fn link_keys_parse_only_matching_ids() {
+    use migrations::link_key;
+    assert_eq!(link_key("draft:abc", "draft").as_deref(), Some("abc"));
+    assert_eq!(link_key(" draft:abc ", "draft").as_deref(), Some("abc"));
+    assert_eq!(link_key("draft:⟨a-b⟩", "draft").as_deref(), Some("a-b"));
+    assert_eq!(link_key("game_plan:abc", "draft"), None);
+    assert_eq!(link_key("draft:", "draft"), None);
+    assert_eq!(link_key("", "draft"), None);
+    assert_eq!(link_key("abc", "draft"), None);
+}
+
+#[tokio::test]
+async fn string_ids_become_record_links() {
+    let db = baseline_only().await;
+    // Recreate the pre-M6 string types, then legacy rows.
+    for (table, field, _) in migrations::LINK_FIELDS {
+        db.query(format!(
+            "DEFINE FIELD OVERWRITE {field} ON {table} TYPE option<string>;"
+        ))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    }
+    db.query(
+        "CREATE user:u SET username = 'u', email = 'u@example.com', password_hash = 'h'; \
+         CREATE team:t SET name = 'T', region = 'EUW', created_by = user:u; \
+         CREATE series:s SET name = 'Bo3', team = team:t, created_by = user:u, opponent_id = 'opponent:o'; \
+         CREATE draft:d SET name = 'D', team = team:t, created_by = user:u, series_id = 'series:s'; \
+         CREATE draft:e SET name = 'E', team = team:t, created_by = user:u, series_id = ''; \
+         CREATE game_plan:p SET team = team:t, draft = 'draft:d', win_conditions = [], objective_priority = [], teamfight_strategy = 'x'; \
+         CREATE game_plan:q SET team = team:t, draft = 'not an id', win_conditions = [], objective_priority = [], teamfight_strategy = 'x'; \
+         CREATE post_game_learning:r SET team = team:t, game_plan_id = 'game_plan:p', draft_id = 'draft:d', what_went_well = [], improvements = [], action_items = [], created_by = user:u; \
+         CREATE action_item:a SET team = team:t, text = 'x', source_review = 'post_game_learning:r'; \
+         CREATE checklist_template:c SET team = team:t, name = 'C'; \
+         CREATE checklist_instance:i SET team = team:t, game_plan_id = 'game_plan:p', template_id = 'checklist_template:c';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+
+    migrations::run(&db).await.unwrap();
+
+    let check = |q: &'static str| {
+        let db = &db;
+        async move {
+            let mut r = db.query(q).await.unwrap();
+            let v: Value = r.take(0).unwrap();
+            format!("{v:?}")
+        }
+    };
+    // Each converted field now compares equal to a record, not a string.
+    for (q, expect_rows) in [
+        ("SELECT id FROM draft WHERE series_id = series:s", 1),
+        ("SELECT id FROM draft WHERE series_id = NONE", 1),
+        ("SELECT id FROM game_plan WHERE draft = draft:d", 1),
+        ("SELECT id FROM game_plan WHERE draft = NONE", 1),
+        ("SELECT id FROM post_game_learning WHERE game_plan_id = game_plan:p AND draft_id = draft:d", 1),
+        ("SELECT id FROM series WHERE opponent_id = opponent:o", 1),
+        ("SELECT id FROM action_item WHERE source_review = post_game_learning:r", 1),
+        ("SELECT id FROM checklist_instance WHERE game_plan_id = game_plan:p AND template_id = checklist_template:c", 1),
+    ] {
+        let out = check(q).await;
+        assert_eq!(out.matches("RecordId(").count(), expect_rows, "{q}: {out}");
+    }
+    let plan = info_for_table(&db, "game_plan").await;
+    assert!(
+        plan.contains("DEFINE FIELD draft ON game_plan TYPE none | record<draft>"),
+        "{plan}"
+    );
+
+    // The models still see string IDs.
+    let plans = db::list_game_plans(&db, "team:t").await.unwrap();
+    let p = plans
+        .iter()
+        .find(|p| p.id.as_deref() == Some("game_plan:p"))
+        .unwrap();
+    assert_eq!(p.draft_id.as_deref(), Some("draft:d"));
+    let reviews = db::list_post_game_learnings(&db, "team:t").await.unwrap();
+    assert_eq!(reviews[0].game_plan_id.as_deref(), Some("game_plan:p"));
+    assert_eq!(reviews[0].draft_id.as_deref(), Some("draft:d"));
+}

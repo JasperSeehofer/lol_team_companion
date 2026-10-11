@@ -73,6 +73,19 @@ pub fn opt_dt(dt: Option<Datetime>) -> Option<String> {
     dt.as_ref().map(dt_to_string)
 }
 
+/// The key of an optional link ID sent by a client, ready to bind for
+/// `IF $x = NONE { NONE } ELSE { type::record('table', $x) }`. Empty strings
+/// count as "no link".
+pub fn opt_key(id: Option<String>, table: &str) -> Option<String> {
+    id.filter(|s| !s.trim().is_empty())
+        .map(|s| record_key(s.trim(), table))
+}
+
+/// A record link read back as the string ID the shared models use.
+fn opt_link(r: Option<RecordId>) -> Option<String> {
+    r.map(|r| r.to_sql())
+}
+
 /// Succeeds only when `table:id` exists and `owner_path` (a field path on
 /// that record, such as `team` or `tree.team`) points at `owner_table:owner_id`.
 /// Zero rows means "not found" whether the record is missing or belongs to
@@ -1352,7 +1365,7 @@ struct DbDraft {
     tags: Vec<String>,
     win_conditions: Option<String>,
     watch_out: Option<String>,
-    series_id: Option<String>,
+    series_id: Option<RecordId>,
     game_number: Option<i32>,
 }
 
@@ -1372,7 +1385,7 @@ impl From<DbDraft> for Draft {
             tags: d.tags,
             win_conditions: d.win_conditions,
             watch_out: d.watch_out,
-            series_id: d.series_id,
+            series_id: opt_link(d.series_id),
             game_number: d.game_number,
         }
     }
@@ -1428,7 +1441,7 @@ pub async fn save_draft(
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     let mut response = db
-        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = $series_id, game_number = $game_number")
+        .query("CREATE draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number")
         .bind(("name", name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -1440,7 +1453,7 @@ pub async fn save_draft(
         .bind(("tags", tags))
         .bind(("win_conditions", win_conditions))
         .bind(("watch_out", watch_out))
-        .bind(("series_id", series_id))
+        .bind(("series_key", opt_key(series_id, "series")))
         .bind(("game_number", game_number))
         .await?
         .check()?;
@@ -1523,7 +1536,7 @@ pub async fn update_draft(
     ensure_team_record(db, "draft", draft_id, team_id).await?;
     let draft_key = record_key(draft_id, "draft");
 
-    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id=$series_id, game_number=$game_number")
+    db.query("UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number=$game_number")
         .bind(("draft_key", draft_key.clone()))
         .bind(("name", name))
         .bind(("opponent", opponent))
@@ -1534,7 +1547,7 @@ pub async fn update_draft(
         .bind(("tags", tags))
         .bind(("win_conditions", win_conditions))
         .bind(("watch_out", watch_out))
-        .bind(("series_id", series_id))
+        .bind(("series_key", opt_key(series_id, "series")))
         .bind(("game_number", game_number))
         .await?
         .check()?;
@@ -2141,11 +2154,11 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .unwrap_or(&plan.team_id)
         .to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, created_by = type::record('user', $user_key)")
+    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, created_by = type::record('user', $user_key)")
         .bind(("name", plan.name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
-        .bind(("draft_id", plan.draft_id))
+        .bind(("draft_key", opt_key(plan.draft_id, "draft")))
         .bind(("our_champions", plan.our_champions))
         .bind(("enemy_champions", plan.enemy_champions))
         .bind(("win_conditions", plan.win_conditions))
@@ -2173,10 +2186,10 @@ pub async fn update_game_plan(db: &Surreal<Db>, team_id: &str, plan: GamePlan) -
     let plan_id = plan.id.as_deref().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "game_plan", plan_id, team_id).await?;
     let plan_key = record_key(plan_id, "game_plan");
-    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = $draft_id, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag")
+    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag")
         .bind(("plan_key", plan_key))
         .bind(("name", plan.name))
-        .bind(("draft_id", plan.draft_id))
+        .bind(("draft_key", opt_key(plan.draft_id, "draft")))
         .bind(("our_champions", plan.our_champions))
         .bind(("enemy_champions", plan.enemy_champions))
         .bind(("win_conditions", plan.win_conditions))
@@ -2200,7 +2213,7 @@ struct DbGamePlan {
     id: RecordId,
     name: String,
     team: RecordId,
-    draft: Option<String>,
+    draft: Option<RecordId>,
     our_champions: Vec<String>,
     enemy_champions: Vec<String>,
     win_conditions: Vec<String>,
@@ -2221,7 +2234,7 @@ impl From<DbGamePlan> for GamePlan {
         GamePlan {
             id: Some(p.id.to_sql()),
             team_id: p.team.to_sql(),
-            draft_id: p.draft,
+            draft_id: opt_link(p.draft),
             name: p.name,
             our_champions: p.our_champions,
             enemy_champions: p.enemy_champions,
@@ -2294,8 +2307,8 @@ pub async fn get_game_plans_for_draft(
     draft_id: &str,
 ) -> DbResult<Vec<GamePlan>> {
     let mut r = db
-        .query("SELECT * FROM game_plan WHERE draft = $draft_id AND team = type::record('team', $team_key) ORDER BY created_at DESC")
-        .bind(("draft_id", draft_id.to_string()))
+        .query("SELECT * FROM game_plan WHERE draft = type::record('draft', $draft_key) AND team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("draft_key", record_key(draft_id, "draft")))
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
     let rows: Vec<DbGamePlan> = r.take(0).unwrap_or_default();
@@ -2316,11 +2329,11 @@ pub async fn save_post_game_learning(
         .strip_prefix("user:")
         .unwrap_or(&learning.created_by)
         .to_string();
-    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating")
+    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating")
         .bind(("team_key", team_key))
         .bind(("match_riot_id", learning.match_riot_id))
-        .bind(("game_plan_id", learning.game_plan_id))
-        .bind(("draft_id", learning.draft_id))
+        .bind(("plan_key", opt_key(learning.game_plan_id, "game_plan")))
+        .bind(("draft_key", opt_key(learning.draft_id, "draft")))
         .bind(("what_went_well", learning.what_went_well))
         .bind(("improvements", learning.improvements))
         .bind(("action_items", learning.action_items))
@@ -2346,11 +2359,11 @@ pub async fn update_post_game_learning(
     let id = learning.id.as_deref().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", id, team_id).await?;
     let key = record_key(id, "post_game_learning");
-    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = $game_plan_id, draft_id = $draft_id, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
+    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
         .bind(("key", key))
         .bind(("match_riot_id", learning.match_riot_id))
-        .bind(("game_plan_id", learning.game_plan_id))
-        .bind(("draft_id", learning.draft_id))
+        .bind(("plan_key", opt_key(learning.game_plan_id, "game_plan")))
+        .bind(("draft_key", opt_key(learning.draft_id, "draft")))
         .bind(("what_went_well", learning.what_went_well))
         .bind(("improvements", learning.improvements))
         .bind(("action_items", learning.action_items))
@@ -2367,8 +2380,8 @@ struct DbPostGameLearning {
     id: RecordId,
     team: RecordId,
     match_riot_id: Option<String>,
-    game_plan_id: Option<String>,
-    draft_id: Option<String>,
+    game_plan_id: Option<RecordId>,
+    draft_id: Option<RecordId>,
     what_went_well: Vec<String>,
     improvements: Vec<String>,
     action_items: Vec<String>,
@@ -2386,8 +2399,8 @@ impl From<DbPostGameLearning> for PostGameLearning {
             id: Some(p.id.to_sql()),
             team_id: p.team.to_sql(),
             match_riot_id: p.match_riot_id,
-            game_plan_id: p.game_plan_id,
-            draft_id: p.draft_id,
+            game_plan_id: opt_link(p.game_plan_id),
+            draft_id: opt_link(p.draft_id),
             what_went_well: p.what_went_well,
             improvements: p.improvements,
             action_items: p.action_items,
@@ -2558,8 +2571,8 @@ impl From<DbChecklistTemplate> for ChecklistTemplate {
 struct DbChecklistInstance {
     id: RecordId,
     team: RecordId,
-    game_plan_id: Option<String>,
-    template_id: Option<String>,
+    game_plan_id: Option<RecordId>,
+    template_id: Option<RecordId>,
     items: Vec<String>,
     checked: Vec<bool>,
 }
@@ -2569,8 +2582,8 @@ impl From<DbChecklistInstance> for ChecklistInstance {
         ChecklistInstance {
             id: Some(i.id.to_sql()),
             team_id: i.team.to_sql(),
-            game_plan_id: i.game_plan_id,
-            template_id: i.template_id,
+            game_plan_id: opt_link(i.game_plan_id),
+            template_id: opt_link(i.template_id),
             items: i.items,
             checked: i.checked,
         }
@@ -2635,10 +2648,10 @@ pub async fn create_checklist_instance(
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let checked: Vec<bool> = vec![false; items.len()];
     let mut response = db
-        .query("CREATE checklist_instance SET team = type::record('team', $team_key), game_plan_id = $game_plan_id, template_id = $template_id, items = $items, checked = $checked")
+        .query("CREATE checklist_instance SET team = type::record('team', $team_key), game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, template_id = IF $template_key = NONE { NONE } ELSE { type::record('checklist_template', $template_key) }, items = $items, checked = $checked")
         .bind(("team_key", team_key))
-        .bind(("game_plan_id", game_plan_id))
-        .bind(("template_id", template_id))
+        .bind(("plan_key", opt_key(game_plan_id, "game_plan")))
+        .bind(("template_key", opt_key(template_id, "checklist_template")))
         .bind(("items", items))
         .bind(("checked", checked))
         .await?
@@ -2656,8 +2669,8 @@ pub async fn get_checklist_for_plan(
     game_plan_id: &str,
 ) -> DbResult<Option<ChecklistInstance>> {
     let mut r = db
-        .query("SELECT * FROM checklist_instance WHERE game_plan_id = $game_plan_id AND team = type::record('team', $team_key) ORDER BY created_at DESC LIMIT 1")
-        .bind(("game_plan_id", game_plan_id.to_string()))
+        .query("SELECT * FROM checklist_instance WHERE game_plan_id = type::record('game_plan', $plan_key) AND team = type::record('team', $team_key) ORDER BY created_at DESC LIMIT 1")
+        .bind(("plan_key", record_key(game_plan_id, "game_plan")))
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
     let row: Option<DbChecklistInstance> = r.take(0)?;
@@ -3147,7 +3160,7 @@ struct DbSeries {
     id: RecordId,
     name: String,
     team: RecordId,
-    opponent_id: Option<String>,
+    opponent_id: Option<RecordId>,
     opponent_name: Option<String>,
     format: String,
     is_fearless: bool,
@@ -3161,7 +3174,7 @@ impl From<DbSeries> for Series {
             id: Some(s.id.to_sql()),
             name: s.name,
             team_id: s.team.to_sql(),
-            opponent_id: s.opponent_id,
+            opponent_id: opt_link(s.opponent_id),
             opponent_name: s.opponent_name,
             format: s.format,
             is_fearless: s.is_fearless,
@@ -3187,11 +3200,11 @@ pub async fn create_series(
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
     let mut response = db
-        .query("CREATE series SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent_id = $opponent_id, opponent_name = $opponent_name, format = $format, is_fearless = $is_fearless, notes = $notes")
+        .query("CREATE series SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent_id = IF $opponent_key = NONE { NONE } ELSE { type::record('opponent', $opponent_key) }, opponent_name = $opponent_name, format = $format, is_fearless = $is_fearless, notes = $notes")
         .bind(("name", name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
-        .bind(("opponent_id", opponent_id))
+        .bind(("opponent_key", opt_key(opponent_id, "opponent")))
         .bind(("opponent_name", opponent_name))
         .bind(("format", format))
         .bind(("is_fearless", is_fearless))
@@ -3244,10 +3257,10 @@ pub async fn update_series(
 ) -> DbResult<()> {
     ensure_team_record(db, "series", series_id, team_id).await?;
     let series_key = record_key(series_id, "series");
-    db.query("UPDATE type::record('series', $series_key) SET name=$name, opponent_id=$opponent_id, opponent_name=$opponent_name, format=$format, is_fearless=$is_fearless, notes=$notes")
+    db.query("UPDATE type::record('series', $series_key) SET name=$name, opponent_id = IF $opponent_key = NONE { NONE } ELSE { type::record('opponent', $opponent_key) }, opponent_name=$opponent_name, format=$format, is_fearless=$is_fearless, notes=$notes")
         .bind(("series_key", series_key))
         .bind(("name", name))
-        .bind(("opponent_id", opponent_id))
+        .bind(("opponent_key", opt_key(opponent_id, "opponent")))
         .bind(("opponent_name", opponent_name))
         .bind(("format", format))
         .bind(("is_fearless", is_fearless))
@@ -3260,10 +3273,9 @@ pub async fn update_series(
 pub async fn delete_series(db: &Surreal<Db>, team_id: &str, series_id: &str) -> DbResult<()> {
     ensure_team_record(db, "series", series_id, team_id).await?;
     let series_key = record_key(series_id, "series");
-    let sid = series_id.to_string();
     // Unlink the team's drafts first
-    db.query("UPDATE draft SET series_id = NONE, game_number = NONE WHERE series_id = $sid AND team = type::record('team', $team_key)")
-        .bind(("sid", sid))
+    db.query("UPDATE draft SET series_id = NONE, game_number = NONE WHERE series_id = type::record('series', $series_key) AND team = type::record('team', $team_key)")
+        .bind(("series_key", series_key.clone()))
         .bind(("team_key", record_key(team_id, "team")))
         .await?
         .check()?;
@@ -3279,10 +3291,9 @@ pub async fn list_series_drafts(
     team_id: &str,
     series_id: &str,
 ) -> DbResult<Vec<Draft>> {
-    let sid = series_id.to_string();
     let mut result = db
-        .query("SELECT * FROM draft WHERE series_id = $sid AND team = type::record('team', $team_key) ORDER BY game_number ASC")
-        .bind(("sid", sid))
+        .query("SELECT * FROM draft WHERE series_id = type::record('series', $series_key) AND team = type::record('team', $team_key) ORDER BY game_number ASC")
+        .bind(("series_key", record_key(series_id, "series")))
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
     let db_drafts: Vec<DbDraft> = result.take(0).unwrap_or_default();
@@ -3316,13 +3327,13 @@ pub async fn get_fearless_used_champions(
     series_id: &str,
     exclude_draft_id: Option<&str>,
 ) -> DbResult<Vec<String>> {
-    let sid = series_id.to_string();
+    let sid = record_key(series_id, "series");
     let team_key = record_key(team_id, "team");
 
     let query = match exclude_draft_id {
         Some(eid) => {
             let mut result = db
-                .query("SELECT champion FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE series_id = $sid AND team = type::record('team', $team_key) AND id != type::record('draft', $eid))")
+                .query("SELECT champion FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE series_id = type::record('series', $sid) AND team = type::record('team', $team_key) AND id != type::record('draft', $eid))")
                 .bind(("sid", sid))
                 .bind(("team_key", team_key))
                 .bind(("eid", record_key(eid, "draft")))
@@ -3332,7 +3343,7 @@ pub async fn get_fearless_used_champions(
         }
         None => {
             let mut result = db
-                .query("SELECT champion FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE series_id = $sid AND team = type::record('team', $team_key))")
+                .query("SELECT champion FROM draft_action WHERE draft IN (SELECT VALUE id FROM draft WHERE series_id = type::record('series', $sid) AND team = type::record('team', $team_key))")
                 .bind(("sid", sid))
                 .bind(("team_key", team_key))
                 .await?;
@@ -3405,7 +3416,7 @@ pub async fn get_team_matchup_notes(
 struct DbActionItem {
     id: RecordId,
     team: RecordId,
-    source_review: Option<String>,
+    source_review: Option<RecordId>,
     text: String,
     status: String,
     assigned_to: Option<String>,
@@ -3418,7 +3429,7 @@ impl From<DbActionItem> for ActionItem {
         ActionItem {
             id: Some(a.id.to_sql()),
             team_id: a.team.to_sql(),
-            source_review: a.source_review,
+            source_review: opt_link(a.source_review),
             text: a.text,
             status: a.status,
             assigned_to: a.assigned_to,
@@ -3438,11 +3449,11 @@ pub async fn create_action_item(
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut response = db
         .query(
-            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = $source_review, assigned_to = $assigned_to",
+            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = IF $review_key = NONE { NONE } ELSE { type::record('post_game_learning', $review_key) }, assigned_to = $assigned_to",
         )
         .bind(("team_key", team_key))
         .bind(("text", text))
-        .bind(("source_review", source_review))
+        .bind(("review_key", opt_key(source_review, "post_game_learning")))
         .bind(("assigned_to", assigned_to))
         .await?;
     let row: Option<IdRecord> = response.take(0)?;
@@ -3852,7 +3863,7 @@ pub async fn get_win_condition_stats(
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbPostGame {
         id: RecordId,
-        game_plan_id: Option<String>,
+        game_plan_id: Option<RecordId>,
         match_riot_id: Option<String>,
     }
 
@@ -3904,8 +3915,8 @@ pub async fn get_win_condition_stats(
     let mut tag_stats: HashMap<String, (i32, i32)> = HashMap::new();
 
     for pg in &post_games {
-        if let Some(ref gp_id) = pg.game_plan_id {
-            if let Some(tag) = plan_tags.get(gp_id) {
+        if let Some(gp_id) = pg.game_plan_id.as_ref().map(|r| r.to_sql()) {
+            if let Some(tag) = plan_tags.get(&gp_id) {
                 if let Some(ref riot_id) = pg.match_riot_id {
                     if let Some(record_id) = match_id_to_record.get(riot_id) {
                         let won = match_record_wins.get(record_id).copied().unwrap_or(false);
@@ -3924,7 +3935,7 @@ pub async fn get_win_condition_stats(
     for (plan_id, tag) in &plan_tags {
         let has_post_game = post_games
             .iter()
-            .any(|pg| pg.game_plan_id.as_deref() == Some(plan_id));
+            .any(|pg| pg.game_plan_id.as_ref().map(|r| r.to_sql()).as_ref() == Some(plan_id));
         if !has_post_game {
             // Count as a game played but with no outcome data
             tag_stats.entry(tag.clone()).or_insert((0, 0));
@@ -3983,7 +3994,7 @@ pub async fn get_win_condition_stats_vs_opponent(
     struct PlanTagWithDraft {
         id: RecordId,
         win_condition_tag: Option<String>,
-        draft: Option<String>,
+        draft: Option<RecordId>,
     }
 
     #[derive(Debug, Deserialize, SurrealValue)]
@@ -3995,7 +4006,7 @@ pub async fn get_win_condition_stats_vs_opponent(
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbPostGameVs {
         id: RecordId,
-        game_plan_id: Option<String>,
+        game_plan_id: Option<RecordId>,
         match_riot_id: Option<String>,
     }
 
@@ -4049,7 +4060,7 @@ pub async fn get_win_condition_stats_vs_opponent(
                 let opp = p
                     .draft
                     .as_ref()
-                    .and_then(|did| draft_opponent.get(did).cloned());
+                    .and_then(|did| draft_opponent.get(&did.to_sql()).cloned());
                 (plan_sql, (tag.clone(), opp))
             })
         })
@@ -4058,8 +4069,8 @@ pub async fn get_win_condition_stats_vs_opponent(
     // Build flat per-result tuples for filter_win_condition_stats
     let mut flat: Vec<(String, Option<String>, bool)> = Vec::new();
     for pg in &post_games {
-        if let Some(ref gp_id) = pg.game_plan_id {
-            if let Some((tag, opp)) = plan_tags_lookup.get(gp_id) {
+        if let Some(gp_id) = pg.game_plan_id.as_ref().map(|r| r.to_sql()) {
+            if let Some((tag, opp)) = plan_tags_lookup.get(&gp_id) {
                 if let Some(ref riot_id) = pg.match_riot_id {
                     if let Some(record_id) = match_id_to_record.get(riot_id) {
                         let won = match_record_wins.get(record_id).copied().unwrap_or(false);
@@ -4090,7 +4101,7 @@ pub async fn get_draft_outcome_stats(
 
     #[derive(Debug, Deserialize, SurrealValue)]
     struct DbPostGame2 {
-        draft_id: Option<String>,
+        draft_id: Option<RecordId>,
         match_riot_id: Option<String>,
     }
 
@@ -4130,10 +4141,10 @@ pub async fn get_draft_outcome_stats(
     // Build draft_id -> outcome lookup via post_game_learning
     let mut draft_outcome: HashMap<String, bool> = HashMap::new();
     for pg in &post_games {
-        if let (Some(ref did), Some(ref riot_id)) = (&pg.draft_id, &pg.match_riot_id) {
+        if let (Some(did), Some(ref riot_id)) = (&pg.draft_id, &pg.match_riot_id) {
             if let Some(record_id) = match_id_to_record.get(riot_id) {
                 if let Some(&won) = match_record_wins.get(record_id) {
-                    draft_outcome.insert(did.clone(), won);
+                    draft_outcome.insert(did.to_sql(), won);
                 }
             }
         }
@@ -4479,10 +4490,10 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
              WHERE team = type::record('team', $team_key) \
              ORDER BY created_at DESC LIMIT 5; \
              SELECT count() as n FROM draft WHERE team = type::record('team', $team_key) \
-             AND draft NOT IN (SELECT VALUE draft FROM game_plan WHERE draft != NONE) \
+             AND id NOT IN (SELECT VALUE draft FROM game_plan WHERE team = type::record('team', $team_key) AND draft != NONE) \
              GROUP ALL; \
              SELECT count() as n FROM game_plan WHERE team = type::record('team', $team_key) \
-             AND id NOT IN (SELECT VALUE game_plan_id FROM post_game_learning WHERE game_plan_id != NONE) \
+             AND id NOT IN (SELECT VALUE game_plan_id FROM post_game_learning WHERE team = type::record('team', $team_key) AND game_plan_id != NONE) \
              GROUP ALL",
         )
         .bind(("team_key", team_key.clone()))

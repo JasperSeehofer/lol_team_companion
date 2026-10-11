@@ -179,3 +179,101 @@ async fn test_get_game_plans_for_draft_empty() {
         "Expected empty vec for draft with no game plans"
     );
 }
+
+/// M6: drafts and plans link by record, so the dashboard's "drafts without a
+/// plan" and "plans without a review" counts are right (the first used to
+/// compare a field the draft table does not have, the second compared a
+/// record with a string, so both counted everything).
+#[tokio::test]
+async fn dashboard_counts_follow_record_links() {
+    use lol_team_companion::models::game_plan::{GamePlan, PostGameLearning};
+    let d = common::test_db().await;
+    let u = db::create_user(&d, "lead".into(), "lead@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let t = db::create_team(&d, &u, "Links".into(), "EUW".into())
+        .await
+        .unwrap();
+    let mk_draft = |name: &'static str| {
+        let (d, t, u) = (&d, t.clone(), u.clone());
+        async move {
+            db::save_draft(
+                d,
+                &t,
+                &u,
+                name.into(),
+                None,
+                None,
+                vec![],
+                vec![],
+                None,
+                "blue".into(),
+                vec![],
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap()
+        }
+    };
+    let d1 = mk_draft("planned").await;
+    let _d2 = mk_draft("unplanned").await;
+    let plan = GamePlan {
+        id: None,
+        team_id: t.clone(),
+        draft_id: Some(d1.clone()),
+        name: "P".into(),
+        our_champions: vec![],
+        enemy_champions: vec![],
+        win_conditions: vec![],
+        objective_priority: vec![],
+        teamfight_strategy: "x".into(),
+        early_game: None,
+        top_strategy: None,
+        jungle_strategy: None,
+        mid_strategy: None,
+        bot_strategy: None,
+        support_strategy: None,
+        notes: None,
+        win_condition_tag: None,
+    };
+    let p1 = db::save_game_plan(&d, plan.clone(), &u).await.unwrap();
+    let _p2 = db::save_game_plan(
+        &d,
+        GamePlan {
+            draft_id: None,
+            ..plan
+        },
+        &u,
+    )
+    .await
+    .unwrap();
+    db::save_post_game_learning(
+        &d,
+        PostGameLearning {
+            id: None,
+            team_id: t.clone(),
+            match_riot_id: None,
+            game_plan_id: Some(p1.clone()),
+            draft_id: Some(d1.clone()),
+            what_went_well: vec![],
+            improvements: vec![],
+            action_items: vec![],
+            open_notes: None,
+            created_by: u.clone(),
+            win_loss: Some("win".into()),
+            rating: Some(4),
+        },
+    )
+    .await
+    .unwrap();
+
+    let summary = db::get_dashboard_summary(&d, &t).await.unwrap();
+    assert_eq!(summary.drafts_without_game_plan, 1);
+    assert_eq!(summary.game_plans_without_post_game, 1);
+    let linked = db::get_game_plans_for_draft(&d, &t, &d1).await.unwrap();
+    assert_eq!(linked.len(), 1);
+    assert_eq!(linked[0].draft_id.as_deref(), Some(d1.as_str()));
+}

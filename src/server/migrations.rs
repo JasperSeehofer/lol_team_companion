@@ -84,6 +84,11 @@ pub const MIGRATIONS: &[Migration] = &[
         // format is also obsolete, so they could never be used again.
         step: Step::Surql("DELETE sessions WHERE expires_at = NONE;"),
     },
+    Migration {
+        version: 5,
+        name: "string_ids_to_record_links",
+        step: Step::Rust(|db| Box::pin(string_ids_to_record_links(db))),
+    },
 ];
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -270,5 +275,101 @@ async fn username_lc_unique(db: &Surreal<Db>) -> DbResult<()> {
     )
     .await?
     .check()?;
+    Ok(())
+}
+
+/// Fields that stored a record ID as a string before M6, and the table the ID
+/// points into.
+pub const LINK_FIELDS: &[(&str, &str, &str)] = &[
+    ("draft", "series_id", "series"),
+    ("game_plan", "draft", "draft"),
+    ("post_game_learning", "game_plan_id", "game_plan"),
+    ("post_game_learning", "draft_id", "draft"),
+    ("series", "opponent_id", "opponent"),
+    ("action_item", "source_review", "post_game_learning"),
+    ("checklist_instance", "game_plan_id", "game_plan"),
+    ("checklist_instance", "template_id", "checklist_template"),
+];
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct StringLinkRow {
+    id: RecordId,
+    v: String,
+}
+
+/// The key of `value` when it is a `target:key` ID string; `None` for empty
+/// strings and anything that points elsewhere.
+pub fn link_key(value: &str, target: &str) -> Option<String> {
+    let value = value.trim();
+    let key = value.strip_prefix(target)?.strip_prefix(':')?;
+    let key = key
+        .strip_prefix('⟨')
+        .and_then(|k| k.strip_suffix('⟩'))
+        .unwrap_or(key);
+    if key.is_empty() {
+        None
+    } else {
+        Some(key.to_string())
+    }
+}
+
+/// Convert the string IDs in [`LINK_FIELDS`] into record links.
+///
+/// Per field: widen the type to accept both forms, rewrite every string value
+/// (`"draft:abc"` becomes `draft:abc`; empty or malformed values become NONE
+/// and are logged), then tighten the type to `option<record<target>>`. Links
+/// to records that no longer exist are kept as they are (SurrealDB allows
+/// dangling links; reads already treat a missing target as absent).
+/// Idempotent: a second run finds no string values.
+async fn string_ids_to_record_links(db: &Surreal<Db>) -> DbResult<()> {
+    for (table, field, target) in LINK_FIELDS {
+        // Table, field and target names are compile-time constants.
+        db.query(format!(
+            "DEFINE FIELD OVERWRITE {field} ON {table} TYPE option<string | record<{target}>>;"
+        ))
+        .await?
+        .check()?;
+
+        let mut r = db
+            .query(format!(
+                "SELECT id, {field} AS v FROM {table} WHERE type::is_string({field})"
+            ))
+            .await?;
+        let rows: Vec<StringLinkRow> = r.take(0)?;
+        let mut converted = 0usize;
+        for row in rows {
+            let row_key = record_key(&row.id.to_sql(), table);
+            let key = link_key(&row.v, target);
+            if key.is_none() && !row.v.trim().is_empty() {
+                tracing::warn!(record = %row.id.to_sql(), field, value = %row.v,
+                    "unparseable link ID cleared");
+            }
+            db.query(format!(
+                "UPDATE type::record($tb, $row_key) SET {field} = \
+                 IF $key = NONE {{ NONE }} ELSE {{ type::record($target, $key) }}"
+            ))
+            .bind(("tb", *table))
+            .bind(("row_key", row_key))
+            .bind(("target", *target))
+            .bind(("key", key))
+            .await?
+            .check()?;
+            converted += 1;
+        }
+        if converted > 0 {
+            tracing::info!(
+                table,
+                field,
+                converted,
+                "string IDs converted to record links"
+            );
+        }
+
+        db.query(format!(
+            "DEFINE FIELD OVERWRITE {field} ON {table} TYPE option<record<{target}>>;"
+        ))
+        .await?
+        .check()?;
+    }
     Ok(())
 }
