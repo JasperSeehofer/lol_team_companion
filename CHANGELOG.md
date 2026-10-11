@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### M2 review fixes
+
+#### Fixed
+- Sign-in and registration no longer clear an email or password that your browser filled in (or that you typed) while the page was still loading.
+- The Solo / Team workspace switch is back in the navigation on phones.
+- A few faint labels on the draft, post-game, stats, tree drafter and learnings pages now meet the contrast minimum.
+- Champion pictures for multi-word names such as Nunu & Willump load again where the older picture component is still used.
+- A short outage of the image source no longer leaves champion pictures missing until the next patch; the image routes are also rate limited per visitor.
+
 ### Milestone M2: Design system foundation (stage B)
 
 #### Added

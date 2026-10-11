@@ -288,7 +288,7 @@ Shared keyboard helpers live in `ui/a11y.rs` (`roving_index`, `typeahead`, `focu
 
 ## 7. Champion images
 
-Portraits are real (owner's decision) and never load from a third party in the browser. `GET /img/champion/{key}` (loading-screen portrait) and `GET /img/champion/{key}/icon` (square icon) are served by the app: the key must be a champion id or name known to the Data Dragon cache (unknown keys are 404; nothing from the URL touches the filesystem), the image is fetched once per patch from Data Dragon, kept in memory, and sent with `Cache-Control: public, max-age=604800`, an `ETag` and `If-None-Match` support. `models::ddragon::champion_icon_url` points at the endpoint and `ChampionAvatar` uses it, with a monogram fallback. Role icons are typographic (`RoleLabel`); the browser loads no image from a third party (the gallery spec checks it).
+Portraits are real (owner's decision) and never load from a third party in the browser. `GET /img/champion/{key}` (loading-screen portrait) and `GET /img/champion/{key}/icon` (square icon) are served by the app: the key must be a champion id or name known to the Data Dragon cache (unknown keys are 404; nothing from the URL touches the filesystem), the image is fetched once per patch from Data Dragon, kept in memory, and sent with `Cache-Control: public, max-age=604800`, an `ETag` and `If-None-Match` support. Cache misses are rate limited per client IP, keys Data Dragon does not have are remembered apart from the images, and a transient upstream failure is a 502 that is retried next time. `models::ddragon::champion_icon_url` points at the endpoint and `ChampionAvatar` uses it, with a monogram fallback. Role icons are typographic (`RoleLabel`); the browser loads no image from a third party (the gallery spec checks it).
 
 ## 8. Gallery
 
@@ -313,9 +313,10 @@ Portraits are real (owner's decision) and never load from a third party in the b
 | `ornament` | Cinzel, `font-imperial`, `font-glitch`, VT323, `canvas-grain`, fleur-de-lis and the other retired ornaments, Pandemonium | none |
 | `emoji` | pictographs (emoji, and `\u{...}` escapes of them) in UI strings | typographic marks: stars, check, cross |
 | `region` | `region ==`, `region=` props, `InitialTheme`, `data-theme` | none |
+| `faded-text` | a text tone with an opacity modifier (`text-muted/60`): not in the contrast table, and below 4.5:1 | none |
 | G-12 | `outline-none` without a `focus-visible:` replacement on the same line | none |
 
-Every rule is hard zero: any hit fails. (During M2 a ratcheting baseline allowed the 170 pre-existing hits; stage B mapped them to tokens, the radius policy and `Skeleton`, and deleted the baseline.)
+Every rule is hard zero: any hit fails, and so does a grep error (a broken pattern or a grep without PCRE), so the gate cannot pass by matching nothing. (During M2 a ratcheting baseline allowed the 170 pre-existing hits; stage B mapped them to tokens, the radius policy and `Skeleton`, and deleted the baseline.)
 
 Escape hatch for a legitimate exception: `lint:allow(<rule>)` in a comment on the same line, with the reason. It is used on six lines, all in `match_detail.rs`: the match timeline's event tokens stay round (map tokens may be round) until M4 moves them into `TimelineScrub`.
 
