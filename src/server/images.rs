@@ -15,6 +15,10 @@
 //! or 404 upstream) live in their own bounded set, and a transient upstream
 //! failure (timeout, 5xx) is answered with 502 and retried next time
 //! instead of being remembered as missing for the whole patch.
+//!
+//! Simultaneous misses for the same image share one upstream download
+//! (single flight): the first request fetches, the others wait for its
+//! result, and only the first is charged against the rate limit.
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -63,6 +67,7 @@ struct Entry {
 }
 
 /// What one upstream request gave.
+#[derive(Clone)]
 enum Fetched {
     Image(Bytes, &'static str),
     /// Data Dragon has no such image (403 or 404): remembered.
@@ -79,6 +84,30 @@ fn cache() -> &'static Mutex<HashMap<String, Arc<Entry>>> {
 fn missing() -> &'static Mutex<HashSet<String>> {
     static MISSING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     MISSING.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Upstream downloads in progress, by cache key. Every request that misses
+/// the cache while one is running waits on the same cell.
+type Flight = Arc<tokio::sync::OnceCell<Fetched>>;
+
+fn in_flight() -> &'static Mutex<HashMap<String, Flight>> {
+    static IN_FLIGHT: OnceLock<Mutex<HashMap<String, Flight>>> = OnceLock::new();
+    IN_FLIGHT.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Join the download for `key`, or start one. `None` means this request
+/// would start a new download and the rate limiter refused it.
+fn join_flight(key: &str, admit: impl FnOnce() -> bool) -> Option<Flight> {
+    let mut map = in_flight().lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(f) = map.get(key) {
+        return Some(Arc::clone(f));
+    }
+    if !admit() {
+        return None;
+    }
+    let f: Flight = Arc::new(tokio::sync::OnceCell::new());
+    map.insert(key.to_string(), Arc::clone(&f));
+    Some(f)
 }
 
 fn client_key(headers: &HeaderMap, ext: &Extensions) -> String {
@@ -135,16 +164,30 @@ async fn serve(kind: Kind, id: String, headers: HeaderMap, ext: Extensions) -> R
             {
                 return not_found();
             }
-            if let Err(wait) =
-                Limiter::global().hit(Bucket::ImageFetch, &client_key(&headers, &ext))
-            {
+            // Only a request that starts a new download is charged.
+            let mut refused = None;
+            let Some(flight) = join_flight(&cache_key, || {
+                match Limiter::global().hit(Bucket::ImageFetch, &client_key(&headers, &ext)) {
+                    Ok(()) => true,
+                    Err(wait) => {
+                        refused = Some(wait);
+                        false
+                    }
+                }
+            }) else {
                 let mut r = (StatusCode::TOO_MANY_REQUESTS, "Slow down").into_response();
-                if let Ok(v) = HeaderValue::from_str(&wait.as_secs().max(1).to_string()) {
-                    r.headers_mut().insert(header::RETRY_AFTER, v);
+                if let Some(wait) = refused {
+                    if let Ok(v) = HeaderValue::from_str(&wait.as_secs().max(1).to_string()) {
+                        r.headers_mut().insert(header::RETRY_AFTER, v);
+                    }
                 }
                 return r;
-            }
-            match fetch(kind, &id, &version).await {
+            };
+            let fetched = flight
+                .get_or_init(|| fetch(kind, &id, &version))
+                .await
+                .clone();
+            let outcome = match fetched {
                 Fetched::Image(bytes, content_type) => {
                     let entry = Arc::new(Entry {
                         etag: etag_for(kind, &id, &version, bytes.len()),
@@ -155,21 +198,30 @@ async fn serve(kind: Kind, id: String, headers: HeaderMap, ext: Extensions) -> R
                     if map.len() >= MAX_ENTRIES {
                         map.clear();
                     }
-                    map.insert(cache_key, Arc::clone(&entry));
-                    entry
+                    map.insert(cache_key.clone(), Arc::clone(&entry));
+                    Ok(entry)
                 }
                 Fetched::Missing => {
                     let mut set = missing().lock().unwrap_or_else(|p| p.into_inner());
                     if set.len() >= MAX_MISSING {
                         set.clear();
                     }
-                    set.insert(cache_key);
-                    return not_found();
+                    set.insert(cache_key.clone());
+                    Err(not_found())
                 }
                 Fetched::Failed => {
-                    return (StatusCode::BAD_GATEWAY, "Image temporarily unavailable")
-                        .into_response();
+                    Err((StatusCode::BAD_GATEWAY, "Image temporarily unavailable").into_response())
                 }
+            };
+            // Retire the flight once the result is stored: later misses read
+            // the cache, or start a fresh download after a failure.
+            in_flight()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&cache_key);
+            match outcome {
+                Ok(entry) => entry,
+                Err(resp) => return resp,
             }
         }
     };
@@ -321,6 +373,49 @@ mod tests {
             etag_for(Kind::Icon, "Ahri", "15.7.1", 10)
         );
         assert!(etag_for(Kind::Icon, "Ahri", "15.6.1", 10).starts_with('"'));
+    }
+
+    #[tokio::test]
+    async fn simultaneous_misses_share_one_download() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let key = "test/single-flight/key";
+        let downloads = Arc::new(AtomicUsize::new(0));
+        let admitted = Arc::new(AtomicUsize::new(0));
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let downloads = Arc::clone(&downloads);
+            let admitted = Arc::clone(&admitted);
+            tasks.push(tokio::spawn(async move {
+                let flight = join_flight(key, || {
+                    admitted.fetch_add(1, Ordering::SeqCst);
+                    true
+                })
+                .expect("admitted");
+                flight
+                    .get_or_init(|| async {
+                        downloads.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        Fetched::Missing
+                    })
+                    .await
+                    .clone()
+            }));
+        }
+        for t in tasks {
+            assert!(matches!(t.await.expect("task"), Fetched::Missing));
+        }
+        assert_eq!(downloads.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            admitted.load(Ordering::SeqCst),
+            1,
+            "only the first is charged"
+        );
+        in_flight()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(key);
+        // A refused first request starts nothing.
+        assert!(join_flight("test/single-flight/refused", || false).is_none());
     }
 
     #[tokio::test]
