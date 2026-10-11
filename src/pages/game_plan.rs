@@ -65,8 +65,7 @@ pub async fn create_plan(plan_json: String) -> Result<String, ServerFnError> {
         .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let mut plan: GamePlan = serde_json::from_str(&plan_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid plan JSON: {e}")))?;
+    let mut plan: GamePlan = serde_json::from_str(&plan_json).map_err(authz::server_err)?;
     if let Some(did) = plan.draft_id.as_deref().filter(|d| !d.is_empty()) {
         db::ensure_team_record(&surreal, "draft", did, &team_id)
             .await
@@ -85,8 +84,7 @@ pub async fn update_plan(plan_json: String) -> Result<(), ServerFnError> {
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
     let team_id = authz::require_team(&surreal, &user).await?;
-    let plan: GamePlan = serde_json::from_str(&plan_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid plan JSON: {e}")))?;
+    let plan: GamePlan = serde_json::from_str(&plan_json).map_err(authz::server_err)?;
     if let Some(did) = plan.draft_id.as_deref().filter(|d| !d.is_empty()) {
         db::ensure_team_record(&surreal, "draft", did, &team_id)
             .await
@@ -190,8 +188,7 @@ pub async fn save_checklist_template(
         .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let items: Vec<String> = serde_json::from_str(&items_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid items JSON: {e}")))?;
+    let items: Vec<String> = serde_json::from_str(&items_json).map_err(authz::server_err)?;
 
     db::create_checklist_template(&surreal, &team_id, name, items)
         .await
@@ -242,8 +239,7 @@ pub async fn create_plan_checklist(
         .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let items: Vec<String> = serde_json::from_str(&items_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid items JSON: {e}")))?;
+    let items: Vec<String> = serde_json::from_str(&items_json).map_err(authz::server_err)?;
     db::ensure_team_record(&surreal, "game_plan", &plan_id, &team_id)
         .await
         .map_err(authz::server_err)?;
@@ -268,8 +264,7 @@ pub async fn update_checklist(
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
     let team_id = authz::require_team(&surreal, &user).await?;
-    let checked: Vec<bool> = serde_json::from_str(&checked_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid checked JSON: {e}")))?;
+    let checked: Vec<bool> = serde_json::from_str(&checked_json).map_err(authz::server_err)?;
     db::update_checklist_checked(&surreal, &team_id, &instance_id, checked)
         .await
         .map_err(authz::server_err)

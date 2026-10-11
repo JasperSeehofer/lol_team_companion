@@ -152,8 +152,8 @@ pub async fn save_node(
     let authz::Ctx { db, user } = authz::authed().await?;
     let team_id = authz::require_team(&db, &user).await?;
 
-    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
+    let actions: Vec<DraftAction> =
+        serde_json::from_str(&actions_json).map_err(authz::server_err)?;
 
     db::update_tree_node(
         &db,

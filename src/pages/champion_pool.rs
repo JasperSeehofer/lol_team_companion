@@ -134,8 +134,7 @@ pub async fn save_note(note_json: String) -> Result<String, ServerFnError> {
 
     let authz::Ctx { db, user } = authz::authed().await?;
 
-    let note: ChampionNote = serde_json::from_str(&note_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid note JSON: {e}")))?;
+    let note: ChampionNote = serde_json::from_str(&note_json).map_err(authz::server_err)?;
 
     if note.id.is_some() {
         db::update_champion_note(&db, &user.id, note)

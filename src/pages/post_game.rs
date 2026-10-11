@@ -145,8 +145,8 @@ pub async fn create_review(review_json: String) -> Result<(String, usize), Serve
         .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let mut review: PostGameLearning = serde_json::from_str(&review_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    let mut review: PostGameLearning =
+        serde_json::from_str(&review_json).map_err(authz::server_err)?;
     review.team_id = team_id.clone();
     review.created_by = user.id;
     check_review_links(&surreal, &team_id, &review).await?;
@@ -170,8 +170,7 @@ pub async fn update_review(review_json: String) -> Result<usize, ServerFnError> 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
     // The team comes from the session, never from the submitted review.
     let team_id = authz::require_team(&surreal, &user).await?;
-    let review: PostGameLearning = serde_json::from_str(&review_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    let review: PostGameLearning = serde_json::from_str(&review_json).map_err(authz::server_err)?;
     check_review_links(&surreal, &team_id, &review).await?;
     let review_id = review.id.clone().unwrap_or_default();
     let improvements = review.improvements.clone();

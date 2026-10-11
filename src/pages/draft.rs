@@ -55,12 +55,10 @@ pub async fn save_draft(
 
     let authz::Ctx { db, user } = authz::authed().await?;
 
-    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
-    let comments: Vec<String> = serde_json::from_str(&comments_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let actions: Vec<DraftAction> =
+        serde_json::from_str(&actions_json).map_err(authz::server_err)?;
+    let comments: Vec<String> = serde_json::from_str(&comments_json).map_err(authz::server_err)?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     // The team is always the caller's own; a client-sent team_id is only
     // accepted when it matches.
@@ -121,12 +119,10 @@ pub async fn update_draft(
     let authz::Ctx { db, user } = authz::authed().await?;
     let team_id = authz::require_team(&db, &user).await?;
 
-    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
-    let comments: Vec<String> = serde_json::from_str(&comments_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let actions: Vec<DraftAction> =
+        serde_json::from_str(&actions_json).map_err(authz::server_err)?;
+    let comments: Vec<String> = serde_json::from_str(&comments_json).map_err(authz::server_err)?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
     let series_id = series_id.filter(|s| !s.is_empty());
     if let Some(sid) = &series_id {
         db::ensure_team_record(&db, "series", sid, &team_id)
@@ -219,8 +215,8 @@ pub async fn save_ban_priorities(priorities_json: String) -> Result<(), ServerFn
         .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let priorities: Vec<BanPriority> = serde_json::from_str(&priorities_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    let priorities: Vec<BanPriority> =
+        serde_json::from_str(&priorities_json).map_err(authz::server_err)?;
 
     db::set_ban_priorities(&db, &team_id, priorities)
         .await
@@ -609,8 +605,8 @@ pub async fn get_pool_notes_for_champions(
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    let champions: Vec<String> = serde_json::from_str(&champions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    let champions: Vec<String> =
+        serde_json::from_str(&champions_json).map_err(authz::server_err)?;
 
     let notes = db::get_pool_notes_for_champions(&surreal, &user.id, &champions)
         .await

@@ -6,10 +6,9 @@ use leptos::prelude::*;
 
 #[server]
 pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    Ok(auth.user.map(|u| PublicUser {
+    Ok(authz::optional_user().await?.map(|u| PublicUser {
         id: u.id,
         username: u.username,
         riot_summoner_name: u.riot_summoner_name,
@@ -29,7 +28,9 @@ pub async fn logout() -> Result<(), ServerFnError> {
     use crate::server::authz;
     use leptos_axum::redirect;
 
-    let mut auth: AuthSession = leptos_axum::extract().await?;
+    let mut auth: AuthSession = leptos_axum::extract()
+        .await
+        .map_err(|e| authz::internal_error("extract auth session", e))?;
     auth.logout().await.map_err(authz::server_err)?;
     redirect("/");
     Ok(())

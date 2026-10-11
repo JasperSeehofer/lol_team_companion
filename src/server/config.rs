@@ -6,7 +6,7 @@
 //! | `CLOSED_BETA` | on | `false`/`0`/`off` disables the invite gate, **only honoured in dev** |
 //! | `SESSION_SECRET` | none | key for the session auth hash (HMAC); required outside dev, at least 32 bytes |
 //! | `COOKIE_SECURE` | `true` outside dev, `false` in dev | `Secure` flag on the session cookie |
-//! | `ADMIN_EMAILS` | empty | comma-separated emails promoted to admin when they sign in (no email verification exists: list an address only after its owner has registered it) |
+//! | `ADMIN_EMAILS` | empty | comma-separated emails promoted to admin when they sign in; removing an address revokes admin on the next request (no email verification exists: list an address only after its owner has registered it) |
 //! | `BOOTSTRAP_INVITE_CODE` | unset | ensures this invite code exists at startup |
 //! | `BOOTSTRAP_INVITE_MAX_USES` | `1` | max uses for that code when it is created |
 //! | `RATE_LIMIT_MULTIPLIER` | `1` | scales every rate-limit capacity (e.g. `100` for e2e runs) |
@@ -152,11 +152,22 @@ impl SecurityConfig {
         let email = email.trim().to_lowercase();
         self.admin_emails.contains(&email)
     }
+
+    /// Whether a user is an admin right now: the stored flag is only honoured
+    /// while the email is still listed in `ADMIN_EMAILS`.
+    pub fn grants_admin(&self, stored_flag: bool, email: &str) -> bool {
+        stored_flag && self.is_admin_email(email)
+    }
 }
 
-/// Install the configuration. Call once at startup, before serving.
+/// Install the configuration. Call once at startup, before anything reads
+/// it. Panics when a configuration is already installed: that means `get()`
+/// ran first and silently installed the test defaults (dev mode, public
+/// secret), which must never serve traffic.
 pub fn init(config: SecurityConfig) {
-    let _ = CONFIG.set(config);
+    if CONFIG.set(config).is_err() {
+        panic!("security configuration was read before config::init; refusing to start");
+    }
 }
 
 /// The installed configuration. Falls back to test defaults when `init` was
@@ -203,5 +214,19 @@ mod tests {
         cfg.admin_emails = list;
         assert!(cfg.is_admin_email("ADMIN@example.com "));
         assert!(!cfg.is_admin_email("nobody@example.com"));
+    }
+
+    #[test]
+    fn admin_requires_flag_and_current_listing() {
+        let mut cfg = SecurityConfig::for_tests();
+        cfg.admin_emails = vec!["admin@example.com".into()];
+        assert!(cfg.grants_admin(true, "Admin@Example.com"));
+        assert!(
+            !cfg.grants_admin(false, "admin@example.com"),
+            "not yet promoted"
+        );
+        // Removed from ADMIN_EMAILS: the stale stored flag no longer counts.
+        cfg.admin_emails.clear();
+        assert!(!cfg.grants_admin(true, "admin@example.com"));
     }
 }

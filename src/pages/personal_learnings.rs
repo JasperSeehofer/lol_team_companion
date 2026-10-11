@@ -61,8 +61,7 @@ pub async fn save_learning(
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     let learning = PersonalLearning {
         id: None,
@@ -128,8 +127,7 @@ pub async fn update_learning(
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     let learning = PersonalLearning {
         id: Some(id),

@@ -136,10 +136,9 @@ pub async fn save_comp_as_draft(
 
     let authz::Ctx { db: db_ctx, user } = authz::authed().await?;
 
-    let champions: Vec<(String, String)> = serde_json::from_str(&champions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid champions JSON: {e}")))?;
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let champions: Vec<(String, String)> =
+        serde_json::from_str(&champions_json).map_err(authz::server_err)?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     let team_id = db::get_user_team_id(&db_ctx, &user.id)
         .await

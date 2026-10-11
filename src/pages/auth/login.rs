@@ -25,6 +25,12 @@ pub async fn login_action(email: String, password: String) -> Result<String, Ser
     // Per-IP limit on attempts, plus a per-account limit on failures.
     authz::rate_limit(Bucket::Login).await?;
     let email = db::normalize_email(&email);
+    // No account has a longer email (registration caps it), and the email is
+    // a rate-limiter key, so oversized values are refused before they are
+    // stored.
+    if email.len() > 254 || password.len() > 1024 {
+        return Err(ServerFnError::new(INVALID));
+    }
     if let Err(wait) = Limiter::global().check(Bucket::LoginFailuresPerEmail, &email) {
         return Err(ServerFnError::new(slow_down_message(wait)));
     }

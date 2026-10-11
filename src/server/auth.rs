@@ -33,8 +33,11 @@ struct DbUser {
 
 impl From<DbUser> for AppUser {
     fn from(u: DbUser) -> Self {
+        let admin_flag = u.is_admin.unwrap_or(false);
         AppUser {
             auth_hash: session_auth_hash_for(&u.password_hash),
+            is_admin: crate::server::config::get().grants_admin(admin_flag, &u.email),
+            admin_flag,
             id: u.id.to_sql(),
             username: u.username,
             email: u.email,
@@ -46,7 +49,6 @@ impl From<DbUser> for AppUser {
             draft_mode: u.draft_mode.unwrap_or_else(|| "auto".to_string()),
             team_dashboard_mode: u.team_dashboard_mode.unwrap_or_else(|| "auto".to_string()),
             solo_mode: u.solo_mode.unwrap_or_else(|| "auto".to_string()),
-            is_admin: u.is_admin.unwrap_or(false),
         }
     }
 }
@@ -66,7 +68,11 @@ pub struct AppUser {
     pub draft_mode: String,
     pub team_dashboard_mode: String,
     pub solo_mode: String,
+    /// Effective admin status: the stored flag AND a current `ADMIN_EMAILS`
+    /// listing, so removing an address revokes access on the next request.
     pub is_admin: bool,
+    /// The raw `user.is_admin` flag as stored (see `authz::sync_admin_flag`).
+    pub(crate) admin_flag: bool,
     auth_hash: Vec<u8>,
 }
 
