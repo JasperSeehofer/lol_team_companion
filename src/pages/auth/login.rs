@@ -63,6 +63,10 @@ pub async fn login_action(email: String, password: String) -> Result<String, Ser
     } else {
         "/solo".to_string()
     };
+    // A form submitted before hydration posts here directly; without the
+    // redirect it would land back on the sign-in page (signed in, but
+    // stuck). A hydrated submit still navigates in the Effect below.
+    leptos_axum::redirect(&dest);
     Ok(dest)
 }
 
