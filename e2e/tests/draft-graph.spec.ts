@@ -142,6 +142,8 @@ test("graph: a team note raises the pair and shows in the explanation", async ({
   if ((await node.count()) > 0) {
     await expect(node).toHaveAttribute("data-light", "focused");
     await expect(page.locator(`[data-graph-canvas] [data-edge="${id}-Jinx"]`)).toBeVisible();
+  } else {
+    await expect(page.locator("[data-graph-canvas-status]")).toContainText(`${name} (rank`);
   }
 });
 

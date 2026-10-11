@@ -383,7 +383,7 @@ The force-directed picture of the same `GraphResult`, at the top of the Draft Gr
 | Double-click | Pick |
 | Drag | Move a candidate; the rest re-settles around it, and on release it settles back to where its relations put it |
 
-The status line under the canvas (`data-graph-canvas-status`) says what the focus means in words: "Thresh, fit 87, at D3 (1 of 24): synergy with Jinx, Vi and Orianna; beats Sejuani, Kai'Sa and Renekton." It is a polite live region while the canvas has focus and silent otherwise (the list announces its own options). Every node also has an SVG `<title>`; nothing lives only on hover. A focus on the canvas below the list's top 10 opens the whole list, so the text twin always shows the focused row.
+The status line under the canvas (`data-graph-canvas-status`) says what the focus means in words: "Thresh, fit 87, at D3 (1 of 24): synergy with Jinx, Vi and Orianna; beats Sejuani, Kai'Sa and Renekton." It is a polite live region while the canvas has focus and silent otherwise (the list announces its own options). Every node also has an SVG `<title>`; nothing lives only on hover. A focus on the canvas below the list's top 10 opens the whole list, so the text twin always shows the focused row. The other way round, a candidate focused in the list below the ones drawn on the canvas lights nothing there, and the status line says so ("Sona (rank 27) is below the 24 candidates drawn here; the list below has it.").
 
 **Motion.** The layout animates once per draft change, a few ticks per frame, then freezes: no perpetual motion, nothing loops. Under `prefers-reduced-motion: reduce` the simulation runs to the end synchronously and the settled layout is drawn directly; a drag then jumps instead of gliding.
 

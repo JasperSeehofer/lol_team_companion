@@ -608,7 +608,16 @@ pub fn DraftGraphCanvas(
             );
         }
         let Some(i) = focus_node.get() else {
-            return "Focus a candidate in the list or here to see how it relates to the locked picks.".to_string();
+            // Focused in the list but below the candidates drawn here.
+            let below = focused.get().and_then(|f| {
+                result.with_value(|g| {
+                    g.candidates
+                        .iter()
+                        .position(|c| c.champion == f)
+                        .map(|r| format!("{} (rank {}) is below the {} candidates drawn here; the list below has it.", g.candidates[r].name, r + 1, shown.get()))
+                })
+            });
+            return below.unwrap_or_else(|| "Focus a candidate in the list or here to see how it relates to the locked picks.".to_string());
         };
         let pins_n = pins.get();
         let rank = i - pins_n;
