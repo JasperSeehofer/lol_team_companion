@@ -962,7 +962,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                     <label class="block text-muted text-xs font-medium mb-1">"General Notes"</label>
                                                                     <textarea
                                                                         rows="3"
-                                                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 resize-none transition-colors"
+                                                                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 resize-none transition-colors"
                                                                         placeholder="General notes about this champion..."
                                                                         prop:value=move || notes_input.get()
                                                                         on:input=move |ev| set_notes_input.set(event_target_value(&ev))
@@ -1037,7 +1037,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                             champ_name_map.with_value(|m| m.get(opponent_name).map(|c| c.image_full.clone()))
                                                                                         });
                                                                                         view! {
-                                                                                            <div class="bg-surface/30 border border-outline/30 rounded-lg p-3">
+                                                                                            <div class="bg-surface/30 border border-rule rounded-lg p-3">
                                                                                                 <div class="flex items-start justify-between gap-2">
                                                                                                     <div class="min-w-0 flex-1">
                                                                                                         <div class="flex items-center gap-2">
@@ -1111,7 +1111,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                     let note_for_edit = note.clone();
                                                                                                     let note_id = note.id.clone().unwrap_or_default();
                                                                                                     view! {
-                                                                                                        <div class="bg-surface/30 border border-outline/30 rounded-lg p-2.5 group">
+                                                                                                        <div class="bg-surface/30 border border-rule rounded-lg p-2.5 group">
                                                                                                             <div class="flex items-start justify-between gap-2">
                                                                                                                 <div class="min-w-0 flex-1">
                                                                                                                     <span class="text-primary text-xs font-medium">{note.title.clone()}</span>
@@ -1177,7 +1177,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         let note_id = note.id.clone().unwrap_or_default();
                                                                                         let date = note.created_at.as_deref().map(format_timestamp).unwrap_or_default();
                                                                                         view! {
-                                                                                            <div class="bg-surface/30 border border-outline/30 rounded-lg p-3 group">
+                                                                                            <div class="bg-surface/30 border border-rule rounded-lg p-3 group">
                                                                                                 <div class="flex items-start justify-between gap-2">
                                                                                                     <div class="min-w-0 flex-1">
                                                                                                         <div class="flex items-center gap-2">
@@ -1245,7 +1245,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     <div>
                                         <label class="block text-muted text-xs font-medium mb-1">"Type"</label>
                                         <select
-                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 cursor-pointer"
+                                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 cursor-pointer"
                                             prop:value=move || note_form_type.get()
                                             on:change=move |ev| set_note_form_type.set(event_target_value(&ev))
                                         >
@@ -1284,7 +1284,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     } else {
                                         view! {
                                             <input type="text"
-                                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
+                                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
                                                 placeholder="e.g. Level 6 all-in"
                                                 prop:value=move || note_form_title.get()
                                                 on:input=move |ev| set_note_form_title.set(event_target_value(&ev))
@@ -1324,7 +1324,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     <label class="block text-muted text-xs font-medium mb-1">"Content"</label>
                                     <textarea
                                         rows="3"
-                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 resize-none transition-colors"
+                                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 resize-none transition-colors"
                                         placeholder="Notes, strategy, details..."
                                         prop:value=move || note_form_content.get()
                                         on:input=move |ev| set_note_form_content.set(event_target_value(&ev))

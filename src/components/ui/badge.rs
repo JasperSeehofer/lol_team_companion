@@ -26,7 +26,7 @@ pub enum BadgeTone {
 impl BadgeTone {
     pub fn class(self) -> &'static str {
         match self {
-            BadgeTone::Neutral => "border-outline/60 text-secondary",
+            BadgeTone::Neutral => "border-outline text-secondary",
             BadgeTone::Accent => "border-accent/60 bg-accent-soft text-accent",
             BadgeTone::Success => "border-success/50 bg-success/10 text-success",
             BadgeTone::Warning => "border-warning/50 bg-warning/10 text-warning",

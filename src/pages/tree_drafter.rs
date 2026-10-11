@@ -734,7 +734,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             on:keydown=move |ev: web_sys::KeyboardEvent| {
                                 if ev.key() == "Enter" { do_create_tree.run(()); }
                             }
-                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
+                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                         />
                         <input
                             type="text"
@@ -744,7 +744,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             on:keydown=move |ev: web_sys::KeyboardEvent| {
                                 if ev.key() == "Enter" { do_create_tree.run(()); }
                             }
-                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
+                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                         />
                         <button
                             type="button"
@@ -1027,7 +1027,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     placeholder="e.g. If they ban Jinx..."
                                                     prop:value=move || new_branch_label.get()
                                                     on:input=move |ev| set_new_branch_label.set(event_target_value(&ev))
-                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
+                                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                                                 />
                                                 <div class="flex gap-2">
                                                     <button
@@ -1293,7 +1293,7 @@ fn NodeEditor(
                             type="text"
                             prop:value=move || node_label.get()
                             on:input=move |ev| set_node_label.set(event_target_value(&ev))
-                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
+                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                         />
                     </div>
                     <div class="flex items-center gap-2 pt-5">
@@ -1311,7 +1311,7 @@ fn NodeEditor(
                         prop:value=move || node_notes.get()
                         on:input=move |ev| set_node_notes.set(event_target_value(&ev))
                         placeholder="Strategy notes for this branch..."
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed resize-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
+                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed resize-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                     />
                 </div>
             </div>
@@ -1604,7 +1604,7 @@ fn LiveNavigator(
                                                         view! {
                                                             <button
                                                                 type="button"
-                                                                class="text-left bg-overlay/50 hover:bg-overlay border border-outline/50 hover:border-accent/30 rounded-lg p-3 transition-all group focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                class="text-left bg-overlay/50 hover:bg-overlay border border-outline hover:border-accent/30 rounded-lg p-3 transition-all group focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                 on:click=move |_| {
                                                                     set_nav_path.update(|p| p.push(child_id.clone()));
                                                                 }

@@ -59,6 +59,12 @@ rule external-url '^(?!\s*//).*https?://(?!www\.w3\.org)[a-z0-9-]+(\.[a-z0-9-]+)
 rule faded-text '(?<![\w-])text-(primary|secondary|muted|dimmed|accent|success|warning|danger|info|win|loss)/\d+' '' \
   'faded text tone (opacity modifier) falls below AA; use a tone from the contrast table'
 
+# Control and box edges at an opacity (`border-outline/50`) fall to about
+# 2:1, below the 3:1 WCAG 1.4.11 asks of control boundaries. Use
+# `border-outline` for controls and `border-rule` for decorative hairlines.
+rule faint-outline '(?<![\w-])(border|divide|ring)-outline/\d+' '' \
+  'outline token at an opacity falls below 3:1; use border-outline (controls) or border-rule (hairlines)'
+
 declare -A COUNT
 TOTAL=0
 GREP_OUT=$(mktemp)

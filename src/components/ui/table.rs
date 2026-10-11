@@ -103,7 +103,7 @@ pub fn Th(
     let c = ctx();
     let align = if numeric { Align::End } else { align };
     let class = join(&[
-        "eyebrow font-medium whitespace-nowrap border-b border-outline/60 pr-4 last:pr-0",
+        "eyebrow font-medium whitespace-nowrap border-b border-outline pr-4 last:pr-0",
         match c.density {
             Density::Compact => "py-2",
             Density::Comfortable => "py-3",

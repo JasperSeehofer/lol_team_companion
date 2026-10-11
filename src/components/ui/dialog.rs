@@ -28,7 +28,7 @@ impl DialogSize {
     }
 }
 
-const DIALOG: &str = "m-auto max-h-[calc(100dvh-2rem)] overflow-visible border border-outline/70 bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim open:flex open:flex-col";
+const DIALOG: &str = "m-auto max-h-[calc(100dvh-2rem)] overflow-visible border border-outline bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim open:flex open:flex-col";
 
 /// A modal dialog. Open and close it through `open`; Escape, the close
 /// button and a click on the scrim set it back to `false`.

@@ -60,7 +60,7 @@ enum SortDir {
 /// categories, so they share one neutral style; status and side colours
 /// mean something else (docs/DESIGN.md section 4).
 fn tag_colors(_tag: &str) -> (&'static str, &'static str) {
-    ("bg-ink-2 border border-outline/60", "text-secondary")
+    ("bg-ink-2 border border-outline", "text-secondary")
 }
 
 fn stars_display(rating: Option<u8>) -> String {

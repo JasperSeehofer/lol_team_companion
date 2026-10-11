@@ -262,11 +262,11 @@ pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, Ser
 // ---------------------------------------------------------------------------
 
 fn textarea_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
+    "w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
 }
 
 fn input_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
+    "w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
 }
 
 /// Basic pattern analysis: find recurring themes across reviews
@@ -653,7 +653,7 @@ pub fn PostGamePage() -> impl IntoView {
                                     {if !gp_id.is_empty() {
                                         view! {
                                             <a href="/game-plan"
-                                               class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors">
+                                               class="inline-flex items-center gap-1 bg-surface border border-outline text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors">
                                                 <span class="text-accent">"Game Plan"</span>
                                             </a>
                                         }.into_any()
@@ -668,7 +668,7 @@ pub fn PostGamePage() -> impl IntoView {
                                             view! {
                                                 <a
                                                     href=format!("/draft?draft_id={did}")
-                                                    class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
+                                                    class="inline-flex items-center gap-1 bg-surface border border-outline text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
                                                 >
                                                     <span class="text-accent">"Draft"</span>
                                                 </a>
@@ -823,7 +823,7 @@ pub fn PostGamePage() -> impl IntoView {
                                         <div class="flex items-center gap-2 flex-wrap">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors disabled:opacity-50"
+                                                class="inline-flex items-center gap-1 bg-surface border border-outline text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors disabled:opacity-50"
                                                 on:click=move |_| {
                                                     let did = draft_id.get_untracked();
                                                     if did.is_empty() { return; }

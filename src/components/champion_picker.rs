@@ -89,7 +89,7 @@ pub fn ChampionPicker(
                     type="text"
                     placeholder="Search champion..."
                     aria-label="Search champion"
-                    class="bg-surface/50 border border-outline/50 rounded-lg pl-10 pr-4 py-3 w-full text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus:border-accent/40 transition-colors"
+                    class="bg-surface/50 border border-outline rounded-lg pl-10 pr-4 py-3 w-full text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus:border-accent/40 transition-colors"
                     on:input=move |ev| set_query.set(event_target_value(&ev))
                 />
             </div>

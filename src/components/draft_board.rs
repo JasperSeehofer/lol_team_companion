@@ -84,7 +84,7 @@ pub fn DraftBoard(
                             "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-surface hover:opacity-80"
                         } else {
                             // Empty default ban slot — dashed outline
-                            "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-elevated border-2 border-dashed border-outline/50 hover:border-accent/40"
+                            "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-elevated border-2 border-dashed border-outline hover:border-accent/40"
                         }
                     }
                     style=move || {
@@ -193,9 +193,9 @@ pub fn DraftBoard(
                     } else if filled && is_highlighted {
                         "relative h-16 rounded-md bg-surface border-2 border-danger overflow-hidden cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all"
                     } else if filled {
-                        "relative h-16 rounded-md bg-surface border border-outline/30 overflow-hidden cursor-pointer hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all"
+                        "relative h-16 rounded-md bg-surface border border-rule overflow-hidden cursor-pointer hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all"
                     } else {
-                        "relative h-16 rounded-md bg-elevated border border-dashed border-outline/50 overflow-hidden cursor-pointer hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all"
+                        "relative h-16 rounded-md bg-elevated border border-dashed border-outline overflow-hidden cursor-pointer hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all"
                     }
                 }
                 draggable="true"

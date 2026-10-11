@@ -59,7 +59,7 @@ pub fn ChampionAutocomplete(
                 type="text"
                 // Phase 17 restyle: semantic tokens, G-12 focus ring,
                 // signature-preserving (placeholder + value still threaded through).
-                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
+                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none focus-visible:border-accent/50"
                 placeholder=placeholder
                 prop:value=move || filter_text.get()
                 on:input=move |ev| {

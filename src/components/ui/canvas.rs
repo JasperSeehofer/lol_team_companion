@@ -301,7 +301,7 @@ pub fn CanvasFrame(
     let vlines = edge_lines(grid, true);
     let hlines = edge_lines(grid, false);
     let is_ref = matches!(grid, FrameGrid::Reference { .. });
-    let area = format!("relative overflow-hidden border border-outline/60 bg-canvas {aspect}");
+    let area = format!("relative overflow-hidden border border-outline bg-canvas {aspect}");
     let ticks_top = top
         .into_iter()
         .map(|(pos, label, _)| {

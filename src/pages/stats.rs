@@ -349,7 +349,7 @@ pub fn StatsPage() -> impl IntoView {
                     <div class="flex items-center gap-3">
                         // Queue type selector for sync
                         <select
-                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                             on:change=move |ev| {
                                 let v = event_target_value(&ev);
                                 let q = match v.as_str() {
@@ -436,7 +436,7 @@ pub fn StatsPage() -> impl IntoView {
 
                 // All / Team toggle (always visible)
                 <div class="flex items-center gap-3">
-                    <div class="flex rounded-lg overflow-hidden border border-outline/50">
+                    <div class="flex rounded-lg overflow-hidden border border-outline">
                         <button
                             class=move || if show_all.get() {
                                 "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -669,7 +669,7 @@ fn StatsContent(
                 <div class="flex items-center gap-2">
                     <span class="text-secondary text-sm">"Queue:"</span>
                     <select
-                        class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                        class="bg-overlay/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                         on:change=move |ev| {
                             let v: i32 = event_target_value(&ev).parse().unwrap_or(0);
                             set_filter_queue.set(v);
@@ -689,7 +689,7 @@ fn StatsContent(
                         <div class="flex items-center gap-2">
                             <span class="text-secondary text-sm">"Min. players:"</span>
                             <select
-                                class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                class="bg-overlay/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 on:change=move |ev| {
                                     let v: usize = event_target_value(&ev).parse().unwrap_or(2);
                                     set_min_players.set(v);
@@ -714,7 +714,7 @@ fn StatsContent(
 
                 // Player filter
                 <select
-                    class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                    class="bg-overlay/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                     on:change=move |ev| set_filter_player.set(event_target_value(&ev))
                 >
                     <option value="">"All Players"</option>
@@ -952,7 +952,7 @@ fn StatsContent(
                                             let username = fp.username.clone();
                                             view! {
                                                 <div class="flex items-center gap-4 mb-4">
-                                                    <img src=icon_url alt=champ.clone() class="w-16 h-16 rounded-lg border border-outline/50 object-cover" />
+                                                    <img src=icon_url alt=champ.clone() class="w-16 h-16 rounded-lg border border-outline object-cover" />
                                                     <div class="min-w-0">
                                                         <div class="font-display text-primary text-2xl leading-tight truncate">
                                                             {champ}
@@ -1065,7 +1065,7 @@ fn StatsContent(
 #[component]
 fn FolioStat(label: String, value: String) -> impl IntoView {
     view! {
-        <div class="bg-surface border border-outline/50 rounded-md px-3 py-2.5">
+        <div class="bg-surface border border-outline rounded-md px-3 py-2.5">
             <span class="font-mono uppercase tracking-wider text-caption text-muted">{label}</span>
             <div class="font-mono text-base text-primary mt-1 tabular-nums">{value}</div>
         </div>
@@ -1076,7 +1076,7 @@ fn FolioStat(label: String, value: String) -> impl IntoView {
 fn FolioStatTone(label: String, value: String, tone: &'static str) -> impl IntoView {
     let value_class = format!("font-mono text-base mt-1 tabular-nums {tone}");
     view! {
-        <div class="bg-surface border border-outline/50 rounded-md px-3 py-2.5">
+        <div class="bg-surface border border-outline rounded-md px-3 py-2.5">
             <span class="font-mono uppercase tracking-wider text-caption text-muted">{label}</span>
             <div class=value_class>{value}</div>
         </div>

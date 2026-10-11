@@ -89,8 +89,8 @@ fn frame_class(shape: AvatarShape, side: Option<DraftSide>) -> &'static str {
     match (side, shape) {
         (Some(DraftSide::Blue), _) => "rounded-full border-2 border-side-blue bg-side-blue-deep",
         (Some(DraftSide::Red), _) => "rounded-ctl border-2 border-side-red bg-side-red-deep",
-        (None, AvatarShape::Round) => "rounded-full border border-outline/60 bg-ink-2",
-        (None, AvatarShape::Square) => "rounded-ctl border border-outline/60 bg-ink-2",
+        (None, AvatarShape::Round) => "rounded-full border border-outline bg-ink-2",
+        (None, AvatarShape::Square) => "rounded-ctl border border-outline bg-ink-2",
     }
 }
 

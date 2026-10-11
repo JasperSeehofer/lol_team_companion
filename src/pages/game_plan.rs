@@ -422,11 +422,11 @@ const STRATEGY_TAGS: &[&str] = &[
 const ROLES: [&str; 5] = ["Top", "Jungle", "Mid", "Bot", "Support"];
 
 fn textarea_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
+    "w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
 }
 
 fn input_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
+    "w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
 }
 
 // ---------------------------------------------------------------------------
@@ -1074,14 +1074,14 @@ pub fn GamePlanPage() -> impl IntoView {
                                     <div class="flex items-center gap-2">
                                         <a
                                             href=format!("/draft?draft_id={did}")
-                                            class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
+                                            class="inline-flex items-center gap-1 bg-surface border border-outline text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
                                         >
                                             <span class="text-accent">"Source Draft"</span>
                                             <span class="text-dimmed">"- click to open"</span>
                                         </a>
                                         {move || if champs_locked.get() {
                                             view! {
-                                                <span class="text-xs text-muted bg-surface border border-outline/30 rounded px-2 py-0.5">
+                                                <span class="text-xs text-muted bg-surface border border-rule rounded px-2 py-0.5">
                                                     "Champions pre-filled from draft"
                                                 </span>
                                             }.into_any()
@@ -1210,7 +1210,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                                             .unwrap_or(val)
                                                                     };
                                                                     view! {
-                                                                        <div class="flex-1 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm">
+                                                                        <div class="flex-1 bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm">
                                                                             {display}
                                                                         </div>
                                                                     }.into_any()

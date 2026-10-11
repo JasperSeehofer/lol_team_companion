@@ -626,7 +626,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             type="text"
                                                             prop:value=move || edit_name.get()
                                                             on:input=move |ev| set_edit_name.set(event_target_value(&ev))
-                                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         />
                                                     </div>
                                                     <div>
@@ -634,7 +634,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         <select
                                                             prop:value=move || edit_region.get()
                                                             on:change=move |ev| set_edit_region.set(event_target_value(&ev))
-                                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         >
                                                             {["EUW","EUNE","NA","KR","BR"].iter().map(|&r| view! {
                                                                 <option value=r>{r}</option>
@@ -716,7 +716,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                         let (req_error, set_req_error) = signal(Option::<String>::None);
                                                                         view! {
                                                                             <div class="flex flex-col gap-1">
-                                                                                <div class="flex items-center justify-between bg-surface border border-outline/50 rounded-lg px-4 py-3">
+                                                                                <div class="flex items-center justify-between bg-surface border border-outline rounded-lg px-4 py-3">
                                                                                 <div>
                                                                                     <span class="text-primary font-medium">{req.username}</span>
                                                                                     {req.riot_summoner_name.map(|n| view! {
@@ -785,7 +785,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 <div
                                                     class=move || format!(
                                                         "relative overflow-hidden bg-elevated border rounded-xl p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
-                                                        if drag_over.get() { "border-accent bg-overlay" } else { "border-outline/50" }
+                                                        if drag_over.get() { "border-accent bg-overlay" } else { "border-outline" }
                                                     )
                                                     on:dragover=move |ev| {
                                                         ev.prevent_default();
@@ -875,7 +875,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 {coaches.into_iter().map(|m| {
                                                     let is_member_leader = m.user_id == created_by_for_coaches;
                                                     view! {
-                                                        <div class="relative overflow-hidden bg-elevated border border-outline/50 rounded-xl p-3 flex items-center gap-3">
+                                                        <div class="relative overflow-hidden bg-elevated border border-outline rounded-xl p-3 flex items-center gap-3">
                                                             // Watermark clipboard icon for coach
                                                             <div class="absolute inset-0 overflow-hidden pointer-events-none">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"
@@ -923,7 +923,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                                     view! {
                                                         <div
-                                                            class="relative bg-elevated border border-outline/50 rounded-xl px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
+                                                            class="relative bg-elevated border border-outline rounded-xl px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
                                                             draggable="true"
                                                             on:dragstart=move |ev| {
                                                                 if let Some(dt) = ev.data_transfer() {
@@ -949,7 +949,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     let mid = m.user_id.clone();
                                                                     view! {
                                                                         <select
-                                                                            class="bg-surface/50 border border-outline/50 rounded-lg px-2 py-1 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                            class="bg-surface/50 border border-outline rounded-lg px-2 py-1 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                             on:change=move |ev| {
                                                                                 let role = event_target_value(&ev);
                                                                                 let uid = mid.clone();
@@ -1084,7 +1084,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     _ => "w-2.5 h-2.5 rounded-ctl bg-success shrink-0",
                                                                 };
                                                                 view! {
-                                                                    <div class="flex items-center gap-2 bg-elevated border border-outline/50 rounded-lg px-3 py-2">
+                                                                    <div class="flex items-center gap-2 bg-elevated border border-outline rounded-lg px-3 py-2">
                                                                         <span class=status_dot aria-hidden="true"></span>
                                                                         <span class="text-primary text-sm truncate">{item.text}</span>
                                                                         {item.assigned_to.map(|a| view! {
@@ -1128,7 +1128,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         };
                                                         let top_improvements: Vec<String> = preview.improvements.into_iter().take(2).collect();
                                                         view! {
-                                                            <div class="bg-elevated border border-outline/50 rounded-xl p-3">
+                                                            <div class="bg-elevated border border-outline rounded-xl p-3">
                                                                 {preview.created_at.map(|d| view! {
                                                                     <p class="text-xs text-muted mb-1 font-mono">{format_timestamp(&d)}</p>
                                                                 })}
@@ -1285,7 +1285,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                     on:input=move |ev| set_new_note.set(event_target_value(&ev))
                     placeholder="Write a note for the team..."
                     rows="2"
-                    class="flex-1 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
+                    class="flex-1 bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
                 />
                 <button
                     class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer self-end focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -1348,7 +1348,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                 <div class=if pinned {
                                                     "bg-accent/10 border border-accent/30 rounded-xl p-4"
                                                 } else {
-                                                    "bg-elevated border border-outline/50 rounded-xl p-4"
+                                                    "bg-elevated border border-outline rounded-xl p-4"
                                                 }>
                                                     <div class="flex items-start gap-3">
                                                         // Author avatar
@@ -1388,7 +1388,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                                                     prop:value=move || edit_content.get()
                                                                                     on:input=move |ev| set_edit_content.set(event_target_value(&ev))
                                                                                     rows="3"
-                                                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
+                                                                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
                                                                                 />
                                                                                 <div class="flex gap-2">
                                                                                     <button

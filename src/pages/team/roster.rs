@@ -175,14 +175,14 @@ pub fn RosterPage() -> impl IntoView {
                                     type="text"
                                     name="name"
                                     required
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 />
                             </div>
                             <div>
                                 <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
                                 <select
                                     name="region"
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 >
                                     <option value="EUW">"EUW"</option>
                                     <option value="EUNE">"EUNE"</option>
@@ -212,7 +212,7 @@ pub fn RosterPage() -> impl IntoView {
                         placeholder="Search teams by name..."
                         prop:value=move || search_query.get()
                         on:input=move |ev| set_search_query.set(event_target_value(&ev))
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none mb-4"
+                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none mb-4"
                     />
 
                     <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
@@ -240,7 +240,7 @@ pub fn RosterPage() -> impl IntoView {
                                                     let region = team.region.clone();
                                                     let member_count = team.member_count.unwrap_or(0);
                                                     view! {
-                                                        <div class="bg-surface border border-outline/50 rounded-lg px-4 py-3 flex items-center justify-between">
+                                                        <div class="bg-surface border border-outline rounded-lg px-4 py-3 flex items-center justify-between">
                                                             <div class="flex items-center gap-3">
                                                                 <span class="font-display text-primary text-base">{team_name.clone()}</span>
                                                                 <span class="font-mono text-muted text-sm">{region}</span>
@@ -290,7 +290,7 @@ pub fn RosterPage() -> impl IntoView {
                                     name="riot_id"
                                     placeholder="GameName#TAG"
                                     required
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 />
                             </div>
                             <button

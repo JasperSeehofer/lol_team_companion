@@ -278,7 +278,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                         <span class="font-mono uppercase tracking-wider text-xs text-muted">"Filter"</span>
                                         // Type filter
                                         <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                             on:change=move |ev| filter_type.set(event_target_value(&ev))
                                         >
                                             <option value="all">"All Types"</option>
@@ -288,7 +288,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                         </select>
                                         // Champion filter
                                         <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                             on:change=move |ev| filter_champion.set(event_target_value(&ev))
                                         >
                                             <option value="all">"All Champions"</option>
@@ -299,7 +299,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                         </select>
                                         // Tag filter
                                         <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                             on:change=move |ev| filter_tag.set(event_target_value(&ev))
                                         >
                                             <option value="all">"All Tags"</option>
@@ -310,7 +310,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                         </select>
                                         // Sort (right-aligned)
                                         <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors ml-auto"
+                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors ml-auto"
                                             on:change=move |ev| sort_mode.set(event_target_value(&ev))
                                         >
                                             <option value="newest">"Newest first"</option>
@@ -488,7 +488,7 @@ fn LearningCard(
                         _ => "General",
                     };
                     view! {
-                        <span class="bg-surface text-muted text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5 border border-outline/50">
+                        <span class="bg-surface text-muted text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5 border border-outline">
                             {type_label}
                         </span>
                     }
@@ -531,7 +531,7 @@ fn LearningCard(
                         let url = champion_icon_url(champ);
                         let champ = champ.clone();
                         return view! {
-                            <img src=url alt=champ class="w-6 h-6 rounded object-cover mb-1 border border-outline/50" />
+                            <img src=url alt=champ class="w-6 h-6 rounded object-cover mb-1 border border-outline" />
                         }.into_any();
                     }
                 }
@@ -556,7 +556,7 @@ fn LearningCard(
                     l.tags.iter().map(|tag| {
                         let tag = tag.clone();
                         view! {
-                            <span class="rounded-ctl px-2.5 py-0.5 text-caption font-medium bg-surface text-muted border border-outline/40">
+                            <span class="rounded-ctl px-2.5 py-0.5 text-caption font-medium bg-surface text-muted border border-outline">
                                 {tag}
                             </span>
                         }
@@ -595,7 +595,7 @@ fn LearningCard(
                         <div class="flex items-center gap-3">
                             <a
                                 href=edit_href
-                                class="bg-surface border border-outline/50 text-secondary hover:text-primary hover:border-outline px-3 py-1 rounded-lg text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                class="bg-surface border border-outline text-secondary hover:text-primary hover:border-outline px-3 py-1 rounded-lg text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 on:click=move |ev| ev.stop_propagation()
                             >
                                 "Edit"
@@ -906,7 +906,7 @@ pub fn NewLearningPage() -> impl IntoView {
                                                 if learning_type.get() == lt_val_str {
                                                     "px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 } else {
-                                                    "px-4 py-2 rounded-lg text-sm bg-surface border border-outline/50 text-secondary hover:text-primary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    "px-4 py-2 rounded-lg text-sm bg-surface border border-outline text-secondary hover:text-primary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 }
                                             }
                                             on:click=move |_| learning_type.set(lt_val_str2.clone())
@@ -967,7 +967,7 @@ pub fn NewLearningPage() -> impl IntoView {
                         <div>
                             <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"What happened"</label>
                             <textarea
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 rows="4"
                                 placeholder="Describe what happened in the game..."
                                 prop:value=move || what_happened.get()
@@ -990,7 +990,7 @@ pub fn NewLearningPage() -> impl IntoView {
                         <div>
                             <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"What I learned"</label>
                             <textarea
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 rows="4"
                                 placeholder="What did you learn from this experience?"
                                 prop:value=move || what_i_learned.get()
@@ -1013,7 +1013,7 @@ pub fn NewLearningPage() -> impl IntoView {
                         <div>
                             <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"Next time I will..."</label>
                             <textarea
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 rows="4"
                                 placeholder="What will you do differently next time?"
                                 prop:value=move || next_time.get()
@@ -1046,7 +1046,7 @@ pub fn NewLearningPage() -> impl IntoView {
                                                 if selected_tags.get().contains(&tag_str) {
                                                     "rounded-ctl px-3 py-1 text-xs font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 } else {
-                                                    "rounded-ctl px-3 py-1 text-xs font-medium bg-surface border border-outline/40 text-muted hover:text-secondary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    "rounded-ctl px-3 py-1 text-xs font-medium bg-surface border border-outline text-muted hover:text-secondary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 }
                                             }
                                             on:click=move |_| {
@@ -1072,7 +1072,7 @@ pub fn NewLearningPage() -> impl IntoView {
                             <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"Title"</label>
                             <input
                                 type="text"
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 placeholder="Auto-generated from type and champion..."
                                 prop:value=move || {
                                     if title_edited.get() {
@@ -1105,7 +1105,7 @@ pub fn NewLearningPage() -> impl IntoView {
                             </button>
                             <a
                                 href="/personal-learnings"
-                                class="bg-surface border border-outline/50 text-secondary hover:text-primary hover:border-outline px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                class="bg-surface border border-outline text-secondary hover:text-primary hover:border-outline px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             >
                                 "Discard changes"
                             </a>

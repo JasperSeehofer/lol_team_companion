@@ -449,7 +449,7 @@ fn MatchListSection(
             <div class="flex items-center justify-between">
                 <SectionHead title="Recent games".to_string() />
                 <select
-                    class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-secondary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-sm text-secondary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:change=move |ev| {
                         let val = event_target_value(&ev);
                         let qf = match val.as_str() {
@@ -481,7 +481,7 @@ fn MatchListSection(
                                 "border-l-4 border-danger/60"
                             };
                             let row_class = format!(
-                                "bg-elevated border border-outline/50 {} rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-surface transition-colors",
+                                "bg-elevated border border-outline {} rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-surface transition-colors",
                                 border_class
                             );
                             let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
@@ -523,7 +523,7 @@ fn LpHistoryGraph(
                 class=move || if active() {
                     "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 } else {
-                    "bg-surface border border-outline/50 text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-surface border border-outline text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 }
                 on:click=move |_| lp_window.set(w)
             >{w}</button>
@@ -1011,7 +1011,7 @@ fn RankTargetCard(
     let payload_clone = payload.clone();
 
     view! {
-        <div class="bg-elevated border border-outline/50 rounded-xl p-4 flex flex-col gap-2">
+        <div class="bg-elevated border border-outline rounded-xl p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
                 <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
@@ -1023,7 +1023,7 @@ fn RankTargetCard(
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
                         <label class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Tier"</label>
-                        <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
+                        <select class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
                                 on:change=move |ev| tier_edit.set(event_target_value(&ev))>
                             {RANK_TIERS.iter().map(|t| {
                                 let selected = tier_edit.get_untracked().to_uppercase() == *t;
@@ -1032,7 +1032,7 @@ fn RankTargetCard(
                         </select>
                         {(!is_master).then(|| view! {
                             <label class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Division"</label>
-                            <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
+                            <select class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
                                     on:change=move |ev| div_edit.set(event_target_value(&ev))>
                                 {RANK_DIVISIONS.iter().map(|d| {
                                     let selected = div_edit.get_untracked() == *d;
@@ -1082,7 +1082,7 @@ fn RankTargetCard(
                         <div class="text-sm text-secondary">{target_display}</div>
                         <div class="font-display text-primary text-2xl mt-1">{current_label}</div>
                         <div class="text-xs text-muted">{format!("{} LP to go", to_go)}</div>
-                        <div class="w-full bg-surface border border-outline/30 h-2 mt-2 overflow-hidden">
+                        <div class="w-full bg-surface border border-rule h-2 mt-2 overflow-hidden">
                             <div class=move || if achieved { "h-2 bg-success/70 transition-all" } else { "h-2 bg-accent/60 transition-all" }
                                  style=format!("width: {:.0}%", pct) />
                         </div>
@@ -1136,7 +1136,7 @@ fn CsGoalCard(
     let on_edit = move |_| editing.set(true);
     let cs_state = payload.cs.clone();
     view! {
-        <div class="bg-elevated border border-outline/50 rounded-xl p-4 flex flex-col gap-2">
+        <div class="bg-elevated border border-outline rounded-xl p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
                 <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
@@ -1150,7 +1150,7 @@ fn CsGoalCard(
                         <input type="number" min="0" max="15" step="0.1"
                                prop:value=move || target_edit.get()
                                on:input=move |ev| target_edit.set(event_target_value(&ev))
-                               class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full" />
+                               class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full" />
                         <div class="flex items-center gap-2 mt-2">
                             <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_save>"Save Goal"</button>
                             <button class="text-muted hover:text-secondary text-xs focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_discard>"Discard"</button>
@@ -1182,7 +1182,7 @@ fn CsGoalCard(
                                 view! {
                                     <div class="font-display text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
                                     <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
-                                    <div class="w-full bg-surface border border-outline/30 h-2 mt-2 overflow-hidden">
+                                    <div class="w-full bg-surface border border-rule h-2 mt-2 overflow-hidden">
                                         <div class=move || if achieved { "h-2 bg-success/70 transition-all" } else { "h-2 bg-accent/60 transition-all" }
                                              style=format!("width: {:.0}%", pct) />
                                     </div>
@@ -1241,7 +1241,7 @@ fn DeathsGoalCard(
     let on_edit = move |_| editing.set(true);
     let deaths_state = payload.deaths.clone();
     view! {
-        <div class="bg-elevated border border-outline/50 rounded-xl p-4 flex flex-col gap-2">
+        <div class="bg-elevated border border-outline rounded-xl p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
                 <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
@@ -1255,7 +1255,7 @@ fn DeathsGoalCard(
                         <input type="number" min="0" max="20" step="1"
                                prop:value=move || target_edit.get()
                                on:input=move |ev| target_edit.set(event_target_value(&ev))
-                               class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full" />
+                               class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full" />
                         <div class="flex items-center gap-2 mt-2">
                             <button class="bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-accent-hover transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none" on:click=on_save>"Save Goal"</button>
                             <button class="text-muted hover:text-secondary text-xs focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_discard>"Discard"</button>
@@ -1287,7 +1287,7 @@ fn DeathsGoalCard(
                                 view! {
                                     <div class="font-display text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
                                     <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
-                                    <div class="w-full bg-surface border border-outline/30 h-2 mt-2 overflow-hidden">
+                                    <div class="w-full bg-surface border border-rule h-2 mt-2 overflow-hidden">
                                         <div class=move || if achieved { "h-2 bg-success/70 transition-all" } else { "h-2 bg-accent/60 transition-all" }
                                              style=format!("width: {:.0}%", pct) />
                                     </div>

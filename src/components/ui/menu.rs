@@ -228,7 +228,7 @@ pub fn Menu(
 
     let trigger_class = join(&[BASE, size.class(), variant.class()]);
     let panel_class = format!(
-        "absolute top-full z-(--z-popover) mt-1 min-w-48 overflow-hidden rounded-ctl border border-outline/60 bg-ink-2 py-1 shadow-overlay {}",
+        "absolute top-full z-(--z-popover) mt-1 min-w-48 overflow-hidden rounded-ctl border border-outline bg-ink-2 py-1 shadow-overlay {}",
         align.class()
     );
     let label_for_trigger = label.clone();

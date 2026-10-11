@@ -209,8 +209,8 @@ fn tier_badge_class(tier: &str) -> &'static str {
         "match_ready" => "bg-success/20 text-success border-success/30",
         "scrim_ready" => "bg-info/20 text-info border-info/30",
         "practicing" => "bg-warning/20 text-warning border-warning/30",
-        "to_practice" => "bg-surface text-muted border-outline/50",
-        _ => "bg-surface text-muted border-outline/50",
+        "to_practice" => "bg-surface text-muted border-outline",
+        _ => "bg-surface text-muted border-outline",
     }
 }
 
@@ -370,7 +370,7 @@ fn comp_tag_class(tag: &str) -> &'static str {
         "scaling" => "bg-info/20 text-info border-info/30",
         "early-game" => "bg-warning/20 text-warning border-warning/30",
         "protect-the-carry" => "bg-success/20 text-success border-success/30",
-        _ => "bg-surface text-muted border-outline/50",
+        _ => "bg-surface text-muted border-outline",
     }
 }
 
@@ -497,7 +497,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                 let stats_for_badge = stats_for_role.clone();
 
                                 view! {
-                                    <div class="bg-elevated rounded-xl border border-outline/50 p-4 flex flex-col gap-3">
+                                    <div class="bg-elevated rounded-xl border border-outline p-4 flex flex-col gap-3">
                                         // Role header
                                         <div class="flex items-center gap-2">
                                             <span class="font-mono uppercase tracking-[0.18em] text-caption text-accent">{role_display_name}</span>
@@ -516,7 +516,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                                         // Champion select dropdown grouped by tier
                                         <select
-                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-2 py-1.5 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                            class="w-full bg-surface/50 border border-outline rounded-lg px-2 py-1.5 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             prop:value=move || signal.get()
                                             on:change=move |ev| {
                                                 signal.set(event_target_value(&ev));
@@ -556,7 +556,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                             let champ = signal.get();
                                             if champ.is_empty() {
                                                 view! {
-                                                    <div class="h-24 flex items-center justify-center border border-dashed border-outline/30 rounded-lg">
+                                                    <div class="h-24 flex items-center justify-center border border-dashed border-rule rounded-lg">
                                                         <span class="text-dimmed text-xs">"Pick a champion"</span>
                                                     </div>
                                                 }.into_any()
@@ -662,7 +662,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                         </div>
 
                         // Opponent section (collapsible)
-                        <div class="mb-8 bg-elevated rounded-xl border border-outline/50">
+                        <div class="mb-8 bg-elevated rounded-xl border border-outline">
                             <button
                                 class="w-full flex items-center justify-between p-4 text-left hover:bg-surface/30 transition-colors rounded-xl focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 on:click=move |_| opponent_expanded.set(!opponent_expanded.get_untracked())
@@ -699,7 +699,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                     <div class="p-4 pt-0 space-y-4">
                                         // Opponent selector
                                         <select
-                                            class="w-full md:w-64 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                            class="w-full md:w-64 bg-surface/50 border border-outline rounded-lg px-3 py-2 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             on:change=move |ev| {
                                                 let val = event_target_value(&ev);
                                                 if val.is_empty() {
@@ -738,7 +738,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                         let player_name = player.name.clone();
                                                         let recent = player.recent_champions.clone();
                                                         view! {
-                                                            <div class="bg-surface border border-outline/50 rounded-lg p-3">
+                                                            <div class="bg-surface border border-outline rounded-lg p-3">
                                                                 <div class="flex items-center gap-2 mb-2">
                                                                     {role_mark.map(|r| view! { <crate::components::ui::RoleLabel role=r /> })}
                                                                     <span class="text-sm font-medium text-primary">{player_name}</span>
@@ -753,7 +753,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                                                     <img
                                                                                         src=img
                                                                                         alt=name
-                                                                                        class="w-7 h-7 rounded-ctl border border-outline/30"
+                                                                                        class="w-7 h-7 rounded-ctl border border-rule"
                                                                                         title=c.clone()
                                                                                     />
                                                                                 }
@@ -777,7 +777,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                         </div>
 
                         // Save as Draft section
-                        <div class="bg-elevated rounded-xl border border-outline/50 p-6">
+                        <div class="bg-elevated rounded-xl border border-outline p-6">
                             <div class="eyebrow">"Save"</div>
                             <h2 class="font-display text-2xl text-primary mb-4">"Save as Draft"</h2>
                             <div class="flex flex-col md:flex-row gap-4 items-end">
@@ -786,7 +786,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                     <input
                                         type="text"
                                         placeholder="e.g. Teamfight Comp v1"
-                                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-sm text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                         prop:value=move || comp_name.get()
                                         on:input=move |ev| comp_name.set(event_target_value(&ev))
                                     />

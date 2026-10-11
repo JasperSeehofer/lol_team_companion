@@ -668,7 +668,7 @@ fn tier_badge_class(tier: &str) -> &'static str {
         "S" => "border border-accent text-accent",
         "A" => "bg-ink-3 text-primary",
         "B" => "border border-outline text-primary",
-        "C" => "border border-outline/60 text-secondary",
+        "C" => "border border-outline text-secondary",
         "D" => "border border-rule text-muted",
         _ => "border border-rule text-muted",
     }
@@ -1666,7 +1666,7 @@ pub fn DraftPage() -> impl IntoView {
                                 <input
                                     type="text"
                                     prop:value=move || opp_filter_text.get()
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
                                     placeholder="Search opponents..."
                                     on:input=move |ev| {
                                         let val = event_target_value(&ev);
@@ -3079,7 +3079,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                 let label = if count == 1 { "1 game plan".to_string() } else { format!("{count} game plans") };
                                                                 view! {
                                                                     <a href="/game-plan"
-                                                                       class="bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-0.5 hover:text-primary hover:border-accent/50 transition-colors">
+                                                                       class="bg-surface border border-outline text-muted text-xs rounded px-2 py-0.5 hover:text-primary hover:border-accent/50 transition-colors">
                                                                         {label}
                                                                     </a>
                                                                 }.into_any()
@@ -3222,7 +3222,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         let (_, existing_plan_id) = prompt.unwrap();
                                                         let cta_draft_id2 = cta_draft_id.clone();
                                                         view! {
-                                                            <div class="flex-shrink-0 flex flex-col gap-1 bg-surface border border-outline/50 rounded-lg px-3 py-2 text-xs">
+                                                            <div class="flex-shrink-0 flex flex-col gap-1 bg-surface border border-outline rounded-lg px-3 py-2 text-xs">
                                                                 <span class="text-muted">"A game plan already exists."</span>
                                                                 <div class="flex gap-1.5">
                                                                     <a href=format!("/game-plan?plan_id={existing_plan_id}")
@@ -3230,7 +3230,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                         "View Game Plan"
                                                                     </a>
                                                                     <button
-                                                                        class="bg-overlay hover:bg-overlay-strong text-secondary border border-outline/50 font-semibold rounded px-2 py-0.5 transition-colors"
+                                                                        class="bg-overlay hover:bg-overlay-strong text-secondary border border-outline font-semibold rounded px-2 py-0.5 transition-colors"
                                                                         on:click=move |_| {
                                                                             #[allow(unused_variables)]
                                                                             let did = cta_draft_id2.clone();
@@ -4096,7 +4096,7 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-label">
+                                            <div class="flex items-baseline justify-between py-1 border-b border-rule font-display text-label">
                                                 <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-primary flex-1 mx-2">{name}</span>
                                                 <span class="text-muted italic text-caption">"role"</span>
@@ -4121,7 +4121,7 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-caption opacity-70">
+                                            <div class="flex items-baseline py-0.5 border-b border-rule font-display text-caption opacity-70">
                                                 <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-secondary line-through flex-1 mx-2">{name}</span>
                                             </div>
@@ -4152,7 +4152,7 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-label">
+                                            <div class="flex items-baseline justify-between py-1 border-b border-rule font-display text-label">
                                                 <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-primary flex-1 mx-2">{name}</span>
                                                 <span class="text-muted italic text-caption">"role"</span>
@@ -4177,7 +4177,7 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-caption opacity-70">
+                                            <div class="flex items-baseline py-0.5 border-b border-rule font-display text-caption opacity-70">
                                                 <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-secondary line-through flex-1 mx-2">{name}</span>
                                             </div>

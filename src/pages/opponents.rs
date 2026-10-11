@@ -693,7 +693,7 @@ fn CreationForm(
                     placeholder="Opponent team name..."
                     prop:value=move || team_name.get()
                     on:input=move |ev| team_name.set(event_target_value(&ev))
-                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    class="w-full text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 />
                 {move || {
                     if let Some(err) = name_error.get() {
@@ -719,7 +719,7 @@ fn CreationForm(
                                     placeholder="Name#Tag (e.g. Faker#KR1)"
                                     prop:value=move || role_sig.get()
                                     on:input=move |ev| role_sig.set(event_target_value(&ev))
-                                    class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="flex-1 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 />
                             </div>
                             {move || {
@@ -870,7 +870,7 @@ fn OpponentDetail(
                     type="text"
                     prop:value=move || name.get()
                     on:input=move |ev| name.set(event_target_value(&ev))
-                    class="flex-1 min-w-48 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    class="flex-1 min-w-48 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     placeholder="Team name..."
                 />
                 <div class="flex gap-2 shrink-0">
@@ -931,7 +931,7 @@ fn OpponentDetail(
                     prop:value=move || notes.get()
                     on:input=move |ev| notes.set(event_target_value(&ev))
                     rows="2"
-                    class="w-full text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-y"
+                    class="w-full text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-y"
                     placeholder="General scouting notes..."
                 />
             </div>
@@ -998,7 +998,7 @@ fn EmptyRoleSlot(
     };
 
     view! {
-        <div class="bg-surface border border-outline/50 rounded-xl p-4">
+        <div class="bg-surface border border-outline rounded-xl p-4">
             <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-20 text-sm font-semibold text-secondary">{role_display}</span>
                 <input
@@ -1006,7 +1006,7 @@ fn EmptyRoleSlot(
                     placeholder="Name#Tag (e.g. Faker#KR1)"
                     prop:value=move || riot_id_input.get()
                     on:input=move |ev| riot_id_input.set(event_target_value(&ev))
-                    class="flex-1 min-w-32 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    class="flex-1 min-w-32 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 />
                 <button
                     on:click=on_add
@@ -1124,7 +1124,7 @@ fn PlayerCard(
     };
 
     view! {
-        <div class="bg-surface border border-outline/50 rounded-xl p-4">
+        <div class="bg-surface border border-outline rounded-xl p-4">
             // Row 1: header
             <div class="flex items-center gap-2 mb-3 flex-wrap">
                 <span class="text-sm font-semibold text-secondary">{role_display}</span>
@@ -1185,7 +1185,7 @@ fn PlayerCard(
                         placeholder="Name#Tag (e.g. Faker#KR1)"
                         prop:value=move || p_summoner.get()
                         on:input=move |ev| p_summoner.set(event_target_value(&ev))
-                        class="flex-1 text-sm bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        class="flex-1 text-sm bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     />
                     // Fetch status icon
                     {move || match fetch_state.get() {

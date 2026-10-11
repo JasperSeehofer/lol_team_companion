@@ -70,9 +70,7 @@ impl RoleLabelStyle {
     fn class(self) -> &'static str {
         match self {
             RoleLabelStyle::Plain => "text-muted",
-            RoleLabelStyle::Boxed => {
-                "h-5 rounded-ctl border border-outline/60 px-1.5 text-secondary"
-            }
+            RoleLabelStyle::Boxed => "h-5 rounded-ctl border border-outline px-1.5 text-secondary",
             RoleLabelStyle::Active => "text-accent",
         }
     }

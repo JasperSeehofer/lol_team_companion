@@ -30,7 +30,7 @@ impl ToastKind {
     fn edge(self) -> &'static str {
         match self {
             ToastKind::Success => "border-success/50",
-            ToastKind::Info => "border-outline/70",
+            ToastKind::Info => "border-outline",
             ToastKind::Warning => "border-warning/60",
             ToastKind::Error => "border-danger/60",
         }

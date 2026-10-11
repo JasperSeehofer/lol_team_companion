@@ -265,7 +265,7 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
             })}
 
             {(!data.has_riot_key).then(|| view! {
-                <div class="bg-elevated border border-outline/50 rounded-xl p-4">
+                <div class="bg-elevated border border-outline rounded-xl p-4">
                     <p class="text-muted text-sm">
                         <span class="font-mono uppercase tracking-[0.18em] text-caption text-warning mr-2">"Notice"</span>
                         "RIOT_API_KEY not set \u{2014} stats syncing is disabled. Add it to .env."
@@ -341,7 +341,7 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
 fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoView {
     view! {
         <A href=href attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
-            <div class="bg-elevated border border-outline/50 rounded-xl p-4 hover:bg-surface transition-colors cursor-pointer">
+            <div class="bg-elevated border border-outline rounded-xl p-4 hover:bg-surface transition-colors cursor-pointer">
                 <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">{label}</div>
                 <div class="font-display text-primary text-2xl tabular-nums">{value}</div>
             </div>
@@ -364,7 +364,7 @@ fn NavCard(href: &'static str, title: &'static str, desc: &'static str) -> impl 
 #[component]
 fn ActivityTile(label: &'static str, value: String) -> impl IntoView {
     view! {
-        <div class="bg-surface border border-outline/50 rounded-lg px-3 py-2 flex flex-col gap-1">
+        <div class="bg-surface border border-outline rounded-lg px-3 py-2 flex flex-col gap-1">
             <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">{label}</span>
             <span class="font-display text-primary text-2xl tabular-nums">{value}</span>
         </div>

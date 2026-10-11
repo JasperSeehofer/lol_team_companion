@@ -249,7 +249,7 @@ fn ParticipantRow(p: MatchParticipant, is_user: bool) -> impl IntoView {
 
             // Cell 2: champion tile + summoner (120px)
             <div class="flex items-center gap-2 min-w-0">
-                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-ctl border border-outline/50 shrink-0" />
+                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-ctl border border-outline shrink-0" />
                 <div class="min-w-0">
                     <span class="text-primary text-xs font-medium truncate block">{summoner}</span>
                     <span class="font-mono text-caption text-dimmed truncate block">{champ_name}</span>
@@ -393,7 +393,7 @@ fn PerformanceBar(
             // Label (140px) — imperial eyebrow
             <span class="font-mono uppercase tracking-wider text-caption text-muted w-[140px] shrink-0">{label}</span>
             // Bar track (flex-1)
-            <div class="bg-surface border border-outline/30 h-3.5 relative flex-1 overflow-hidden">
+            <div class="bg-surface border border-rule h-3.5 relative flex-1 overflow-hidden">
                 // Bar fill
                 <div
                     class="bg-accent/70 h-full transition-all duration-200"
@@ -720,7 +720,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                 {champ_label}
                                                             </h1>
                                                             <div class="flex items-center gap-3">
-                                                                <img src=icon alt=champ class="w-10 h-10 rounded-ctl border border-outline/50" />
+                                                                <img src=icon alt=champ class="w-10 h-10 rounded-ctl border border-outline" />
                                                                 <span class="font-mono text-sm text-secondary tabular-nums">{user_kda}</span>
                                                             </div>
                                                         }
@@ -903,7 +903,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                     };
 
                                                                     return view! {
-                                                                        <div class="bg-surface border border-outline/50 rounded-lg p-4 mt-4">
+                                                                        <div class="bg-surface border border-outline rounded-lg p-4 mt-4">
                                                                             <p class="font-mono text-sm text-secondary">{detail_text}</p>
                                                                             {if has_involved {
                                                                                 view! {

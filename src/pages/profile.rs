@@ -211,7 +211,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                                             name="username"
                                                                             value=username_val
                                                                             required
-                                                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                         />
                                                                         <button
                                                                             type="submit"
@@ -275,7 +275,7 @@ pub fn ProfilePage() -> impl IntoView {
                                             <div class="mb-4">
                                                 <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
                                                 <select
-                                                    class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary w-full max-w-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-sm text-primary w-full max-w-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                     on:change=move |ev| {
                                                         let region = event_target_value(&ev);
                                                         leptos::task::spawn_local(async move {
@@ -311,7 +311,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                             name="riot_id"
                                                             placeholder="GameName#TAG"
                                                             required
-                                                            class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                         />
                                                     </div>
                                                     <button
@@ -351,7 +351,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                             view! {
                                                                 <div class="flex gap-3 flex-wrap">
                                                                     {counts.into_iter().map(|(role, count)| view! {
-                                                                        <div class="bg-surface border border-outline/50 rounded-lg px-3 py-2 flex items-baseline gap-2">
+                                                                        <div class="bg-surface border border-outline rounded-lg px-3 py-2 flex items-baseline gap-2">
                                                                             <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">{role}</span>
                                                                             <span class="font-display text-primary text-lg tabular-nums">{count}</span>
                                                                         </div>

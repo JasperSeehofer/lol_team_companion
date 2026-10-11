@@ -174,7 +174,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     max="1000"
                                                     value="1"
                                                     required
-                                                    class="w-28 bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="w-28 bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 />
                                             </div>
                                             <div>
@@ -188,7 +188,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     min="1"
                                                     max="365"
                                                     value="14"
-                                                    class="w-28 bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="w-28 bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 />
                                             </div>
                                             <div class="flex-1 min-w-[12rem]">
@@ -201,7 +201,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     name="note"
                                                     maxlength="200"
                                                     placeholder="Who is this for?"
-                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 />
                                             </div>
                                             <button

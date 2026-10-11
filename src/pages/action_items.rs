@@ -213,15 +213,15 @@ pub fn ActionItemsPage() -> impl IntoView {
                             let done_count = all_items.iter().filter(|i| i.status == "done").count();
                             view! {
                                 <div class="flex gap-4 mb-6 flex-wrap">
-                                    <div class="bg-surface border border-outline/50 rounded-lg px-4 py-2 flex items-center gap-2">
+                                    <div class="bg-surface border border-outline rounded-lg px-4 py-2 flex items-center gap-2">
                                         <span class="w-2.5 h-2.5 rounded-ctl bg-success"></span>
                                         <span class="text-secondary text-sm">{open_count}" open"</span>
                                     </div>
-                                    <div class="bg-surface border border-outline/50 rounded-lg px-4 py-2 flex items-center gap-2">
+                                    <div class="bg-surface border border-outline rounded-lg px-4 py-2 flex items-center gap-2">
                                         <span class="w-2.5 h-2.5 rounded-ctl bg-warning"></span>
                                         <span class="text-secondary text-sm">{in_progress_count}" in progress"</span>
                                     </div>
-                                    <div class="bg-surface border border-outline/50 rounded-lg px-4 py-2 flex items-center gap-2">
+                                    <div class="bg-surface border border-outline rounded-lg px-4 py-2 flex items-center gap-2">
                                         <span class="w-2.5 h-2.5 rounded-ctl bg-muted"></span>
                                         <span class="text-secondary text-sm">{done_count}" done"</span>
                                     </div>
@@ -239,7 +239,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                         <input
                             type="text"
                             placeholder="What needs to be done?"
-                            class="flex-1 min-w-48 bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary placeholder:text-dimmed text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            class="flex-1 min-w-48 bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary placeholder:text-dimmed text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             prop:value=move || new_text.get()
                             on:input=move |ev| set_new_text.set(event_target_value(&ev))
                             on:keydown=move |ev| {
@@ -270,7 +270,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                                     let member_list = member_list.clone();
                                     view! {
                                         <select
-                                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             prop:value=move || new_assignee.get()
                                             on:change=move |ev| set_new_assignee.set(event_target_value(&ev))
                                         >
@@ -296,7 +296,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                 // Filters
                 <div class="flex gap-3 mb-4 flex-wrap">
                     <select
-                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        class="bg-surface/50 border border-outline rounded-lg px-3 py-1.5 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         prop:value=move || status_filter.get()
                         on:change=move |ev| set_status_filter.set(event_target_value(&ev))
                     >
@@ -311,7 +311,7 @@ pub fn ActionItemsPage() -> impl IntoView {
                                 let member_list = member_list.clone();
                                 view! {
                                     <select
-                                        class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-1.5 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        class="bg-surface/50 border border-outline rounded-lg px-3 py-1.5 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                         prop:value=move || assignee_filter.get()
                                         on:change=move |ev| set_assignee_filter.set(event_target_value(&ev))
                                     >
