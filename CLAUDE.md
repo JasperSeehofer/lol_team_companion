@@ -129,10 +129,12 @@ src/
 │   ├── admin/invites.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
 │   └── draft.rs, tree_drafter.rs, champion_pool.rs, game_plan.rs, post_game.rs,
 │       opponents.rs, action_items.rs, stats.rs, match_detail.rs, analytics.rs,
-│       solo_dashboard.rs, personal_learnings.rs, profile.rs, team_builder.rs, home.rs
+│       solo_dashboard.rs, personal_learnings.rs, profile.rs, team_builder.rs, home.rs,
+│       navigate.rs (client navigation helpers: `navigator`, `go`, `replace_url`)
 └── components/          # ui/ (design-system primitives, see below), nav (command bar, account
-                         # menu), footer, skeleton, draft_board, champion_picker/autocomplete,
-                         # tree_graph, bug_report_widget, region/* (compatibility shims until M3)
+                         # menu), footer, skeleton, draft_board (slot metadata only; the board is
+                         # ui::DraftBoard), champion_picker/autocomplete, tree_graph,
+                         # bug_report_widget, region/* (compatibility shims until M5)
 schema.surql             # Baseline DB schema (idempotent), applied on every start; migrations follow
 input.css                # Tailwind entry + Survey tokens (@theme, OKLCH) + @font-face
 public/fonts/            # Self-hosted woff2 (Familjen Grotesk, Public Sans, JetBrains Mono, Source Serif 4) + licences
@@ -212,10 +214,10 @@ Honesty rule (MISSION section 6): never render invented data or controls that do
 New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 and `/design`). A new primitive gets typed enum variants, a doc comment with an `A11y:` line (a test enforces it), and a gallery section (`SECTIONS` in `design.rs` and in `gallery.spec.ts`).
 
 `components::ui` primitives:
-- Batch 1 (layout and controls): `PageShell`, `PageHeader`, `SectionHeader`, `Surface`, `Text`, `Button` (+ `Keycap`), `Field`, `TextField`, `Select`, `Badge`, `Table` (`Th`, `Tr`, `Td`, `RowLink`), `Tabs` (+ `TabPanel`); domain `DraftSlot`, `DraftSequence`, `PrepSequence`.
-- Batch 2 (interaction): `Dialog`, `ConfirmDialog`, `Menu`, `CommandBar`, `Toast` (`ToastContext.show`/`.push` with an "Undo" action), `Callout`, `EmptyState`, `Skeleton` (+ `SkeletonGroup`; the only `animate-pulse`), `Tooltip`, `SegmentedControl`, `Switch`.
+- Batch 1 (layout and controls): `PageShell`, `PageHeader`, `SectionHeader`, `Surface`, `Text`, `Button` (+ `Keycap`), `Field`, `TextField`, `Select`, `Badge`, `Table` (`Th`, `Tr`, `Td`, `RowLink`), `Tabs` (+ `TabPanel`); domain `DraftBoard` (the one tournament board for the draft page, tree drafter and gallery; `DraftFormat` has only `Tournament`), `PrepSequence`. Hooks added in M3: `Button` `pressed` (toggle rows), `TextField` `on_keydown`/`on_blur`/`combobox`.
+- Batch 2 (interaction): `Dialog`, `ConfirmDialog`, `Menu`, `CommandBar`, `Toast` (`ToastContext.show`/`.push` with an "Undo" action), `Callout`, `EmptyState`, `Skeleton` (+ `SkeletonGroup`; the only `animate-pulse`), `Tooltip`, `SegmentedControl` (`manual`: arrows move focus, Enter/Space/click select, for switches with side effects), `Switch`, `Checkbox`.
 - Batch 3 (domain and canvas): `ChampionAvatar` (only `/img/champion/...`, monogram fallback), `UserAvatar`, `RoleLabel` (TOP JGL MID BOT SUP; no role icons), `SideMarker`, `ResultGlyph`, `StatReadout`, `LegendBlock`, `CanvasFrame` + `ScaleBar`, `Annotation`, `TimelineScrub` (the last four reserved for the Sand Table and Draft Graph, M4).
-- Compatibility names that render them until M3/M5: `ErrorBanner`, `StatusMessage` (Callout), `SkeletonLine/Card/Grid` (Skeleton), `region::ModeToggle` (SegmentedControl).
+- Compatibility names that render them until M5 (the strategy pages no longer use any; `ChampTile`/`ChampPortrait` were deleted in M3): `ErrorBanner`, `StatusMessage` (Callout), `SkeletonLine/Card/Grid` (Skeleton), `PageLoading`/`PageEmpty`, `region::{Card, SectionHead, Eyebrow, ModeToggle, RankBadge, LPProgress}` (solo dashboard, match detail).
 
 ## Testing
 
@@ -241,7 +243,8 @@ Closed-beta users file bug reports through the in-app widget. On every server st
 ## Code style
 
 - **Errors:** `thiserror` for custom error types; in server functions map them with `.map_err(authz::server_err)` (implement `authz::IntoServerError` for a new error type). User-facing rule violations from the DB layer are `DbError::Invalid("...")`.
-- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M3. Type: `text-caption` (12px, the floor) to `text-display` (32px page titles are `text-headline`), plus `eyebrow` (mono caps overline), `figures`, `note` (serif italic, annotations only). Never raw palette classes, `text-[Npx]` under 12px, `rounded-full` outside primitives, `animate-pulse` outside `Skeleton`, faded text tones (`text-muted/60`), gradients, blur or emoji: `scripts/lint_design.sh` fails on any hit (hard zero, no baseline). Map old colours by meaning, never "red means red side". The danger button hovers to `danger-deep` with primary text. Headings are plain product language (no lore eyebrows).
-- **Forms:** `Field` + `TextField`/`Select` from `components::ui` for new forms; older pages still use inline inputs (`bg-surface/50 border-outline/50`) until M3.
+- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M5 (only pages not yet migrated still use them). Type: `text-caption` (12px, the floor) to `text-display` (32px page titles are `text-headline`), plus `eyebrow` (mono caps overline), `figures`, `note` (serif italic, annotations only). Never raw palette classes, `text-[Npx]` under 12px, `rounded-full` outside primitives, `animate-pulse` outside `Skeleton`, faded text tones (`text-muted/60`), gradients, blur or emoji: `scripts/lint_design.sh` fails on any hit (hard zero, no baseline). Map old colours by meaning, never "red means red side". The danger button hovers to `danger-deep` with primary text. Headings are plain product language (no lore eyebrows).
+- **Forms:** `Field` + `TextField`/`Select` from `components::ui`; the M3 strategy pages have no raw `<button>`/`<input>`/`<select>`/`<textarea>`. Pages left for M5 still have inline inputs (`bg-surface/50 border-outline`); control edges are always the full `border-outline` (3:1; the lint rule `faint-outline` rejects `border-outline/N`).
+- **Strategy page patterns (M3, `docs/DESIGN.md` 6.6):** list on the left, editor on the right; save state in the `PageHeader` meta; saving puts the id in the URL (`?draft_id=`, `?plan_id=`, `?review_id=`) via `pages::navigate::replace_url`; Undo toasts for reversible deletes, `ConfirmDialog` for the rest; a `Keycap` legend where a page has its own keys.
 - **Naming:** snake_case files and functions, PascalCase components.
 - **Commits:** conventional prefixes (`feat`, `fix`, `chore`, `docs`, `ci`, `test`, `refactor`).
