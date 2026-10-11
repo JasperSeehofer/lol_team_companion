@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M2: Design system foundation (stage A)
+
+#### Added
+- A new visual language, "Survey": a dark green-slate ground in tonal layers, one chalk accent for focus, selection and the next action, matched blue and red side colours, win and loss on their own colours, and plain, precise type. Every text and control colour meets WCAG AA contrast.
+- New typefaces, served by the app itself: Familjen Grotesk for titles, Public Sans for text, JetBrains Mono for numbers, Source Serif 4 italic for annotations. Numbers line up in every table and readout, and no text is smaller than 12px.
+- A design-system gallery at `/design` for admins (and developers): every component in every state, the colour tokens with their measured contrast, the type scale, a worked tournament draft and the Match Day preparation checklist.
+- A tournament draft layout that shows the real order (five bans and five picks per side; blue starts, red opens the second ban phase) with the current step highlighted, and a "what to do next" checklist for Match Day. Pages adopt them in M3 and M5.
+- A "Skip to content" link for keyboard users and a visible focus outline everywhere.
+
+#### Changed
+- Champion and item pictures load from Companion's own server (cached per patch) instead of from Riot's image servers, so your browser no longer contacts a third party for them.
+- Sign-in, registration, the closed-beta page, the 404 page, the navigation, the footer and the headers of the solo and team dashboards use the new components; every other page already wears the new colours and type and is rebuilt in M3 and M5.
+- The solo dashboard's views are called Overview, Rank and Journal; the last ten results show W and L marks.
+
+#### Removed
+- The heraldic ornaments, the painted background images, gradients, glows and blur, emoji icons and the leftover second theme.
+- The theme card on the profile page, which pointed at a switch that no longer exists.
+
 ### Milestone M6: Data layer and integrations
 
 #### Added

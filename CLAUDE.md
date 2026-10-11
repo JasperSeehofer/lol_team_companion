@@ -14,7 +14,7 @@ A private coaching workspace for one League of Legends team: scouting, drafting,
 |------|------------|
 | `MISSION.md` | The agreed mission contract: goals, decisions, milestones (M0 to M8), rules of engagement. Read section 5 and 7 before starting a milestone. |
 | `docs/ARCHITECTURE.md` | How the code is put together today (crate layout, server functions, DB, auth, Riot integration, theming, tests). |
-| `docs/DESIGN.md` | Design system: principles, tokens, primitives, gallery, lint gates. Skeleton until M2. |
+| `docs/DESIGN.md` | Design system (direction "Survey"): principles, tokens, type, primitives, gallery, lint gates, migration plan. The single source of truth for UI. |
 | `CHANGELOG.md` | Keep a Changelog. Add an entry under `Unreleased` for every user-visible change. |
 | `.claude/rules/*.md` | Path-scoped gotchas (SurrealDB, Leptos, WASM/e2e). Loaded automatically. |
 
@@ -38,6 +38,9 @@ cargo clippy --features ssr -- -D warnings
 cargo clippy --features hydrate --target wasm32-unknown-unknown -- -D warnings
 cargo fmt --check
 
+# Design-system lint gates (palette classes, sub-12px text, radius, ornaments, emoji, ...)
+./scripts/lint_design.sh
+
 # Unit tests (fast; what CI runs)
 cargo test --features ssr --lib
 
@@ -45,7 +48,7 @@ cargo test --features ssr --lib
 cargo test --features ssr
 
 # e2e (needs a running server started with the e2e env, see "Testing" below)
-cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts
+cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts
 
 # Seed demo data (STOP THE SERVER FIRST, see "One process per database").
 # Idempotent; prints every login and a 25-use invite code. --dry-run shows the plan.
@@ -102,7 +105,7 @@ Single crate, two compile targets. `--features ssr` builds the Axum server (Surr
 
 ```
 src/
-├── main.rs              # Axum setup: DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth, theme middleware, /healthz
+├── main.rs              # Axum setup: DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth, /img/* images, /healthz
 ├── app.rs               # Shell, <Routes>, footer
 ├── lib.rs               # Crate root, hydrate() entry
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
@@ -115,7 +118,7 @@ src/
 │   ├── rate_limit.rs    # In-memory token buckets + per-user cooldowns
 │   ├── auth.rs          # axum-login backend, argon2 (spawn_blocking), HMAC session hash
 │   ├── session_store.rs # tower-sessions store on SurrealDB (expiry + purge)
-│   ├── theme_layer.rs   # Per-request theme middleware (clamped to "demacia")
+│   ├── images.rs        # /img/champion/{key}[/icon], /img/item/{id}: cached images (no browser CDN calls)
 │   ├── riot.rs          # Shared RiotClient (riven): region routing, global request budget
 │   ├── data_dragon.rs   # Live patch version + champion cache (DB copy, 6 h refresh, patch changes)
 │   ├── sand_table.rs    # Riot Match-V5 timeline importer (replay frames and events)
@@ -123,15 +126,16 @@ src/
 ├── models/              # Shared types (SSR + WASM)
 ├── pages/               # Route components (+ their #[server] fns)
 │   ├── auth/{login,register}.rs, team/{dashboard,roster}.rs
-│   ├── admin/invites.rs, legal/{impressum,datenschutz}.rs, closed_beta.rs
+│   ├── admin/invites.rs, design.rs (gallery), legal/{impressum,datenschutz}.rs, closed_beta.rs
 │   └── draft.rs, tree_drafter.rs, champion_pool.rs, game_plan.rs, post_game.rs,
 │       opponents.rs, action_items.rs, stats.rs, match_detail.rs, analytics.rs,
 │       solo_dashboard.rs, personal_learnings.rs, profile.rs, team_builder.rs, home.rs
-└── components/          # nav, footer, ui (ErrorBanner, EmptyState, Toast...), skeleton,
-                         # draft_board, champion_picker/autocomplete, tree_graph,
-                         # bug_report_widget, region/* (legacy themed primitives)
+└── components/          # ui/ (design-system primitives, tokens, contrast test), nav, footer,
+                         # skeleton, draft_board, champion_picker/autocomplete, tree_graph,
+                         # bug_report_widget, region/* (compatibility shims until M3)
 schema.surql             # Baseline DB schema (idempotent), applied on every start; migrations follow
-input.css                # Tailwind entry + tokens (@theme) + fonts
+input.css                # Tailwind entry + Survey tokens (@theme, OKLCH) + @font-face
+public/fonts/            # Self-hosted woff2 (Familjen Grotesk, Public Sans, JetBrains Mono, Source Serif 4) + licences
 e2e/                     # Playwright suite
 tests/integration/       # DB integration tests (one binary)
 ```
@@ -162,6 +166,8 @@ tests/integration/       # DB integration tests (one binary)
 | `/analytics` | AnalyticsPage (parked) | Yes |
 | `/personal-learnings`, `/personal-learnings/new` | PersonalLearningsPage, NewLearningPage | Yes |
 | `/admin/invites` | AdminInvitesPage: list, mint, disable invite codes | Admin (404 for everyone else) |
+| `/design` | DesignGalleryPage: every primitive, token and state | Admin, or anyone in a dev build (404 otherwise) |
+| `/img/champion/{key}`, `/img/champion/{key}/icon`, `/img/item/{id}` | Axum handlers (not Leptos): cached champion and item images | No |
 | anything else | NotFound (HTTP 404) | No |
 
 Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Registration and login hard-navigate to `/solo` (or `/team/dashboard` when the user's mode is `team`).
@@ -192,7 +198,8 @@ Toolchain and external APIs:
 3. **Standalone Tailwind.** cargo-leptos downloads the Tailwind v4 CLI itself (`tailwind-input-file = "input.css"`). There is no `style-file`: setting both made the browser fetch `/pkg/tailwindcss` (404).
 4. **tower-sessions** must match the version axum-login uses (0.14). A mismatch fails silently.
 5. **riven:** `Queue::from(u16)`, not `i16`; `puuid` is `String`, not `Option<String>`.
-6. **Unlayered CSS beats Tailwind utilities.** Custom rules in `input.css` that could clash with utilities belong in `@layer components` (see `.canvas-grain`).
+6. **Unlayered CSS beats Tailwind utilities.** Custom rules in `input.css` that could clash with utilities belong in `@layer components` or `@layer base` (see the forced-state rule for the gallery).
+7. **Tailwind only sees literal class names.** Primitives map enum variants to `&'static str` in `match` arms; never build class names at runtime (`format!("text-{}", x)` produces nothing).
 
 ## Adding things
 
@@ -200,13 +207,15 @@ New page: `src/pages/my_page.rs` with `#[component] pub fn MyPage()` and its `#[
 
 New DB table: `DEFINE TABLE` / `DEFINE FIELD` in `schema.surql` (with `IF NOT EXISTS`); query functions in `src/server/db.rs` with a `Db*` struct converted to the shared model; model in `src/models/` deriving `Serialize, Deserialize, Clone`. Index the scope field (`team`/`user`). Changing existing data or types, or adding a unique index, needs a migration: see "How to add a migration" in `docs/ARCHITECTURE.md`.
 
-Honesty rule (MISSION section 6): never render invented data or controls that do nothing. When a feature has no data yet, show an empty state that says what will appear and how (`EmptyState` in `components/ui.rs`, `PageEmpty` in `components/skeleton.rs`).
+Honesty rule (MISSION section 6): never render invented data or controls that do nothing. When a feature has no data yet, show an empty state that says what will appear and how (`EmptyState` in `components/ui/feedback.rs`, `PageEmpty` in `components/skeleton.rs`).
+
+New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 and `/design`). A new primitive gets typed enum variants, a doc comment with an `A11y:` line (a test enforces it), and a gallery section.
 
 ## Testing
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for `/solo`; `teamPage` also creates a team. CI runs unit and integration tests, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites` and `cross-tenant` specs against a debug build. The visual-regression baselines predate the M0 footer and are re-captured in M2.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for `/solo`; `teamPage` also creates a team. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant` and `gallery` specs against a debug build. `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container
@@ -226,7 +235,7 @@ Closed-beta users file bug reports through the in-app widget. On every server st
 ## Code style
 
 - **Errors:** `thiserror` for custom error types; in server functions map them with `.map_err(authz::server_err)` (implement `authz::IntoServerError` for a new error type). User-facing rule violations from the DB layer are `DbError::Invalid("...")`.
-- **Theming:** one dark theme (`data-theme="demacia"`), CSS custom properties in `input.css` `@theme`. Use semantic tokens (`bg-base`, `bg-surface`, `bg-elevated`, `text-primary`, `text-secondary`, `text-muted`, `text-dimmed`, `border-divider`, `border-outline`, `bg-accent`, `text-accent-contrast`, `text-success|warning|danger|info`), not raw palette colors. Coloured buttons with white text (`bg-red-700 text-white`) keep `text-white`. The full token and component system is specified in `docs/DESIGN.md` (M2).
-- **Forms:** Tailwind utilities inline, `bg-surface/50` inputs with `border-outline/50`.
+- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M3. Type: `text-caption` (12px, the floor) to `text-display`, plus `overline`, `figures`, `note` (serif italic, annotations only). Never raw palette classes, `text-[Npx]` under 12px, gradients, blur or emoji: `scripts/lint_design.sh` fails on them.
+- **Forms:** `Field` + `TextField`/`Select` from `components::ui` for new forms; older pages still use inline inputs (`bg-surface/50 border-outline/50`) until M3.
 - **Naming:** snake_case files and functions, PascalCase components.
 - **Commits:** conventional prefixes (`feat`, `fix`, `chore`, `docs`, `ci`, `test`, `refactor`).

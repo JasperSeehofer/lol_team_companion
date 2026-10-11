@@ -1,6 +1,6 @@
 # Architecture
 
-How Companion is built today (state after milestone M6). For goals and scope see `MISSION.md`; for the design system see `docs/DESIGN.md`.
+How Companion is built today (state after milestone M6 and M2 stage A). For goals and scope see `MISSION.md`; for the design system see `docs/DESIGN.md`.
 
 ## One crate, two targets
 
@@ -24,10 +24,10 @@ Leptos 0.8 runs without its `nightly` feature, so the crate builds on stable Rus
 3. Load the Data Dragon cache (stored copy, then a live refresh), normalise stored champion names against it, and start the 6-hour refresh task. Build the shared `RiotClient` and start the rate-limiter purge task.
 4. Export open bug reports to `BUG_REPORT_INBOX_PATH` (default `./docs/inbox/bug-reports.md`). Failures are logged, never fatal.
 5. Build the session layer (`tower-sessions` 0.14 with `SurrealSessionStore`, 30-day inactivity expiry) and the `axum-login` auth layer.
-6. Mount `/healthz` (JSON `{status, db}`), all Leptos routes via `leptos_routes_with_context`, and `file_and_error_handler` for static files.
-7. Wrap everything in `theme_injection_middleware` (inner) and the auth layer (outer).
+6. Mount `/healthz` (JSON `{status, db}`), the image routes (`/img/champion/{key}`, `/img/champion/{key}/icon`, `/img/item/{id}`, see "Images"), all Leptos routes via `leptos_routes_with_context`, and `file_and_error_handler` for static files.
+7. Wrap everything in the auth layer.
 
-For each page request (and server function call) the context closure provides three values to Leptos: the database handle (`Arc<Surreal<Db>>`), the shared `Arc<RiotClient>` and an `InitialTheme`. The shell in `src/app.rs` renders `<html data-theme=...>`, the stylesheet `/pkg/lol_team_companion.css`, the nav, the routed page inside `<main>`, the site footer with Riot's legal disclaimer, and the floating bug-report widget. Unknown paths render `NotFound` and set HTTP 404.
+For each page request (and server function call) the context closure provides two values to Leptos: the database handle (`Arc<Surreal<Db>>`) and the shared `Arc<RiotClient>`. The shell in `src/app.rs` renders `<html lang="en">` (one theme, no `data-theme`), preloads the two critical fonts, links the stylesheet `/pkg/lol_team_companion.css`, and renders a skip link, the nav, the routed page inside `<main id="main">`, the site footer with Riot's legal disclaimer, and the floating bug-report widget. Unknown paths render `NotFound` and set HTTP 404.
 
 ## Pages and server functions
 
@@ -98,21 +98,31 @@ Users have a `mode` (`solo` or `team`). New users start in solo mode and land on
   - **Budget:** on top of the per-IP `Bucket::Riot` limit, every request takes a token from the process-wide `RiotBudget` (`rate_limit.rs`): 20 per second and 50 per minute with a two-minute burst (a development key's 20/1 s and 100/2 min), configurable with `RIOT_GLOBAL_BUDGET_PER_SEC` / `RIOT_GLOBAL_BUDGET_PER_MIN`. A request waits at most 5 s for a token; multi-request jobs call `ensure_headroom(n)` first. Either way the user gets "Riot is busy, try again in N s." instead of a stalled job.
   - **No key / bad key:** without a key the client reports "not configured" and pages show that Riot features are off; a dummy key reaches Riot and gets 401/403, which `authz::server_err` turns into "The Riot API rejected our key".
 - `src/server/data_dragon.rs` is a process-wide cache of the live patch version, the champion list and the numeric key → champion map. `init` loads the last good copy from `ddragon_cache` (so a cold start without network still works), then fetches `versions.json` and `champion.json`; a tokio interval refreshes every 6 hours. Each successful refresh is persisted; a new version writes a `patch_change` row (old, new, detected_at) and is logged. The public champion-list server functions read the cache. Masteries resolve champion keys through the live map first. It also normalises free-text champion names.
-- Image URLs use the live version on both targets: the shell writes it into `<meta name="ddragon-version">`, and `models::ddragon::{champion_icon_url, item_icon_url}` read it from the server cache (SSR) or that tag (browser).
+- Image URLs point at the app's own endpoint and carry the live version as a cache buster: the shell writes it into `<meta name="ddragon-version">`, and `models::ddragon::{champion_icon_url, champion_portrait_url, item_icon_url}` read it from the server cache (SSR) or that tag (browser) and return `/img/...?v=<version>`. The cached champion list's `image_full` is rewritten to the same URLs.
+
+## Images
+
+`src/server/images.rs` serves champion portraits, champion icons and item icons so the browser never calls a third party (owner's decision, M2). A champion key resolves through the Data Dragon cache (`data_dragon::resolve_champion_id`: id, display name or a loose match); an item id must be one to six digits. Anything else is 404 before any fetch, and nothing from the URL reaches the filesystem; the upstream URL is built only from a cache id. Each image is fetched once per patch version from Data Dragon with the shared reqwest client (15 s timeout), kept in an in-memory map (bounded at 1,200 entries, cleared when full, misses remembered as negative entries), and sent with `Content-Type`, `Cache-Control: public, max-age=604800`, an `ETag` (`"<version>-<kind>-<id>-<len>"`), `X-Content-Type-Options: nosniff`, and 304 for a matching `If-None-Match`. Role icons still come from CommunityDragon until batch 3 replaces them.
 
 ## Sand Table storage
 
 Storage only so far (no UI). `server::sand_table::import_timeline` converts a Riot Match-V5 timeline JSON into per-minute frames (every participant's position, total and current gold, xp, CS, level, and an estimated `alive`) and positioned events (kills, objectives, structures, plates, wards, level-ups, game end; unknown types are counted, not fatal). `db::store_replay` writes a team's replay with all frames and events in one transaction (re-importing a match replaces the team's copy); `get_replay_frames` / `get_replay_events` read them scoped to the team. Boards are saved as numbered `board_version` scene documents (`save_board_version`, `get_board_version`). The test fixture `tests/fixtures/riot_match_v5_timeline.json` was written from the documented shape; its `_fixture_notes` list what could not be verified.
 
-## Theming and CSS
+## Design system, theming and CSS
 
-Tailwind CSS v4 runs through cargo-leptos (`tailwind-input-file = "input.css"`); there is no Node toolchain. `input.css` contains self-hosted `@font-face` rules (no Google Fonts CDN, enforced in CI), the `@theme` block mapping semantic tokens (`--color-base`, `--color-surface`, `--color-primary`, `--color-accent`, `--color-success`, ...) to per-theme variables, and a few component rules in `@layer components`.
+`docs/DESIGN.md` is the specification. Tailwind CSS v4 runs through cargo-leptos (`tailwind-input-file = "input.css"`); there is no Node toolchain. `input.css` holds the `@font-face` rules for the four self-hosted families (woff2 in `public/fonts/`, latin and latin-ext per style via `unicode-range`; no font CDN, enforced in CI), the `@theme` block with the Survey tokens in OKLCH (surfaces, lines, text, accent, side and result colours, status, terrain, type scale, radius, one shadow, motion), the legacy aliases (`base`, `surface`, `elevated`, ...), `:root` extras (`color-scheme: dark`, durations, z layers, focus ring), base styles (body font and tabular figures, the global `:focus-visible` outline), the `overline`/`figures`/`note` utilities and the reduced-motion block. There is one theme and no theme plumbing: no `data-theme`, no cookie, no middleware. (`user.theme` is still stored but unused.)
 
-The theme value travels: cookie `lol_companion_theme`, then the user's DB `theme`, then the default, resolved by `src/server/theme_layer.rs` into a task-local, then provided as `InitialTheme` and written to `<html data-theme>`. On hydrate, `App` re-reads that attribute so server and client agree. Since M0 the resolver clamps every value to `"demacia"`; the user-facing toggle is gone. The `src/components/region/` primitives (Card, Btn, SectionHead, ModeToggle, Badge, ...) still accept a `region` prop and contain unreachable Pandemonium branches; M2 and M3 replace them with the new design-system primitives.
+`src/components/ui/` holds the primitives (batch 1: PageShell, PageHeader, SectionHeader, Surface, Text, Button, Keycap, Field, TextField, Select, Badge, Table, Tabs, plus the domain primitives DraftSlot/DraftSequence with `TOURNAMENT_ORDER`, and PrepSequence) and `feedback.rs` with the older ErrorBanner, StatusMessage, toasts, skeletons and empty states. Variants are enums mapped to literal class strings. `ui/tokens.rs` mirrors the colour tokens for the gallery and implements OKLCH to sRGB contrast; its tests check that the table matches `input.css` and that every contrast pair listed in DESIGN.md meets its minimum. A test in `ui/mod.rs` requires an `A11y:` line in every component's doc comment.
+
+`src/components/region/` is a compatibility layer: `Card`, `SectionHead`, `Eyebrow`, `ModeToggle`, `ChampTile`, `ChampPortrait`, `RankBadge` and `LPProgress` keep the names pages call, without the old `region` prop, and render batch 1 primitives or token-only markup. M3 deletes it when the last page has moved.
+
+`/design` (`src/pages/design.rs`) is the gallery: every primitive in every variant and state, the token board with measured contrast, the type scale and worked domain examples. Dev builds show it to everyone, otherwise admins only (404 for the rest, `SsrMode::Async`).
+
+`scripts/lint_design.sh` enforces the design rules over `src/` with a ratcheting baseline (`scripts/design-lint-baseline.txt`); CI runs it in the `style_guardrails` job.
 
 ## Components
 
-`src/components/` holds the shared UI: `nav` (hub navigation, solo/team mode toggle, notifications, user menu), `footer`, `ui` (ErrorBanner, StatusMessage, ToastProvider, Skeleton*, EmptyState, NoTeamState), `skeleton` (PageLoading, PageEmpty), `draft_board` (20-slot pick/ban board; `slot_meta` is the canonical slot order), `champion_picker`, `champion_autocomplete`, `tree_graph` (SVG draft tree), `bug_report_widget`, `stat_card`, `icon` and the legacy `region/*` set.
+`src/components/` holds the shared UI: `ui` (the design-system primitives, above), `nav` (hub navigation, solo/team mode toggle, join-request notifications, user menu), `footer`, `skeleton` (PageLoading, PageEmpty), `draft_board` (20-slot pick/ban board; `slot_meta` is the canonical slot order, tested against `ui::draft::TOURNAMENT_ORDER`), `champion_picker`, `champion_autocomplete`, `tree_graph` (SVG draft tree), `bug_report_widget`, `stat_card`, `icon` and the `region/*` shims.
 
 ## Testing
 
@@ -122,7 +132,7 @@ The theme value travels: cookie `lol_companion_theme`, then the user's DB `theme
 | DB integration | `tests/integration/main.rs` plus one module per area, each on an in-memory SurrealDB (`kv-mem`) prepared with the baseline and all migrations; `security.rs` holds the cross-tenant, invite, session-expiry and injection suites, `migrations.rs` the migration and index checks, `transactions.rs` the rollback checks | `cargo test --features ssr` |
 | e2e | `e2e/tests/*.spec.ts`, Playwright 1.58, Chromium | `cd e2e && npx playwright test` |
 
-The e2e fixtures register a fresh user per test (`authedPage`, with the invite code from `E2E_INVITE_CODE`, which the server provides through `BOOTSTRAP_INVITE_CODE`) and optionally create a team (`teamPage`). `hydration-no-panic.spec.ts` is the gate against SSR/hydrate divergence; `cross-tenant.spec.ts` drives two accounts and checks that one team cannot read or change the other's draft and game plan. CI (`.github/workflows/ci.yml`) checks both targets, runs clippy for both targets with `-D warnings`, `cargo fmt --check`, the unit and DB integration tests and the style guardrails, then builds the app, starts the binary in production mode (with `SESSION_SECRET`, a bootstrap invite and `ADMIN_EMAILS`), waits for `/healthz` and runs the smoke, hydration, auth, admin-invites and cross-tenant specs.
+The e2e fixtures register a fresh user per test (`authedPage`, with the invite code from `E2E_INVITE_CODE`, which the server provides through `BOOTSTRAP_INVITE_CODE`) and optionally create a team (`teamPage`). `hydration-no-panic.spec.ts` is the gate against SSR/hydrate divergence; `cross-tenant.spec.ts` drives two accounts and checks that one team cannot read or change the other's draft and game plan. CI (`.github/workflows/ci.yml`) checks both targets, runs clippy for both targets with `-D warnings`, `cargo fmt --check`, the unit and DB integration tests and the style guardrails, then builds the app, starts the binary in production mode (with `SESSION_SECRET`, a bootstrap invite and `ADMIN_EMAILS`), waits for `/healthz` and runs the smoke, hydration, auth, admin-invites, cross-tenant and gallery specs. The `style_guardrails` job checks for font CDN references and runs the design lint.
 
 ## Tooling
 
