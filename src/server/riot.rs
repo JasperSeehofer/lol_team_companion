@@ -610,18 +610,20 @@ pub fn platform_route_from_str(region: &str) -> PlatformRoute {
     }
 }
 
-/// account-v1 uses different regional grouping than match-v5
+/// The account-v1 cluster for a platform. account-v1 is served only by
+/// AMERICAS, ASIA and EUROPE (any of them finds any account; the nearest is
+/// recommended), not by SEA, which match-v5 uses for OCE and South East Asia.
 pub fn account_region_for(platform: PlatformRoute) -> RegionalRoute {
     match platform {
-        PlatformRoute::OC1
-        | PlatformRoute::SG2
-        | PlatformRoute::TW2
-        | PlatformRoute::VN2
-        | PlatformRoute::ME1 => RegionalRoute::SEA,
         PlatformRoute::NA1 | PlatformRoute::BR1 | PlatformRoute::LA1 | PlatformRoute::LA2 => {
             RegionalRoute::AMERICAS
         }
-        PlatformRoute::KR | PlatformRoute::JP1 => RegionalRoute::ASIA,
+        PlatformRoute::KR
+        | PlatformRoute::JP1
+        | PlatformRoute::OC1
+        | PlatformRoute::SG2
+        | PlatformRoute::TW2
+        | PlatformRoute::VN2 => RegionalRoute::ASIA,
         _ => RegionalRoute::EUROPE,
     }
 }
@@ -839,12 +841,25 @@ mod tests {
 
     #[test]
     fn account_region_mapping() {
-        // SEA group
-        assert_eq!(account_region_for(PlatformRoute::OC1), RegionalRoute::SEA);
-        assert_eq!(account_region_for(PlatformRoute::SG2), RegionalRoute::SEA);
-        assert_eq!(account_region_for(PlatformRoute::TW2), RegionalRoute::SEA);
-        assert_eq!(account_region_for(PlatformRoute::VN2), RegionalRoute::SEA);
-        assert_eq!(account_region_for(PlatformRoute::ME1), RegionalRoute::SEA);
+        // account-v1 has no SEA cluster: OCE and South East Asia use ASIA,
+        // the Middle East uses EUROPE.
+        assert_eq!(account_region_for(PlatformRoute::OC1), RegionalRoute::ASIA);
+        assert_eq!(account_region_for(PlatformRoute::SG2), RegionalRoute::ASIA);
+        assert_eq!(account_region_for(PlatformRoute::TW2), RegionalRoute::ASIA);
+        assert_eq!(account_region_for(PlatformRoute::VN2), RegionalRoute::ASIA);
+        assert_eq!(
+            account_region_for(PlatformRoute::ME1),
+            RegionalRoute::EUROPE
+        );
+        for p in [
+            PlatformRoute::OC1,
+            PlatformRoute::SG2,
+            PlatformRoute::TW2,
+            PlatformRoute::VN2,
+            PlatformRoute::ME1,
+        ] {
+            assert_ne!(account_region_for(p), RegionalRoute::SEA, "{p:?}");
+        }
         // AMERICAS group
         assert_eq!(
             account_region_for(PlatformRoute::NA1),
