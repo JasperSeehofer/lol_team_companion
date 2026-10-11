@@ -32,11 +32,17 @@ use crate::pages::profile::get_current_user;
 /// line 590 — public/auth/legal pages must not show the widget.
 const HIDDEN_PREFIXES: &[&str] = &["/auth", "/closed-beta", "/legal"];
 
+/// A registered global event listener, kept so it can be removed later
+/// (hydrate only; closures are not `Send`, hence `LocalStorage`).
+#[cfg(feature = "hydrate")]
+type ListenerHandle<E> =
+    StoredValue<Option<wasm_bindgen::closure::Closure<dyn Fn(E)>>, leptos::prelude::LocalStorage>;
+
 /// Three-mode widget state.
 ///
 /// - `Idle`        — only the floating button is visible
 /// - `Selecting`   — global click-capture listener is attached; user
-///                   is targeting a tagged element
+///   is targeting a tagged element
 /// - `Editing`     — modal is open with the captured element label
 ///
 /// `#[allow(dead_code)]` because `Selecting` and `Editing` are only
@@ -74,17 +80,10 @@ pub async fn submit_bug_report(
     viewport_w: Option<i32>,
     viewport_h: Option<i32>,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     // T-19-02 server-fn guard (description hygiene).
     let description = description.trim().to_string();
@@ -110,7 +109,7 @@ pub async fn submit_bug_report(
         viewport_h,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 /// List bug reports. v1 returns Forbidden for ALL callers — no admin role
@@ -214,16 +213,10 @@ fn BugReportWidgetInner(
     // `let` bindings.
     #[allow(unused_variables)]
     #[cfg(feature = "hydrate")]
-    let click_capture_handle: StoredValue<
-        Option<wasm_bindgen::closure::Closure<dyn Fn(web_sys::MouseEvent)>>,
-        leptos::prelude::LocalStorage,
-    > = StoredValue::new_local(None);
+    let click_capture_handle: ListenerHandle<web_sys::MouseEvent> = StoredValue::new_local(None);
     #[allow(unused_variables)]
     #[cfg(feature = "hydrate")]
-    let esc_handle: StoredValue<
-        Option<wasm_bindgen::closure::Closure<dyn Fn(web_sys::KeyboardEvent)>>,
-        leptos::prelude::LocalStorage,
-    > = StoredValue::new_local(None);
+    let esc_handle: ListenerHandle<web_sys::KeyboardEvent> = StoredValue::new_local(None);
 
     // --- exit_select_mode (declared first so start_select_mode can call it) ---
     //
@@ -291,8 +284,12 @@ fn BugReportWidgetInner(
             use wasm_bindgen::closure::Closure;
             use wasm_bindgen::JsCast;
 
-            let Some(win) = web_sys::window() else { return; };
-            let Some(doc) = win.document() else { return; };
+            let Some(win) = web_sys::window() else {
+                return;
+            };
+            let Some(doc) = win.document() else {
+                return;
+            };
 
             if let Some(body) = doc.body() {
                 let _ = body.style().set_property("cursor", "crosshair");
@@ -304,8 +301,8 @@ fn BugReportWidgetInner(
             // Click-capture closure. We attach in CAPTURE phase so we
             // intercept before any bubble-phase `on:click` handlers
             // attached to tagged elements.
-            let click_cb = Closure::<dyn Fn(web_sys::MouseEvent)>::new(
-                move |ev: web_sys::MouseEvent| {
+            let click_cb =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
                     let target = match ev.target() {
                         Some(t) => t,
                         None => return,
@@ -334,8 +331,7 @@ fn BugReportWidgetInner(
                     element_label.set(label);
                     widget_state.set(WidgetState::Editing);
                     exit_select_mode();
-                },
-            );
+                });
 
             let opts = web_sys::AddEventListenerOptions::new();
             opts.set_capture(true);
@@ -355,10 +351,8 @@ fn BugReportWidgetInner(
                     }
                 },
             );
-            let _ = win.add_event_listener_with_callback(
-                "keydown",
-                esc_cb.as_ref().unchecked_ref(),
-            );
+            let _ =
+                win.add_event_listener_with_callback("keydown", esc_cb.as_ref().unchecked_ref());
             esc_handle.set_value(Some(esc_cb));
         }
     };

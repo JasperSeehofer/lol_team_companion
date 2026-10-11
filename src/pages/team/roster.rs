@@ -4,40 +4,27 @@ use leptos::prelude::*;
 
 #[server]
 pub async fn create_team(name: String, region: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
     use leptos_axum::redirect;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     db::create_team(&db, &user.id, name, region)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     redirect("/team/dashboard");
     Ok(())
 }
 
 #[server]
 pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
+    use crate::server::rate_limit::Bucket;
     use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let parts: Vec<&str> = riot_id.splitn(2, '#').collect();
     if parts.len() != 2 {
@@ -45,51 +32,43 @@ pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
             "Invalid Riot ID format (use GameName#TAG)",
         ));
     }
+    authz::rate_limit(Bucket::Riot).await?;
     let (game_name, tag_line) = (parts[0], parts[1]);
 
-    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
-    let puuid = riot::get_puuid(game_name, tag_line, platform)
+    let platform = riot::platform_for(&[user.riot_region.as_deref()]);
+    let puuid = authz::riot()?
+        .get_puuid(game_name, tag_line, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     db::update_user_riot(&db, user.id, puuid, riot_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(())
 }
 
 #[server]
 pub async fn list_teams() -> Result<Vec<Team>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    // Signed-in users only: the team list is not public.
+    let authz::Ctx { db, .. } = authz::authed().await?;
 
-    db::list_all_teams(&db)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    db::list_all_teams(&db).await.map_err(authz::server_err)
 }
 
 #[server]
 pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     db::create_join_request(&db, &user.id, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[component]
@@ -98,19 +77,18 @@ pub fn RosterPage() -> impl IntoView {
     // Auth redirect + mode detection
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-    Effect::new(move || {
-        match auth_user.get() {
-            Some(Ok(None)) => {
-                #[cfg(feature = "hydrate")]
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/auth/login");
-                }
+    Effect::new(move || match auth_user.get() {
+        Some(Ok(None)) =>
+        {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
             }
-            Some(Ok(Some(u))) => {
-                is_solo_mode.set(u.mode == "solo");
-            }
-            _ => {}
         }
+        Some(Ok(Some(u))) => {
+            is_solo_mode.set(u.mode == "solo");
+        }
+        _ => {}
     });
 
     // Toast for create_team errors (success redirects to dashboard)
@@ -129,7 +107,9 @@ pub fn RosterPage() -> impl IntoView {
     Effect::new(move || {
         if let Some(result) = link_riot.value().get() {
             match result {
-                Ok(()) => toast.show.run((ToastKind::Success, "Riot account linked".into())),
+                Ok(()) => toast
+                    .show
+                    .run((ToastKind::Success, "Riot account linked".into())),
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
         }

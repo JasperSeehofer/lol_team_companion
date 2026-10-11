@@ -1,7 +1,9 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
 use crate::components::region::HeraldicDivider;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{
+    ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+};
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
@@ -13,21 +15,14 @@ use leptos::prelude::*;
 
 #[server]
 pub async fn list_plans() -> Result<Vec<GamePlan>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -35,26 +30,19 @@ pub async fn list_plans() -> Result<Vec<GamePlan>, ServerFnError> {
 
     db::list_game_plans(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn list_team_drafts() -> Result<Vec<Draft>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -62,84 +50,68 @@ pub async fn list_team_drafts() -> Result<Vec<Draft>, ServerFnError> {
 
     db::list_drafts(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn create_plan(plan_json: String) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let mut plan: GamePlan = serde_json::from_str(&plan_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid plan JSON: {e}")))?;
+    let mut plan: GamePlan = serde_json::from_str(&plan_json).map_err(authz::server_err)?;
+    if let Some(did) = plan.draft_id.as_deref().filter(|d| !d.is_empty()) {
+        db::ensure_team_record(&surreal, "draft", did, &team_id)
+            .await
+            .map_err(authz::server_err)?;
+    }
     plan.team_id = team_id;
-
     db::save_game_plan(&surreal, plan, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn update_plan(plan_json: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let plan: GamePlan = serde_json::from_str(&plan_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid plan JSON: {e}")))?;
-
-    db::update_game_plan(&surreal, plan)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let team_id = authz::require_team(&surreal, &user).await?;
+    let plan: GamePlan = serde_json::from_str(&plan_json).map_err(authz::server_err)?;
+    if let Some(did) = plan.draft_id.as_deref().filter(|d| !d.is_empty()) {
+        db::ensure_team_record(&surreal, "draft", did, &team_id)
+            .await
+            .map_err(authz::server_err)?;
+    }
+    db::update_game_plan(&surreal, &team_id, plan)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_plan(plan_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::delete_game_plan(&surreal, &plan_id)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let team_id = authz::require_team(&surreal, &user).await?;
+    db::delete_game_plan(&surreal, &team_id, &plan_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_champions_for_game_plan() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    data_dragon::champions().await.map_err(authz::server_err)
 }
 
 /// Fetch a draft with its actions by ID, for prefilling a new game plan.
@@ -148,66 +120,47 @@ pub async fn get_champions_for_game_plan() -> Result<Vec<Champion>, ServerFnErro
 pub async fn get_draft_for_prefill(
     draft_id: String,
 ) -> Result<Option<crate::models::draft::Draft>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::get_draft_for_prefill(&surreal, &draft_id)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&surreal, &user).await? else {
+        return Ok(None);
+    };
+    db::get_draft_for_prefill(&surreal, &team_id, &draft_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 /// Check whether any game plan already references the given draft ID.
 /// Returns Some(plan_id) if at least one plan exists, or None if none do.
 /// Used for duplicate detection in the "Prep for This Draft" CTA.
 #[server]
-pub async fn check_draft_has_game_plan(
-    draft_id: String,
-) -> Result<Option<String>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn check_draft_has_game_plan(draft_id: String) -> Result<Option<String>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let plans = db::get_game_plans_for_draft(&surreal, &draft_id)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&surreal, &user).await? else {
+        return Ok(None);
+    };
+    let plans = db::get_game_plans_for_draft(&surreal, &team_id, &draft_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(plans.into_iter().next().and_then(|p| p.id))
 }
 
 #[server]
 pub async fn get_checklist_templates() -> Result<Vec<ChecklistTemplate>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -215,7 +168,7 @@ pub async fn get_checklist_templates() -> Result<Vec<ChecklistTemplate>, ServerF
 
     db::list_checklist_templates(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -223,67 +176,49 @@ pub async fn save_checklist_template(
     name: String,
     items_json: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let items: Vec<String> = serde_json::from_str(&items_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid items JSON: {e}")))?;
+    let items: Vec<String> = serde_json::from_str(&items_json).map_err(authz::server_err)?;
 
     db::create_checklist_template(&surreal, &team_id, name, items)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_checklist_template_fn(id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::delete_checklist_template(&surreal, &id)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let team_id = authz::require_team(&surreal, &user).await?;
+    db::delete_checklist_template(&surreal, &team_id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
-pub async fn get_plan_checklist(plan_id: String) -> Result<Option<ChecklistInstance>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn get_plan_checklist(
+    plan_id: String,
+) -> Result<Option<ChecklistInstance>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::get_checklist_for_plan(&surreal, &plan_id)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&surreal, &user).await? else {
+        return Ok(None);
+    };
+    db::get_checklist_for_plan(&surreal, &team_id, &plan_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -292,29 +227,29 @@ pub async fn create_plan_checklist(
     template_id: Option<String>,
     items_json: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let items: Vec<String> = serde_json::from_str(&items_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid items JSON: {e}")))?;
-
+    let items: Vec<String> = serde_json::from_str(&items_json).map_err(authz::server_err)?;
+    db::ensure_team_record(&surreal, "game_plan", &plan_id, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let template_id = template_id.filter(|t| !t.is_empty());
+    if let Some(tid) = &template_id {
+        db::ensure_team_record(&surreal, "checklist_template", tid, &team_id)
+            .await
+            .map_err(authz::server_err)?;
+    }
     db::create_checklist_instance(&surreal, &team_id, Some(plan_id), template_id, items)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -322,24 +257,15 @@ pub async fn update_checklist(
     instance_id: String,
     checked_json: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let checked: Vec<bool> = serde_json::from_str(&checked_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid checked JSON: {e}")))?;
-
-    db::update_checklist_checked(&surreal, &instance_id, checked)
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let team_id = authz::require_team(&surreal, &user).await?;
+    let checked: Vec<bool> = serde_json::from_str(&checked_json).map_err(authz::server_err)?;
+    db::update_checklist_checked(&surreal, &team_id, &instance_id, checked)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -347,23 +273,26 @@ pub async fn start_post_game_review(
     plan_id: String,
     draft_id: Option<String>,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
     use crate::models::game_plan::PostGameLearning;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::authz;
+    use crate::server::db;
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
+
+    db::ensure_team_record(&surreal, "game_plan", &plan_id, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let draft_id = draft_id.filter(|d| !d.is_empty());
+    if let Some(did) = &draft_id {
+        db::ensure_team_record(&surreal, "draft", did, &team_id)
+            .await
+            .map_err(authz::server_err)?;
+    }
 
     let review = PostGameLearning {
         id: None,
@@ -382,7 +311,7 @@ pub async fn start_post_game_review(
 
     db::save_post_game_learning(&surreal, review)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -437,21 +366,14 @@ fn generate_template(
 
 #[server]
 pub async fn get_strategy_win_rates() -> Result<Vec<(String, i32, i32)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -459,28 +381,21 @@ pub async fn get_strategy_win_rates() -> Result<Vec<(String, i32, i32)>, ServerF
 
     db::get_win_condition_stats(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_strategy_win_rates_vs_opponent(
     opponent_name: String,
 ) -> Result<Vec<(String, i32, i32)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -488,7 +403,7 @@ pub async fn get_strategy_win_rates_vs_opponent(
 
     db::get_win_condition_stats_vs_opponent(&surreal, &team_id, &opponent_name)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -738,7 +653,7 @@ pub fn GamePlanPage() -> impl IntoView {
     // When navigating from "View Game Plan" on the draft page, the URL includes
     // plan_id=<id>. This Effect finds the matching plan in the loaded list and
     // calls load_plan to populate the editor, so the correct plan opens immediately.
-    let plan_id_from_url = query.with(|q| q.get("plan_id").map(|s| s.clone()));
+    let plan_id_from_url = query.with(|q| q.get("plan_id"));
     let plan_id_applied = RwSignal::new(false);
     {
         let plan_id_from_url = plan_id_from_url.clone();
@@ -746,12 +661,17 @@ pub fn GamePlanPage() -> impl IntoView {
             if plan_id_applied.get() {
                 return;
             }
-            let Some(ref target_id) = plan_id_from_url else { return };
+            let Some(ref target_id) = plan_id_from_url else {
+                return;
+            };
             if target_id.is_empty() {
                 return;
             }
             if let Some(Ok(list)) = plans.get() {
-                if let Some(plan) = list.into_iter().find(|p| p.id.as_deref() == Some(target_id.as_str())) {
+                if let Some(plan) = list
+                    .into_iter()
+                    .find(|p| p.id.as_deref() == Some(target_id.as_str()))
+                {
                     load_plan.run(plan);
                     plan_id_applied.set(true);
                 }
@@ -910,21 +830,65 @@ pub fn GamePlanPage() -> impl IntoView {
             let plan = GamePlan {
                 id: existing_id,
                 team_id: String::new(),
-                draft_id: if draft_val.is_empty() { None } else { Some(draft_val) },
+                draft_id: if draft_val.is_empty() {
+                    None
+                } else {
+                    Some(draft_val)
+                },
                 name: name_val,
                 our_champions: our_vals.into_iter().filter(|s| !s.is_empty()).collect(),
                 enemy_champions: enemy_vals.into_iter().filter(|s| !s.is_empty()).collect(),
-                win_conditions: wc_val.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-                objective_priority: obj_val.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                win_conditions: wc_val
+                    .lines()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
+                objective_priority: obj_val
+                    .lines()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
                 teamfight_strategy: tf_val,
-                early_game: if eg_val.is_empty() { None } else { Some(eg_val) },
-                top_strategy: if strats_val[0].is_empty() { None } else { Some(strats_val[0].clone()) },
-                jungle_strategy: if strats_val[1].is_empty() { None } else { Some(strats_val[1].clone()) },
-                mid_strategy: if strats_val[2].is_empty() { None } else { Some(strats_val[2].clone()) },
-                bot_strategy: if strats_val[3].is_empty() { None } else { Some(strats_val[3].clone()) },
-                support_strategy: if strats_val[4].is_empty() { None } else { Some(strats_val[4].clone()) },
-                notes: if notes_val.is_empty() { None } else { Some(notes_val) },
-                win_condition_tag: if wct_val.is_empty() { None } else { Some(wct_val) },
+                early_game: if eg_val.is_empty() {
+                    None
+                } else {
+                    Some(eg_val)
+                },
+                top_strategy: if strats_val[0].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[0].clone())
+                },
+                jungle_strategy: if strats_val[1].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[1].clone())
+                },
+                mid_strategy: if strats_val[2].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[2].clone())
+                },
+                bot_strategy: if strats_val[3].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[3].clone())
+                },
+                support_strategy: if strats_val[4].is_empty() {
+                    None
+                } else {
+                    Some(strats_val[4].clone())
+                },
+                notes: if notes_val.is_empty() {
+                    None
+                } else {
+                    Some(notes_val)
+                },
+                win_condition_tag: if wct_val.is_empty() {
+                    None
+                } else {
+                    Some(wct_val)
+                },
             };
             let plan_json = serde_json::to_string(&plan).unwrap_or_default();
 
@@ -965,7 +929,9 @@ pub fn GamePlanPage() -> impl IntoView {
                     if !is_update && !id.is_empty() {
                         set_editing_id.set(Some(id));
                     }
-                    toast.show.run((ToastKind::Success, "Game plan saved".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Game plan saved".into()));
                     plans.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -978,7 +944,9 @@ pub fn GamePlanPage() -> impl IntoView {
             match delete_plan(plan_id).await {
                 Ok(_) => {
                     clear_editor.run(());
-                    toast.show.run((ToastKind::Success, "Game plan deleted".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Game plan deleted".into()));
                     plans.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -1002,7 +970,10 @@ pub fn GamePlanPage() -> impl IntoView {
         set_obj_priority.set(obj.join("\n"));
         set_teamfight.set(tf);
         set_early_game.set(eg);
-        toast.show.run((ToastKind::Success, "Template generated! Customize to your strategy.".into()));
+        toast.show.run((
+            ToastKind::Success,
+            "Template generated! Customize to your strategy.".into(),
+        ));
     };
 
     // Pre-clone for multiple move closures in view!
@@ -1673,10 +1644,7 @@ pub fn GamePlanPage() -> impl IntoView {
 // ---------------------------------------------------------------------------
 
 #[component]
-fn ChecklistSection(
-    editing_id: ReadSignal<Option<String>>,
-    toast: ToastContext,
-) -> impl IntoView {
+fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext) -> impl IntoView {
     let (checklist_open, set_checklist_open) = signal(false);
     let (checklist_items, set_checklist_items) = signal(Vec::<String>::new());
     let (checklist_checked, set_checklist_checked) = signal(Vec::<bool>::new());
@@ -1730,7 +1698,10 @@ fn ChecklistSection(
         set_checklist_items.set(tmpl.items.clone());
         set_checklist_checked.set(vec![false; tmpl.items.len()]);
         set_checklist_instance_id.set(None); // Will create new on save
-        toast.show.run((ToastKind::Success, format!("Loaded template: {}", tmpl.name)));
+        toast.show.run((
+            ToastKind::Success,
+            format!("Loaded template: {}", tmpl.name),
+        ));
     });
 
     let do_save_checklist = move |_| {
@@ -1740,12 +1711,17 @@ fn ChecklistSection(
         let instance_id = checklist_instance_id.get_untracked();
 
         if items.is_empty() {
-            toast.show.run((ToastKind::Error, "No checklist items to save.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "No checklist items to save.".into()));
             return;
         }
 
         let Some(pid) = plan_id else {
-            toast.show.run((ToastKind::Error, "Save the plan first before adding a checklist.".into()));
+            toast.show.run((
+                ToastKind::Error,
+                "Save the plan first before adding a checklist.".into(),
+            ));
             return;
         };
 
@@ -1754,7 +1730,9 @@ fn ChecklistSection(
                 // Update existing
                 let checked_json = serde_json::to_string(&checked).unwrap_or_default();
                 match update_checklist(iid, checked_json).await {
-                    Ok(_) => toast.show.run((ToastKind::Success, "Checklist updated!".into())),
+                    Ok(_) => toast
+                        .show
+                        .run((ToastKind::Success, "Checklist updated!".into())),
                     Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
             } else {
@@ -1763,7 +1741,9 @@ fn ChecklistSection(
                 match create_plan_checklist(pid, None, items_json).await {
                     Ok(id) => {
                         set_checklist_instance_id.set(Some(id));
-                        toast.show.run((ToastKind::Success, "Checklist created!".into()));
+                        toast
+                            .show
+                            .run((ToastKind::Success, "Checklist created!".into()));
                     }
                     Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
                 }
@@ -1774,14 +1754,18 @@ fn ChecklistSection(
     let do_save_as_template = move |_| {
         let items = checklist_items.get_untracked();
         if items.is_empty() {
-            toast.show.run((ToastKind::Error, "No items to save as template.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "No items to save as template.".into()));
             return;
         }
         let items_json = serde_json::to_string(&items).unwrap_or_default();
         leptos::task::spawn_local(async move {
             match save_checklist_template("Pre-Game Checklist".to_string(), items_json).await {
                 Ok(_) => {
-                    toast.show.run((ToastKind::Success, "Saved as template!".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Saved as template!".into()));
                     templates.refetch();
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
@@ -1826,7 +1810,7 @@ fn ChecklistSection(
                     <div class="px-6 pb-6 flex flex-col gap-3">
                         // Progress bar
                         {(total > 0).then(|| {
-                            let pct = if total > 0 { (done * 100) / total } else { 0 };
+                            let pct = (done * 100).checked_div(total).unwrap_or(0);
                             view! {
                                 <div class="w-full bg-overlay rounded-full h-2">
                                     <div

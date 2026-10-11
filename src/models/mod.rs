@@ -1,11 +1,14 @@
 pub mod action_item;
 pub mod bug_report;
 pub mod champion;
+pub mod ddragon;
 pub mod draft;
 pub mod game_plan;
+pub mod invite;
 pub mod match_data;
 pub mod opponent;
 pub mod personal_learning;
+pub mod sand_table;
 pub mod series;
 pub mod team;
 pub mod team_note;

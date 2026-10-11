@@ -13,9 +13,7 @@ use leptos::prelude::*;
 /// Heraldic horizontal divider with central fleur. Demacia variant —
 /// callers should swap to `RiotTape` for Pandemonium contexts.
 #[component]
-pub fn HeraldicDivider(
-    #[prop(optional, default = 200)] width: u32,
-) -> impl IntoView {
+pub fn HeraldicDivider(#[prop(optional, default = 200)] width: u32) -> impl IntoView {
     view! {
         <svg
             width=width
@@ -72,9 +70,7 @@ pub fn GiltCorner(
 
 /// Small fleur-de-lis SVG. Used in headings and ban-slot wax seals.
 #[component]
-pub fn FleurDeLis(
-    #[prop(optional, default = 18)] size: u32,
-) -> impl IntoView {
+pub fn FleurDeLis(#[prop(optional, default = 18)] size: u32) -> impl IntoView {
     view! {
         <svg
             width=size
@@ -148,7 +144,8 @@ pub fn CompanionSigil(
     /// which falls back to the Demacia arm). The caller is responsible for
     /// reading `use_context::<InitialTheme>()` ONCE at page entry and
     /// passing the resulting `t.0` value here.
-    #[prop(into)] region: String,
+    #[prop(into)]
+    region: String,
 ) -> impl IntoView {
     let is_pandemonium = region == "pandemonium";
 
@@ -187,9 +184,7 @@ pub fn CompanionSigil(
 /// Crown SVG (foundations.jsx lines 105-115). Used for admin badges and
 /// champion tier-S indicators.
 #[component]
-pub fn Crown(
-    #[prop(optional, default = 44)] size: u32,
-) -> impl IntoView {
+pub fn Crown(#[prop(optional, default = 44)] size: u32) -> impl IntoView {
     view! {
         <svg
             width=size

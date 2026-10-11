@@ -1,3 +1,16 @@
+-- Baseline schema. Applied on every start; every statement must be
+-- idempotent (IF NOT EXISTS). Backfills, type changes and unique constraints
+-- that need clean data live in src/server/migrations.rs, which runs right
+-- after this file. Where a migration tightened a definition, the line below
+-- says so: IF NOT EXISTS keeps the tightened version on existing databases.
+
+-- Applied migrations (src/server/migrations.rs)
+DEFINE TABLE IF NOT EXISTS schema_migration SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS version ON schema_migration TYPE int;
+DEFINE FIELD IF NOT EXISTS name ON schema_migration TYPE string;
+DEFINE FIELD IF NOT EXISTS applied_at ON schema_migration TYPE datetime;
+DEFINE INDEX IF NOT EXISTS schema_migration_version ON schema_migration FIELDS version UNIQUE;
+
 -- Users
 DEFINE TABLE IF NOT EXISTS user SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS username ON user TYPE string;
@@ -18,6 +31,18 @@ DEFINE FIELD IF NOT EXISTS theme ON user TYPE string DEFAULT 'demacia'
 DEFINE FIELD IF NOT EXISTS draft_mode ON user TYPE string DEFAULT 'auto';
 DEFINE FIELD IF NOT EXISTS team_dashboard_mode ON user TYPE string DEFAULT 'auto';
 DEFINE FIELD IF NOT EXISTS solo_mode ON user TYPE string DEFAULT 'auto';
+
+-- M1: admin flag. option<bool> (NONE = not admin) so users created before
+-- this field existed stay valid on UPDATE; ADMIN_EMAILS promotes at login.
+-- Migration 3 backfills NONE to false and tightens it to bool DEFAULT false.
+DEFINE FIELD IF NOT EXISTS is_admin ON user TYPE option<bool>;
+
+-- M6: lowercase username for case-insensitive uniqueness. Migration 2
+-- backfills it, tightens it to string and adds the unique index
+-- username_lc_unique. Emails are stored lowercase (migration 1), so
+-- email_unique is case-insensitive in practice.
+DEFINE FIELD IF NOT EXISTS username_lc ON user TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS user_riot_puuid ON user FIELDS riot_puuid;
 
 -- Teams
 DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;
@@ -76,7 +101,7 @@ DEFINE FIELD IF NOT EXISTS our_side ON draft TYPE string DEFAULT 'blue';
 DEFINE FIELD IF NOT EXISTS tags ON draft TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS win_conditions ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS watch_out ON draft TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS series_id ON draft TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS series_id ON draft TYPE option<record<series>>;
 DEFINE FIELD IF NOT EXISTS game_number ON draft TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
@@ -93,7 +118,7 @@ DEFINE FIELD IF NOT EXISTS role ON draft_action TYPE option<string>;
 -- Game plans
 DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON game_plan TYPE string DEFAULT '';
-DEFINE FIELD OVERWRITE draft ON game_plan TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS draft ON game_plan TYPE option<record<draft>>;
 DEFINE FIELD IF NOT EXISTS team ON game_plan TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS our_champions ON game_plan TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS enemy_champions ON game_plan TYPE array<string> DEFAULT [];
@@ -115,8 +140,8 @@ DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::n
 DEFINE TABLE IF NOT EXISTS post_game_learning SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON post_game_learning TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS match_riot_id ON post_game_learning TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS game_plan_id ON post_game_learning TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS draft_id ON post_game_learning TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_plan_id ON post_game_learning TYPE option<record<game_plan>>;
+DEFINE FIELD IF NOT EXISTS draft_id ON post_game_learning TYPE option<record<draft>>;
 DEFINE FIELD IF NOT EXISTS what_went_well ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS improvements ON post_game_learning TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS action_items ON post_game_learning TYPE array<string>;
@@ -207,7 +232,7 @@ DEFINE FIELD IF NOT EXISTS role_distribution_json ON opponent_player TYPE option
 DEFINE TABLE IF NOT EXISTS series SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON series TYPE string;
 DEFINE FIELD IF NOT EXISTS team ON series TYPE record<team>;
-DEFINE FIELD IF NOT EXISTS opponent_id ON series TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS opponent_id ON series TYPE option<record<opponent>>;
 DEFINE FIELD IF NOT EXISTS opponent_name ON series TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS format ON series TYPE string DEFAULT 'bo1';
 DEFINE FIELD IF NOT EXISTS is_fearless ON series TYPE bool DEFAULT false;
@@ -218,7 +243,7 @@ DEFINE FIELD IF NOT EXISTS created_at ON series TYPE datetime DEFAULT time::now(
 -- Action items (from post-game reviews)
 DEFINE TABLE IF NOT EXISTS action_item SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON action_item TYPE record<team>;
-DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<record<post_game_learning>>;
 DEFINE FIELD IF NOT EXISTS text ON action_item TYPE string;
 DEFINE FIELD IF NOT EXISTS status ON action_item TYPE string DEFAULT 'open';
 DEFINE FIELD IF NOT EXISTS assigned_to ON action_item TYPE option<string>;
@@ -244,14 +269,29 @@ DEFINE FIELD IF NOT EXISTS created_at ON checklist_template TYPE datetime DEFAUL
 -- Checklist instances (per-game)
 DEFINE TABLE IF NOT EXISTS checklist_instance SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS team ON checklist_instance TYPE record<team>;
-DEFINE FIELD IF NOT EXISTS game_plan_id ON checklist_instance TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS template_id ON checklist_instance TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS game_plan_id ON checklist_instance TYPE option<record<game_plan>>;
+DEFINE FIELD IF NOT EXISTS template_id ON checklist_instance TYPE option<record<checklist_template>>;
 DEFINE FIELD IF NOT EXISTS items ON checklist_instance TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS checked ON checklist_instance TYPE array<bool> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS created_at ON checklist_instance TYPE datetime DEFAULT time::now();
 
--- Sessions (for tower-sessions-surrealdb-store)
+-- Sessions (tower-sessions via SurrealSessionStore). `data` is the
+-- MessagePack record; `expires_at` (unix seconds) is written on every save
+-- so expired rows can be purged without decoding them.
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;
+DEFINE INDEX IF NOT EXISTS sessions_expires_at ON sessions FIELDS expires_at;
+
+-- Closed-beta invite codes (M1). Registration consumes one use atomically.
+DEFINE TABLE IF NOT EXISTS invite SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS code ON invite TYPE string;
+DEFINE FIELD IF NOT EXISTS created_by ON invite TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS created_at ON invite TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS max_uses ON invite TYPE int DEFAULT 1 ASSERT $value >= 1;
+DEFINE FIELD IF NOT EXISTS uses ON invite TYPE int DEFAULT 0 ASSERT $value >= 0;
+DEFINE FIELD IF NOT EXISTS expires_at ON invite TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS disabled ON invite TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS note ON invite TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS invite_code_unique ON invite FIELDS code UNIQUE;
 
 -- Ranked snapshots
 DEFINE TABLE IF NOT EXISTS ranked_snapshot SCHEMAFULL;
@@ -334,3 +374,114 @@ DEFINE FIELD IF NOT EXISTS status ON bug_report TYPE string DEFAULT 'open'
   ASSERT $value IN ['open', 'triaged', 'closed'];
 DEFINE INDEX IF NOT EXISTS bug_report_status_created
   ON bug_report FIELDS status, created_at;
+
+-- Data Dragon (M6): the last good copy of the champion list, so a cold
+-- start without network still has champion data, and detected patch changes.
+DEFINE TABLE IF NOT EXISTS ddragon_cache SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS version ON ddragon_cache TYPE string;
+DEFINE FIELD IF NOT EXISTS champions_json ON ddragon_cache TYPE string;
+DEFINE FIELD IF NOT EXISTS fetched_at ON ddragon_cache TYPE datetime DEFAULT time::now();
+DEFINE TABLE IF NOT EXISTS patch_change SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS old_version ON patch_change TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS new_version ON patch_change TYPE string;
+DEFINE FIELD IF NOT EXISTS detected_at ON patch_change TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS patch_change_detected_at ON patch_change FIELDS detected_at;
+
+-- Sand Table (M6): storage only, no UI yet. A replay is a team's imported
+-- copy of one match timeline (src/server/sand_table.rs); frames hold every
+-- participant per minute, events the positioned moments. Boards are saved as
+-- numbered versions of a scene document.
+DEFINE TABLE IF NOT EXISTS replay SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON replay TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS match_id ON replay TYPE string;
+DEFINE FIELD IF NOT EXISTS patch ON replay TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS imported_at ON replay TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS source ON replay TYPE string ASSERT $value IN ['riot_timeline'];
+DEFINE FIELD IF NOT EXISTS frame_interval_ms ON replay TYPE int;
+DEFINE FIELD IF NOT EXISTS participants ON replay TYPE array<object> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS participants[*].participant_id ON replay TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].puuid ON replay TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS participants[*].team_id ON replay TYPE int;
+DEFINE INDEX IF NOT EXISTS replay_team_match ON replay FIELDS team, match_id UNIQUE;
+
+DEFINE TABLE IF NOT EXISTS replay_frame SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS replay ON replay_frame TYPE record<replay>;
+DEFINE FIELD IF NOT EXISTS t_ms ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants ON replay_frame TYPE array<object> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS participants[*].participant_id ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].x ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].y ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].gold ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].current_gold ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].xp ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].cs ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].level ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].alive ON replay_frame TYPE bool;
+DEFINE INDEX IF NOT EXISTS replay_frame_replay ON replay_frame FIELDS replay, t_ms;
+
+DEFINE TABLE IF NOT EXISTS replay_event SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS replay ON replay_event TYPE record<replay>;
+DEFINE FIELD IF NOT EXISTS seq ON replay_event TYPE int;
+DEFINE FIELD IF NOT EXISTS t_ms ON replay_event TYPE int;
+DEFINE FIELD IF NOT EXISTS kind ON replay_event TYPE string;
+DEFINE FIELD IF NOT EXISTS x ON replay_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS y ON replay_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS participants ON replay_event TYPE array<int> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS team_id ON replay_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS meta ON replay_event TYPE object FLEXIBLE DEFAULT {};
+DEFINE INDEX IF NOT EXISTS replay_event_replay ON replay_event FIELDS replay, seq;
+
+DEFINE TABLE IF NOT EXISTS board SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON board TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS name ON board TYPE string;
+DEFINE FIELD IF NOT EXISTS created_by ON board TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON board TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON board TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS board_team ON board FIELDS team;
+
+DEFINE TABLE IF NOT EXISTS board_version SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS board ON board_version TYPE record<board>;
+DEFINE FIELD IF NOT EXISTS version ON board_version TYPE int;
+DEFINE FIELD IF NOT EXISTS scene ON board_version TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS author ON board_version TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON board_version TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS board_version_unique ON board_version FIELDS board, version UNIQUE;
+
+-- Record links (M6). These fields held record IDs as strings before M6;
+-- migration 5 converted existing values and tightened the types above.
+-- action_item.assigned_to stays a string: it holds the assignee's username as
+-- picked on the page, not a record ID.
+DEFINE INDEX IF NOT EXISTS draft_series ON draft FIELDS series_id;
+DEFINE INDEX IF NOT EXISTS game_plan_draft ON game_plan FIELDS draft;
+DEFINE INDEX IF NOT EXISTS post_game_learning_plan ON post_game_learning FIELDS game_plan_id;
+DEFINE INDEX IF NOT EXISTS checklist_instance_plan ON checklist_instance FIELDS game_plan_id;
+
+-- Indexes on the scope fields that tenant-scoped reads filter on (M6).
+-- Plain (non-unique) indexes are safe to add to an existing database here.
+DEFINE INDEX IF NOT EXISTS team_member_team ON team_member FIELDS team;
+-- team_member.user has a UNIQUE index (one team per user), added by
+-- migration 6 after it resolved legacy multi-memberships.
+DEFINE INDEX IF NOT EXISTS join_request_team ON join_request FIELDS team;
+DEFINE INDEX IF NOT EXISTS join_request_user ON join_request FIELDS user;
+DEFINE INDEX IF NOT EXISTS match_team ON match FIELDS team_id;
+DEFINE INDEX IF NOT EXISTS player_match_user ON player_match FIELDS user;
+DEFINE INDEX IF NOT EXISTS player_match_match ON player_match FIELDS match;
+DEFINE INDEX IF NOT EXISTS draft_team ON draft FIELDS team;
+DEFINE INDEX IF NOT EXISTS draft_action_draft ON draft_action FIELDS draft;
+DEFINE INDEX IF NOT EXISTS game_plan_team ON game_plan FIELDS team;
+DEFINE INDEX IF NOT EXISTS post_game_learning_team ON post_game_learning FIELDS team;
+DEFINE INDEX IF NOT EXISTS champion_pool_user ON champion_pool FIELDS user;
+DEFINE INDEX IF NOT EXISTS champion_note_user ON champion_note FIELDS user;
+DEFINE INDEX IF NOT EXISTS draft_tree_team ON draft_tree FIELDS team;
+DEFINE INDEX IF NOT EXISTS draft_tree_node_tree ON draft_tree_node FIELDS tree;
+DEFINE INDEX IF NOT EXISTS draft_tree_node_parent ON draft_tree_node FIELDS parent;
+DEFINE INDEX IF NOT EXISTS tree_node_action_node ON tree_node_action FIELDS node;
+DEFINE INDEX IF NOT EXISTS ban_priority_team ON ban_priority FIELDS team;
+DEFINE INDEX IF NOT EXISTS opponent_team ON opponent FIELDS team;
+DEFINE INDEX IF NOT EXISTS opponent_player_opponent ON opponent_player FIELDS opponent;
+DEFINE INDEX IF NOT EXISTS series_team ON series FIELDS team;
+DEFINE INDEX IF NOT EXISTS action_item_team ON action_item FIELDS team;
+DEFINE INDEX IF NOT EXISTS team_note_team ON team_note FIELDS team;
+DEFINE INDEX IF NOT EXISTS checklist_template_team ON checklist_template FIELDS team;
+DEFINE INDEX IF NOT EXISTS checklist_instance_team ON checklist_instance FIELDS team;
+DEFINE INDEX IF NOT EXISTS bug_report_user ON bug_report FIELDS user;

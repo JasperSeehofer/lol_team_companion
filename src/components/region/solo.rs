@@ -15,7 +15,11 @@ pub fn RankBadge(
     #[prop(optional, into)] division: Option<String>,
     #[prop(optional, default = false)] large: bool,
 ) -> impl IntoView {
-    let (w, h) = if large { (64u32, 80u32) } else { (32u32, 40u32) };
+    let (w, h) = if large {
+        (64u32, 80u32)
+    } else {
+        (32u32, 40u32)
+    };
     let label_size = if large { "text-[11px]" } else { "text-[8px]" };
     let div_label = division.unwrap_or_default();
 
@@ -76,8 +80,9 @@ pub fn LPProgress(
     let pct = ((lp as f64 / max as f64) * 100.0).clamp(0.0, 100.0);
     let width_style = format!("width: {:.1}%;", pct);
 
-    move || if is_pandemonium {
-        view! {
+    move || {
+        if is_pandemonium {
+            view! {
             <div class="flex flex-col gap-1">
                 <div
                     class="border-l-2 border-r-2 border-accent"
@@ -93,8 +98,8 @@ pub fn LPProgress(
                 </span>
             </div>
         }.into_any()
-    } else {
-        view! {
+        } else {
+            view! {
             <div class="flex flex-col gap-1">
                 <div
                     class="border border-outline/50 rounded-full p-0.5"
@@ -113,5 +118,6 @@ pub fn LPProgress(
                 </span>
             </div>
         }.into_any()
+        }
     }
 }

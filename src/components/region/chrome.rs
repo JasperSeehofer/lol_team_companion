@@ -7,9 +7,7 @@ use leptos::prelude::*;
 /// Strip spaces and special characters from a champion name to get the DDragon key.
 /// "Aurelion Sol" → "AurelionSol", "Cho'Gath" → "ChoGath", "Kai'Sa" → "KaiSa".
 fn champ_key(name: &str) -> String {
-    name.chars()
-        .filter(|c| c.is_alphanumeric())
-        .collect()
+    name.chars().filter(|c| c.is_alphanumeric()).collect()
 }
 
 /// Champion portrait image from Data Dragon CDN.
@@ -23,15 +21,13 @@ pub fn ChampPortrait(
 ) -> impl IntoView {
     let key = champ_key(&name);
     let src = match kind {
-        "loading" => format!(
-            "https://ddragon.leagueoflegends.com/cdn/img/champion/loading/{key}_0.jpg"
-        ),
-        "splash" => format!(
-            "https://ddragon.leagueoflegends.com/cdn/img/champion/centered/{key}_0.jpg"
-        ),
-        _ => format!(
-            "https://ddragon.leagueoflegends.com/cdn/14.24.1/img/champion/{key}.png"
-        ),
+        "loading" => {
+            format!("https://ddragon.leagueoflegends.com/cdn/img/champion/loading/{key}_0.jpg")
+        }
+        "splash" => {
+            format!("https://ddragon.leagueoflegends.com/cdn/img/champion/centered/{key}_0.jpg")
+        }
+        _ => crate::models::ddragon::champion_icon_url(&key),
     };
     let alt = name.clone();
     view! {
@@ -62,7 +58,10 @@ pub fn ChampTile(
 ) -> impl IntoView {
     let opacity_class = if dimmed { "opacity-50" } else { "" };
     let filter_style = if banned { "filter: grayscale(1);" } else { "" };
-    let container_style = format!("position: relative; width: {}px; height: {}px; flex-shrink: 0;", size, size);
+    let container_style = format!(
+        "position: relative; width: {}px; height: {}px; flex-shrink: 0;",
+        size, size
+    );
 
     view! {
         <div style=container_style class=opacity_class>
@@ -88,7 +87,7 @@ pub fn ChampTile(
                                 </svg>
                             }.into_any()
                         } else {
-                            view! {}.into_any()
+                            ().into_any()
                         }}
                         {if locked {
                             view! {
@@ -98,7 +97,7 @@ pub fn ChampTile(
                                 ></div>
                             }.into_any()
                         } else {
-                            view! {}.into_any()
+                            ().into_any()
                         }}
                     </div>
                 }.into_any()
@@ -119,10 +118,7 @@ pub fn ChampTile(
 /// Fills with `bg-accent` color via CSS mask. Default size = 24.
 /// Touch target wrapper at 44px per UI-SPEC accessibility note (G-12).
 #[component]
-pub fn RoleIcon(
-    role: String,
-    #[prop(optional, default = 24)] size: u32,
-) -> impl IntoView {
+pub fn RoleIcon(role: String, #[prop(optional, default = 24)] size: u32) -> impl IntoView {
     let icon_url = format!(
         "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-{}.svg",
         role
@@ -153,10 +149,7 @@ pub fn RoleIcon(
 /// Default size = 18. Stroke uses `currentColor` so callers can color via `text-*`.
 /// Unknown names return an empty span (no crash).
 #[component]
-pub fn Icon(
-    name: String,
-    #[prop(optional, default = 18)] size: u32,
-) -> impl IntoView {
+pub fn Icon(name: String, #[prop(optional, default = 18)] size: u32) -> impl IntoView {
     let vb = "0 0 24 24";
     let stroke_attrs = r#"fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round""#;
 
@@ -191,7 +184,8 @@ pub fn Icon(
     if let Some(svg_html) = inner_svg {
         view! {
             <span inner_html=svg_html style="display: inline-flex; align-items: center;"></span>
-        }.into_any()
+        }
+        .into_any()
     } else {
         view! { <span></span> }.into_any()
     }

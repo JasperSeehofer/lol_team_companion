@@ -11,21 +11,14 @@ use leptos::prelude::*;
 #[server]
 pub async fn get_team_roster_with_pools(
 ) -> Result<Vec<(String, String, String, Vec<ChampionPoolEntry>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (_, members) = match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(t) => t,
         None => return Ok(Vec::new()),
@@ -51,21 +44,14 @@ pub async fn get_team_roster_with_pools(
 #[server]
 pub async fn get_team_stats_for_builder(
 ) -> Result<Vec<(String, Vec<ChampionStatSummary>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (_, members) = match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(t) => t,
         None => return Ok(Vec::new()),
@@ -85,21 +71,14 @@ pub async fn get_team_stats_for_builder(
 /// List team's opponents
 #[server]
 pub async fn get_opponents_for_builder() -> Result<Vec<Opponent>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -107,7 +86,7 @@ pub async fn get_opponents_for_builder() -> Result<Vec<Opponent>, ServerFnError>
 
     db::list_opponents(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 /// Get opponent's players with recent champions
@@ -115,16 +94,17 @@ pub async fn get_opponents_for_builder() -> Result<Vec<Opponent>, ServerFnError>
 pub async fn get_opponent_players_for_builder(
     opponent_id: String,
 ) -> Result<Vec<OpponentPlayer>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
+        return Ok(Vec::new());
+    };
 
-    match db::get_opponent(&db, &opponent_id)
+    match db::get_opponent(&db, &team_id, &opponent_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some((_, players)) => Ok(players),
         None => Ok(Vec::new()),
@@ -134,10 +114,9 @@ pub async fn get_opponent_players_for_builder(
 /// Get champion data from Data Dragon
 #[server]
 pub async fn get_champions_for_builder() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    data_dragon::champions().await.map_err(authz::server_err)
 }
 
 /// Creates a new draft from the composition (5 picks, no bans)
@@ -150,26 +129,18 @@ pub async fn save_comp_as_draft(
     tags_json: String,
 ) -> Result<String, ServerFnError> {
     use crate::models::draft::DraftAction;
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db_ctx =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: db_ctx, user } = authz::authed().await?;
 
-    let champions: Vec<(String, String)> = serde_json::from_str(&champions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid champions JSON: {e}")))?;
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let champions: Vec<(String, String)> =
+        serde_json::from_str(&champions_json).map_err(authz::server_err)?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     let team_id = db::get_user_team_id(&db_ctx, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new("You must be in a team to save a draft"))?;
 
     // Build pick actions for our side (blue by default)
@@ -193,24 +164,11 @@ pub async fn save_comp_as_draft(
     let comments: Vec<String> = vec![String::new(); 20];
 
     db::save_draft(
-        &db_ctx,
-        &team_id,
-        &user.id,
-        name,
-        opponent,
-        None,
-        comments,
-        actions,
-        None,
-        side,
-        tags,
-        None,
-        None,
-        None,
-        None,
+        &db_ctx, &team_id, &user.id, name, opponent, None, comments, actions, None, side, tags,
+        None, None, None, None,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -242,9 +200,7 @@ fn role_icon_url(role: &str) -> &'static str {
 }
 
 fn champion_image_url(champion_name: &str) -> String {
-    format!(
-        "https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png"
-    )
+    crate::models::ddragon::champion_icon_url(champion_name)
 }
 
 fn tier_label(tier: &str) -> &'static str {
@@ -272,11 +228,7 @@ fn tier_badge_class(tier: &str) -> &'static str {
 fn comfort_stars(level: u8) -> String {
     let filled = level.min(5) as usize;
     let empty = 5 - filled;
-    format!(
-        "{}{}",
-        "\u{2605}".repeat(filled),
-        "\u{2606}".repeat(empty)
-    )
+    format!("{}{}", "\u{2605}".repeat(filled), "\u{2606}".repeat(empty))
 }
 
 /// Compute composition tags from selected champions + Data Dragon champion data.
@@ -286,10 +238,8 @@ fn compute_comp_tags(
 ) -> Vec<String> {
     use std::collections::HashMap;
 
-    let champ_map: HashMap<&str, &Champion> = all_champions
-        .iter()
-        .map(|c| (c.name.as_str(), c))
-        .collect();
+    let champ_map: HashMap<&str, &Champion> =
+        all_champions.iter().map(|c| (c.name.as_str(), c)).collect();
 
     let picked: Vec<(&str, Option<&&Champion>)> = selected
         .iter()
@@ -332,11 +282,18 @@ fn compute_comp_tags(
 
     // "split-push" - contains known split-pushers
     let split_pushers = [
-        "Fiora", "Tryndamere", "Jax", "Camille", "Gwen", "Yorick", "Nasus", "Shen",
+        "Fiora",
+        "Tryndamere",
+        "Jax",
+        "Camille",
+        "Gwen",
+        "Yorick",
+        "Nasus",
+        "Shen",
     ];
     let has_split = picked
         .iter()
-        .any(|(_, c)| c.map_or(false, |ch| split_pushers.contains(&ch.name.as_str())));
+        .any(|(_, c)| c.is_some_and(|ch| split_pushers.contains(&ch.name.as_str())));
     if has_split {
         tags.push("split-push".to_string());
     }
@@ -353,12 +310,25 @@ fn compute_comp_tags(
 
     // "scaling" - 3+ late-game scalers
     let scalers = [
-        "Kayle", "Kassadin", "Vayne", "Jinx", "Kog'Maw", "Veigar", "Senna", "Aphelios",
-        "Zeri", "Smolder", "Viktor", "Azir", "Ryze", "Cassiopeia", "Vladimir",
+        "Kayle",
+        "Kassadin",
+        "Vayne",
+        "Jinx",
+        "Kog'Maw",
+        "Veigar",
+        "Senna",
+        "Aphelios",
+        "Zeri",
+        "Smolder",
+        "Viktor",
+        "Azir",
+        "Ryze",
+        "Cassiopeia",
+        "Vladimir",
     ];
     let scaler_count = picked
         .iter()
-        .filter(|(_, c)| c.map_or(false, |ch| scalers.contains(&ch.name.as_str())))
+        .filter(|(_, c)| c.is_some_and(|ch| scalers.contains(&ch.name.as_str())))
         .count();
     if scaler_count >= 3 {
         tags.push("scaling".to_string());
@@ -371,7 +341,7 @@ fn compute_comp_tags(
     ];
     let early_count = picked
         .iter()
-        .filter(|(_, c)| c.map_or(false, |ch| early_game.contains(&ch.name.as_str())))
+        .filter(|(_, c)| c.is_some_and(|ch| early_game.contains(&ch.name.as_str())))
         .count();
     if early_count >= 3 {
         tags.push("early-game".to_string());
@@ -386,11 +356,11 @@ fn compute_comp_tags(
     ];
     let has_enchanter = picked.iter().any(|(role, c)| {
         role.to_lowercase() == "support"
-            && c.map_or(false, |ch| enchanters.contains(&ch.name.as_str()))
+            && c.is_some_and(|ch| enchanters.contains(&ch.name.as_str()))
     });
     let has_hypercarry = picked.iter().any(|(role, c)| {
         (role.to_lowercase() == "bot" || role.to_lowercase() == "adc")
-            && c.map_or(false, |ch| hypercarries.contains(&ch.name.as_str()))
+            && c.is_some_and(|ch| hypercarries.contains(&ch.name.as_str()))
     });
     if has_enchanter && has_hypercarry {
         tags.push("protect-the-carry".to_string());
@@ -591,7 +561,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                                 let champ_name = entry.champion.clone();
                                                                 let comfort = entry.comfort_level.unwrap_or(0);
                                                                 let display = if comfort > 0 {
-                                                                    format!("{} ({})", champ_name, comfort_stars(comfort as u8))
+                                                                    format!("{} ({})", champ_name, comfort_stars(comfort))
                                                                 } else {
                                                                     champ_name.clone()
                                                                 };
@@ -664,7 +634,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                         }}
                                                         {if comfort > 0 {
                                                             view! {
-                                                                <span class="text-accent text-xs">{comfort_stars(comfort as u8)}</span>
+                                                                <span class="text-accent text-xs">{comfort_stars(comfort)}</span>
                                                             }.into_any()
                                                         } else {
                                                             view! { <span></span> }.into_any()

@@ -25,6 +25,9 @@ pub struct PublicUser {
     pub draft_mode: String,
     pub team_dashboard_mode: String,
     pub solo_mode: String,
+    /// Admins see the invite management page.
+    #[serde(default)]
+    pub is_admin: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

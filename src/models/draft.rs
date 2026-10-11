@@ -236,7 +236,10 @@ mod tests {
 
     #[test]
     fn guess_role_marksman_priority_over_assassin() {
-        assert_eq!(guess_role_from_tags(&["Marksman".into(), "Assassin".into()]), "bot");
+        assert_eq!(
+            guess_role_from_tags(&["Marksman".into(), "Assassin".into()]),
+            "bot"
+        );
     }
 
     #[test]
@@ -282,10 +285,7 @@ mod tests {
 
     #[test]
     fn most_common_tag_single_returns_it() {
-        assert_eq!(
-            most_common_tag(&["poke"]),
-            Some("poke".to_string())
-        );
+        assert_eq!(most_common_tag(&["poke"]), Some("poke".to_string()));
     }
 
     #[test]

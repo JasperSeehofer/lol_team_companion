@@ -1,4 +1,3 @@
-use crate::app::InitialTheme;
 use crate::components::region::*;
 use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
@@ -11,22 +10,16 @@ use leptos_router::components::A;
 #[server]
 pub async fn get_team_dashboard() -> Result<Option<(Team, Vec<TeamMember>, String)>, ServerFnError>
 {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
+    let user = authz::require_user().await?;
     let user_id = user.id.clone();
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db = authz::db()?;
 
     match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some((team, members)) => Ok(Some((team, members, user_id))),
         None => Ok(None),
@@ -35,22 +28,15 @@ pub async fn get_team_dashboard() -> Result<Option<(Team, Vec<TeamMember>, Strin
 
 #[server]
 pub async fn update_team_info(name: String, region: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Err(ServerFnError::new(
@@ -61,27 +47,20 @@ pub async fn update_team_info(name: String, region: String) -> Result<(), Server
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::update_team(&db, &team_id, name, region)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn set_member_role(member_user_id: String, role: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Err(ServerFnError::new("Only the team leader can assign roles"));
@@ -90,27 +69,20 @@ pub async fn set_member_role(member_user_id: String, role: String) -> Result<(),
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::update_member_role(&db, &team_id, &member_user_id, role)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Err(ServerFnError::new(
@@ -125,27 +97,20 @@ pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::remove_team_member(&db, &team_id, &member_user_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn leave_team() -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by == user.id {
         return Err(ServerFnError::new(
@@ -156,27 +121,20 @@ pub async fn leave_team() -> Result<(), ServerFnError> {
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::remove_team_member(&db, &team_id, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Ok(Vec::new()); // non-leaders see empty list
@@ -185,27 +143,20 @@ pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::list_pending_join_requests(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Err(ServerFnError::new(
@@ -216,7 +167,7 @@ pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(),
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::respond_to_join_request(&db, &request_id, accept, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -224,22 +175,15 @@ pub async fn assign_member_to_slot(
     member_user_id: String,
     role: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Err(ServerFnError::new("Only the team leader can assign slots"));
@@ -248,27 +192,20 @@ pub async fn assign_member_to_slot(
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::assign_to_slot(&db, &team_id, &member_user_id, &role)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (team, _) = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     if team.created_by != user.id {
         return Err(ServerFnError::new(
@@ -279,7 +216,7 @@ pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), Ser
     let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
     db::remove_from_slot(&db, &team_id, &member_user_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 const MEMBER_ROLES: &[&str] = &[
@@ -307,21 +244,14 @@ pub struct RecentMatch {
 
 #[server]
 pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -329,7 +259,7 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
 
     let rows = db::get_team_match_stats(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Group by riot_match_id, take most recent 3 unique matches
     let mut seen = std::collections::HashSet::new();
@@ -361,23 +291,16 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
 // ---------------------------------------------------------------------------
 
 #[server]
-pub async fn get_all_team_notes(
-) -> Result<Vec<crate::models::team_note::TeamNote>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn get_all_team_notes() -> Result<Vec<crate::models::team_note::TeamNote>, ServerFnError>
+{
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -385,108 +308,76 @@ pub async fn get_all_team_notes(
 
     db::list_team_notes(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn add_team_note(content: String) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     db::create_team_note(&db, &team_id, &user.id, &user.username, content)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn toggle_note_pin(note_id: String, pinned: bool) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::toggle_pin_team_note(&db, &note_id, pinned)
+    db::toggle_pin_team_note(&db, &team_id, &note_id, pinned)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn edit_team_note(note_id: String, content: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::update_team_note(&db, &note_id, content)
+    db::update_team_note(&db, &team_id, &note_id, content)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn remove_team_note(note_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::delete_team_note(&db, &note_id)
+    db::delete_team_note(&db, &team_id, &note_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_open_action_items_summary(
 ) -> Result<(usize, Vec<crate::models::action_item::ActionItem>), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok((0, Vec::new())),
@@ -494,7 +385,7 @@ pub async fn get_open_action_items_summary(
 
     let items = db::list_open_action_items(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let total = items.len();
     let top3: Vec<_> = items.into_iter().take(3).collect();
@@ -502,22 +393,16 @@ pub async fn get_open_action_items_summary(
 }
 
 #[server]
-pub async fn get_post_game_panel() -> Result<Vec<crate::models::game_plan::PostGamePreview>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn get_post_game_panel(
+) -> Result<Vec<crate::models::game_plan::PostGamePreview>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -525,28 +410,22 @@ pub async fn get_post_game_panel() -> Result<Vec<crate::models::game_plan::PostG
 
     let summary = db::get_dashboard_summary(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(summary.recent_post_games)
 }
 
 #[server]
-pub async fn get_pool_gap_panel() -> Result<Vec<crate::models::game_plan::PoolGapWarning>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn get_pool_gap_panel(
+) -> Result<Vec<crate::models::game_plan::PoolGapWarning>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -554,7 +433,7 @@ pub async fn get_pool_gap_panel() -> Result<Vec<crate::models::game_plan::PoolGa
 
     let summary = db::get_dashboard_summary(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(summary.pool_gap_warnings)
 }
@@ -578,10 +457,8 @@ fn role_icon_url(role: &str) -> &'static str {
 /// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
 #[server]
 pub async fn set_team_dashboard_mode_pref(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
     // App-layer validation — DB has no ASSERT per Research Pitfall 4
     const VALID: &[&str] = &["auto", "dashboard", "brief"];
@@ -589,75 +466,32 @@ pub async fn set_team_dashboard_mode_pref(mode: String) -> Result<(), ServerFnEr
         return Err(ServerFnError::new("Invalid team dashboard mode"));
     }
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
     db::set_user_team_dashboard_mode(&db, &user.id, &mode)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(())
 }
 
-/// Resolve the effective team dashboard mode from a stored preference and region context.
-/// Returns region-coupled defaults when stored == "auto" (D-04).
-/// An explicit user pick (stored != "auto") always wins over the default (D-05).
-fn resolve_team_dashboard_mode(stored: &str, region: &str) -> String {
-    if stored != "auto" {
-        return stored.to_string();
-    }
-    match region {
-        "pandemonium" => "brief".to_string(),
-        _ => "dashboard".to_string(),
-    }
-}
-
-/// Top-level team dashboard page. Reads region once, dispatches to region-specific view.
+/// Top-level team dashboard page.
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
-    // Read region once at page entry — passed as String to all subcomponents.
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-    let is_pandemonium = region == "pandemonium";
-
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
 
-    // Mode preference — signal-driven, persisted via set_team_dashboard_mode_pref server fn (18-08)
-    let (mode_current, set_mode_current) = signal(
-        resolve_team_dashboard_mode("auto", &region)
-    );
-    let region_for_mode = region.clone();
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-    Effect::new(move || {
-        match auth_user.get() {
-            Some(Ok(None)) => {
-                #[cfg(feature = "hydrate")]
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/auth/login");
-                }
+    Effect::new(move || match auth_user.get() {
+        Some(Ok(None)) =>
+        {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
             }
-            Some(Ok(Some(u))) => {
-                is_solo_mode.set(u.mode == "solo");
-                let resolved = resolve_team_dashboard_mode(&u.team_dashboard_mode, &region_for_mode);
-                set_mode_current.set(resolved);
-            }
-            _ => {}
         }
-    });
-
-    let set_mode_action = Action::new(move |new_mode: &String| {
-        let m = new_mode.clone();
-        async move { set_team_dashboard_mode_pref(m).await }
-    });
-    Effect::new(move |_| {
-        if let Some(Ok(())) = set_mode_action.value().get() {
-            auth_user.refetch();
+        Some(Ok(Some(u))) => {
+            is_solo_mode.set(u.mode == "solo");
         }
-    });
-    let on_mode_select = Callback::new(move |new_mode: String| {
-        set_mode_current.set(new_mode.clone());
-        set_mode_action.dispatch(new_mode);
+        _ => {}
     });
 
     let dashboard = Resource::new(|| (), |_| get_team_dashboard());
@@ -667,23 +501,9 @@ pub fn TeamDashboard() -> impl IntoView {
     let post_game_panel = Resource::new(|| (), |_| get_post_game_panel());
     let pool_gap_panel = Resource::new(|| (), |_| get_pool_gap_panel());
 
-    let region_for_toggle = region.clone();
-
     view! {
         <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Team dashboard">
             <div class="max-w-5xl mx-auto">
-            // Mode toggle — Dashboard / Game Day Brief (18-08)
-            <div class="mb-4 flex items-center">
-                <ModeToggle
-                    region=region_for_toggle
-                    current=mode_current
-                    options=vec![
-                        ("dashboard".to_string(), "Dashboard".to_string(), "DASHBOARD".to_string()),
-                        ("brief".to_string(), "Game Day Brief".to_string(), "GAME_DAY".to_string()),
-                    ]
-                    on_select=on_mode_select
-                />
-            </div>
             <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                 {move || {
                     if is_solo_mode.get() {
@@ -712,16 +532,7 @@ pub fn TeamDashboard() -> impl IntoView {
                     }
                     dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
-                        // Brief mode — signal-driven (18-08: DB persistence + resolve_team_dashboard_mode)
-                        if mode_current.get() == "brief" {
-                            let region_brief = region.clone();
-                            return view! {
-                                <TeamGameDayBriefView region=region_brief team=team members=members />
-                            }.into_any();
-                        }
-                        if is_pandemonium {
-                            view! { <PandemoniumTeamDashboard team=team members=members /> }.into_any()
-                        } else {
+                        {
                             // Demacia: original team management UI with gilt header
                             let is_leader = team.created_by == current_user_id;
                             let created_by = team.created_by.clone();
@@ -1279,10 +1090,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 view! {
                                                     <div class="flex flex-col gap-2">
                                                         {matches.into_iter().map(|m| {
-                                                            let champ_img = format!(
-                                                                "https://ddragon.leagueoflegends.com/cdn/15.5.1/img/champion/{}.png",
-                                                                m.champion
-                                                            );
+                                                            let champ_img =
+                                                                crate::models::ddragon::champion_icon_url(&m.champion);
                                                             let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
                                                             let win = m.win;
                                                             let date_str = m.game_end.unwrap_or_else(|| "Unknown".into());
@@ -1763,524 +1572,5 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                 }}
             </Suspense>
         </div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Pandemonium Team Dashboard — 7-section full data-surface rebuild
-// Per CONTENT-CONTRACT-AUDIT.md: all 7 sections must be visually present.
-// Placeholder values have TODO comments for future data-source wiring.
-// ---------------------------------------------------------------------------
-
-/// Pandemonium variant of the team dashboard. Receives team + members from the
-/// parent Suspense so it renders without an additional network round-trip.
-#[component]
-fn PandemoniumTeamDashboard(
-    team: crate::models::team::Team,
-    members: Vec<TeamMember>,
-) -> impl IntoView {
-    let team_name = team.name.clone();
-
-    // Section 2: build roster slots from real member data where available.
-    // Pad to 5 slots with empty placeholders.
-    let starters: Vec<Option<TeamMember>> = {
-        let mut slots: Vec<Option<TeamMember>> = vec![None; 5];
-        let role_order = ["top", "jungle", "mid", "bot", "support"];
-        for (i, role) in role_order.iter().enumerate() {
-            if let Some(m) = members.iter().find(|m| m.role == *role && m.roster_type == "starter") {
-                slots[i] = Some(m.clone());
-            }
-        }
-        slots
-    };
-    let role_labels = ["TOP", "JGL", "MID", "BOT", "SUP"];
-
-    view! {
-        <div class="space-y-3 bg-base bg-scanline p-4">
-
-            // Section 1: RiotTape header strip
-            <RiotTape width=1200 label="TEAM_BRIEF GAME_DAY" />
-
-            // Section 2: 5-player roster row with MoodMeter
-            <div>
-                <div class="font-mono text-[10px] text-muted uppercase tracking-[0.16em] mb-2">"// ROSTER"</div>
-                <div class="grid grid-cols-5 gap-2">
-                    {starters.into_iter().enumerate().map(|(i, slot)| {
-                        let role_label = role_labels[i];
-                        // TODO(future phase): wire mood from team-vibe-check feature
-                        let mood_value = 0.7_f64;
-                        let player_name = slot.map(|m| m.username).unwrap_or_else(|| "// EMPTY".to_string());
-                        let name_clone = player_name.clone();
-                        view! {
-                            <div class="bg-surface border border-outline/30 p-3 flex flex-col items-center gap-2 relative">
-                                // bracket corners (zine aesthetic)
-                                <div class="absolute top-0 left-0 w-2 h-2 border-l-2 border-t-2 border-accent"></div>
-                                <div class="absolute top-0 right-0 w-2 h-2 border-r-2 border-t-2 border-accent"></div>
-                                <div class="absolute bottom-0 left-0 w-2 h-2 border-l-2 border-b-2 border-accent"></div>
-                                <div class="absolute bottom-0 right-0 w-2 h-2 border-r-2 border-b-2 border-accent"></div>
-                                <span class="font-mono text-[10px] text-muted uppercase">{role_label}</span>
-                                <span class="font-glitch text-[11px] uppercase tracking-[0.14em] text-accent text-center truncate w-full"
-                                      style="text-shadow: -1px -1px 0 var(--accent-2), 1px 1px 0 var(--t-accent);">
-                                    {name_clone}
-                                </span>
-                                <MoodMeter value=mood_value />
-                                <span class="font-mono text-[9px] text-muted">"MOOD"</span>
-                            </div>
-                        }
-                    }).collect_view()}
-                </div>
-            </div>
-
-            // Section 3: Captain's note
-            // TODO(future phase): add captain_note field to Team model and wire here.
-            <div class="bg-surface border border-outline/30 p-4 relative">
-                <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
-                <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
-                <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
-                <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
-                <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// FROM_THE_CAPTAIN"</div>
-                <p class="font-mono text-[13px] leading-relaxed text-secondary whitespace-pre-wrap">
-                    "Watch for their level-6 baron-area invade — we ate it last time.\nMid roams hard at 3:45. Stay on wards, keep tempo."
-                </p>
-            </div>
-
-            // Section 4: Reasoned Bans
-            // TODO(future phase): wire from ban-reasoning feature when built.
-            <PandemoniumBansPanel />
-
-            // Section 5: Our Pool Ready
-            // TODO(future phase): compute from champion_pool resource per-player.
-            <div class="bg-surface border border-outline/30 p-4 relative">
-                <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
-                <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
-                <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
-                <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
-                <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// READINESS"</div>
-                <div class="font-mono text-[11px] text-muted uppercase mb-3">"OUR POOL READY"</div>
-                <div class="flex items-baseline gap-2">
-                    <span class="font-mono text-[28px] tabular-nums text-accent">"4"</span>
-                    <span class="font-mono text-muted text-[12px]">"/ 5 PLAYERS · POOL FILLED"</span>
-                </div>
-                <div class="mt-2 h-2 bg-elevated">
-                    <div class="h-2 bg-accent" style="width: 80%"></div>
-                </div>
-            </div>
-
-            // Section 6: Their Pattern (opponent intel)
-            // TODO(future phase): wire from get_opponents_for_team or opponent-intel resource.
-            <div class="bg-surface border border-outline/30 p-4 relative">
-                <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
-                <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
-                <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
-                <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
-                <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// SCOUT"</div>
-                <div class="font-mono text-[11px] text-muted uppercase mb-3">"THEIR PATTERN"</div>
-                <div class="space-y-2 font-mono text-[12px]">
-                    <div>
-                        <span class="text-accent">"// LAST_5_BANS"</span>
-                        <span class="ml-2 text-secondary">"Yasuo, Yone, Akali, Zed, Sylas"</span>
-                    </div>
-                    <div>
-                        <span class="text-accent">"// PICK_HABIT"</span>
-                        <span class="ml-2 text-secondary">"Mid-priority drafts; engage support always blue side"</span>
-                    </div>
-                    <div>
-                        <span class="text-accent">"// EARLY_GAME"</span>
-                        <span class="ml-2 text-secondary">"Jungle invades 2:30–3:30; rotates bot at 5:00"</span>
-                    </div>
-                </div>
-            </div>
-
-            // Section 7: Threat Ranking + "If you let it through" warnings
-            <PandemoniumThreatsPanel />
-
-            // Team name footer
-            <div class="pt-2 border-t border-outline/20">
-                <span class="font-mono text-[10px] text-dimmed">"// SQUAD: "</span>
-                <span class="font-mono text-[10px] text-muted">{team_name}</span>
-            </div>
-        </div>
-    }
-}
-
-/// Pandemonium Section 4: Reasoned bans panel.
-/// Hardcoded placeholders — TODO(future phase): wire from ban-reasoning feature.
-#[component]
-fn PandemoniumBansPanel() -> impl IntoView {
-    view! {
-        <div class="bg-surface border border-outline/30 p-4 relative">
-            <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
-            <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
-            <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
-            <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
-            <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// PRE-PICK"</div>
-            <div class="font-mono text-[11px] text-muted uppercase mb-3">"REASONED BANS"</div>
-            <div class="grid grid-cols-2 gap-3">
-                <div class="flex items-start gap-2">
-                    <ChampTile name="Yasuo".to_string() size=40 banned=true />
-                    <div class="flex-1">
-                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"BAN"</span>
-                        <p class="font-mono text-[11px] text-muted mt-1">"OTP on mid; team-fight uptime kills us"</p>
-                    </div>
-                </div>
-                <div class="flex items-start gap-2">
-                    <ChampTile name="Yone".to_string() size=40 banned=true />
-                    <div class="flex-1">
-                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"BAN"</span>
-                        <p class="font-mono text-[11px] text-muted mt-1">"Their mid/adc both proficient; pick rate 80%"</p>
-                    </div>
-                </div>
-                <div class="flex items-start gap-2">
-                    <ChampTile name="Zed".to_string() size=40 banned=true />
-                    <div class="flex-1">
-                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"BAN"</span>
-                        <p class="font-mono text-[11px] text-muted mt-1">"Snowballs hard; our support can't disengage"</p>
-                    </div>
-                </div>
-                <div class="flex items-start gap-2">
-                    <ChampTile name="Akali".to_string() size=40 banned=true />
-                    <div class="flex-1">
-                        <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-elevated text-muted">"FLEX-BAN"</span>
-                        <p class="font-mono text-[11px] text-muted mt-1">"Counter to our top's current champion pool"</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-}
-
-/// Pandemonium Section 7: Threat ranking + "If you let it through" warnings.
-/// Hardcoded placeholders — TODO(future phase): wire from opponent-intel threat scoring.
-#[component]
-fn PandemoniumThreatsPanel() -> impl IntoView {
-    view! {
-        <div class="bg-surface border border-outline/30 p-4 relative">
-            <div class="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-accent"></div>
-            <div class="absolute top-0 right-0 w-3 h-3 border-r-2 border-t-2 border-accent"></div>
-            <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-accent"></div>
-            <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-accent"></div>
-            <div class="font-mono text-[10px] text-accent uppercase tracking-[0.16em] mb-2">"// PRIORITY"</div>
-            <div class="font-mono text-[11px] text-muted uppercase mb-3">"THREATS"</div>
-            <ol class="space-y-3">
-                <li class="flex items-start gap-3">
-                    <span class="font-mono text-[18px] text-accent tabular-nums">"1."</span>
-                    <ChampTile name="Azir".to_string() size=40 />
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-danger/15 text-danger">"CRITICAL"</span>
-                            <span class="font-mono text-[12px] text-primary">"Azir"</span>
-                        </div>
-                        <p class="font-mono text-[11px] text-danger mt-1">"If you let it through: 65% chance of team-fight loss"</p>
-                    </div>
-                </li>
-                <li class="flex items-start gap-3">
-                    <span class="font-mono text-[18px] text-accent tabular-nums">"2."</span>
-                    <ChampTile name="Orianna".to_string() size=40 />
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-elevated text-muted">"HIGH"</span>
-                            <span class="font-mono text-[12px] text-primary">"Orianna"</span>
-                        </div>
-                        <p class="font-mono text-[11px] text-danger mt-1">"If you let it through: peel composition counters our dive"</p>
-                    </div>
-                </li>
-                <li class="flex items-start gap-3">
-                    <span class="font-mono text-[18px] text-accent tabular-nums">"3."</span>
-                    <ChampTile name="Leona".to_string() size=40 />
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] rounded-sm bg-elevated text-muted">"MED"</span>
-                            <span class="font-mono text-[12px] text-primary">"Leona"</span>
-                        </div>
-                        <p class="font-mono text-[11px] text-muted mt-1">"If you let it through: stun-chain disrupts our rotations"</p>
-                    </div>
-                </li>
-            </ol>
-        </div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// TeamGameDayBriefView — 18-07
-// Game-day brief sub-view for /team/dashboard route mode="brief".
-// Demacia: "THE COMPANION GAZETTE" newspaper (3-col, gilt, Cormorant)
-// Pandemonium: "GAME_DAY · ZINE_v0.3" collage (RiotTape, rotated zine cards)
-// Mode toggle wired in 18-08; reachable now via mode="brief" stub.
-//
-// ChildrenFn rule: all String props inside Card/Glitch children must use
-// .clone() so the generated closure remains Fn. Data needing multiple
-// closure accesses uses StoredValue<T> (Copy, so closures stay Fn).
-// ---------------------------------------------------------------------------
-
-#[component]
-fn TeamGameDayBriefView(
-    region: String,
-    team: crate::models::team::Team,
-    members: Vec<crate::models::user::TeamMember>,
-) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
-
-    let team_name_sv = StoredValue::new(team.name.clone());
-    let members_sv = StoredValue::new(members);
-
-    if is_pandemonium {
-        // Pandemonium: xeroxed match-day zine
-        let r1 = region.clone();
-        let r2 = region.clone();
-        let r3 = region.clone();
-        let r4 = region.clone();
-        let r5 = region.clone();
-        let r6 = region.clone();
-        let r7 = region.clone();
-        let r8 = region.clone();
-        let r9 = region.clone();
-        let r10 = region.clone();
-        view! {
-            <div class="canvas-grain bg-base flex flex-col gap-3">
-                <RiotTape label="GAME_DAY · ZINE_v0.3" />
-
-                // Section 1: Roster card
-                <div class="transform -rotate-1">
-                    <Card region=r1 variant="zine">
-                        <Glitch region=r2.clone()>"// ROSTER_CARD"</Glitch>
-                        <div class="mt-2 grid grid-cols-5 gap-2">
-                            {move || members_sv.get_value().into_iter().take(5).map(|m| {
-                                let role_sv = StoredValue::new(m.role.to_uppercase());
-                                let name_sv = StoredValue::new(
-                                    m.riot_summoner_name.unwrap_or_else(|| m.username.clone())
-                                );
-                                view! {
-                                    <div class="flex flex-col items-center gap-1">
-                                        <ChampTile name=name_sv.get_value() size=36 />
-                                        <span class="font-mono text-[9px] text-muted">
-                                            {move || format!("// {}", role_sv.get_value())}
-                                        </span>
-                                    </div>
-                                }
-                            }).collect_view()}
-                        </div>
-                    </Card>
-                </div>
-
-                // Section 2: Strat note
-                <div class="transform rotate-1">
-                    <Card region=r3 variant="zine">
-                        <Glitch region=r4.clone()>"// STRAT_NOTE"</Glitch>
-                        // TODO: wire real strategy from game_plan resource once linked
-                        <pre class="font-mono text-[11px] text-secondary mt-2 whitespace-pre-wrap leading-relaxed">
-                            "WIN_CON: early tower pressure\nBANS: focus engage supports\nDRAFT: flex top/mid picks preferred"
-                        </pre>
-                    </Card>
-                </div>
-
-                // Section 3: Opponent intel
-                <div class="transform -rotate-1">
-                    <Card region=r5 variant="zine">
-                        <Glitch region=r6.clone()>"// OPPONENT_INTEL"</Glitch>
-                        // TODO: wire real opponent data from match history when available
-                        <div class="mt-2 flex flex-col gap-1 font-mono text-[11px]">
-                            <div class="text-secondary">"LAST_5_BANS: Yasuo, Yone, Zed, Katarina, Akali"</div>
-                            <div class="text-secondary">"LAST_5_FORM: W · L · W · W · L"</div>
-                            <div class="text-secondary">"PLAYSTYLE: aggressive early, poke-heavy mid"</div>
-                        </div>
-                    </Card>
-                </div>
-
-                // Section 4: Threat rank
-                <div class="transform rotate-1">
-                    <Card region=r7 variant="zine">
-                        <Glitch region=r8.clone()>"// THREAT_RANK"</Glitch>
-                        <div class="mt-2 flex flex-col gap-2">
-                            <div class="flex items-center gap-3 border-b border-outline/20 pb-2">
-                                <ChampTile name="Azir".to_string() size=32 />
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <Badge tone="danger">"CRITICAL"</Badge>
-                                        <span class="font-mono text-[11px] text-primary">"Azir"</span>
-                                    </div>
-                                    <p class="font-mono text-[10px] text-muted mt-1">"// if let through: 65% team-fight loss"</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3 border-b border-outline/20 pb-2">
-                                <ChampTile name="Orianna".to_string() size=32 />
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <Badge tone="warning">"HIGH"</Badge>
-                                        <span class="font-mono text-[11px] text-primary">"Orianna"</span>
-                                    </div>
-                                    <p class="font-mono text-[10px] text-muted mt-1">"// if let through: peel counters our dive"</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <ChampTile name="Leona".to_string() size=32 />
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <Badge tone="neutral">"MED"</Badge>
-                                        <span class="font-mono text-[11px] text-primary">"Leona"</span>
-                                    </div>
-                                    <p class="font-mono text-[10px] text-muted mt-1">"// if let through: stun-chain disrupts rotations"</p>
-                                </div>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                // Footer: squad tag
-                <Card region=r9 variant="zine">
-                    <Glitch region=r10.clone()>
-                        {move || format!("// SQUAD: {}", team_name_sv.get_value())}
-                    </Glitch>
-                    <div class="mt-1 font-mono text-[10px] text-muted">
-                        {move || format!("{} MEMBERS CONFIRMED", members_sv.get_value().len())}
-                    </div>
-                </Card>
-            </div>
-        }.into_any()
-    } else {
-        // Demacia: "THE COMPANION GAZETTE" newspaper layout
-        let r1 = region.clone();
-        let r2 = region.clone();
-        let r3 = region.clone();
-        let r4 = region.clone();
-        let r5 = region.clone();
-        view! {
-            <div class="flex flex-col gap-6">
-                // Masthead
-                <Card region=r1.clone() variant="gilt">
-                    <div class="text-center py-2">
-                        <div class="font-imperial text-[9px] uppercase tracking-[0.25em] text-muted mb-1">
-                            "GAME DAY EDITION"
-                        </div>
-                        <h1 class="font-display font-bold text-[28px] tracking-[0.06em] text-primary uppercase">
-                            "THE COMPANION GAZETTE"
-                        </h1>
-                        <div class="font-imperial text-[10px] text-muted mt-1 tracking-[0.15em]">
-                            {move || format!("TEAM: {}", team_name_sv.get_value())}
-                        </div>
-                        <div class="mt-3 flex justify-center">
-                            <HeraldicDivider width=640 />
-                        </div>
-                    </div>
-                </Card>
-
-                // Three-column newspaper body
-                <div class="grid grid-cols-3 gap-4">
-                    // Column 1: Roster
-                    <Card region=r2.clone() variant="gilt">
-                        <SectionHead
-                            region=r2.clone()
-                            eyebrow="TODAY'S LINEUP"
-                            title="Roster".to_string()
-                        />
-                        <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=220 />
-                        </div>
-                        // Real roster from team members
-                        <div class="mt-3 flex flex-col gap-3">
-                            {move || members_sv.get_value().into_iter().take(5).map(|m| {
-                                let role_sv = StoredValue::new(m.role.clone());
-                                let name_sv = StoredValue::new(
-                                    m.riot_summoner_name.clone().unwrap_or_else(|| m.username.clone())
-                                );
-                                view! {
-                                    <div class="flex items-center gap-2 border-b border-outline/20 pb-2">
-                                        <ChampTile name=name_sv.get_value() size=32 />
-                                        <div class="flex-1">
-                                            <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted">
-                                                {move || role_sv.get_value()}
-                                            </div>
-                                            <div class="font-display text-[13px] text-primary italic">
-                                                {move || name_sv.get_value()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }).collect_view()}
-                        </div>
-                    </Card>
-
-                    // Column 2: Strategy
-                    <Card region=r3.clone() variant="gilt">
-                        <SectionHead
-                            region=r3.clone()
-                            eyebrow="TODAY'S ORDERS"
-                            title="Strategy".to_string()
-                        />
-                        <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=220 />
-                        </div>
-                        // TODO: wire real strategy from game_plan resource once linked
-                        <p class="font-display italic text-secondary text-[13px] leading-relaxed mt-3
-                            first-letter:float-left first-letter:font-display first-letter:text-5xl first-letter:text-accent first-letter:mr-1 first-letter:leading-none">
-                            "Early pressure along the top side. Secure Rift Herald first objective. Ban engage supports. Flex picks preferred for blue side."
-                        </p>
-                        <div class="mt-4">
-                            <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted mb-2">"BAN INTENTIONS"</div>
-                            <div class="font-display italic text-[12px] text-secondary">
-                                "Priority: Yasuo · Yone · Zed"
-                            </div>
-                        </div>
-                    </Card>
-
-                    // Column 3: Opponent intel + threats
-                    <Card region=r4.clone() variant="gilt">
-                        <SectionHead
-                            region=r4.clone()
-                            eyebrow="INTELLIGENCE"
-                            title="Opponent Intel".to_string()
-                        />
-                        <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=220 />
-                        </div>
-                        // TODO: wire real opponent data from match history when available
-                        <div class="mt-3 flex flex-col gap-3">
-                            <div>
-                                <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted mb-1">"RECENT FORM"</div>
-                                <p class="font-display italic text-[12px] text-secondary leading-relaxed
-                                    first-letter:float-left first-letter:font-display first-letter:text-5xl first-letter:text-accent first-letter:mr-1 first-letter:leading-none">
-                                    "Victory in 3 of last 5. Aggressive early, poke-heavy midgame."
-                                </p>
-                            </div>
-                            <div class="flex justify-center">
-                                <HeraldicDivider width=180 />
-                            </div>
-                            <div>
-                                <div class="font-imperial text-[8px] uppercase tracking-[0.18em] text-muted mb-2">"KEY THREATS"</div>
-                                <div class="flex flex-col gap-2">
-                                    <div class="flex items-center gap-2">
-                                        <ChampTile name="Azir".to_string() size=28 />
-                                        <span class="font-display italic text-[12px] text-secondary">"Azir — must ban"</span>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <ChampTile name="Orianna".to_string() size=28 />
-                                        <span class="font-display italic text-[12px] text-secondary">"Orianna — peel threat"</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                // Editor's Note sidebar
-                <Card region=r5.clone() variant="gilt">
-                    <SectionHead
-                        region=r5.clone()
-                        eyebrow="FROM THE CAPTAIN"
-                        title="Editor's Note".to_string()
-                    />
-                    <div class="mt-2 flex justify-center">
-                        <HeraldicDivider width=480 />
-                    </div>
-                    // TODO: wire real captain's note from team notes once notes
-                    // resource exposes a "captain_note" field
-                    <p class="font-display italic text-secondary mt-3 text-[14px] leading-relaxed">
-                        "Today we face a disciplined opponent. Trust the preparation, execute the early game plan, and maintain map awareness above all else. Steady and methodical — that is how Demacia wins."
-                    </p>
-                    <div class="mt-3 font-imperial text-[9px] tracking-[0.18em] text-muted uppercase text-right">
-                        {move || format!("— {}", team_name_sv.get_value())}
-                    </div>
-                </Card>
-            </div>
-        }.into_any()
     }
 }

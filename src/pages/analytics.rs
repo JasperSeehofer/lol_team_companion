@@ -7,23 +7,15 @@ use leptos::prelude::*;
 
 #[server]
 pub async fn get_analytics_data() -> Result<AnalyticsPayload, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     // Return empty payload if user has no team (per CLAUDE.md rule 44)
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => {
@@ -36,7 +28,7 @@ pub async fn get_analytics_data() -> Result<AnalyticsPayload, ServerFnError> {
 
     let (tag_summaries, plan_effectiveness) = db::get_analytics(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(AnalyticsPayload {
         tag_summaries,
@@ -199,11 +191,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                                 {tag_summaries.into_iter().filter(|s| s.games_played > 0).map(|s| {
                                                     let (bg_border, text_color) = tag_colors(&s.tag);
-                                                    let win_pct = if s.games_played > 0 {
-                                                        s.wins * 100 / s.games_played
-                                                    } else {
-                                                        0
-                                                    };
+                                                    let win_pct = (s.wins * 100).checked_div(s.games_played).unwrap_or(0);
                                                     let stars = rating_to_stars(s.avg_rating);
                                                     let tag_label = s.tag.clone();
                                                     let wl = format!("{}-{}", s.wins, s.losses);

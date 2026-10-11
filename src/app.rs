@@ -2,13 +2,14 @@ use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
-    path,
+    path, SsrMode,
 };
 
 use crate::components::bug_report_widget::BugReportWidget;
+use crate::components::footer::SiteFooter;
 use crate::components::nav::Nav;
 use crate::components::ui::ToastProvider;
-use crate::error_template::ErrorTemplate;
+use crate::error_template::NotFound;
 use crate::pages::{
     action_items::ActionItemsPage,
     admin::invites::AdminInvitesPage,
@@ -64,6 +65,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                // Live Data Dragon version for image URLs built in the browser.
+                <meta name=crate::models::ddragon::META_NAME content=crate::models::ddragon::version() />
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
@@ -119,20 +122,21 @@ pub fn App() -> impl IntoView {
             .and_then(|w| w.document())
             .and_then(|d| d.document_element())
             .and_then(|el| el.get_attribute("data-theme"))
-            .filter(|v| v == "demacia" || v == "pandemonium")
+            // Release 1 serves one theme; anything else falls back.
+            .filter(|v| v == "demacia")
             .unwrap_or_else(|| "demacia".to_string());
         provide_context(InitialTheme(theme));
     }
 
     view! {
         <Stylesheet id="leptos" href="/pkg/lol_team_companion.css" />
-        <Title text="LoL Team Companion" />
+        <Title text="Companion" />
 
         <Router>
             <ToastProvider>
                 <Nav />
                 <main>
-                    <Routes fallback=|| view! { <ErrorTemplate outside_errors=Errors::default() /> }>
+                    <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=HomePage />
                         <Route path=path!("/profile") view=ProfilePage />
                         <Route path=path!("/auth/login") view=LoginPage />
@@ -155,11 +159,12 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />
                         // Phase 17 plan 17-01 stubs (filled by plan 06)
                         <Route path=path!("/closed-beta") view=ClosedBetaPage />
-                        <Route path=path!("/admin/invites") view=AdminInvitesPage />
+                        <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
                         <Route path=path!("/legal/impressum") view=ImpressumPage />
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
                     </Routes>
                 </main>
+                <SiteFooter />
                 // Floating bug-report widget (Phase 17 visual stub;
                 // Phase 18 wires submit-to-DB). Self-gates on auth +
                 // pathname so it never shows on /, /auth/*,

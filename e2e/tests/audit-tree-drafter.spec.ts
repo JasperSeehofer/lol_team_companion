@@ -204,7 +204,11 @@ test("tree-drafter: delete a tree", async ({ teamPage }) => {
   const deleteBtn = page.locator('button:has-text("Delete Tree")');
   await expect(deleteBtn).toBeVisible({ timeout: 3000 });
 
+  // Deleting asks for an inline confirmation first.
   await deleteBtn.click();
+  const confirmBtn = page.locator('button:has-text("Remove")');
+  await expect(confirmBtn).toBeVisible({ timeout: 3000 });
+  await confirmBtn.click();
   await page.waitForTimeout(1000);
 
   // After deletion, the tree should no longer appear in the sidebar

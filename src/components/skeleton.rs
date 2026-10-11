@@ -11,28 +11,26 @@ use leptos::prelude::*;
 /// `region` controls the visual grammar: "demacia" (parchment shimmer + serif italic caption)
 /// or "pandemonium" (xerox flicker + monospace caption with blinking cursor).
 #[component]
-pub fn PageLoading(
-    region: String,
-    #[prop(into)] variant: String,
-) -> impl IntoView {
+pub fn PageLoading(region: String, #[prop(into)] variant: String) -> impl IntoView {
     let is_pandemonium = region == "pandemonium";
     let v = variant.clone();
     let caption_dem = match v.as_str() {
         "draft" => "Awaiting word from the field\u{2026}",
-        "solo"  => "Reading the stars\u{2026}",
-        "team"  => "Mustering the company\u{2026}",
-        _       => "Loading\u{2026}",
+        "solo" => "Reading the stars\u{2026}",
+        "team" => "Mustering the company\u{2026}",
+        _ => "Loading\u{2026}",
     };
     let caption_pan = match v.as_str() {
         "draft" => "// LOADING_DRAFT",
-        "solo"  => "// LOADING_SOLO_PROFILE",
-        "team"  => "// LOADING_TEAM_BRIEF",
-        _       => "// LOADING_",
+        "solo" => "// LOADING_SOLO_PROFILE",
+        "team" => "// LOADING_TEAM_BRIEF",
+        _ => "// LOADING_",
     };
     let variant_for_layout = variant.clone();
-    move || if is_pandemonium {
-        // Pandemonium: dark scanline background, flicker animation, mono caption with blinking cursor
-        view! {
+    move || {
+        if is_pandemonium {
+            // Pandemonium: dark scanline background, flicker animation, mono caption with blinking cursor
+            view! {
             <div class="relative w-full min-h-[60vh] bg-base bg-scanline animate-pan-flicker p-6">
                 {render_pan_skeleton_layout(&variant_for_layout)}
                 <div class="absolute bottom-6 left-6 font-mono text-[12px] tracking-[0.14em] text-accent">
@@ -41,9 +39,9 @@ pub fn PageLoading(
                 </div>
             </div>
         }.into_any()
-    } else {
-        // Demacia: parchment-tan shimmer, serif italic caption
-        view! {
+        } else {
+            // Demacia: parchment-tan shimmer, serif italic caption
+            view! {
             <div class="relative w-full min-h-[60vh] bg-base bg-parchment-shimmer animate-dem-shimmer p-6">
                 {render_dem_skeleton_layout(&variant_for_layout)}
                 <div class="absolute bottom-6 left-6 font-display italic text-[14px] text-muted">
@@ -51,6 +49,7 @@ pub fn PageLoading(
                 </div>
             </div>
         }.into_any()
+        }
     }
 }
 
@@ -130,39 +129,39 @@ fn render_pan_skeleton_layout(variant: &str) -> AnyView {
 /// Empty-state component for when data is loaded but no records exist.
 /// `kind` selects the copy + icon: "draft" | "matches" | "team" | "pool" | "scout".
 #[component]
-pub fn PageEmpty(
-    region: String,
-    #[prop(into)] kind: String,
-) -> impl IntoView {
+pub fn PageEmpty(region: String, #[prop(into)] kind: String) -> impl IntoView {
     let is_pandemonium = region == "pandemonium";
     let k = kind.clone();
     let copy_dem = match k.as_str() {
-        "draft"   => "No drafts recorded. Begin your first campaign.",
+        "draft" => "No drafts recorded. Begin your first campaign.",
         "matches" => "No matches in the ledger. Sync your history.",
-        "team"    => "Your company has not assembled. Join or form a team.",
-        "pool"    => "Your champion pool awaits its first entries.",
-        "scout"   => "No opponent intelligence on file.",
-        _         => "Nothing here yet.",
+        "team" => "Your company has not assembled. Join or form a team.",
+        "pool" => "Your champion pool awaits its first entries.",
+        "scout" => "No opponent intelligence on file.",
+        _ => "Nothing here yet.",
     };
     let copy_pan = match k.as_str() {
-        "draft"   => "// NO_DRAFTS_FOUND \u{2014} start a session",
+        "draft" => "// NO_DRAFTS_FOUND \u{2014} start a session",
         "matches" => "// MATCH_HISTORY_EMPTY \u{2014} run sync",
-        "team"    => "// NO_TEAM \u{2014} join_or_create()",
-        "pool"    => "// POOL_EMPTY \u{2014} add champions",
-        "scout"   => "// NO_INTEL \u{2014} begin scouting",
-        _         => "// EMPTY",
+        "team" => "// NO_TEAM \u{2014} join_or_create()",
+        "pool" => "// POOL_EMPTY \u{2014} add champions",
+        "scout" => "// NO_INTEL \u{2014} begin scouting",
+        _ => "// EMPTY",
     };
-    move || if is_pandemonium {
-        view! {
+    move || {
+        if is_pandemonium {
+            view! {
             <div class="w-full p-12 bg-surface border-l-2 border-accent rounded-none text-center">
                 <div class="font-mono text-[14px] tracking-[0.14em] text-accent">{copy_pan}</div>
             </div>
         }.into_any()
-    } else {
-        view! {
-            <div class="w-full p-12 bg-surface border border-outline/50 rounded-xl text-center">
-                <div class="font-display italic text-[16px] text-muted">{copy_dem}</div>
-            </div>
-        }.into_any()
+        } else {
+            view! {
+                <div class="w-full p-12 bg-surface border border-outline/50 rounded-xl text-center">
+                    <div class="font-display italic text-[16px] text-muted">{copy_dem}</div>
+                </div>
+            }
+            .into_any()
+        }
     }
 }

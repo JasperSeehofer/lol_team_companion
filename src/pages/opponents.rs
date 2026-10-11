@@ -9,21 +9,14 @@ use leptos::prelude::*;
 
 #[server]
 pub async fn get_opponents() -> Result<Vec<Opponent>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -31,98 +24,77 @@ pub async fn get_opponents() -> Result<Vec<Opponent>, ServerFnError> {
 
     db::list_opponents(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn create_opponent(name: String) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     db::create_opponent(&surreal, &team_id, name, None)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_opponent_detail(
     id: String,
 ) -> Result<Option<(Opponent, Vec<OpponentPlayer>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::get_opponent(&surreal, &id)
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(None);
+    };
+    db::get_opponent(&ctx.db, &team_id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn save_opponent(id: String, name: String, notes: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
     let notes_opt = if notes.is_empty() { None } else { Some(notes) };
-    db::update_opponent(&surreal, &id, name, notes_opt)
+    db::update_opponent(&ctx.db, &team_id, &id, name, notes_opt)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_opponent_action(id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::delete_opponent(&surreal, &id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::delete_opponent(&ctx.db, &team_id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
-pub async fn add_player(opponent_id: String, name: String, role: String) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+pub async fn add_player(
+    opponent_id: String,
+    name: String,
+    role: String,
+) -> Result<String, ServerFnError> {
+    use crate::server::{authz, db};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::add_opponent_player(&surreal, &opponent_id, name, role)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::add_opponent_player(&ctx.db, &team_id, &opponent_id, name, role)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -133,14 +105,10 @@ pub async fn save_player(
     riot_summoner_name: String,
     notes: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
 
     let summoner_opt = if riot_summoner_name.is_empty() {
         None
@@ -149,32 +117,20 @@ pub async fn save_player(
     };
     let notes_opt = if notes.is_empty() { None } else { Some(notes) };
 
-    db::save_opponent_player_info(
-        &surreal,
-        &id,
-        name,
-        role,
-        summoner_opt,
-        notes_opt,
-    )
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    db::save_opponent_player_info(&ctx.db, &team_id, &id, name, role, summoner_opt, notes_opt)
+        .await
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn remove_player(id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::delete_opponent_player(&surreal, &id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::delete_opponent_player(&ctx.db, &team_id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -182,17 +138,17 @@ pub async fn fetch_champions(
     player_id: String,
     summoner_name: String,
 ) -> Result<Vec<String>, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db, rate_limit::Bucket, riot};
 
-    let _auth: AuthSession = leptos_axum::extract().await?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    // Check ownership before spending Riot API quota.
+    db::ensure_team_opponent_player(&ctx.db, &team_id, &player_id)
+        .await
+        .map_err(authz::server_err)?;
 
-    if !riot::has_api_key() {
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new("No Riot API key configured"));
     }
 
@@ -203,20 +159,31 @@ pub async fn fetch_champions(
             "Summoner name must be in Name#Tag format",
         ));
     }
+    authz::rate_limit(Bucket::Riot).await?;
+    // Account lookup + match list + 20 matches.
+    riot_client
+        .ensure_headroom(2 + 20)
+        .map_err(authz::server_err)?;
 
-    let platform = riot::platform_route_from_str("EUW");
-    let puuid = riot::get_puuid(parts[0], parts[1], platform)
+    // Opponents are looked up on the team's server.
+    let team_region = db::get_team_region(&ctx.db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
+    let platform = riot::platform_for(&[team_region.as_deref()]);
+    let puuid = riot_client
+        .get_puuid(parts[0], parts[1], platform)
+        .await
+        .map_err(authz::server_err)?;
 
-    let champions = riot::fetch_player_champions(&puuid, 20, platform)
+    let champions = riot_client
+        .fetch_player_champions(&puuid, 20, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Update the player record with champions
-    db::update_opponent_player_champions(&surreal, &player_id, champions.clone())
+    db::update_opponent_player_champions(&ctx.db, &team_id, &player_id, champions.clone())
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(champions)
 }
@@ -233,33 +200,18 @@ pub async fn create_opponent_with_players_fn(
     name: String,
     players_json: String,
 ) -> Result<(String, Vec<String>), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
 
-    let team_id = match db::get_user_team_id(&surreal, &user.id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-    {
-        Some(id) => id,
-        None => return Err(ServerFnError::new("No team")),
-    };
-
-    let players: Vec<(String, Option<String>)> = serde_json::from_str(&players_json)
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let players: Vec<(String, Option<String>)> =
+        serde_json::from_str(&players_json).map_err(authz::server_err)?;
 
     let (opponent_id, player_ids) =
-        db::create_opponent_with_players(&surreal, &team_id, name, None, players)
+        db::create_opponent_with_players(&ctx.db, &team_id, name, None, players)
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+            .map_err(authz::server_err)?;
 
     Ok((opponent_id, player_ids))
 }
@@ -273,25 +225,22 @@ pub async fn fetch_player_intel_fn(
     player_id: String,
     riot_summoner_name: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db, rate_limit::Bucket, riot};
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    // Check ownership before spending Riot API quota.
+    db::ensure_team_opponent_player(&ctx.db, &team_id, &player_id)
+        .await
+        .map_err(authz::server_err)?;
 
     // Empty summoner name is not an error — skip gracefully
     if riot_summoner_name.trim().is_empty() {
         return Ok(());
     }
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    if !riot::has_api_key() {
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new("No Riot API key configured"));
     }
 
@@ -302,19 +251,29 @@ pub async fn fetch_player_intel_fn(
             "Summoner name must be in Name#Tag format",
         ));
     }
+    authz::rate_limit(Bucket::Riot).await?;
+    // Account lookup + match list + 20 matches + masteries.
+    riot_client
+        .ensure_headroom(3 + 20)
+        .map_err(authz::server_err)?;
 
-    let platform = riot::platform_route_from_str("EUW");
-    let puuid = riot::get_puuid(parts[0], parts[1], platform)
+    // Opponents are looked up on the team's server.
+    let team_region = db::get_team_region(&ctx.db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
+    let platform = riot::platform_for(&[team_region.as_deref()]);
+    let puuid = riot_client
+        .get_puuid(parts[0], parts[1], platform)
+        .await
+        .map_err(authz::server_err)?;
 
-    let intel = riot::fetch_player_intel(&puuid, 20, platform)
+    let intel = riot_client
+        .fetch_player_intel(&puuid, 20, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Compute role distribution: count occurrences of each team_position
-    let mut role_counts: std::collections::HashMap<String, u32> =
-        std::collections::HashMap::new();
+    let mut role_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     for (_champion, position) in &intel.champion_with_role {
         if !position.is_empty() {
             *role_counts.entry(position.clone()).or_insert(0) += 1;
@@ -326,7 +285,8 @@ pub async fn fetch_player_intel_fn(
     let role_dist_json = serde_json::to_string(&role_dist).unwrap_or_default();
 
     db::update_opponent_player_intel(
-        &surreal,
+        &ctx.db,
+        &team_id,
         &player_id,
         Some(puuid),
         intel.recent_champions,
@@ -334,7 +294,7 @@ pub async fn fetch_player_intel_fn(
         Some(role_dist_json),
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    .map_err(authz::server_err)?;
 
     Ok(())
 }
@@ -369,19 +329,18 @@ pub fn OpponentsPage() -> impl IntoView {
     let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
 
     // Auth redirect + mode detection
-    Effect::new(move || {
-        match user.get() {
-            Some(Ok(None)) => {
-                #[cfg(feature = "hydrate")]
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/auth/login");
-                }
+    Effect::new(move || match user.get() {
+        Some(Ok(None)) =>
+        {
+            #[cfg(feature = "hydrate")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href("/auth/login");
             }
-            Some(Ok(Some(u))) => {
-                is_solo_mode.set(u.mode == "solo");
-            }
-            _ => {}
         }
+        Some(Ok(Some(u))) => {
+            is_solo_mode.set(u.mode == "solo");
+        }
+        _ => {}
     });
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
@@ -394,7 +353,13 @@ pub fn OpponentsPage() -> impl IntoView {
     // Team check for NoTeamState
     let has_team = Resource::new(
         || (),
-        |_| async { crate::pages::team::dashboard::get_team_dashboard().await.ok().flatten().is_some() },
+        |_| async {
+            crate::pages::team::dashboard::get_team_dashboard()
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        },
     );
 
     let opponents = Resource::new(|| (), |_| get_opponents());
@@ -418,7 +383,9 @@ pub fn OpponentsPage() -> impl IntoView {
                 Ok(()) => {
                     selected_id.set(None);
                     opponents.refetch();
-                    toast.show.run((ToastKind::Success, "Opponent deleted".into()));
+                    toast
+                        .show
+                        .run((ToastKind::Success, "Opponent deleted".into()));
                 }
                 Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
             }
@@ -673,11 +640,15 @@ fn CreationForm(
         }
 
         // Build players_json: Vec<(role, Option<riot_id>)>
-        let players: Vec<(String, Option<String>)> = ROLES.iter().enumerate().map(|(i, (role_key, _))| {
-            let v = inputs_vals[i].trim().to_string();
-            let opt = if v.is_empty() { None } else { Some(v) };
-            (role_key.to_string(), opt)
-        }).collect();
+        let players: Vec<(String, Option<String>)> = ROLES
+            .iter()
+            .enumerate()
+            .map(|(i, (role_key, _))| {
+                let v = inputs_vals[i].trim().to_string();
+                let opt = if v.is_empty() { None } else { Some(v) };
+                (role_key.to_string(), opt)
+            })
+            .collect();
 
         let players_json = serde_json::to_string(&players).unwrap_or_default();
         let inputs_vals_clone = inputs_vals.clone();
@@ -687,7 +658,10 @@ fn CreationForm(
             match create_opponent_with_players_fn(name, players_json).await {
                 Ok((opponent_id, player_ids)) => {
                     saving.set(false);
-                    toast.show.run((ToastKind::Success, "Opponent saved and players fetched".into()));
+                    toast.show.run((
+                        ToastKind::Success,
+                        "Opponent saved and players fetched".into(),
+                    ));
                     let done_id = opponent_id.clone();
 
                     // Sequential fetch for players that have a riot ID
@@ -821,9 +795,7 @@ fn OpponentDetail(
 
     // Build ordered players vec matching ROLES order
     let players_by_role: [Option<OpponentPlayer>; 5] = {
-        let find_player = |role_key: &str| {
-            players.iter().find(|p| p.role == role_key).cloned()
-        };
+        let find_player = |role_key: &str| players.iter().find(|p| p.role == role_key).cloned();
         [
             find_player("top"),
             find_player("jungle"),
@@ -850,8 +822,8 @@ fn OpponentDetail(
     let on_refresh_all = move |_| {
         let players_snap = players_stored.get_value();
         refreshing_all.set(true);
-        for i in 0..5 {
-            fetch_states[i].set(FetchState::Idle);
+        for state in fetch_states.iter() {
+            state.set(FetchState::Idle);
         }
         let fetch_states_clone = fetch_states;
         leptos::task::spawn_local(async move {
@@ -879,9 +851,14 @@ fn OpponentDetail(
             refreshing_all.set(false);
             on_player_change();
             if success_count == 5 {
-                toast.show.run((ToastKind::Success, "All players refreshed".into()));
+                toast
+                    .show
+                    .run((ToastKind::Success, "All players refreshed".into()));
             } else if success_count > 0 {
-                toast.show.run((ToastKind::Success, format!("{success_count}/5 players refreshed")));
+                toast.show.run((
+                    ToastKind::Success,
+                    format!("{success_count}/5 players refreshed"),
+                ));
             }
         });
     };
@@ -1067,9 +1044,8 @@ fn PlayerCard(
     }
     .to_string();
 
-    let p_summoner: RwSignal<String> = RwSignal::new(
-        player.riot_summoner_name.clone().unwrap_or_default(),
-    );
+    let p_summoner: RwSignal<String> =
+        RwSignal::new(player.riot_summoner_name.clone().unwrap_or_default());
     let pool_expanded: RwSignal<bool> = RwSignal::new(false);
 
     // Compute intel once from player data
@@ -1105,7 +1081,10 @@ fn PlayerCard(
         let pid = player_id_refresh.clone();
         let summoner = p_summoner.get_untracked();
         if summoner.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Enter a summoner name (Name#Tag) first".into()));
+            toast.show.run((
+                ToastKind::Error,
+                "Enter a summoner name (Name#Tag) first".into(),
+            ));
             return;
         }
         fetch_state.set(FetchState::Fetching);

@@ -28,11 +28,11 @@ pub fn ChampionAutocomplete(
     };
 
     let select_champion = move |champ: Champion| {
-        value.set(champ.id.clone());           // store canonical Data Dragon ID
+        value.set(champ.id.clone()); // store canonical Data Dragon ID
         set_filter_text.set(champ.name.clone()); // display human-readable name
         set_open.set(false);
         if let Some(cb) = on_select {
-            cb.run(champ.id);   // callback receives canonical ID
+            cb.run(champ.id); // callback receives canonical ID
         }
     };
 
@@ -41,9 +41,8 @@ pub fn ChampionAutocomplete(
     Effect::new(move |_| {
         let v = value.get();
         if v != filter_text.get_untracked() {
-            let display = champions.with_value(|champs| {
-                champs.iter().find(|c| c.id == v).map(|c| c.name.clone())
-            });
+            let display = champions
+                .with_value(|champs| champs.iter().find(|c| c.id == v).map(|c| c.name.clone()));
             set_filter_text.set(display.unwrap_or(v));
         }
     });

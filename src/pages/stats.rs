@@ -26,27 +26,20 @@ pub struct TeamMatchRow {
 
 #[server]
 pub async fn check_api_key() -> Result<bool, ServerFnError> {
-    use crate::server::riot;
-    Ok(riot::has_api_key())
+    use crate::server::authz;
+    Ok(authz::riot()?.is_configured())
 }
 
 #[server]
 pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -54,7 +47,7 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
 
     let rows = db::get_team_match_stats(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Convert db type to page type
     Ok(rows
@@ -81,28 +74,24 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
 
 #[server]
 pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
+    use crate::server::rate_limit::Bucket;
     use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    if !riot::has_api_key() {
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let riot_client = authz::riot()?;
+
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new(
             "RIOT_API_KEY not configured. Set it in .env to enable match syncing.",
         ));
     }
-
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    authz::rate_limit(Bucket::Riot).await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => {
@@ -111,10 +100,26 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
             ))
         }
     };
-
     let members = db::get_roster_puuids(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
+    let team_region = db::get_team_region(&surreal, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+
+    // Fail fast when the global Riot budget cannot cover this sync.
+    let linked = members
+        .iter()
+        .filter(|m| m.riot_puuid.as_deref().is_some_and(|p| !p.is_empty()))
+        .count() as u32;
+    riot_client
+        .ensure_headroom(linked * riot::MATCH_HISTORY_REQUESTS)
+        .map_err(authz::server_err)?;
+    // A team sync makes ~21 Riot calls per linked player: once a minute per
+    // team (not per member, so five members cannot run five syncs). Taken
+    // after the budget check so a "Riot is busy" answer does not lock the
+    // team out as well.
+    authz::team_cooldown("team_sync", &team_id, std::time::Duration::from_secs(60))?;
 
     let queue_label = match queue_id {
         Some(420) => "Solo/Duo",
@@ -126,33 +131,41 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
     let mut synced_players = 0usize;
     let mut errors = Vec::new();
 
-    for (uid, username, puuid_opt) in &members {
-        let puuid = match puuid_opt {
+    for member in &members {
+        let (uid, username) = (&member.user_id, &member.username);
+        let puuid = match &member.riot_puuid {
             Some(p) if !p.is_empty() => p,
             _ => continue,
         };
 
-        let platform = riot::platform_route_from_str("EUW");
-        match riot::fetch_match_history(puuid, queue_id, platform).await {
+        // Each player's own profile region, else the team's.
+        let platform = riot::platform_for(&[member.riot_region.as_deref(), team_region.as_deref()]);
+        match riot_client
+            .fetch_match_history(puuid, queue_id, platform)
+            .await
+        {
             Ok(matches) => {
                 let count = matches.len();
                 if let Err(e) = db::store_matches(&surreal, uid, matches).await {
-                    errors.push(format!("{username}: store error: {e}"));
+                    tracing::error!(user = %uid, error = %e, "storing synced matches failed");
+                    errors.push(format!("{username}: could not save matches"));
                 } else {
                     total_synced += count;
                     synced_players += 1;
                 }
             }
+            Err(riot::RiotError::Busy(secs)) => {
+                errors.push(format!("Riot is busy, try again in {secs} s"));
+                break;
+            }
             Err(e) => {
-                errors.push(format!("{username}: API error: {e}"));
+                tracing::warn!(user = %uid, error = %e, "Riot match history fetch failed");
+                errors.push(format!("{username}: Riot API request failed"));
             }
         }
     }
 
-    let linked_count = members
-        .iter()
-        .filter(|(_, _, p)| p.as_ref().map(|s| !s.is_empty()).unwrap_or(false))
-        .count();
+    let linked_count = linked;
     let mut msg = format!("Synced {total_synced} {queue_label} matches for {synced_players}/{linked_count} linked players.");
     if !errors.is_empty() {
         msg.push_str(&format!(" Errors: {}", errors.join("; ")));
@@ -162,22 +175,15 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
 
 #[server]
 pub async fn get_champion_trends(window: String) -> Result<Vec<ChampionTrend>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let cutoff = trends_window_to_cutoff(&window);
     db::get_champion_trends(&surreal, &user.id, cutoff)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[allow(dead_code)]
@@ -265,7 +271,7 @@ fn queue_label(queue_id: i32) -> &'static str {
 
 /// Champion icon URL from Data Dragon CDN
 fn champion_icon_url(champion_name: &str) -> String {
-    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png")
+    crate::models::ddragon::champion_icon_url(champion_name)
 }
 
 fn format_damage(damage: i32) -> String {
@@ -525,9 +531,7 @@ pub fn StatsPage() -> impl IntoView {
 
 /// Imperial display headline: "A week of {wins} victories and {losses} defeats."
 #[component]
-fn BattleLogHeadline(
-    stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>,
-) -> impl IntoView {
+fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) -> impl IntoView {
     view! {
         <Suspense fallback=move || view! {
             <h1 class="font-display italic text-primary text-[40px] sm:text-[56px] leading-tight">
@@ -1172,7 +1176,11 @@ fn ChampionTrendsSection() -> impl IntoView {
         let is_active = move || sort_col.get() == target;
         let arrow = move || {
             if is_active() {
-                if sort_dir_desc.get() { " \u{25BE}" } else { " \u{25B4}" }
+                if sort_dir_desc.get() {
+                    " \u{25BE}"
+                } else {
+                    " \u{25B4}"
+                }
             } else {
                 " \u{25BE}"
             }

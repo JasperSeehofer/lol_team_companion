@@ -24,14 +24,10 @@ pub struct DashboardData {
 
 #[server]
 pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = match auth.user {
+    let user = match authz::optional_user().await? {
         Some(u) => u,
         None => {
             return Ok(DashboardData {
@@ -48,17 +44,16 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
                 review_count: 0,
                 recent_games: 0,
                 recent_win_rate: None,
-                has_riot_key: riot::has_api_key(),
+                has_riot_key: authz::riot().is_ok_and(|r| r.is_configured()),
             })
         }
     };
 
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let surreal = authz::db()?;
 
     let team_data = db::get_user_team_with_members(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let (team_name, roster_count, is_leader, team_id_opt) = match &team_data {
         Some((team, members)) => (
@@ -141,7 +136,7 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
         review_count,
         recent_games,
         recent_win_rate,
-        has_riot_key: riot::has_api_key(),
+        has_riot_key: authz::riot().is_ok_and(|r| r.is_configured()),
     })
 }
 
@@ -360,11 +355,7 @@ fn StatBox(label: &'static str, value: String, href: &'static str) -> impl IntoV
 }
 
 #[component]
-fn NavCard(
-    href: &'static str,
-    title: &'static str,
-    desc: &'static str,
-) -> impl IntoView {
+fn NavCard(href: &'static str, title: &'static str, desc: &'static str) -> impl IntoView {
     view! {
         <A href=href attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
             <div class="bg-elevated border border-outline/50 border-l-4 border-l-accent rounded-xl p-5 hover:bg-surface transition-colors cursor-pointer h-full">

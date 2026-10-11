@@ -9,25 +9,29 @@ use leptos::prelude::*;
 pub async fn fetch_match_detail(
     match_id: String,
 ) -> Result<crate::models::match_data::MatchDetail, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::{db, riot};
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db, rate_limit::Bucket, riot};
+
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     if match_id.is_empty() {
         return Err(ServerFnError::new("No match ID provided"));
     }
-
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    // Riot match IDs look like "EUW1_7123456789".
+    let valid_id = match_id.split_once('_').is_some_and(|(platform, num)| {
+        !platform.is_empty()
+            && platform.chars().all(|c| c.is_ascii_alphanumeric())
+            && !num.is_empty()
+            && num.chars().all(|c| c.is_ascii_digit())
+    });
+    if !valid_id || match_id.len() > 32 {
+        return Err(ServerFnError::new(authz::NOT_FOUND));
+    }
 
     // Cache hit path
     if let Some((participants, timeline_events, game_duration, game_mode)) =
         db::get_cached_match_detail(&surreal, &match_id)
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?
+            .map_err(authz::server_err)?
     {
         let user_pid = participants
             .iter()
@@ -49,16 +53,23 @@ pub async fn fetch_match_detail(
     }
 
     // Cache miss: fetch from Riot API
-    if !riot::has_api_key() {
+    authz::rate_limit(Bucket::Riot).await?;
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new(
             "Riot API key not configured. Ask an admin to add a RIOT_API_KEY.",
         ));
     }
+    // Match + timeline.
+    riot_client.ensure_headroom(2).map_err(authz::server_err)?;
 
-    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
-    let full = riot::fetch_full_match_detail(&match_id, platform)
+    // The match ID names its platform ("EUW1_..."); fall back to the profile.
+    let platform = riot::platform_from_match_id(&match_id)
+        .unwrap_or_else(|| riot::platform_for(&[user.riot_region.as_deref()]));
+    let full = riot_client
+        .fetch_full_match_detail(&match_id, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let user_pid = full
         .participants
@@ -99,7 +110,7 @@ pub async fn fetch_match_detail(
 // ---------------------------------------------------------------------------
 
 fn champion_icon_url(champion_name: &str) -> String {
-    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png")
+    crate::models::ddragon::champion_icon_url(champion_name)
 }
 
 fn format_damage(damage: i32) -> String {
@@ -190,16 +201,18 @@ fn ItemIcon(item_id: i32) -> impl IntoView {
     if item_id > 0 {
         view! {
             <img
-                src=format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/item/{item_id}.png")
+                src=crate::models::ddragon::item_icon_url(item_id)
                 class="w-6 h-6 rounded border border-divider/30"
                 title=format!("Item {item_id}")
                 alt=format!("Item {item_id}")
             />
-        }.into_any()
+        }
+        .into_any()
     } else {
         view! {
             <div class="w-6 h-6 rounded bg-elevated border border-divider/30" aria-hidden="true" />
-        }.into_any()
+        }
+        .into_any()
     }
 }
 
@@ -285,10 +298,16 @@ fn TeamScoreboard(
     };
 
     let result_text = if team_win { "Victory" } else { "Defeat" };
-    let result_color = if team_win { "text-success" } else { "text-danger" };
+    let result_color = if team_win {
+        "text-success"
+    } else {
+        "text-danger"
+    };
     let header_class = format!("{header_bg} px-4 py-3 flex items-center justify-between");
-    let eyebrow_class = format!("font-imperial uppercase tracking-[0.18em] text-[10px] {eyebrow_color}");
-    let result_class = format!("font-imperial uppercase tracking-[0.18em] text-[10px] {result_color}");
+    let eyebrow_class =
+        format!("font-imperial uppercase tracking-[0.18em] text-[10px] {eyebrow_color}");
+    let result_class =
+        format!("font-imperial uppercase tracking-[0.18em] text-[10px] {result_color}");
 
     view! {
         <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
@@ -339,12 +358,12 @@ fn performance_verdict(user_val: f32, avg: f32) -> &'static str {
 
 fn normalize_pct(user_val: f32, avg: f32) -> f32 {
     let max = (user_val).max(avg * 2.0).max(1.0);
-    (user_val / max * 100.0).min(100.0).max(0.0)
+    (user_val / max * 100.0).clamp(0.0, 100.0)
 }
 
 fn avg_marker_pct(user_val: f32, avg: f32) -> f32 {
     let max = (user_val).max(avg * 2.0).max(1.0);
-    (avg / max * 100.0).min(100.0).max(0.0)
+    (avg / max * 100.0).clamp(0.0, 100.0)
 }
 
 #[component]
@@ -362,7 +381,8 @@ fn PerformanceBar(
         "Below average" => "text-danger",
         _ => "text-muted",
     };
-    let verdict_class = format!("font-imperial uppercase tracking-wider text-[10px] w-24 shrink-0 {verdict_color}");
+    let verdict_class =
+        format!("font-imperial uppercase tracking-wider text-[10px] w-24 shrink-0 {verdict_color}");
 
     view! {
         <div class="flex items-center gap-3 mb-3">
@@ -562,7 +582,7 @@ pub fn MatchDetailPage() -> impl IntoView {
     // Route param extraction
     let params = use_params_map();
     let match_id = move || params.read().get("id").unwrap_or_default();
-    let detail = Resource::new(match_id, |id| fetch_match_detail(id));
+    let detail = Resource::new(match_id, fetch_match_detail);
 
     // Signals for interactivity
     let (comparison_mode, set_comparison_mode) = signal(ComparisonMode::GameAverage);

@@ -17,8 +17,10 @@ test("champion-pool: page loads with empty state", async ({ teamPage }) => {
   await navigateTo(page, "/champion-pool");
   await page.waitForTimeout(500);
 
-  // Page should render — h1 or main content visible
-  await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
+  // Page should render. The page has no h1 (its title comes from the legacy
+  // SectionHead primitive, which renders a styled div), so check the page
+  // container instead.
+  await expect(page.locator('[data-feedback-label="Champion pool"]')).toBeVisible({ timeout: 5000 });
 
   // Should NOT show a full-page error banner
   const errorBanner = page.locator('[class*="error"], [class*="Error"]').filter({ hasText: /error|failed/i });

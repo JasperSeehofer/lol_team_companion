@@ -1,10 +1,23 @@
+// The #[server] macro generates a client stub that does not inherit item-level
+// attributes, so clippy::too_many_arguments is allowed for this file: save/update
+// server fns take one argument per form field. A params struct is planned with
+// the API-layer refactor.
+#![allow(clippy::too_many_arguments)]
+
 use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape, SectionHead, Stat};
+use crate::components::region::{
+    Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape,
+    SectionHead,
+};
 use crate::components::skeleton::PageLoading;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
-use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES};
+use crate::components::ui::{
+    EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+};
+use crate::models::champion::{
+    note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES,
+};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
 use crate::models::opponent::{Opponent, OpponentPlayerIntel};
 use crate::models::series::Series;
@@ -15,10 +28,9 @@ use std::collections::HashMap;
 
 #[server]
 pub async fn get_champions() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    data_dragon::champions().await.map_err(authz::server_err)
 }
 
 #[server]
@@ -36,32 +48,32 @@ pub async fn save_draft(
     series_id: Option<String>,
     game_number: Option<i32>,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
-    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
-    let comments: Vec<String> = serde_json::from_str(&comments_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let actions: Vec<DraftAction> =
+        serde_json::from_str(&actions_json).map_err(authz::server_err)?;
+    let comments: Vec<String> = serde_json::from_str(&comments_json).map_err(authz::server_err)?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
-    let resolved_team_id = match team_id.filter(|s| !s.is_empty()) {
-        Some(tid) => tid,
-        None => db::get_user_team_id(&db, &user.id)
+    // The team is always the caller's own; a client-sent team_id is only
+    // accepted when it matches.
+    let resolved_team_id = authz::current_team_for(&db, &user)
+        .await?
+        .ok_or_else(|| ServerFnError::new("You must be in a team to create a draft"))?;
+    if let Some(tid) = team_id.filter(|s| !s.is_empty()) {
+        if db::record_key(&tid, "team") != db::record_key(&resolved_team_id, "team") {
+            return Err(ServerFnError::new(authz::NOT_FOUND));
+        }
+    }
+    let series_id = series_id.filter(|s| !s.is_empty());
+    if let Some(sid) = &series_id {
+        db::ensure_team_record(&db, "series", sid, &resolved_team_id)
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?
-            .ok_or_else(|| ServerFnError::new("You must be in a team to create a draft"))?,
-    };
+            .map_err(authz::server_err)?;
+    }
 
     db::save_draft(
         &db,
@@ -81,7 +93,7 @@ pub async fn save_draft(
         game_number,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 #[server]
@@ -99,27 +111,26 @@ pub async fn update_draft(
     series_id: Option<String>,
     game_number: Option<i32>,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
-    let comments: Vec<String> = serde_json::from_str(&comments_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid comments JSON: {e}")))?;
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let actions: Vec<DraftAction> =
+        serde_json::from_str(&actions_json).map_err(authz::server_err)?;
+    let comments: Vec<String> = serde_json::from_str(&comments_json).map_err(authz::server_err)?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
+    let series_id = series_id.filter(|s| !s.is_empty());
+    if let Some(sid) = &series_id {
+        db::ensure_team_record(&db, "series", sid, &team_id)
+            .await
+            .map_err(authz::server_err)?;
+    }
 
     db::update_draft(
         &db,
+        &team_id,
         &draft_id,
         name,
         opponent,
@@ -135,26 +146,19 @@ pub async fn update_draft(
         game_number,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn list_drafts() -> Result<Vec<Draft>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -162,45 +166,31 @@ pub async fn list_drafts() -> Result<Vec<Draft>, ServerFnError> {
 
     db::list_drafts(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn list_user_teams() -> Result<Vec<Team>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     db::get_user_teams(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_ban_priorities() -> Result<Vec<BanPriority>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -208,53 +198,39 @@ pub async fn get_ban_priorities() -> Result<Vec<BanPriority>, ServerFnError> {
 
     db::get_ban_priorities(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn save_ban_priorities(priorities_json: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
-    let priorities: Vec<BanPriority> = serde_json::from_str(&priorities_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    let priorities: Vec<BanPriority> =
+        serde_json::from_str(&priorities_json).map_err(authz::server_err)?;
 
     db::set_ban_priorities(&db, &team_id, priorities)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn list_series_fn() -> Result<Vec<crate::models::series::Series>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -262,7 +238,7 @@ pub async fn list_series_fn() -> Result<Vec<crate::models::series::Series>, Serv
 
     db::list_series(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -272,22 +248,15 @@ pub async fn create_series_fn(
     format: String,
     is_fearless: bool,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     db::create_series(
         &db,
@@ -301,7 +270,7 @@ pub async fn create_series_fn(
         None,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 #[server]
@@ -309,38 +278,38 @@ pub async fn get_fearless_champions(
     series_id: String,
     exclude_draft: Option<String>,
 ) -> Result<Vec<String>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
+        return Ok(Vec::new());
+    };
 
-    db::get_fearless_used_champions(&db, &series_id, exclude_draft.as_deref())
+    db::get_fearless_used_champions(&db, &team_id, &series_id, exclude_draft.as_deref())
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 /// Get champion pool entries for all starters on the user's team.
 /// Returns Vec<(username, role, pool_entries)>.
 #[server]
-pub async fn get_team_pools(
-) -> Result<Vec<(String, String, Vec<crate::models::champion::ChampionPoolEntry>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn get_team_pools() -> Result<
+    Vec<(
+        String,
+        String,
+        Vec<crate::models::champion::ChampionPoolEntry>,
+    )>,
+    ServerFnError,
+> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let _team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -348,7 +317,7 @@ pub async fn get_team_pools(
 
     let (_, members) = match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(t) => t,
         None => return Ok(Vec::new()),
@@ -370,21 +339,14 @@ pub async fn get_team_pools(
 #[server]
 pub async fn get_team_champion_stats(
 ) -> Result<Vec<(String, Vec<ChampionStatSummary>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (_, members) = match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(t) => t,
         None => return Ok(Vec::new()),
@@ -406,16 +368,17 @@ pub async fn get_team_champion_stats(
 pub async fn get_opponent_intel(
     opponent_id: String,
 ) -> Result<Vec<crate::models::opponent::OpponentPlayer>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
+        return Ok(Vec::new());
+    };
 
-    match db::get_opponent(&db, &opponent_id)
+    match db::get_opponent(&db, &team_id, &opponent_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some((_, players)) => Ok(players),
         None => Ok(Vec::new()),
@@ -429,18 +392,28 @@ pub async fn get_opponent_intel(
 pub async fn get_opponent_intel_full(
     opponent_id: String,
 ) -> Result<Vec<OpponentPlayerIntel>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
+    use crate::server::rate_limit::Bucket;
     use crate::server::riot;
     use std::collections::HashMap;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let players = match db::get_opponent(&db, &opponent_id)
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
+        return Ok(Vec::new());
+    };
+    // Calls the Riot API once per scouted player.
+    authz::rate_limit(Bucket::Riot).await?;
+    let riot_client = authz::riot()?;
+    // Opponents are scouted on the team's server.
+    let platform = riot::platform_for(&[db::get_team_region(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
+        .as_deref()]);
+
+    let players = match db::get_opponent(&db, &team_id, &opponent_id)
+        .await
+        .map_err(authz::server_err)?
     {
         Some((_, players)) => players,
         None => return Ok(Vec::new()),
@@ -455,7 +428,7 @@ pub async fn get_opponent_intel_full(
         }
         let total_games = player.recent_champions.len() as u32;
         let mut champion_frequencies: Vec<(String, u32)> = freq_map.into_iter().collect();
-        champion_frequencies.sort_by(|a, b| b.1.cmp(&a.1));
+        champion_frequencies.sort_by_key(|e| std::cmp::Reverse(e.1));
 
         // OTP detection: most-played champion accounts for >60% of scouted games.
         let otp_champion = champion_frequencies.first().and_then(|(name, count)| {
@@ -467,9 +440,9 @@ pub async fn get_opponent_intel_full(
         });
 
         // Mastery data — gracefully absent when API key missing or no PUUID.
-        let mastery_data = if riot::has_api_key() {
+        let mastery_data = if riot_client.is_configured() {
             if let Some(ref puuid) = player.riot_puuid {
-                match riot::fetch_champion_masteries(puuid, riot::platform_route_from_str("EUW")).await {
+                match riot_client.fetch_champion_masteries(puuid, platform).await {
                     Ok(masteries) => masteries.into_iter().take(10).collect(),
                     Err(_) => Vec::new(),
                 }
@@ -495,21 +468,14 @@ pub async fn get_opponent_intel_full(
 pub async fn get_matchup_notes_for_champion(
     champion: String,
 ) -> Result<Vec<(String, crate::models::champion::ChampionNote)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -517,7 +483,7 @@ pub async fn get_matchup_notes_for_champion(
 
     db::get_team_matchup_notes(&db, &team_id, &champion)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -544,21 +510,14 @@ pub struct DraftAnalytics {
 
 #[server]
 pub async fn get_draft_tendency_data() -> Result<Vec<DraftTendency>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -566,7 +525,7 @@ pub async fn get_draft_tendency_data() -> Result<Vec<DraftTendency>, ServerFnErr
 
     let raw = db::get_draft_tendencies(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(raw
         .into_iter()
@@ -581,21 +540,14 @@ pub async fn get_draft_tendency_data() -> Result<Vec<DraftTendency>, ServerFnErr
 
 #[server]
 pub async fn get_draft_analytics() -> Result<DraftAnalytics, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(DraftAnalytics::default()),
@@ -603,7 +555,7 @@ pub async fn get_draft_analytics() -> Result<DraftAnalytics, ServerFnError> {
 
     let data = db::get_draft_outcome_stats(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(DraftAnalytics {
         blue_games: data.blue_games,
@@ -619,21 +571,14 @@ pub async fn get_draft_analytics() -> Result<DraftAnalytics, ServerFnError> {
 /// Returns a list of (draft_id, count) pairs for drafts that have at least one game plan.
 #[server]
 pub async fn get_draft_game_plan_counts() -> Result<Vec<(String, usize)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -641,7 +586,7 @@ pub async fn get_draft_game_plan_counts() -> Result<Vec<(String, usize)>, Server
 
     let plans = db::list_game_plans(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for plan in &plans {
@@ -657,24 +602,17 @@ pub async fn get_draft_game_plan_counts() -> Result<Vec<(String, usize)>, Server
 pub async fn get_pool_notes_for_champions(
     champions_json: String,
 ) -> Result<Vec<(String, Vec<ChampionNote>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    let champions: Vec<String> = serde_json::from_str(&champions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid JSON: {e}")))?;
+    let champions: Vec<String> =
+        serde_json::from_str(&champions_json).map_err(authz::server_err)?;
 
     let notes = db::get_pool_notes_for_champions(&surreal, &user.id, &champions)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Group by champion
     let mut map: std::collections::HashMap<String, Vec<ChampionNote>> =
@@ -692,7 +630,11 @@ pub async fn get_pool_notes_for_champions(
         .collect())
 }
 
-fn build_actions(slots: Vec<Option<String>>, slot_comments: &[Option<String>], roles: &[Option<String>]) -> Vec<DraftAction> {
+fn build_actions(
+    slots: Vec<Option<String>>,
+    slot_comments: &[Option<String>],
+    roles: &[Option<String>],
+) -> Vec<DraftAction> {
     slots
         .into_iter()
         .enumerate()
@@ -753,7 +695,11 @@ const TIERS: &[&str] = &["S+", "S", "A", "B", "C", "D"];
 /// * `role_overrides` - Manual slot→role assignment overrides (keyed by slot index)
 pub fn compute_slot_warnings(
     slots: &[Option<String>],
-    pools: &[(String, String, Vec<crate::models::champion::ChampionPoolEntry>)],
+    pools: &[(
+        String,
+        String,
+        Vec<crate::models::champion::ChampionPoolEntry>,
+    )],
     champions: &HashMap<String, crate::models::champion::Champion>,
     our_side: &str,
     role_overrides: &HashMap<usize, String>,
@@ -762,10 +708,8 @@ pub fn compute_slot_warnings(
 
     // Build a reverse lookup: canonical Data Dragon ID -> Champion
     // This is needed because pool entries store canonical IDs, but champions map uses display names.
-    let id_to_champion: HashMap<&str, &Champion> = champions
-        .values()
-        .map(|c| (c.id.as_str(), c))
-        .collect();
+    let id_to_champion: HashMap<&str, &Champion> =
+        champions.values().map(|c| (c.id.as_str(), c)).collect();
 
     // Our-side pick slot indices and their conventional role mapping
     // Draft order: pick1=top, pick2=jungle, pick3=mid, pick4=bot, pick5=support
@@ -801,9 +745,9 @@ pub fn compute_slot_warnings(
         };
 
         // Find the player whose role matches
-        let player = pools.iter().find(|(_, player_role, _)| {
-            normalize_role(player_role) == normalize_role(role)
-        });
+        let player = pools
+            .iter()
+            .find(|(_, player_role, _)| normalize_role(player_role) == normalize_role(role));
         let (username, _, pool_entries) = match player {
             Some(p) => p,
             None => continue, // no player for this role
@@ -856,10 +800,7 @@ pub fn compute_slot_warnings(
             .find(|tag| !covered_classes.contains(tag.as_str()));
 
         if let Some(class) = missing_class {
-            result[slot_idx] = Some((
-                username.clone(),
-                format!("No {} coverage", class),
-            ));
+            result[slot_idx] = Some((username.clone(), format!("No {} coverage", class)));
         }
         // If all classes are covered (no gap), no warning despite champion not being in pool
     }
@@ -886,10 +827,8 @@ fn normalize_role(role: &str) -> &str {
 /// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
 #[server]
 pub async fn set_draft_mode_pref(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
     // App-layer validation — DB has no ASSERT per Research Pitfall 4
     const VALID: &[&str] = &["auto", "carousel", "war-table", "ledger"];
@@ -897,13 +836,10 @@ pub async fn set_draft_mode_pref(mode: String) -> Result<(), ServerFnError> {
         return Err(ServerFnError::new("Invalid draft mode"));
     }
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
     db::set_user_draft_mode(&db, &user.id, &mode)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(())
 }
 
@@ -946,9 +882,7 @@ pub fn DraftPage() -> impl IntoView {
 
     // Mode preference — signal-driven, persisted via set_draft_mode_pref server fn (18-08)
     // Initialised from auth_user resource; resolve_mode() applies region-coupled default when "auto".
-    let (mode_current, set_mode_current) = signal(
-        resolve_mode("auto", &region, "draft")
-    );
+    let (mode_current, set_mode_current) = signal(resolve_mode("auto", &region, "draft"));
     // Keep mode_current synced with DB value when auth_user loads/refetches
     let region_for_mode = region.clone();
     Effect::new(move |_| {
@@ -1157,7 +1091,10 @@ pub fn DraftPage() -> impl IntoView {
                 if !d_opp.is_empty() {
                     set_opponent.set(d_opp.clone());
                     if let Some(Ok(opps)) = opponents_list.get_untracked() {
-                        if let Some(matched) = opps.iter().find(|o| o.id.as_deref() == Some(d_opp.as_str())) {
+                        if let Some(matched) = opps
+                            .iter()
+                            .find(|o| o.id.as_deref() == Some(d_opp.as_str()))
+                        {
                             set_opp_filter_text.set(matched.name.clone());
                             set_selected_opponent_id.set(d_opp.clone());
                         } else {
@@ -1253,11 +1190,7 @@ pub fn DraftPage() -> impl IntoView {
     });
 
     let used_champions = move || {
-        let mut used: Vec<String> = draft_slots
-            .get()
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut used: Vec<String> = draft_slots.get().into_iter().flatten().collect();
         // In fearless mode, also include champions used in prior series games
         for champ in fearless_used.get() {
             if !used.contains(&champ) {
@@ -1298,9 +1231,14 @@ pub fn DraftPage() -> impl IntoView {
         // Auto-guess role for pick slots only (Phase 8)
         let (_, kind, _) = slot_meta(slot_idx);
         if kind == "pick" {
-            let guessed = champions_resource.get_untracked()
+            let guessed = champions_resource
+                .get_untracked()
                 .and_then(|r| r.ok())
-                .and_then(|champs| champs.into_iter().find(|c| c.name == champion_name || c.id == champion_name))
+                .and_then(|champs| {
+                    champs
+                        .into_iter()
+                        .find(|c| c.name == champion_name || c.id == champion_name)
+                })
                 .map(|c| guess_role_from_tags(&c.tags).to_string())
                 .unwrap_or_else(|| "mid".to_string());
             set_role_assignments.update(|roles| {
@@ -1400,7 +1338,10 @@ pub fn DraftPage() -> impl IntoView {
     let do_save = move |_| {
         let name = draft_name.get_untracked();
         if name.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Give this draft a name before saving.".into()));
+            toast.show.run((
+                ToastKind::Error,
+                "Give this draft a name before saving.".into(),
+            ));
             return;
         }
         let opp = opponent.get_untracked();
@@ -1413,11 +1354,29 @@ pub fn DraftPage() -> impl IntoView {
         let acts_json = serde_json::to_string(&actions).unwrap_or_default();
         let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
         let tags_json = serde_json::to_string(&tags.get_untracked()).unwrap_or_default();
-        let wc = { let s = win_conditions.get_untracked(); if s.is_empty() { None } else { Some(s) } };
-        let wo = { let s = watch_out.get_untracked(); if s.is_empty() { None } else { Some(s) } };
+        let wc = {
+            let s = win_conditions.get_untracked();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        };
+        let wo = {
+            let s = watch_out.get_untracked();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        };
         let existing_id = loaded_draft_id.get_untracked();
         let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-        let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
+        let g_num = if s_id.is_some() {
+            Some(active_game_number.get_untracked())
+        } else {
+            None
+        };
 
         leptos::task::spawn_local(async move {
             let opp_opt = if opp.is_empty() { None } else { Some(opp) };
@@ -1425,8 +1384,18 @@ pub fn DraftPage() -> impl IntoView {
 
             if let Some(draft_id) = existing_id {
                 match update_draft(
-                    draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
-                    tags_json, wc, wo, s_id, g_num,
+                    draft_id,
+                    name,
+                    opp_opt,
+                    acts_json,
+                    cmts_json,
+                    rate,
+                    Some(side),
+                    tags_json,
+                    wc,
+                    wo,
+                    s_id,
+                    g_num,
                 )
                 .await
                 {
@@ -1438,8 +1407,18 @@ pub fn DraftPage() -> impl IntoView {
                 }
             } else {
                 match save_draft(
-                    name, opp_opt, team_opt, acts_json, cmts_json, rate, Some(side),
-                    tags_json, wc, wo, s_id, g_num,
+                    name,
+                    opp_opt,
+                    team_opt,
+                    acts_json,
+                    cmts_json,
+                    rate,
+                    Some(side),
+                    tags_json,
+                    wc,
+                    wo,
+                    s_id,
+                    g_num,
                 )
                 .await
                 {
@@ -1514,19 +1493,41 @@ pub fn DraftPage() -> impl IntoView {
             let acts_json = serde_json::to_string(&actions).unwrap_or_default();
             let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
             let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
-            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
-            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
+            let wc = if wc_val.is_empty() {
+                None
+            } else {
+                Some(wc_val)
+            };
+            let wo = if wo_val.is_empty() {
+                None
+            } else {
+                Some(wo_val)
+            };
             let opp_opt = if opp.is_empty() { None } else { Some(opp) };
             let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-            let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
+            let g_num = if s_id.is_some() {
+                Some(active_game_number.get_untracked())
+            } else {
+                None
+            };
 
             use wasm_bindgen::prelude::*;
             let cb = Closure::once(move || {
                 if let Some(draft_id) = existing_id {
                     leptos::task::spawn_local(async move {
                         let _ = update_draft(
-                            draft_id, name, opp_opt, acts_json, cmts_json, rate, Some(side),
-                            tags_json, wc, wo, s_id, g_num,
+                            draft_id,
+                            name,
+                            opp_opt,
+                            acts_json,
+                            cmts_json,
+                            rate,
+                            Some(side),
+                            tags_json,
+                            wc,
+                            wo,
+                            s_id,
+                            g_num,
                         )
                         .await;
                         set_auto_save_status.set("saved");
@@ -1550,15 +1551,18 @@ pub fn DraftPage() -> impl IntoView {
     let (role_overrides, set_role_overrides) = signal(HashMap::<usize, String>::new());
 
     let warning_slots_memo = Memo::new(move |_| {
-        let slots = draft_slots.get();       // tracked
-        let side = our_side.get();           // tracked
+        let slots = draft_slots.get(); // tracked
+        let side = our_side.get(); // tracked
         let overrides = role_overrides.get(); // tracked
-        let pools = team_pools.get()
+        let pools = team_pools.get().and_then(|r| r.ok()).unwrap_or_default();
+        let champs = champions_resource
+            .get()
             .and_then(|r| r.ok())
-            .unwrap_or_default();
-        let champs = champions_resource.get()
-            .and_then(|r| r.ok())
-            .map(|v| v.into_iter().map(|c| (c.name.clone(), c)).collect::<HashMap<_, _>>())
+            .map(|v| {
+                v.into_iter()
+                    .map(|c| (c.name.clone(), c))
+                    .collect::<HashMap<_, _>>()
+            })
             .unwrap_or_default();
         compute_slot_warnings(&slots, &pools, &champs, &side, &overrides)
     });
@@ -1804,10 +1808,7 @@ pub fn DraftPage() -> impl IntoView {
                                             let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
                                             let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
                                             let tid = if team_id_val.is_empty() { None } else { Some(team_id_val) };
-                                            match save_draft(name_val, opp_opt, tid, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await {
-                                                Ok(new_id) => Some(new_id),
-                                                Err(_) => None,
-                                            }
+                                            save_draft(name_val, opp_opt, tid, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await.ok()
                                         };
 
                                         #[allow(unused_variables)]
@@ -3341,7 +3342,7 @@ pub fn DraftPage() -> impl IntoView {
                                             *champ_totals.entry(t.champion.clone()).or_insert(0) += t.count;
                                         }
                                         let mut champs: Vec<(String, i32)> = champ_totals.into_iter().filter(|(_, c)| *c >= 2).collect();
-                                        champs.sort_by(|a, b| b.1.cmp(&a.1));
+                                        champs.sort_by_key(|e| std::cmp::Reverse(e.1));
 
                                         if champs.is_empty() {
                                             return view! {
@@ -3398,7 +3399,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                 <th class="text-muted px-1 py-1">"Total"</th>
                                                                 {(0..20).map(|i| {
                                                                     let (side, kind, _) = crate::components::draft_board::slot_meta(i);
-                                                                    let label = format!("{}{}", &side[..1].to_uppercase(), if kind.contains("ban") { "B" } else { "P" });
+                                                                    let label = format!("{}{}", side[..1].to_uppercase(), if kind.contains("ban") { "B" } else { "P" });
                                                                     view! { <th class="text-muted px-0.5 py-1 text-center" title=format!("{side} {kind}")>{label}</th> }
                                                                 }).collect_view()}
                                                             </tr>
@@ -3763,7 +3764,6 @@ fn DraftCarouselView(
     set_slot_comment_input: WriteSignal<String>,
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
     let region_for_head = region.clone();
     let region_for_board = region.clone();
     let region_for_loading = region.clone();
@@ -3776,17 +3776,8 @@ fn DraftCarouselView(
                 title="Draft Carousel".to_string()
             />
 
-            // Pandemonium mismatch patch: confidence + sample-size annotation
-            {if is_pandemonium {
-                view! {
-                    <div class="mb-3 flex items-center gap-3 py-2 border-b border-divider/50">
-                        <span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">"Pick confidence:"</span>
-                        <span class="font-mono text-[10px] text-accent">"conf 0.71"</span>
-                        <span class="font-mono text-[10px] text-muted">" · 1,400 similar comps"</span>
-                    </div>
-                }.into_any()
-            } else {
-                // Demacia mismatch patch: onDeck halo shown inline via ring-accent on active slot
+            {
+                // onDeck halo shown inline via ring-accent on active slot
                 // The DraftBoard itself handles the active-slot ring; the additional halo ring
                 // is rendered here as a context indicator for the next-pick slot.
                 view! {
@@ -3794,8 +3785,8 @@ fn DraftCarouselView(
                         <div class="w-3 h-3 rounded-full ring-2 ring-accent/60 animate-pulse"></div>
                         <span class="font-imperial text-[10px] uppercase tracking-[0.18em] text-muted">"Next pick"</span>
                     </div>
-                }.into_any()
-            }}
+                }
+            }
 
             <Suspense fallback=move || view! { <PageLoading region=region_for_loading.clone() variant="draft".to_string() /> }>
                 {move || champions_resource.get().map(|result| match result {
@@ -3945,7 +3936,6 @@ fn DraftWarTableView(
     set_slot_comment_input: WriteSignal<String>,
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
-    let is_demacia = region != "pandemonium";
     let region_for_head = region.clone();
     let region_for_board = region.clone();
     let region_for_card = region.clone();
@@ -3992,33 +3982,18 @@ fn DraftWarTableView(
                 })}
             </Suspense>
 
-            // Demacia mismatch patch: composition pillars + composite score
-            {if is_demacia {
-                view! {
-                    <div class="mt-4">
-                        <Card region=region_for_card variant="gilt".to_string()>
-                            <SectionHead
-                                region=region_for_pillars.clone()
-                                eyebrow="COMPOSITION".to_string()
-                                title="Pillars".to_string()
-                            />
-                            <div class="grid grid-cols-4 gap-4 mt-4">
-                                <Stat label="DPS".to_string() value="72".to_string() unit="/100".to_string() />
-                                <Stat label="FRONT".to_string() value="58".to_string() unit="/100".to_string() />
-                                <Stat label="POKE".to_string() value="34".to_string() unit="/100".to_string() />
-                                <Stat label="UTIL".to_string() value="61".to_string() unit="/100".to_string() />
-                            </div>
-                            <div class="mt-4 flex items-baseline gap-2">
-                                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">"Composite Score"</span>
-                                <span class="font-display text-[28px] text-accent">"81"</span>
-                                <span class="font-mono text-muted text-[12px]">"/ 100"</span>
-                            </div>
-                        </Card>
-                    </div>
-                }.into_any()
-            } else {
-                view! { <span></span> }.into_any()
-            }}
+            // Composition pillars: not computed yet. Show an honest empty state
+            // instead of placeholder scores (the Draft Graph milestone fills this).
+            <div class="mt-4">
+                <Card region=region_for_card variant="gilt".to_string()>
+                    <SectionHead
+                        region=region_for_pillars.clone()
+                        eyebrow="COMPOSITION".to_string()
+                        title="Pillars".to_string()
+                    />
+                    <EmptyState message="Composition scores are not computed yet. Once the Draft Graph ships, damage, frontline, poke and utility will be scored from the picks on this board, with the reason for each score." />
+                </Card>
+            </div>
 
             // Role override dropdowns for our-side pick slots
             {move || {
@@ -4132,14 +4107,14 @@ fn DraftLedgerView(
     let region_for_red = region.clone();
     let region_for_journal = region.clone();
 
-    // Slot layout per 20-slot draft board convention:
-    //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,14,16
-    //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,13,15
+    // Slot layout per 20-slot draft board convention (see `slot_meta`):
+    //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,13,15
+    //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,12,14
     // Using canonical pick indices for side columns (5 picks each).
     let blue_pick_slots: &[usize] = &[6, 9, 10, 17, 18];
-    let red_pick_slots:  &[usize] = &[7, 8, 11, 16, 19];
-    let blue_ban_slots:  &[usize] = &[0, 2, 4, 14, 16];
-    let red_ban_slots:   &[usize] = &[1, 3, 5, 13, 15];
+    let red_pick_slots: &[usize] = &[7, 8, 11, 16, 19];
+    let blue_ban_slots: &[usize] = &[0, 2, 4, 13, 15];
+    let red_ban_slots: &[usize] = &[1, 3, 5, 12, 14];
 
     if is_pandemonium {
         view! {
@@ -4445,27 +4420,45 @@ mod tests {
     fn champion_in_pool_no_warning() {
         // Player has Darius in pool -> picking Darius = no warning
         let mut champs = HashMap::new();
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Darius".to_string()); // Blue pick 1 = top
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[6].is_none(), "Champion in pool should not trigger warning");
+        assert!(
+            result[6].is_none(),
+            "Champion in pool should not trigger warning"
+        );
     }
 
     #[test]
     fn champion_not_in_pool_with_class_gap_warns() {
         // Player has only Fighters, picks a Mage (not in pool + class gap)
         let mut champs = HashMap::new();
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
         champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Syndra".to_string()); // Blue pick 1 = top
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[6].is_some(), "Not-in-pool champion with class gap should warn");
+        assert!(
+            result[6].is_some(),
+            "Not-in-pool champion with class gap should warn"
+        );
         let (name, detail) = result[6].as_ref().unwrap();
         assert_eq!(name, "TopPlayer");
         assert!(detail.contains("Mage"), "Should mention the missing class");
@@ -4476,14 +4469,23 @@ mod tests {
         // Player has Darius (Fighter) in pool, picks Garen (also Fighter, not in pool)
         // No class gap because Fighter is already covered
         let mut champs = HashMap::new();
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
         champs.insert("Garen".to_string(), make_champion("Garen", vec!["Fighter"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Garen".to_string());
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[6].is_none(), "No class gap = no warning even if champion not in pool");
+        assert!(
+            result[6].is_none(),
+            "No class gap = no warning even if champion not in pool"
+        );
     }
 
     #[test]
@@ -4495,16 +4497,25 @@ mod tests {
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[7] = Some("Syndra".to_string()); // Red pick 1 (not our side when blue)
         let result = compute_slot_warnings(&slots, &pools, &champs, "blue", &HashMap::new());
-        assert!(result[7].is_none(), "Opponent-side slots should not have warnings");
+        assert!(
+            result[7].is_none(),
+            "Opponent-side slots should not have warnings"
+        );
     }
 
     #[test]
     fn side_switch_changes_checked_slots() {
         let mut champs = HashMap::new();
         champs.insert("Syndra".to_string(), make_champion("Syndra", vec!["Mage"]));
-        champs.insert("Darius".to_string(), make_champion("Darius", vec!["Fighter"]));
-        let pools = vec![("TopPlayer".to_string(), "top".to_string(),
-            vec![make_pool_entry("user:u1", "Darius", "top")])];
+        champs.insert(
+            "Darius".to_string(),
+            make_champion("Darius", vec!["Fighter"]),
+        );
+        let pools = vec![(
+            "TopPlayer".to_string(),
+            "top".to_string(),
+            vec![make_pool_entry("user:u1", "Darius", "top")],
+        )];
         let mut slots: Vec<Option<String>> = vec![None; 20];
         slots[6] = Some("Syndra".to_string()); // Blue pick 1
         slots[7] = Some("Syndra".to_string()); // Red pick 1
@@ -4518,7 +4529,13 @@ mod tests {
 
     #[test]
     fn empty_inputs_no_panic() {
-        let result = compute_slot_warnings(&vec![None; 20], &[], &HashMap::new(), "blue", &HashMap::new());
+        let result = compute_slot_warnings(
+            &vec![None; 20],
+            &[],
+            &HashMap::new(),
+            "blue",
+            &HashMap::new(),
+        );
         assert_eq!(result.len(), 20);
         assert!(result.iter().all(|w| w.is_none()));
     }

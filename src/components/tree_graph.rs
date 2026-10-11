@@ -5,8 +5,8 @@ use leptos::prelude::*;
 // ----------------------------------------------------------------------------
 // Phase 17 visual restyle.
 //
-// PRESERVED behaviour (per CLAUDE.md rule 41 + .planning/phases/17-ui-consolidation/
-// 17-PATTERNS.md):
+// PRESERVED behaviour (per the Phase 17 patterns doc, archived under git tag
+// planning-archive-2026-10):
 //   - LayoutNode + the recursive layout algorithm (`compute_widths`,
 //     `assign_positions`, `to_layout_nodes`) are untouched.
 //   - Tree assembly is performed upstream in `src/server/db.rs` via the
@@ -281,16 +281,10 @@ fn canvas_size(roots: &[LayoutNode]) -> (f64, f64) {
 fn edge_base_style(state: NodeState, side: Option<EdgeSide>) -> &'static str {
     match (state, side) {
         // Ghost lineage: faint, dashed-feel, regardless of side.
-        (NodeState::Ghost, _) => {
-            "stroke: var(--color-muted); stroke-width: 1; opacity: 0.25"
-        }
+        (NodeState::Ghost, _) => "stroke: var(--color-muted); stroke-width: 1; opacity: 0.25",
         // Side-tinted edges (when diff actions exist).
-        (_, Some(EdgeSide::Us)) => {
-            "stroke: var(--color-info); stroke-width: 1.5; opacity: 0.7"
-        }
-        (_, Some(EdgeSide::Them)) => {
-            "stroke: var(--color-danger); stroke-width: 1.5; opacity: 0.7"
-        }
+        (_, Some(EdgeSide::Us)) => "stroke: var(--color-info); stroke-width: 1.5; opacity: 0.7",
+        (_, Some(EdgeSide::Them)) => "stroke: var(--color-danger); stroke-width: 1.5; opacity: 0.7",
         // Alternate / fallback.
         _ => "stroke: var(--color-secondary); stroke-width: 1.5; opacity: 0.6",
     }

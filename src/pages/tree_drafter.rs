@@ -3,7 +3,9 @@ use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::region::*;
 use crate::components::tree_graph::TreeGraph;
-use crate::components::ui::{ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind};
+use crate::components::ui::{
+    ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+};
 use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
 use leptos::prelude::*;
@@ -15,29 +17,38 @@ use std::collections::HashMap;
 
 #[server]
 pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
+    data_dragon::champions().await.map_err(authz::server_err)
+}
+
+/// Whether the current user belongs to a team. Drives the empty state of the
+/// tree list (no team: point to the roster page; team but no trees: point to
+/// the create form).
+#[server]
+pub async fn user_has_team() -> Result<bool, ServerFnError> {
+    use crate::server::{authz, db};
+
+    let Some(user) = authz::optional_user().await? else {
+        return Ok(false);
+    };
+    let db = authz::db()?;
+    let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)?;
+    Ok(team_id.is_some())
 }
 
 #[server]
 pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -45,50 +56,37 @@ pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
 
     db::list_draft_trees(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn create_tree(name: String, opponent: Option<String>) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     db::create_draft_tree(&db, &team_id, &user.id, name, opponent)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_tree(tree_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::delete_draft_tree(&db, &tree_id)
+    db::delete_draft_tree(&db, &team_id, &tree_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -97,40 +95,28 @@ pub async fn update_tree_meta(
     name: String,
     opponent: Option<String>,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::update_draft_tree(&db, &tree_id, name, opponent)
+    db::update_draft_tree(&db, &team_id, &tree_id, name, opponent)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_tree_nodes(tree_id: String) -> Result<Vec<DraftTreeNode>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::get_tree_nodes(&db, &tree_id)
+    db::get_tree_nodes(&db, &team_id, &tree_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -139,21 +125,15 @@ pub async fn add_branch(
     parent_id: Option<String>,
     label: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::create_tree_node(&db, &tree_id, parent_id, label)
+    db::create_tree_node(&db, &team_id, &tree_id, parent_id, label)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -164,43 +144,39 @@ pub async fn save_node(
     is_improvised: bool,
     actions_json: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
+    let actions: Vec<DraftAction> =
+        serde_json::from_str(&actions_json).map_err(authz::server_err)?;
 
-    db::update_tree_node(&db, &node_id, label, notes, is_improvised, actions)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    db::update_tree_node(
+        &db,
+        &team_id,
+        &node_id,
+        label,
+        notes,
+        is_improvised,
+        actions,
+    )
+    .await
+    .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn remove_node(node_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::delete_tree_node(&db, &node_id)
+    db::delete_tree_node(&db, &team_id, &node_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +275,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     // Resources
     let champions_resource = Resource::new(|| (), |_| get_champions_for_tree());
     let trees = Resource::new(|| (), |_| list_trees());
+    let has_team = Resource::new(|| (), |_| user_has_team());
 
     // Reactive resource for tree nodes — depends on selected_tree_id
     let nodes_resource = Resource::new(
@@ -315,7 +292,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let do_create_tree = Callback::new(move |_: ()| {
         let name = new_tree_name.get_untracked();
         if name.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Enter a tree name.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "Enter a tree name.".into()));
             return;
         }
         let opp = new_tree_opponent.get_untracked();
@@ -506,14 +485,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
                 });
             });
             if let Some(win) = web_sys::window() {
-                match win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                if let Ok(timer_id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
                     cb.as_ref().unchecked_ref(),
                     2000,
                 ) {
-                    Ok(timer_id) => {
-                        auto_save_node_timer.set(Some(timer_id));
-                    }
-                    Err(_) => {}
+                    auto_save_node_timer.set(Some(timer_id));
                 }
             }
             cb.forget();
@@ -529,7 +505,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
         let parent = adding_branch_to.get_untracked();
         let label = new_branch_label.get_untracked();
         if label.trim().is_empty() {
-            toast.show.run((ToastKind::Error, "Enter a branch label.".into()));
+            toast
+                .show
+                .run((ToastKind::Error, "Enter a branch label.".into()));
             return;
         }
         let tree_id_for_select = tree_id.clone();
@@ -786,15 +764,27 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         <h3 class="text-muted text-xs font-semibold uppercase tracking-wider px-1">"Your Trees"</h3>
                         <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                             {move || trees.get().map(|result| match result {
-                                Ok(list) if list.is_empty() => view! {
-                                    <div class="text-center py-6">
-                                        <p class="text-dimmed text-sm mb-3">"No draft trees yet"</p>
-                                        <p class="text-dimmed text-xs mb-4">"Create or join a team to get started."</p>
-                                        <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
-                                            "Go to Team"
-                                        </a>
-                                    </div>
-                                }.into_any(),
+                                Ok(list) if list.is_empty() => {
+                                    let in_team = matches!(has_team.get(), Some(Ok(true)));
+                                    if in_team {
+                                        view! {
+                                            <div class="text-center py-6">
+                                                <p class="text-muted text-sm mb-2">"No draft trees yet"</p>
+                                                <p class="text-muted text-xs">"Name a tree above and press Create Tree. Your team's trees will be listed here."</p>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="text-center py-6">
+                                                <p class="text-muted text-sm mb-3">"No draft trees yet"</p>
+                                                <p class="text-muted text-xs mb-4">"Draft trees are shared with your team. Create or join a team to get started."</p>
+                                                <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
+                                                    "Go to Team Roster"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }
                                 Ok(list) => view! {
                                     <div class="flex flex-col gap-1.5">
                                         {list.into_iter().map(|t| {
@@ -899,7 +889,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             return view! {
                                 <div class="flex-1 flex items-center justify-center">
                                     <div class="text-center">
-                                        <div class="text-dimmed text-6xl mb-4">"&#x1f333;"</div>
+                                        <div class="text-dimmed text-6xl mb-4" aria-hidden="true">"\u{1f333}"</div>
                                         <p class="text-muted text-lg">"Select or create a tree to start planning"</p>
                                     </div>
                                 </div>

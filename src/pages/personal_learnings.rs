@@ -1,3 +1,9 @@
+// The #[server] macro generates a client stub that does not inherit item-level
+// attributes, so clippy::too_many_arguments is allowed for this file: save/update
+// server fns take one argument per form field. A params struct is planned with
+// the API-layer refactor.
+#![allow(clippy::too_many_arguments)]
+
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::ui::{ErrorBanner, ToastContext, ToastKind};
 use crate::models::champion::Champion;
@@ -11,39 +17,28 @@ use std::collections::BTreeMap;
 
 #[server]
 pub async fn list_learnings() -> Result<Vec<PersonalLearning>, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = match auth.user {
-        Some(u) => u,
-        None => return Ok(Vec::new()),
+    let Some(user) = authz::optional_user().await? else {
+        return Ok(Vec::new());
     };
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db = authz::db()?;
 
     db::list_personal_learnings(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_learning(id: String) -> Result<Option<PersonalLearning>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
-    db::get_personal_learning(&db, &id)
+    db::get_personal_learning(&db, &user.id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -61,40 +56,54 @@ pub async fn save_learning(
     game_timestamp_ms: String,
     event_name: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     let learning = PersonalLearning {
         id: None,
         user_id: user.id,
         title,
         learning_type,
-        champion: if champion.is_empty() { None } else { Some(champion) },
-        opponent: if opponent.is_empty() { None } else { Some(opponent) },
+        champion: if champion.is_empty() {
+            None
+        } else {
+            Some(champion)
+        },
+        opponent: if opponent.is_empty() {
+            None
+        } else {
+            Some(opponent)
+        },
         what_happened,
         what_i_learned,
         next_time,
         tags,
-        win_loss: if win_loss.is_empty() { None } else { Some(win_loss) },
-        match_riot_id: if match_riot_id.is_empty() { None } else { Some(match_riot_id) },
+        win_loss: if win_loss.is_empty() {
+            None
+        } else {
+            Some(win_loss)
+        },
+        match_riot_id: if match_riot_id.is_empty() {
+            None
+        } else {
+            Some(match_riot_id)
+        },
         game_timestamp_ms: game_timestamp_ms.parse::<i64>().ok(),
-        event_name: if event_name.is_empty() { None } else { Some(event_name) },
+        event_name: if event_name.is_empty() {
+            None
+        } else {
+            Some(event_name)
+        },
         created_at: None,
     };
 
     db::create_personal_learning(&surreal, learning)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -113,65 +122,73 @@ pub async fn update_learning(
     game_timestamp_ms: String,
     event_name: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    let tags: Vec<String> = serde_json::from_str(&tags_json)
-        .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).map_err(authz::server_err)?;
 
     let learning = PersonalLearning {
         id: Some(id),
-        user_id: user.id,
+        user_id: user.id.clone(),
         title,
         learning_type,
-        champion: if champion.is_empty() { None } else { Some(champion) },
-        opponent: if opponent.is_empty() { None } else { Some(opponent) },
+        champion: if champion.is_empty() {
+            None
+        } else {
+            Some(champion)
+        },
+        opponent: if opponent.is_empty() {
+            None
+        } else {
+            Some(opponent)
+        },
         what_happened,
         what_i_learned,
         next_time,
         tags,
-        win_loss: if win_loss.is_empty() { None } else { Some(win_loss) },
-        match_riot_id: if match_riot_id.is_empty() { None } else { Some(match_riot_id) },
+        win_loss: if win_loss.is_empty() {
+            None
+        } else {
+            Some(win_loss)
+        },
+        match_riot_id: if match_riot_id.is_empty() {
+            None
+        } else {
+            Some(match_riot_id)
+        },
         game_timestamp_ms: game_timestamp_ms.parse::<i64>().ok(),
-        event_name: if event_name.is_empty() { None } else { Some(event_name) },
+        event_name: if event_name.is_empty() {
+            None
+        } else {
+            Some(event_name)
+        },
         created_at: None,
     };
 
-    db::update_personal_learning(&surreal, learning)
+    db::update_personal_learning(&surreal, &user.id, learning)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_learning(id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
-    db::delete_personal_learning(&db, &id)
+    db::delete_personal_learning(&db, &user.id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_champions_for_learnings() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    data_dragon::champions().await.map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +196,7 @@ pub async fn get_champions_for_learnings() -> Result<Vec<Champion>, ServerFnErro
 // ---------------------------------------------------------------------------
 
 fn champion_icon_url(name: &str) -> String {
-    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{name}.png")
+    crate::models::ddragon::champion_icon_url(name)
 }
 
 // ---------------------------------------------------------------------------
@@ -792,36 +809,13 @@ pub fn NewLearningPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             let result = if editing {
                 update_learning(
-                    edit_id,
-                    title_val,
-                    lt,
-                    champ,
-                    opp,
-                    wh,
-                    wil,
-                    nt,
-                    tags_json,
-                    wl,
-                    mrid,
-                    gts,
-                    en,
+                    edit_id, title_val, lt, champ, opp, wh, wil, nt, tags_json, wl, mrid, gts, en,
                 )
                 .await
                 .map(|_| String::new())
             } else {
                 save_learning(
-                    title_val,
-                    lt,
-                    champ,
-                    opp,
-                    wh,
-                    wil,
-                    nt,
-                    tags_json,
-                    wl,
-                    mrid,
-                    gts,
-                    en,
+                    title_val, lt, champ, opp, wh, wil, nt, tags_json, wl, mrid, gts, en,
                 )
                 .await
             };
@@ -837,7 +831,9 @@ pub fn NewLearningPage() -> impl IntoView {
                     }
                 }
                 Err(e) => {
-                    save_error.set(Some(format!("Failed to save. Check your connection and try again. ({e})")));
+                    save_error.set(Some(format!(
+                        "Failed to save. Check your connection and try again. ({e})"
+                    )));
                 }
             }
         });

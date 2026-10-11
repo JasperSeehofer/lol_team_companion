@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use leptos::callback::Callback;
+use leptos::prelude::*;
 
 /// A styled error banner for page-level and resource errors.
 ///
@@ -64,9 +64,7 @@ pub fn ToastProvider(children: Children) -> impl IntoView {
     let next_id = StoredValue::new(std::sync::atomic::AtomicU64::new(0u64));
 
     let show = Callback::new(move |(kind, message): (ToastKind, String)| {
-        let id = next_id.with_value(|c| {
-            c.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        });
+        let id = next_id.with_value(|c| c.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
 
         // Enforce max 3 visible: remove oldest success toast before pushing if at capacity
         set_toasts.update(|v| {
@@ -75,7 +73,11 @@ pub fn ToastProvider(children: Children) -> impl IntoView {
                     v.remove(pos);
                 }
             }
-            v.push(ToastEntry { id, kind: kind.clone(), message });
+            v.push(ToastEntry {
+                id,
+                kind: kind.clone(),
+                message,
+            });
         });
 
         // Auto-dismiss success toasts after 4 seconds
@@ -173,7 +175,8 @@ pub fn SkeletonLine(
 /// A card-shaped animated skeleton block. Height is a Tailwind h-* class.
 #[component]
 pub fn SkeletonCard(#[prop(default = "h-24")] height: &'static str) -> impl IntoView {
-    let cls = format!("animate-pulse bg-elevated rounded-xl border border-divider/30 {height} w-full");
+    let cls =
+        format!("animate-pulse bg-elevated rounded-xl border border-divider/30 {height} w-full");
     view! { <div class=cls></div> }
 }
 

@@ -1,7 +1,7 @@
 use crate::app::InitialTheme;
 use crate::components::region::*;
 use crate::components::skeleton::{PageEmpty, PageLoading};
-use crate::components::ui::{ErrorBanner, StatusMessage, ToastContext, ToastKind};
+use crate::components::ui::{EmptyState, ErrorBanner, StatusMessage, ToastContext, ToastKind};
 use crate::models::match_data::{GoalProgressPayload, PlayerMatchStats, RankedSnapshot};
 use crate::models::user::RankedInfo;
 use leptos::prelude::*;
@@ -26,17 +26,10 @@ pub struct SoloDashboardData {
 pub async fn get_solo_dashboard(
     queue_filter: Option<i32>,
 ) -> Result<SoloDashboardData, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let has_puuid = user
         .riot_puuid
@@ -47,15 +40,15 @@ pub async fn get_solo_dashboard(
     // Read last_solo_sync from DB
     let should_auto_sync = db::get_should_auto_sync(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let ranked = db::get_latest_ranked_snapshot(&surreal, &user.id, "RANKED_SOLO_5x5")
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let matches = db::get_solo_matches(&surreal, &user.id, queue_filter, 20)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(SoloDashboardData {
         ranked,
@@ -67,45 +60,45 @@ pub async fn get_solo_dashboard(
 
 #[server]
 pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
     use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let puuid = user
         .riot_puuid
         .as_deref()
         .filter(|p| !p.is_empty())
-        .ok_or_else(|| {
-            ServerFnError::new("Link your Riot account on your profile first")
-        })?
+        .ok_or_else(|| ServerFnError::new("Link your Riot account on your profile first"))?
         .to_string();
 
-    let region = user.riot_region.as_deref().unwrap_or("EUW").to_string();
-    let platform = riot::platform_route_from_str(&region);
+    authz::rate_limit(crate::server::rate_limit::Bucket::Riot).await?;
+    let riot_client = authz::riot()?;
+    // Match history plus the ranked lookup.
+    riot_client
+        .ensure_headroom(riot::MATCH_HISTORY_REQUESTS + 1)
+        .map_err(authz::server_err)?;
+    // After the budget check, so "Riot is busy" does not also start the cooldown.
+    authz::user_cooldown("solo_sync", &user, std::time::Duration::from_secs(60))?;
+    let platform = riot::platform_for(&[user.riot_region.as_deref()]);
 
-    let matches = riot::fetch_match_history(&puuid, None, platform)
+    let matches = riot_client
+        .fetch_match_history(&puuid, None, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let new_count = matches.len();
 
     db::store_matches_with_synced_by(&surreal, &user.id, matches, Some(&user.id))
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Fetch and store ranked snapshot
-    let ranked_entries = riot::fetch_ranked_data(&puuid, platform)
+    let ranked_entries = riot_client
+        .fetch_ranked_data(&puuid, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     for entry in ranked_entries {
         if entry.queue_type.contains("RANKED_SOLO") || entry.queue_type.contains("RANKED_FLEX") {
@@ -120,89 +113,107 @@ pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
                 entry.losses,
             )
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+            .map_err(authz::server_err)?;
         }
     }
 
     db::update_last_solo_sync(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(new_count as i32)
 }
 
 #[server]
 pub async fn get_lp_history(window: String) -> Result<Vec<RankedSnapshot>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
     let cutoff = window_to_cutoff(&window);
-    db::get_lp_history(&surreal, &user.id, cutoff).await.map_err(|e| ServerFnError::new(e.to_string()))
+    db::get_lp_history(&surreal, &user.id, cutoff)
+        .await
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn compute_goal_progress() -> Result<GoalProgressPayload, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-    db::compute_goal_progress(&surreal, &user.id).await.map_err(|e| ServerFnError::new(e.to_string()))
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    db::compute_goal_progress(&surreal, &user.id)
+        .await
+        .map_err(authz::server_err)
 }
 
 #[server]
-pub async fn upsert_personal_goal(goal_type: String, target_value: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+pub async fn upsert_personal_goal(
+    goal_type: String,
+    target_value: String,
+) -> Result<(), ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal = use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-    if !matches!(goal_type.as_str(), "rank_target" | "cs_per_min" | "deaths_per_game") {
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    if !matches!(
+        goal_type.as_str(),
+        "rank_target" | "cs_per_min" | "deaths_per_game"
+    ) {
         return Err(ServerFnError::new("Invalid goal_type"));
     }
     if goal_type == "cs_per_min" {
-        let v: f32 = target_value.parse().map_err(|_| ServerFnError::new("CS/min must be a number"))?;
-        if !(0.0..=15.0).contains(&v) { return Err(ServerFnError::new("CS/min must be between 0 and 15")); }
+        let v: f32 = target_value
+            .parse()
+            .map_err(|_| ServerFnError::new("CS/min must be a number"))?;
+        if !(0.0..=15.0).contains(&v) {
+            return Err(ServerFnError::new("CS/min must be between 0 and 15"));
+        }
     }
     if goal_type == "deaths_per_game" {
-        let v: i32 = target_value.parse().map_err(|_| ServerFnError::new("Deaths must be a whole number"))?;
-        if !(0..=20).contains(&v) { return Err(ServerFnError::new("Deaths must be between 0 and 20")); }
+        let v: i32 = target_value
+            .parse()
+            .map_err(|_| ServerFnError::new("Deaths must be a whole number"))?;
+        if !(0..=20).contains(&v) {
+            return Err(ServerFnError::new("Deaths must be between 0 and 20"));
+        }
     }
     if goal_type == "rank_target" {
         let parts: Vec<&str> = target_value.splitn(2, ':').collect();
         let tier = parts.first().copied().unwrap_or("");
-        if !matches!(tier.to_uppercase().as_str(), "IRON" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "EMERALD" | "DIAMOND" | "MASTER" | "GRANDMASTER" | "CHALLENGER") {
+        if !matches!(
+            tier.to_uppercase().as_str(),
+            "IRON"
+                | "BRONZE"
+                | "SILVER"
+                | "GOLD"
+                | "PLATINUM"
+                | "EMERALD"
+                | "DIAMOND"
+                | "MASTER"
+                | "GRANDMASTER"
+                | "CHALLENGER"
+        ) {
             return Err(ServerFnError::new("Invalid tier"));
         }
     }
-    db::upsert_personal_goal(&surreal, &user.id, &goal_type, &target_value).await.map_err(|e| ServerFnError::new(e.to_string()))
+    db::upsert_personal_goal(&surreal, &user.id, &goal_type, &target_value)
+        .await
+        .map_err(authz::server_err)
 }
 
+#[cfg(feature = "ssr")]
 fn window_to_cutoff(window: &str) -> Option<String> {
     use chrono::{Duration, Utc};
-    let days: i64 = match window { "7d" => 7, "30d" => 30, "90d" => 90, _ => return None };
+    let days: i64 = match window {
+        "7d" => 7,
+        "30d" => 30,
+        "90d" => 90,
+        _ => return None,
+    };
     Some((Utc::now() - Duration::days(days)).to_rfc3339())
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn tier_emblem_url(tier: &str) -> String {
-    format!(
-        "https://ddragon.leagueoflegends.com/cdn/img/ranked-emblems/{}.png",
-        tier.to_uppercase()
-    )
-}
-
 
 // ---------------------------------------------------------------------------
 // Phase 18-08: Mode toggle persistence
@@ -212,10 +223,8 @@ fn tier_emblem_url(tier: &str) -> String {
 /// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
 #[server]
 pub async fn set_solo_mode_pref(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
     // App-layer validation — DB has no ASSERT per Research Pitfall 4
     const VALID: &[&str] = &["auto", "constellation", "forge", "journal"];
@@ -223,13 +232,10 @@ pub async fn set_solo_mode_pref(mode: String) -> Result<(), ServerFnError> {
         return Err(ServerFnError::new("Invalid solo mode"));
     }
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth.user.ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db = use_context::<Arc<Surreal<Db>>>()
-        .ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
     db::set_user_solo_mode(&db, &user.id, &mode)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(())
 }
 
@@ -271,9 +277,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
 
     // Mode preference — signal-driven, persisted via set_solo_mode_pref server fn (18-08)
-    let (mode_current, set_mode_current) = signal(
-        resolve_mode("auto", &region)
-    );
+    let (mode_current, set_mode_current) = signal(resolve_mode("auto", &region));
     let region_for_mode = region.clone();
     Effect::new(move |_| {
         if let Some(Ok(Some(user))) = auth_user.get() {
@@ -296,9 +300,10 @@ pub fn SoloDashboardPage() -> impl IntoView {
     });
 
     let queue_filter: RwSignal<Option<i32>> = RwSignal::new(None);
-    let dashboard_resource = Resource::new(move || queue_filter.get(), |qf| get_solo_dashboard(qf));
+    let dashboard_resource = Resource::new(move || queue_filter.get(), get_solo_dashboard);
 
-    let goal_progress_resource = Resource::new(|| (), |_| async move { compute_goal_progress().await });
+    let goal_progress_resource =
+        Resource::new(|| (), |_| async move { compute_goal_progress().await });
 
     let lp_window: RwSignal<&'static str> = RwSignal::new("30d");
     let lp_history_resource = Resource::new(
@@ -471,71 +476,6 @@ pub fn SoloDashboardPage() -> impl IntoView {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-// RankedBadgeSection is no longer the top-level rank display — the rank info is
-// now embedded inline inside SoloDashboardPage using RankBadge + LPProgress primitives.
-// Kept here for reference but not currently used.
-#[allow(dead_code)]
-#[component]
-fn RankedBadgeSection(ranked: Option<RankedInfo>) -> impl IntoView {
-    view! {
-        <div class="bg-elevated border border-outline rounded-xl p-6">
-            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-accent mb-3">"Ranked Solo / Duo"</div>
-            {match ranked {
-                Some(info) => {
-                    let tier = info.tier.clone();
-                    let tier_for_img = info.tier.clone();
-                    let division = info.division.clone();
-                    let display_name = if division.is_empty() {
-                        info.tier.clone()
-                    } else {
-                        format!("{} {}", info.tier, info.division)
-                    };
-                    let total = info.wins + info.losses;
-                    let wr = if total > 0 {
-                        format!("{}%", (info.wins as f64 / total as f64 * 100.0).round() as i32)
-                    } else {
-                        "0%".to_string()
-                    };
-
-                    view! {
-                        <div class="flex items-center gap-5">
-                            <img
-                                src=tier_emblem_url(&tier_for_img)
-                                alt=tier.clone()
-                                class="w-20 h-20 object-contain"
-                                style="filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-accent) 35%, transparent))"
-                            />
-                            <div class="flex flex-col gap-1">
-                                <span class="font-display italic text-primary text-[32px] leading-tight">{display_name}</span>
-                                <span class="font-mono text-2xl text-accent tabular-nums">{format!("{} LP", info.lp)}</span>
-                                <span class="text-sm text-muted font-mono tabular-nums">
-                                    {format!("{}W {}L ({})", info.wins, info.losses, wr)}
-                                </span>
-                            </div>
-                        </div>
-                    }.into_any()
-                }
-                None => view! {
-                    <div class="flex items-center gap-4">
-                        <svg
-                            class="w-16 h-16 text-dimmed"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            aria-hidden="true"
-                        >
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                        </svg>
-                        <span class="font-display italic text-2xl text-muted">"Unranked"</span>
-                    </div>
-                }.into_any(),
-            }}
-        </div>
-    }
-}
-
 #[component]
 fn MatchListSection(
     matches: Vec<PlayerMatchStats>,
@@ -688,24 +628,50 @@ fn LpGraphSvg(
     let min_score = snapshots.iter().map(|s| s.rank_score).min().unwrap_or(0) as f64;
     let max_score = snapshots.iter().map(|s| s.rank_score).max().unwrap_or(1) as f64;
     let span = (max_score - min_score).max(1.0);
-    let x_step = if n > 1 { (SVG_W - Y_AXIS_W) / (n - 1) as f64 } else { 0.0 };
+    let x_step = if n > 1 {
+        (SVG_W - Y_AXIS_W) / (n - 1) as f64
+    } else {
+        0.0
+    };
     let y_scale = (SVG_H - X_AXIS_H) / span;
     let bottom_y = SVG_H - X_AXIS_H;
 
-    let points: Vec<(f64, f64)> = snapshots.iter().enumerate().map(|(i, s)| {
-        let x = if n > 1 { Y_AXIS_W + i as f64 * x_step } else { Y_AXIS_W + (SVG_W - Y_AXIS_W) / 2.0 };
-        let y = bottom_y - (s.rank_score as f64 - min_score) * y_scale;
-        (x, y)
-    }).collect();
+    let points: Vec<(f64, f64)> = snapshots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let x = if n > 1 {
+                Y_AXIS_W + i as f64 * x_step
+            } else {
+                Y_AXIS_W + (SVG_W - Y_AXIS_W) / 2.0
+            };
+            let y = bottom_y - (s.rank_score as f64 - min_score) * y_scale;
+            (x, y)
+        })
+        .collect();
 
-    let line_points = points.iter().map(|(x, y)| format!("{:.1},{:.1}", x, y)).collect::<Vec<_>>().join(" ");
+    let line_points = points
+        .iter()
+        .map(|(x, y)| format!("{:.1},{:.1}", x, y))
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let area_d = if n >= 2 {
         let mut d = format!("M {:.1},{:.1}", points[0].0, points[0].1);
-        for (x, y) in points.iter().skip(1) { d.push_str(&format!(" L {:.1},{:.1}", x, y)); }
-        d.push_str(&format!(" L {:.1},{:.1} L {:.1},{:.1} Z", points.last().unwrap().0, bottom_y, points[0].0, bottom_y));
+        for (x, y) in points.iter().skip(1) {
+            d.push_str(&format!(" L {:.1},{:.1}", x, y));
+        }
+        d.push_str(&format!(
+            " L {:.1},{:.1} L {:.1},{:.1} Z",
+            points.last().unwrap().0,
+            bottom_y,
+            points[0].0,
+            bottom_y
+        ));
         d
-    } else { String::new() };
+    } else {
+        String::new()
+    };
 
     #[allow(unused_variables)]
     let snaps_for_hover = snapshots.clone();
@@ -714,14 +680,31 @@ fn LpGraphSvg(
 
     let tier_labels = {
         let boundaries: &[(i32, &str)] = &[
-            (0, "Iron"), (400, "Bronze"), (800, "Silver"), (1200, "Gold"),
-            (1600, "Platinum"), (2000, "Emerald"), (2400, "Diamond"), (2800, "Master"),
+            (0, "Iron"),
+            (400, "Bronze"),
+            (800, "Silver"),
+            (1200, "Gold"),
+            (1600, "Platinum"),
+            (2000, "Emerald"),
+            (2400, "Diamond"),
+            (2800, "Master"),
         ];
-        let mut out: Vec<(f64, String)> = boundaries.iter()
+        let mut out: Vec<(f64, String)> = boundaries
+            .iter()
             .filter(|(s, _)| (*s as f64) >= min_score - 100.0 && (*s as f64) <= max_score + 100.0)
-            .map(|(s, name)| { let y = bottom_y - (*s as f64 - min_score) * y_scale; (y, name.to_string()) })
+            .map(|(s, name)| {
+                let y = bottom_y - (*s as f64 - min_score) * y_scale;
+                (y, name.to_string())
+            })
             .collect();
-        if out.len() > 5 { out = out.into_iter().enumerate().filter(|(i, _)| i % 2 == 0).map(|(_, v)| v).collect(); }
+        if out.len() > 5 {
+            out = out
+                .into_iter()
+                .enumerate()
+                .filter(|(i, _)| i % 2 == 0)
+                .map(|(_, v)| v)
+                .collect();
+        }
         out
     };
 
@@ -730,12 +713,40 @@ fn LpGraphSvg(
         let last_x = points[n - 1].0;
         let mid_idx = n / 2;
         vec![
-            (first_x, snapshots[0].snapshotted_at.get(..10).unwrap_or("").to_string()),
-            ((first_x + last_x) / 2.0, snapshots[mid_idx].snapshotted_at.get(..10).unwrap_or("").to_string()),
-            (last_x, snapshots[n - 1].snapshotted_at.get(..10).unwrap_or("").to_string()),
+            (
+                first_x,
+                snapshots[0]
+                    .snapshotted_at
+                    .get(..10)
+                    .unwrap_or("")
+                    .to_string(),
+            ),
+            (
+                (first_x + last_x) / 2.0,
+                snapshots[mid_idx]
+                    .snapshotted_at
+                    .get(..10)
+                    .unwrap_or("")
+                    .to_string(),
+            ),
+            (
+                last_x,
+                snapshots[n - 1]
+                    .snapshotted_at
+                    .get(..10)
+                    .unwrap_or("")
+                    .to_string(),
+            ),
         ]
     } else {
-        vec![(points[0].0, snapshots[0].snapshotted_at.get(..10).unwrap_or("").to_string())]
+        vec![(
+            points[0].0,
+            snapshots[0]
+                .snapshotted_at
+                .get(..10)
+                .unwrap_or("")
+                .to_string(),
+        )]
     };
 
     view! {
@@ -836,15 +847,32 @@ fn LpGraphSvg(
     }.into_any()
 }
 
-const RANK_TIERS: &[&str] = &["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
+const RANK_TIERS: &[&str] = &[
+    "IRON",
+    "BRONZE",
+    "SILVER",
+    "GOLD",
+    "PLATINUM",
+    "EMERALD",
+    "DIAMOND",
+    "MASTER",
+    "GRANDMASTER",
+    "CHALLENGER",
+];
 const RANK_DIVISIONS: &[&str] = &["IV", "III", "II", "I"];
 
 fn tier_label_display(t: &str) -> &'static str {
     match t.to_uppercase().as_str() {
-        "IRON" => "Iron", "BRONZE" => "Bronze", "SILVER" => "Silver",
-        "GOLD" => "Gold", "PLATINUM" => "Platinum", "EMERALD" => "Emerald",
-        "DIAMOND" => "Diamond", "MASTER" => "Master",
-        "GRANDMASTER" => "Grandmaster", "CHALLENGER" => "Challenger",
+        "IRON" => "Iron",
+        "BRONZE" => "Bronze",
+        "SILVER" => "Silver",
+        "GOLD" => "Gold",
+        "PLATINUM" => "Platinum",
+        "EMERALD" => "Emerald",
+        "DIAMOND" => "Diamond",
+        "MASTER" => "Master",
+        "GRANDMASTER" => "Grandmaster",
+        "CHALLENGER" => "Challenger",
         _ => "Unranked",
     }
 }
@@ -871,8 +899,14 @@ fn SoloConstellationContent(
     let is_demacia = region == "demacia";
     let is_pandemonium = region == "pandemonium";
 
-    let current_tier = ranked.as_ref().map(|r| r.tier.clone()).unwrap_or_else(|| "UNRANKED".to_string());
-    let current_division = ranked.as_ref().map(|r| r.division.clone()).unwrap_or_default();
+    let current_tier = ranked
+        .as_ref()
+        .map(|r| r.tier.clone())
+        .unwrap_or_else(|| "UNRANKED".to_string());
+    let current_division = ranked
+        .as_ref()
+        .map(|r| r.division.clone())
+        .unwrap_or_default();
     let current_lp = ranked.as_ref().map(|r| r.lp).unwrap_or(0);
 
     // Last-10 W/L for Demacia patch
@@ -881,7 +915,6 @@ fn SoloConstellationContent(
 
     let region_badge = region.clone();
     let current_tier_pan = current_tier.clone();
-    let region_sort = region.clone();
     let region_pool = region.clone();
 
     view! {
@@ -905,27 +938,6 @@ fn SoloConstellationContent(
                     </div>
                 }.into_any())}
             </Card>
-
-            // ── PANDEMONIUM PATCH (b): 4 deep stat cards (2×2 grid) ──────────
-            // TODO: Wire real KDA/CS/DMG/Vision values from dashboard_resource
-            // when per-stat aggregation is added in a future analytics phase.
-            // Current values are placeholders per CONTENT-CONTRACT-AUDIT.md.
-            {is_pandemonium.then(|| view! {
-                <div class="grid grid-cols-2 gap-2">
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="KDA".to_string() value="3.42".to_string() delta=0.18_f32 />
-                    </Card>
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="CS/min".to_string() value="7.1".to_string() delta={-0.2_f32} />
-                    </Card>
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="DMG Share".to_string() value="27.3".to_string() unit="%".to_string() delta=2.1_f32 />
-                    </Card>
-                    <Card region="pandemonium".to_string() variant="zine">
-                        <Stat label="Vision/min".to_string() value="1.4".to_string() delta=0.05_f32 />
-                    </Card>
-                </div>
-            }.into_any())}
 
             // ── LP History ────────────────────────────────────────────────────
             <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window region=lp_region attr:data-feedback-label="Solo dashboard → LP history graph" />
@@ -967,45 +979,15 @@ fn SoloConstellationContent(
                 attr:data-feedback-label="Solo dashboard → Recent matches"
             />
 
-            // ── DEMACIA PATCH (c): Sort/filter controls ───────────────────────
-            {is_demacia.then(|| view! {
-                <div class="flex items-center gap-3">
-                    <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">"Sort"</span>
-                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Champion"</Btn>
-                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Queue"</Btn>
-                    <Btn region=region_sort.clone() variant="ghost" size="sm">"By Date"</Btn>
-                </div>
-            }.into_any())}
-
-            // ── DEMACIA PATCH (a): Pool-gap warnings ──────────────────────────
-            // TODO: Wire real pool-gap detection from match history
-            // in a future analytics phase. Current gaps are
-            // placeholder advisories per CONTENT-CONTRACT-AUDIT.md.
+            // ── Pool gaps (not built yet) ─────────────────────────────────────
+            // Honest empty state: pool-gap detection does not exist yet, so we
+            // explain what will appear instead of showing invented advice.
             {is_demacia.then(|| view! {
                 <Card region=region_pool.clone() variant="gilt">
                     <SectionHead region=region_pool.clone()
                                  eyebrow="REVIEW"
                                  title="Pool Gaps".to_string() />
-                    <ul class="space-y-2 mt-2">
-                        <li class="flex items-center gap-2">
-                            <Badge tone="warning">"Gap"</Badge>
-                            <span class="font-display italic text-secondary text-sm">
-                                "No reliable engage support \u{2014} consider learning Leona or Rell"
-                            </span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <Badge tone="warning">"Gap"</Badge>
-                            <span class="font-display italic text-secondary text-sm">
-                                "Low DPS jungle option \u{2014} pick up Kindred or Lillia"
-                            </span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <Badge tone="warning">"Gap"</Badge>
-                            <span class="font-display italic text-secondary text-sm">
-                                "Missing scaling carry \u{2014} practice Kayle or Vladimir"
-                            </span>
-                        </li>
-                    </ul>
+                    <EmptyState message="Pool-gap analysis is not available yet. When it ships, roles and champion types missing from your pool will be detected from your synced match history and listed here." />
                 </Card>
             }.into_any())}
 
@@ -1060,24 +1042,51 @@ fn RankTargetCard(
     use crate::models::match_data::rank_score;
     let editing = RwSignal::new(false);
     let error_msg: RwSignal<Option<String>> = RwSignal::new(None);
-    let initial_tier = payload.rank.as_ref().and_then(|p| p.goal.target_value.split(':').next().map(|s| s.to_string())).unwrap_or_else(|| "GOLD".to_string());
-    let initial_div = payload.rank.as_ref().and_then(|p| p.goal.target_value.splitn(2, ':').nth(1).map(|s| s.to_string())).unwrap_or_else(|| "IV".to_string());
+    let initial_tier = payload
+        .rank
+        .as_ref()
+        .and_then(|p| p.goal.target_value.split(':').next().map(|s| s.to_string()))
+        .unwrap_or_else(|| "GOLD".to_string());
+    let initial_div = payload
+        .rank
+        .as_ref()
+        .and_then(|p| {
+            p.goal
+                .target_value
+                .split_once(':')
+                .map(|x| x.1)
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "IV".to_string());
     let tier_edit = RwSignal::new(initial_tier);
     let div_edit = RwSignal::new(initial_div);
 
     let on_save = move |_| {
         error_msg.set(None);
         let tier = tier_edit.get_untracked();
-        let div = if matches!(tier.to_uppercase().as_str(), "MASTER" | "GRANDMASTER" | "CHALLENGER") { String::new() } else { div_edit.get_untracked() };
+        let div = if matches!(
+            tier.to_uppercase().as_str(),
+            "MASTER" | "GRANDMASTER" | "CHALLENGER"
+        ) {
+            String::new()
+        } else {
+            div_edit.get_untracked()
+        };
         let target = format!("{}:{}", tier, div);
         leptos::task::spawn_local(async move {
             match upsert_personal_goal("rank_target".to_string(), target).await {
-                Ok(_) => { editing.set(false); progress_resource.refetch(); }
+                Ok(_) => {
+                    editing.set(false);
+                    progress_resource.refetch();
+                }
                 Err(_) => error_msg.set(Some("Error: Failed to save goal. Try again.".to_string())),
             }
         });
     };
-    let on_discard = move |_| { editing.set(false); error_msg.set(None); };
+    let on_discard = move |_| {
+        editing.set(false);
+        error_msg.set(None);
+    };
     let on_set = move |_| editing.set(true);
     let on_edit = move |_| editing.set(true);
     let payload_clone = payload.clone();
@@ -1141,7 +1150,7 @@ fn RankTargetCard(
                     }
                 }).unwrap_or_else(|| "—".to_string());
                 let target_display = if matches!(target_tier.to_uppercase().as_str(), "MASTER" | "GRANDMASTER" | "CHALLENGER") {
-                    format!("{}", tier_label_display(&target_tier))
+                    tier_label_display(&target_tier).to_string()
                 } else {
                     format!("{} {}", tier_label_display(&target_tier), target_div)
                 };
@@ -1173,7 +1182,11 @@ fn CsGoalCard(
 ) -> impl IntoView {
     let editing = RwSignal::new(false);
     let error_msg: RwSignal<Option<String>> = RwSignal::new(None);
-    let initial = payload.cs.as_ref().map(|p| p.goal.target_value.clone()).unwrap_or_else(|| "7.0".to_string());
+    let initial = payload
+        .cs
+        .as_ref()
+        .map(|p| p.goal.target_value.clone())
+        .unwrap_or_else(|| "7.0".to_string());
     let target_edit = RwSignal::new(initial);
     let on_save = move |_| {
         error_msg.set(None);
@@ -1184,15 +1197,22 @@ fn CsGoalCard(
                 let value = format!("{:.1}", v);
                 leptos::task::spawn_local(async move {
                     match upsert_personal_goal("cs_per_min".to_string(), value).await {
-                        Ok(_) => { editing.set(false); progress_resource.refetch(); }
-                        Err(_) => error_msg.set(Some("Error: Failed to save goal. Try again.".to_string())),
+                        Ok(_) => {
+                            editing.set(false);
+                            progress_resource.refetch();
+                        }
+                        Err(_) => error_msg
+                            .set(Some("Error: Failed to save goal. Try again.".to_string())),
                     }
                 });
             }
             _ => error_msg.set(Some("Error: Enter a number between 0 and 15.".to_string())),
         }
     };
-    let on_discard = move |_| { editing.set(false); error_msg.set(None); };
+    let on_discard = move |_| {
+        editing.set(false);
+        error_msg.set(None);
+    };
     let on_set = move |_| editing.set(true);
     let on_edit = move |_| editing.set(true);
     let cs_state = payload.cs.clone();
@@ -1265,7 +1285,11 @@ fn DeathsGoalCard(
 ) -> impl IntoView {
     let editing = RwSignal::new(false);
     let error_msg: RwSignal<Option<String>> = RwSignal::new(None);
-    let initial = payload.deaths.as_ref().map(|p| p.goal.target_value.clone()).unwrap_or_else(|| "4".to_string());
+    let initial = payload
+        .deaths
+        .as_ref()
+        .map(|p| p.goal.target_value.clone())
+        .unwrap_or_else(|| "4".to_string());
     let target_edit = RwSignal::new(initial);
     let on_save = move |_| {
         error_msg.set(None);
@@ -1276,15 +1300,24 @@ fn DeathsGoalCard(
                 let value = format!("{}", v);
                 leptos::task::spawn_local(async move {
                     match upsert_personal_goal("deaths_per_game".to_string(), value).await {
-                        Ok(_) => { editing.set(false); progress_resource.refetch(); }
-                        Err(_) => error_msg.set(Some("Error: Failed to save goal. Try again.".to_string())),
+                        Ok(_) => {
+                            editing.set(false);
+                            progress_resource.refetch();
+                        }
+                        Err(_) => error_msg
+                            .set(Some("Error: Failed to save goal. Try again.".to_string())),
                     }
                 });
             }
-            _ => error_msg.set(Some("Error: Enter a whole number between 0 and 20.".to_string())),
+            _ => error_msg.set(Some(
+                "Error: Enter a whole number between 0 and 20.".to_string(),
+            )),
         }
     };
-    let on_discard = move |_| { editing.set(false); error_msg.set(None); };
+    let on_discard = move |_| {
+        editing.set(false);
+        error_msg.set(None);
+    };
     let on_set = move |_| editing.set(true);
     let on_edit = move |_| editing.set(true);
     let deaths_state = payload.deaths.clone();
@@ -1350,7 +1383,6 @@ fn DeathsGoalCard(
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // SoloJournalView — 18-07
 // Personal journal / match diary sub-view for /solo route mode="journal".
@@ -1380,11 +1412,22 @@ fn SoloJournalView(
     let is_pandemonium = region == "pandemonium";
     let matches_empty = matches.is_empty();
 
-    let entries: Vec<JournalEntry> = matches.iter().take(5).map(|m| {
-        let outcome = if m.win { "Victory" } else { "Defeat" };
-        let body = format!("{} — {} · KDA {}/{}/{}", outcome, m.champion, m.kills, m.deaths, m.assists);
-        JournalEntry { date_label: "Recent".to_string(), body, won: m.win }
-    }).collect();
+    let entries: Vec<JournalEntry> = matches
+        .iter()
+        .take(5)
+        .map(|m| {
+            let outcome = if m.win { "Victory" } else { "Defeat" };
+            let body = format!(
+                "{} — {} · KDA {}/{}/{}",
+                outcome, m.champion, m.kills, m.deaths, m.assists
+            );
+            JournalEntry {
+                date_label: "Recent".to_string(),
+                body,
+                won: m.win,
+            }
+        })
+        .collect();
 
     // StoredValue<Vec<JournalEntry>> is Copy+Send+Sync; get_value() returns a clone each call.
     let entries_sv = StoredValue::new(entries);
@@ -1509,202 +1552,78 @@ fn SoloJournalView(
 // ---------------------------------------------------------------------------
 
 #[component]
-fn SoloForgeView(
-    region: String,
-    ranked: Option<RankedInfo>,
-) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
-
-    let current_tier = ranked.as_ref().map(|r| r.tier.clone()).unwrap_or_else(|| "UNRANKED".to_string());
-    let current_division = ranked.as_ref().map(|r| r.division.clone()).unwrap_or_default();
+fn SoloForgeView(region: String, ranked: Option<RankedInfo>) -> impl IntoView {
+    let current_tier = ranked
+        .as_ref()
+        .map(|r| r.tier.clone())
+        .unwrap_or_else(|| "UNRANKED".to_string());
+    let current_division = ranked
+        .as_ref()
+        .map(|r| r.division.clone())
+        .unwrap_or_default();
     let current_lp = ranked.as_ref().map(|r| r.lp).unwrap_or(0);
-    let tier_upper = current_tier.to_uppercase();
 
-    // TODO: wire real prep/pool data from champion pool + match history phases
-    // StoredValue<Vec<[String; N]>> — each String is Send+Sync+Clone.
-    let prep_sv = StoredValue::new(vec![
-        ["[ ]".to_string(), "Aatrox — review lvl 3 jungle clear".to_string()],
-        ["[ ]".to_string(), "Study: how to play into poke comps".to_string()],
-        ["[x]".to_string(), "Warmup: 20 CS practice tool".to_string()],
-        ["[ ]".to_string(), "Mental reset — previous tilt noted".to_string()],
-    ]);
-
-    // TODO: wire from champion pool resource once pool-fill aggregation is added
-    let pool_sv = StoredValue::new(vec![
-        ["Aatrox".to_string(),   "12 games".to_string(), "58% WR".to_string()],
-        ["Jax".to_string(),      "8 games".to_string(),  "62% WR".to_string()],
-        ["Malphite".to_string(), "5 games".to_string(),  "40% WR".to_string()],
-    ]);
-
-    let targets_sv = StoredValue::new(vec![
-        ["Aatrox".to_string(),   "Master carry patterns".to_string()],
-        ["Jax".to_string(),      "Refine split-push decision-making".to_string()],
-        ["Malphite".to_string(), "Consistent engage timing".to_string()],
-    ]);
-
-    let champ_pool_sv = StoredValue::new(vec![
-        "Aatrox".to_string(), "Jax".to_string(), "Malphite".to_string(),
-    ]);
-
-    if is_pandemonium {
-        let tier_pan = StoredValue::new(current_tier.clone());
-        let div_pan  = StoredValue::new(current_division.clone());
-        let tier_up_pan = StoredValue::new(tier_upper.clone());
-        let r1 = region.clone();
-        let r2 = region.clone();
-        let r3 = region.clone();
-        let r4 = region.clone();
-        let r5 = region.clone();
-        let r6 = region.clone();
-        let r7 = region.clone();
-        view! {
-            <div class="flex flex-col gap-3">
-                <RiotTape label="FORGE · QUEUE_PREP" />
-                // Rank display
-                <Card region=r1 variant="zine">
-                    <Glitch region=r2.clone()>"// TIER"</Glitch>
-                    <div class="flex items-center gap-4 mt-2">
-                        <RankBadge tier=tier_pan.get_value() division=div_pan.get_value() large=false />
-                        <LPProgress region=r3.clone() lp={current_lp.max(0) as u32} max=100 />
+    // Only real data is shown here: the rank snapshot. Improvement targets and
+    // pool status are not computed yet, so they render honest empty states
+    // instead of placeholder champions.
+    let r1 = region.clone();
+    let r2 = region.clone();
+    let r3 = region.clone();
+    view! {
+        <div class="flex flex-col gap-4">
+            // Forge header
+            <Card region=r1.clone() variant="gilt">
+                <div class="text-center pb-2">
+                    <div class="flex justify-center mb-2">
+                        <Crown size=36 />
                     </div>
-                    <div class="mt-2">
-                        <Glitch region=r4.clone()>
-                            {move || format!("// TIER · {}", tier_up_pan.get_value())}
-                        </Glitch>
-                    </div>
-                </Card>
-                // Queue prep checklist
-                <Card region=r5 variant="zine">
-                    <Glitch region=r6.clone()>"// PREP_LIST"</Glitch>
-                    <div class="mt-2 flex flex-col gap-1">
-                        {move || prep_sv.get_value().into_iter().map(|row| {
-                            let a_sv = StoredValue::new(row[0].clone());
-                            let b_sv = StoredValue::new(row[1].clone());
-                            view! {
-                                <div class="font-mono text-[12px] flex gap-2 items-baseline border-b border-outline/20 py-1">
-                                    <span class="text-accent shrink-0">{move || a_sv.get_value()}</span>
-                                    <span class="text-primary">{move || b_sv.get_value()}</span>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // Pool status
-                <Card region=r7 variant="zine">
-                    <Glitch region=region.clone()>"// POOL_STATUS"</Glitch>
-                    <div class="mt-2 flex flex-col gap-1">
-                        {move || pool_sv.get_value().into_iter().map(|row| {
-                            let a_sv = StoredValue::new(row[0].clone());
-                            let b_sv = StoredValue::new(row[1].clone());
-                            let c_sv = StoredValue::new(row[2].clone());
-                            view! {
-                                <div class="font-mono text-[11px] flex gap-2 items-baseline border-b border-outline/20 py-1">
-                                    <span class="text-primary flex-1">{move || a_sv.get_value()}</span>
-                                    <span class="text-secondary">{move || b_sv.get_value()}</span>
-                                    <span class="text-accent">{move || c_sv.get_value()}</span>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // CTA
-                <Btn region="pandemonium".to_string() variant="primary">
-                    "QUEUE"
-                </Btn>
-            </div>
-        }.into_any()
-    } else {
-        let tier_dem = StoredValue::new(current_tier.clone());
-        let div_dem  = StoredValue::new(current_division.clone());
-        let r1 = region.clone();
-        let r2 = region.clone();
-        let r3 = region.clone();
-        let r4 = region.clone();
-        let r5 = region.clone();
-        let r6 = region.clone();
-        let r7 = region.clone();
-        let r8 = region.clone();
-        view! {
-            <div class="flex flex-col gap-4">
-                // Forge header
-                <Card region=r1.clone() variant="gilt">
-                    <div class="text-center pb-2">
-                        <div class="flex justify-center mb-2">
-                            <Crown size=36 />
-                        </div>
-                        <h1 class="font-display text-[24px] tracking-[0.08em] text-accent uppercase">
-                            "FORGE"
-                        </h1>
-                        <SectionHead
-                            region=r1.clone()
-                            eyebrow="CHAMPION MASTERY"
-                            title="Workbench".to_string()
-                        />
-                        <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=400 />
-                        </div>
-                    </div>
-                </Card>
-                // Rank display
-                <Card region=r2 variant="gilt">
+                    <h1 class="font-display text-[24px] tracking-[0.08em] text-accent uppercase">
+                        "FORGE"
+                    </h1>
                     <SectionHead
-                        region=r3.clone()
-                        eyebrow="CURRENT STANDING"
-                        title="Rank".to_string()
+                        region=r1.clone()
+                        eyebrow="CHAMPION MASTERY"
+                        title="Workbench".to_string()
                     />
-                    <div class="flex items-center gap-6 mt-3">
-                        <RankBadge tier=tier_dem.get_value() division=div_dem.get_value() large=true />
-                        <LPProgress region=r4.clone() lp={current_lp.max(0) as u32} max=100 />
+                    <div class="mt-2 flex justify-center">
+                        <HeraldicDivider width=400 />
                     </div>
-                </Card>
-                // Improvement targets
-                <Card region=r5 variant="gilt">
-                    <SectionHead
-                        region=r6.clone()
-                        eyebrow="FORGE"
-                        title="Improvement Targets".to_string()
-                    />
-                    <div class="flex justify-center mt-2">
-                        <HeraldicDivider width=480 />
-                    </div>
-                    <div class="mt-3 flex flex-col gap-2">
-                        {move || targets_sv.get_value().into_iter().map(|row| {
-                            let a_sv = StoredValue::new(row[0].clone());
-                            let b_sv = StoredValue::new(row[1].clone());
-                            view! {
-                                <div class="flex items-baseline gap-3 border-b border-outline/20 py-2 font-display text-[13px]">
-                                    <span class="text-accent shrink-0">"•"</span>
-                                    <span class="text-primary font-semibold">{move || a_sv.get_value()}</span>
-                                    <span class="text-secondary italic flex-1">{move || b_sv.get_value()}</span>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // Tool rack: champion pool
-                <Card region=r7 variant="gilt">
-                    <SectionHead
-                        region=r8.clone()
-                        eyebrow="TOOL RACK"
-                        title="Champion Pool".to_string()
-                    />
-                    <div class="flex gap-3 mt-3 flex-wrap">
-                        {move || champ_pool_sv.get_value().into_iter().map(|champ| {
-                            let champ_badge_sv = StoredValue::new(champ.clone());
-                            view! {
-                                <div class="flex flex-col items-center gap-1">
-                                    <ChampTile name=champ size=56 />
-                                    <Badge tone="neutral">{move || champ_badge_sv.get_value()}</Badge>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                </Card>
-                // Queue CTA
-                <Btn region=region variant="primary">
-                    "Queue Aatrox"
-                </Btn>
-            </div>
-        }.into_any()
+                </div>
+            </Card>
+            // Rank display
+            <Card region=r2.clone() variant="gilt">
+                <SectionHead
+                    region=r2.clone()
+                    eyebrow="CURRENT STANDING"
+                    title="Rank".to_string()
+                />
+                <div class="flex items-center gap-6 mt-3">
+                    <RankBadge tier=current_tier.clone() division=current_division.clone() large=true />
+                    <LPProgress region=r2.clone() lp={current_lp.max(0) as u32} max=100 />
+                </div>
+            </Card>
+            // Improvement targets (not built yet)
+            <Card region=r3.clone() variant="gilt">
+                <SectionHead
+                    region=r3.clone()
+                    eyebrow="FORGE"
+                    title="Improvement Targets".to_string()
+                />
+                <EmptyState message="Improvement targets are not available yet. They will be derived from your synced matches and personal learnings once that analysis ships." />
+            </Card>
+            // Champion pool pointer
+            <Card region=region.clone() variant="gilt">
+                <SectionHead
+                    region=region.clone()
+                    eyebrow="TOOL RACK"
+                    title="Champion Pool".to_string()
+                />
+                <EmptyState
+                    message="Your champion pool lives on the Champion Pool page. Per-champion games and win rates will appear here once pool statistics are aggregated from your match history."
+                    cta_label="Open Champion Pool"
+                    cta_href="/champion-pool"
+                />
+            </Card>
+        </div>
     }
 }

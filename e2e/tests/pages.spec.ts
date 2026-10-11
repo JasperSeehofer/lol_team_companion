@@ -20,8 +20,7 @@ const AUTHED_PAGES = [
   { path: "/solo", content: /dashboard|matches|ranked|solo/i },
   { path: "/personal-learnings", content: /learnings|personal|reflections/i },
   { path: "/personal-learnings/new", content: /learning|new|happened|learned/i },
-  // Phase 17 plan 17-01 stubs (auth — filled by plan 06)
-  { path: "/admin/invites", content: /admin|invites|placeholder/i },
+  // /admin/invites is admin-only (404 for others): see admin-invites.spec.ts
 ];
 
 for (const { path, content } of AUTHED_PAGES) {
@@ -43,13 +42,14 @@ for (const { path, content } of AUTHED_PAGES) {
     expect(body).toMatch(content);
 
     // Nav should be present
-    await expect(authedPage.locator("nav")).toBeVisible();
+    await expect(authedPage.locator('nav[aria-label="Primary"]')).toBeVisible();
 
-    // No JS errors (ignore 404s — the Tailwind v4 @import "tailwindcss" causes a
-    // harmless 404 in dev mode on every page)
+    // No JS errors (asset 404s and sandbox proxy tunnel failures for
+    // third-party hosts are environment noise)
     const realErrors = errors.filter((e) =>
       !e.includes("favicon") &&
-      !e.includes("404 (Not Found)")
+      !e.includes("404 (Not Found)") &&
+      !e.includes("ERR_TUNNEL_CONNECTION_FAILED")
     );
     expect(realErrors).toHaveLength(0);
   });

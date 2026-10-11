@@ -13,6 +13,8 @@ TIMESTAMP="$(date +%s)"
 EMAIL="${2:-apitest_${TIMESTAMP}@test.invalid}"
 PASSWORD="${3:-ApiTest1234!}"
 USERNAME="apiuser_${TIMESTAMP}"
+# Invite code the server accepts (start it with BOOTSTRAP_INVITE_CODE).
+INVITE_CODE="${E2E_INVITE_CODE:-E2E-INVITE-CODE}"
 WASM_PATH="target/site/pkg/lol_team_companion.wasm"
 COOKIE_JAR="$(mktemp /tmp/lol_cookies_XXXXXX)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
@@ -83,7 +85,7 @@ echo "[ Auth ]"
 status=$(curl -s -o /tmp/lol_resp_body -w "%{http_code}" \
     -X POST "${BASE_URL}${URL_REGISTER}" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "username=${USERNAME}&email=${EMAIL}&password=${PASSWORD}" \
+    -d "username=${USERNAME}&email=${EMAIL}&password=${PASSWORD}&invite_code=${INVITE_CODE}" \
     -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
     -L --max-redirs 0 2>/dev/null || true)
 body=$(cat /tmp/lol_resp_body 2>/dev/null || true)
