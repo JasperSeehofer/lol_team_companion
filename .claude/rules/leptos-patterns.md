@@ -93,9 +93,9 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 50. **Protected pages redirect to `/auth/login`** — All protected page components fetch `get_current_user()` on mount and redirect via `window.location().set_href()` if the user is `None`. The redirect is client-side only (`#[cfg(feature = "hydrate")]`).
 
-51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, then redirects to `/team/dashboard`.
+51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, then returns `/solo` (new users start in solo mode) and the page hard-navigates there.
 
-52. **Auth-aware nav links** — The nav only shows Team/Draft/Tree Drafter/Stats/Game Plan/Post Game links when the user is authenticated. The `is_authed` signal derives from the `user` Resource.
+52. **Auth-aware nav** — The nav's user cluster (mode toggle, notifications, user menu) derives from the `user` Resource; hub links are static (`HUB_ROUTES` in `nav.rs`).
 
 ## Toolchain
 

@@ -67,9 +67,9 @@ description: WASM safety, browser testing gotchas, and tooling patterns for lol_
 
 46. **Extracting text from Leptos SSR HTML** — The HTML contains large inline `<script>` blocks (hot-reload, hydration). Use Python's `HTMLParser` to strip scripts and extract visible text content. Raw `sed` approaches break on multi-line scripts.
 
-47. **Tailwind v4 `@import "tailwindcss"` 404** — `input.css` starts with `@import "tailwindcss"` which is Tailwind v4 build-time syntax. When not fully processed by the tailwind CLI, the browser resolves it as a relative URL → 404. This is harmless but causes console errors. E2e tests must filter out `404 (Not Found)` console errors.
+47. **No `style-file` next to `tailwind-input-file`** — `input.css` starts with `@import "tailwindcss"`, which only the Tailwind CLI understands. When `Cargo.toml` also listed it as `style-file`, cargo-leptos shipped the raw import and the browser requested `/pkg/tailwindcss` (404 on every page). Keep only `tailwind-input-file`. `smoke.spec.ts` asserts there is no `/pkg/` 404.
 
-48. **E2e auth fixture registers then logs in** — Registration now auto-logs in and redirects to `/team/dashboard`. The `authedPage` fixture still does both steps for robustness. After login, `waitForURL("**/team/dashboard")` ensures the hard navigation completes before visiting other pages.
+48. **E2e auth fixture registers and lands on `/solo`** — Registration requires `?invite=...` (otherwise it redirects to `/closed-beta`), auto-logs in and hard-navigates to `/solo` because new users start in solo mode. Login goes to `/solo`, or `/team/dashboard` when the user's mode is `team`. The `authedPage` fixture waits for `**/solo`; `teamPage` then creates a team via `/team/roster`.
 
 53. **`just` may not be installed** — `just` is a dev dependency. Fall back to running cargo/npx commands directly if `just` is not on PATH.
 
