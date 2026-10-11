@@ -483,7 +483,6 @@ pub fn StatsPage() -> impl IntoView {
                             if user_has_team {
                                 view! {
                                     <EmptyState
-                                        icon="\u{2756}"
                                         message="No match stats yet — link your Riot account and play some games to see stats here"
                                         cta_label="Link Riot Account"
                                         cta_href="/profile"

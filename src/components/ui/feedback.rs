@@ -1,35 +1,37 @@
 use leptos::callback::Callback;
 use leptos::prelude::*;
 
-/// A styled error banner for page-level and resource errors.
+/// An inline error message for page-level and resource errors.
 ///
-/// Uses semantic `bg-danger` token (theme-aware: Demacia heraldic crimson,
-/// Pandemonium electric coral). `role="alert"` per DESIGN.md §5.5.
+/// A11y: `role="alert"`, so it is announced when it appears; the icon is
+/// decorative and the text says what went wrong. Danger text is 4.5:1 on
+/// every layer. (Batch 2 replaces this with `Callout`.)
 #[component]
 pub fn ErrorBanner(message: String) -> impl IntoView {
     view! {
-        <div role="alert" class="bg-danger/10 border border-danger/30 rounded-lg p-4 flex items-start gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-danger shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        <div role="alert" class="flex items-start gap-3 border border-danger/40 bg-danger/10 rounded-ctl px-4 py-3">
+            <svg class="mt-0.5 size-4 shrink-0 text-danger" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.25" />
+                <path d="M8 4.75v3.75M8 10.75v.5" stroke-linecap="round" />
             </svg>
-            <p class="text-danger text-sm">{message}</p>
+            <p class="text-body text-danger">{message}</p>
         </div>
     }
 }
 
-/// A styled status message that shows success (green) or error (red) based on content.
+/// A success or error line, chosen by whether the text starts with "Error".
 ///
-/// Uses semantic `bg-success` / `bg-danger` tokens (theme-aware).
+/// A11y: `role="status"` (polite); the tone is repeated in the words.
 #[component]
 pub fn StatusMessage(message: String) -> impl IntoView {
     let is_err = message.starts_with("Error");
     let cls = if is_err {
-        "bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-3 text-sm"
+        "border border-danger/40 bg-danger/10 text-danger rounded-ctl px-4 py-3 text-body"
     } else {
-        "bg-success/10 border border-success/30 text-success rounded-lg px-4 py-3 text-sm"
+        "border border-success/40 bg-success/10 text-success rounded-ctl px-4 py-3 text-body"
     };
     view! {
-        <div class=cls>{message}</div>
+        <div role="status" class=cls>{message}</div>
     }
 }
 
@@ -58,6 +60,10 @@ pub struct ToastContext {
 
 /// Provides toast notifications to the entire app tree.
 /// Must be placed unconditionally in App (not in a cfg block) so SSR can call use_context.
+///
+/// A11y: success toasts are `role="status"` (polite) and leave after 4 s;
+/// errors stay until dismissed and are announced assertively. Toasts never
+/// take focus; the dismiss and copy buttons are at least 24px.
 #[component]
 pub fn ToastProvider(children: Children) -> impl IntoView {
     let (toasts, set_toasts) = signal(Vec::<ToastEntry>::new());
@@ -107,14 +113,16 @@ pub fn ToastProvider(children: Children) -> impl IntoView {
     }
 }
 
-/// Internal overlay component — renders all active toasts at top-center of screen.
+/// Internal overlay component: renders all active toasts at the top centre.
+///
+/// A11y: see `ToastProvider`.
 #[component]
 fn ToastOverlay(
     toasts: ReadSignal<Vec<ToastEntry>>,
     set_toasts: WriteSignal<Vec<ToastEntry>>,
 ) -> impl IntoView {
     view! {
-        <div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
+        <div class="fixed top-16 left-1/2 -translate-x-1/2 z-(--z-toast) flex flex-col gap-2 items-center pointer-events-none">
             {move || toasts.get().into_iter().map(|t| {
                 let id = t.id;
                 let is_error = t.kind == ToastKind::Error;
@@ -122,9 +130,9 @@ fn ToastOverlay(
                 #[allow(unused_variables)]
                 let msg_for_copy = t.message.clone();
                 let base = if is_error {
-                    "pointer-events-auto flex items-start gap-3 bg-danger/20 border border-danger/40 text-danger rounded-lg px-4 py-3 text-sm shadow-lg min-w-64 max-w-sm"
+                    "pointer-events-auto flex items-start gap-3 bg-ink-2 border border-danger/60 text-danger rounded-ctl px-4 py-3 text-body shadow-overlay min-w-64 max-w-sm"
                 } else {
-                    "pointer-events-auto flex items-center gap-3 bg-success/20 border border-success/40 text-success rounded-lg px-4 py-3 text-sm shadow-lg min-w-64 max-w-sm"
+                    "pointer-events-auto flex items-center gap-3 bg-ink-2 border border-success/60 text-success rounded-ctl px-4 py-3 text-body shadow-overlay min-w-64 max-w-sm"
                 };
                 view! {
                     <div role="status" aria-live=if is_error { "assertive" } else { "polite" } class=base>
@@ -133,7 +141,7 @@ fn ToastOverlay(
                             view! {
                                 <div class="flex gap-1 shrink-0">
                                     <button
-                                        class="text-danger/70 hover:text-danger text-xs px-1.5 py-0.5 rounded-md hover:bg-danger/20 transition-colors focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
+                                        class="text-danger hover:bg-danger/15 text-caption min-h-6 min-w-6 px-1.5 rounded-ctl transition-colors cursor-pointer"
                                         on:click=move |_| {
                                             #[cfg(feature = "hydrate")]
                                             {
@@ -145,9 +153,9 @@ fn ToastOverlay(
                                         }
                                     >"Copy"</button>
                                     <button
-                                        class="text-danger/70 hover:text-danger text-xs px-1.5 py-0.5 rounded-md hover:bg-danger/20 transition-colors focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
+                                        class="text-danger hover:bg-danger/15 text-caption min-h-6 min-w-6 px-1.5 rounded-ctl transition-colors cursor-pointer"
                                         on:click=move |_| set_toasts.update(|v| v.retain(|t| t.id != id))
-                                    >"×"</button>
+                                    aria-label="Dismiss">"\u{00d7}"</button>
                                 </div>
                             }.into_any()
                         } else {
@@ -162,25 +170,31 @@ fn ToastOverlay(
 
 // ── Skeleton Primitives ───────────────────────────────────────────────────────
 
-/// A single animated skeleton line. Width and height are Tailwind w-*/h-* classes.
+/// A loading placeholder line. Width and height are Tailwind w-*/h-* classes.
+///
+/// A11y: decorative (`aria-hidden`); the surrounding `Suspense` region is
+/// what announces loading. The pulse stops under reduced motion.
 #[component]
 pub fn SkeletonLine(
     #[prop(default = "w-full")] width: &'static str,
     #[prop(default = "h-4")] height: &'static str,
 ) -> impl IntoView {
-    let cls = format!("animate-pulse bg-elevated rounded {width} {height}");
-    view! { <div class=cls></div> }
+    let cls = format!("animate-pulse motion-reduce:animate-none bg-ink-2 rounded-ctl {width} {height}");
+    view! { <div class=cls aria-hidden="true"></div> }
 }
 
-/// A card-shaped animated skeleton block. Height is a Tailwind h-* class.
+/// A block-shaped loading placeholder. Height is a Tailwind h-* class.
+///
+/// A11y: decorative (`aria-hidden`), static under reduced motion.
 #[component]
 pub fn SkeletonCard(#[prop(default = "h-24")] height: &'static str) -> impl IntoView {
-    let cls =
-        format!("animate-pulse bg-elevated rounded-xl border border-divider/30 {height} w-full");
-    view! { <div class=cls></div> }
+    let cls = format!("animate-pulse motion-reduce:animate-none bg-ink-1 border border-rule {height} w-full");
+    view! { <div class=cls aria-hidden="true"></div> }
 }
 
-/// A grid of skeleton cards. cols must be 2, 3, or 4 (defaults to 3).
+/// A grid of skeleton blocks. cols must be 2, 3, or 4 (defaults to 3).
+///
+/// A11y: decorative, like its blocks.
 #[component]
 pub fn SkeletonGrid(
     #[prop(default = 3u8)] cols: u8,
@@ -195,7 +209,7 @@ pub fn SkeletonGrid(
     };
     let items: Vec<u8> = (0..cols * rows).collect();
     view! {
-        <div class=col_class>
+        <div class=col_class aria-hidden="true">
             {items.into_iter().map(|_| view! { <SkeletonCard height=card_height /> }).collect_view()}
         </div>
     }
@@ -203,43 +217,42 @@ pub fn SkeletonGrid(
 
 // ── Empty States ──────────────────────────────────────────────────────────────
 
-/// A full-width empty state placeholder with optional icon and CTA.
-/// Backward-compatible: existing `<EmptyState message="..." />` call sites continue to compile.
+/// An empty state: says what will appear here and how, with an optional link.
+///
+/// A11y: plain text plus a real link for the next step; no decorative icon
+/// or emoji. Write the message as a sentence that names the action
+/// (honesty rule: never fake data instead).
 #[component]
 pub fn EmptyState(
     message: &'static str,
-    #[prop(optional)] icon: Option<&'static str>,
     #[prop(optional)] cta_label: Option<&'static str>,
     #[prop(optional)] cta_href: Option<&'static str>,
 ) -> impl IntoView {
     view! {
-        <div class="text-center py-12 flex flex-col items-center gap-3">
-            {match icon {
-                Some(i) => view! { <span class="text-4xl" aria-hidden="true">{i}</span> }.into_any(),
-                None => view! { <span></span> }.into_any(),
-            }}
-            <p class="text-secondary text-sm max-w-xs">{message}</p>
+        <div class="py-10 flex flex-col items-start gap-3 border-t border-rule">
+            <p class="text-body text-secondary max-w-prose">{message}</p>
             {match (cta_label, cta_href) {
                 (Some(label), Some(href)) => view! {
                     <a href=href
-                       class="mt-1 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
+                       class="inline-flex h-8 items-center rounded-ctl border border-outline px-3 text-label font-medium text-primary transition-colors hover:bg-ink-3">
                         {label}
                     </a>
                 }.into_any(),
-                _ => view! { <span></span> }.into_any(),
+                _ => ().into_any(),
             }}
         </div>
     }
 }
 
 /// Consistent "no team" state used by all team-scoped pages.
+///
+/// A11y: as `EmptyState`.
 #[component]
 pub fn NoTeamState() -> impl IntoView {
     view! {
         <EmptyState
-            icon="👥"
-            message="You need a team to use this feature. Create or join a team to get started."
-            cta_label="Go to Team Roster"
+            message="Team pages need a team. Create one or ask to join one on the roster page; your drafts, plans and reviews will appear here."
+            cta_label="Go to the roster"
             cta_href="/team/roster"
         />
     }

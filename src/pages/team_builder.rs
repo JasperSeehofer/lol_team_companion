@@ -464,7 +464,6 @@ pub fn TeamBuilderPage() -> impl IntoView {
                     if roster_data.is_empty() {
                         return view! {
                             <EmptyState
-                                icon="⚗️"
                                 message="No team compositions saved yet — use the builder below to try role combinations"
                             />
                         }.into_any();

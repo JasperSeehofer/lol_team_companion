@@ -356,7 +356,6 @@ pub fn ActionItemsPage() -> impl IntoView {
                             if filtered.is_empty() {
                                 view! {
                                     <EmptyState
-                                        icon="✅"
                                         message="No action items yet — they'll appear here automatically after post-game reviews, or add one manually"
                                     />
                                 }.into_any()

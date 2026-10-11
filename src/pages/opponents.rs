@@ -479,7 +479,6 @@ pub fn OpponentsPage() -> impl IntoView {
                                             if user_has_team {
                                                 view! {
                                                     <EmptyState
-                                                        icon="🎭"
                                                         message="No opponents scouted yet — add an opponent team to start tracking their picks and bans"
                                                         cta_label="Add Opponent"
                                                         cta_href="#add-opponent"

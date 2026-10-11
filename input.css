@@ -1,374 +1,302 @@
 @import "tailwindcss";
 
 /* ============================================================
-   Self-hosted fonts (G-01: NO Google Fonts CDN).
-   19 woff2 files in public/fonts/ — see plan 17-01 task 1.
+   Companion design tokens, direction C "Survey".
+   docs/DESIGN.md is the specification; this file implements it.
+   The Rust test `components::ui::tokens` parses the oklch() values
+   below and checks every contrast pair listed in DESIGN.md, so keep
+   one token per line in the form `--color-name: oklch(L C H);`.
+
+   Fonts are self-hosted (G-01: NO Google Fonts CDN); licences in
+   public/fonts/LICENSES.md.
    ============================================================ */
 
 @font-face {
-  font-family: "Cinzel";
+  font-family: "Familjen Grotesk";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 700;
   font-display: swap;
-  src: url("/fonts/cinzel/cinzel-400.woff2") format("woff2");
+  src: url("/fonts/familjen-grotesk/familjen-grotesk-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Cinzel";
+  font-family: "Familjen Grotesk";
   font-style: normal;
-  font-weight: 500;
+  font-weight: 400 700;
   font-display: swap;
-  src: url("/fonts/cinzel/cinzel-500.woff2") format("woff2");
+  src: url("/fonts/familjen-grotesk/familjen-grotesk-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Cinzel";
+  font-family: "Public Sans";
   font-style: normal;
-  font-weight: 600;
+  font-weight: 100 900;
   font-display: swap;
-  src: url("/fonts/cinzel/cinzel-600.woff2") format("woff2");
+  src: url("/fonts/public-sans/public-sans-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Cinzel";
+  font-family: "Public Sans";
   font-style: normal;
-  font-weight: 700;
+  font-weight: 100 900;
   font-display: swap;
-  src: url("/fonts/cinzel/cinzel-700.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Cormorant Garamond";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/cormorant-garamond/cormorant-garamond-400.woff2") format("woff2");
+  src: url("/fonts/public-sans/public-sans-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Cormorant Garamond";
+  font-family: "Public Sans";
   font-style: italic;
-  font-weight: 400;
+  font-weight: 100 900;
   font-display: swap;
-  src: url("/fonts/cormorant-garamond/cormorant-garamond-400i.woff2") format("woff2");
+  src: url("/fonts/public-sans/public-sans-latin-ext-wght-italic.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Cormorant Garamond";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/cormorant-garamond/cormorant-garamond-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Cormorant Garamond";
+  font-family: "Public Sans";
   font-style: italic;
-  font-weight: 500;
+  font-weight: 100 900;
   font-display: swap;
-  src: url("/fonts/cormorant-garamond/cormorant-garamond-500i.woff2") format("woff2");
+  src: url("/fonts/public-sans/public-sans-latin-wght-italic.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Cormorant Garamond";
+  font-family: "JetBrains Mono";
   font-style: normal;
-  font-weight: 600;
+  font-weight: 100 800;
   font-display: swap;
-  src: url("/fonts/cormorant-garamond/cormorant-garamond-600.woff2") format("woff2");
+  src: url("/fonts/jetbrains-mono/jetbrains-mono-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Cormorant Garamond";
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "Source Serif 4";
   font-style: italic;
-  font-weight: 600;
+  font-weight: 200 900;
   font-display: swap;
-  src: url("/fonts/cormorant-garamond/cormorant-garamond-600i.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/inter/inter-400.woff2") format("woff2");
+  src: url("/fonts/source-serif-4/source-serif-4-latin-ext-wght-italic.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 500;
+  font-family: "Source Serif 4";
+  font-style: italic;
+  font-weight: 200 900;
   font-display: swap;
-  src: url("/fonts/inter/inter-500.woff2") format("woff2");
+  src: url("/fonts/source-serif-4/source-serif-4-latin-wght-italic.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/inter/inter-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/inter/inter-700.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono/jetbrains-mono-400.woff2") format("woff2");
-}
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono/jetbrains-mono-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono/jetbrains-mono-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono/jetbrains-mono-700.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "VT323";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/vt323/vt323-400.woff2") format("woff2");
-}
-
-/* ============================================================
-   Theme system: semantic color tokens
-   Tailwind v4 @theme block — generates utility classes from
-   --color-*, --font-* custom properties.
-   ============================================================ */
 
 @theme {
-  /* Backgrounds */
-  --color-base: var(--t-base);
-  --color-surface: var(--t-surface);
-  --color-elevated: var(--t-elevated);
-  --color-overlay: var(--t-overlay);
-  --color-overlay-strong: var(--t-overlay-strong);
+  /* ---- Ground: night-map ink, green-slate h200. Tonal layers, no shadows. */
+  --color-page: oklch(0.180 0.018 200);
+  --color-ink-1: oklch(0.205 0.020 200);
+  --color-ink-2: oklch(0.235 0.020 200);
+  --color-ink-3: oklch(0.275 0.020 200);
+  --color-canvas: oklch(0.190 0.022 195);
 
-  /* Text */
-  --color-primary: var(--t-primary);
-  --color-secondary: var(--t-secondary);
-  --color-muted: var(--t-muted);
-  --color-dimmed: var(--t-dimmed);
+  /* ---- Lines: hairline for structure, outline (3:1) for anything interactive. */
+  --color-rule: oklch(0.340 0.016 200);
+  --color-outline: oklch(0.580 0.020 200);
 
-  /* Borders */
-  --color-divider: var(--t-divider);
-  --color-outline: var(--t-outline);
+  /* ---- Text */
+  --color-primary: oklch(0.950 0.008 190);
+  --color-secondary: oklch(0.820 0.012 195);
+  --color-muted: oklch(0.700 0.014 200);
 
-  /* Accent */
-  --color-accent: var(--t-accent);
-  --color-accent-hover: var(--t-accent-hover);
-  --color-accent-contrast: var(--t-accent-contrast);
-  --color-accent-soft: var(--t-accent-soft);
+  /* ---- The one accent: survey chalk. Focus, selection, primary action, playhead. */
+  --color-accent: oklch(0.910 0.100 108);
+  --color-accent-hover: oklch(0.950 0.070 108);
+  --color-accent-ink: oklch(0.240 0.030 110);
+  --color-accent-soft: oklch(0.910 0.100 108 / 0.10);
 
-  /* Status */
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-danger: var(--danger);
-  --color-info: var(--info);
+  /* ---- Domain: sides are a matched pair (same L and C), always with shape or text. */
+  --color-side-blue: oklch(0.700 0.120 245);
+  --color-side-red: oklch(0.700 0.120 28);
+  --color-side-blue-deep: oklch(0.300 0.050 245);
+  --color-side-red-deep: oklch(0.300 0.050 28);
 
-  /* Fonts */
-  --font-display: "Cormorant Garamond", "Cinzel", serif;
-  --font-imperial: "Cinzel", "Trajan Pro", serif;
-  --font-ui: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
-  --font-glitch: "VT323", "JetBrains Mono", monospace;
+  /* ---- Domain: results never reuse side colours. Win is a filled teal W, loss a hollow neutral L. */
+  --color-win: oklch(0.800 0.110 175);
+  --color-win-ink: oklch(0.220 0.030 175);
+  --color-loss: oklch(0.700 0.014 200);
 
-  /* Phase 18 skeleton animations (region-aware loading + empty states) */
-  --animate-dem-shimmer: dem-shimmer 2.4s ease-in-out infinite;
-  --animate-pan-flicker: pan-flicker 1.6s ease-in-out infinite;
-  --animate-pan-scan: pan-scan 0.9s linear infinite;
-  --animate-pan-cursor: pan-cursor 0.9s steps(1) infinite;
+  /* ---- Status, always paired with text or a glyph. */
+  --color-success: oklch(0.790 0.120 155);
+  --color-warning: oklch(0.800 0.140 78);
+  --color-danger: oklch(0.720 0.160 12);
+  --color-info: oklch(0.790 0.080 215);
 
-  @keyframes dem-shimmer {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.85; }
+  /* ---- Terrain: canvases (map, graph) only, never behind running text. */
+  --color-terrain-jungle: oklch(0.215 0.024 170);
+  --color-terrain-river: oklch(0.255 0.032 225);
+  --color-terrain-lane: oklch(0.300 0.014 200);
+  --color-terrain-texture: oklch(0.240 0.022 195);
+
+  /* ---- Scrim behind dialogs: opaque enough that nothing reads through (no blur). */
+  --color-scrim: oklch(0.140 0.016 200 / 0.88);
+
+  /* ---- Legacy names kept so pages restyle without edits (M3 migrates them). */
+  --color-base: var(--color-page);
+  --color-surface: var(--color-ink-1);
+  --color-elevated: var(--color-ink-2);
+  --color-divider: var(--color-rule);
+  --color-dimmed: var(--color-muted);
+  --color-accent-contrast: var(--color-accent-ink);
+  --color-overlay: var(--color-scrim);
+  --color-overlay-strong: var(--color-scrim);
+
+  /* ---- Type faces */
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-ui: var(--font-sans);
+  --font-display: "Familjen Grotesk", "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-note: "Source Serif 4", Georgia, "Times New Roman", serif;
+
+  /* ---- Type scale (ratio about 1.2). Nothing below 12px. */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.4;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-reading: 1rem;
+  --text-reading--line-height: 1.6;
+  --text-heading: 1.25rem;
+  --text-heading--line-height: 1.3;
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.2;
+  --text-page: 2rem;
+  --text-page--line-height: 1.1;
+  --text-display: 2.75rem;
+  --text-display--line-height: 1.05;
+
+  /* ---- Radius has meaning: 0 structure, 3px controls, round only avatars and toggles.
+     Tailwind's named radii all collapse to the control radius so legacy
+     `rounded-lg` / `rounded-xl` stop reading as "everything rounded". */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-2xl: 3px;
+  --radius-3xl: 3px;
+  --radius-4xl: 3px;
+  --radius-ctl: 3px;
+
+  /* ---- Elevation: tone does the work; one soft shadow for floating overlays only. */
+  --shadow-*: initial;
+  --shadow-overlay: 0 12px 32px oklch(0.10 0.02 200 / 0.45);
+  --drop-shadow-*: initial;
+  --inset-shadow-*: initial;
+
+  /* ---- Motion: under 300ms, ease-out, nothing loops. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --default-transition-duration: 160ms;
+  --default-transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  --animate-*: initial;
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Non-Tailwind tokens (read through var()). */
+:root {
+  color-scheme: dark;
+
+  --dur-1: 100ms; /* press, colour change */
+  --dur-2: 160ms; /* hover reveal, tooltip, toggle */
+  --dur-3: 220ms; /* popover, tray */
+  --dur-4: 300ms; /* panel, route content */
+
+  /* Layers: nav < popover < dialog < toast. Use as z-(--z-nav). */
+  --z-nav: 30;
+  --z-popover: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+
+  --focus-ring: var(--color-accent);
+}
+
+@layer base {
+  html {
+    background-color: var(--color-page);
   }
-  @keyframes pan-flicker {
-    0%, 100% { opacity: 0.55; }
-    48% { opacity: 0.55; }
-    50% { opacity: 0.95; }
-    52% { opacity: 0.55; }
-    80% { opacity: 0.75; }
+  body {
+    background-color: var(--color-page);
+    color: var(--color-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Figures line up everywhere: tables, readouts, timers. */
+    font-variant-numeric: tabular-nums;
   }
-  @keyframes pan-scan {
-    0%   { background-position: 0 0; }
-    100% { background-position: 0 12px; }
+  h1, h2, h3, h4 {
+    text-wrap: balance;
   }
-  @keyframes pan-cursor {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
+  ::selection {
+    background-color: oklch(0.910 0.100 108 / 0.30);
+    color: var(--color-primary);
+  }
+  /* One focus rule for the whole app: solid 2px chalk, 2px offset. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  kbd {
+    font-family: var(--font-mono);
   }
 }
 
-/* Pandemonium scanline background — used by PageLoading pandemonium variants */
-@utility bg-scanline {
-  background-image: repeating-linear-gradient(
-    0deg,
-    color-mix(in oklab, var(--color-accent) 14%, transparent),
-    color-mix(in oklab, var(--color-accent) 14%, transparent) 1px,
-    transparent 1px,
-    transparent 12px
-  );
+/* Type roles that are more than a size. */
+@utility overline {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+@utility note {
+  font-family: var(--font-note);
+  font-style: italic;
+  font-weight: 400;
+}
+@utility figures {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Demacia parchment-tan shimmer overlay tint */
-@utility bg-parchment-shimmer {
-  background-color: color-mix(in oklab, var(--color-accent) 8%, var(--t-surface) 92%);
+/* Reduced motion: no movement, no loops; state changes still happen. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-/* ============================================================
-   DEMACIA (default) — heraldic, illuminated manuscript
-   ============================================================ */
-:root, [data-theme="demacia"] {
-  --t-base: #0d0f1a;
-  --t-surface: #14182a;
-  --t-elevated: #1c2238;
-  --t-overlay: rgba(20, 24, 42, 0.85);
-  --t-overlay-strong: rgba(13, 15, 26, 0.95);
-
-  --t-primary: #f6efd9;
-  --t-secondary: #e0d4b2;
-  --t-muted: #a89773;
-  --t-dimmed: #6e6446;
-
-  --t-divider: rgba(212, 175, 90, 0.14);
-  --t-outline: rgba(212, 175, 90, 0.32);
-
-  --t-accent: #d4af5a;
-  --t-accent-hover: #f1d985;
-  --t-accent-contrast: #0d0f1a;
-  --t-accent-soft: rgba(212, 175, 90, 0.12);
-
-  /* Demacia-only extended tokens */
-  --gold-1: #f1d985;
-  --gold-2: #d4af5a;
-  --gold-3: #9b7c34;
-  --gold-deep: #6b531e;
-  --lapis-1: #3a5fa8;
-  --lapis-2: #2a4d8c;
-  --lapis-3: #16315e;
-  --ivory: #f6efd9;
-  --ink: #2b1c14;
-  --ornament: rgba(212, 175, 90, 0.55);
-
-  /* Status */
-  --success: #7ba35e;
-  --warning: #d4974a;
-  --danger: #a84436;
-  --info: #6b8eb8;
-}
-
-/* ============================================================
-   PANDEMONIUM — fractured, kinetic, oil-on-obsidian
-   ============================================================ */
-[data-theme="pandemonium"] {
-  --t-base: #06070b;
-  --t-surface: #0e1018;
-  --t-elevated: #14171f;
-  --t-overlay: rgba(14, 16, 24, 0.85);
-  --t-overlay-strong: rgba(6, 7, 11, 0.95);
-
-  --t-primary: #f3f0e8;
-  --t-secondary: #c8c4ba;
-  --t-muted: #7c7870;
-  --t-dimmed: #4d4a44;
-
-  --t-divider: rgba(255, 255, 255, 0.08);
-  --t-outline: rgba(120, 220, 240, 0.32);
-
-  --t-accent: #f73c8c;
-  --t-accent-hover: #ff7ab8;
-  --t-accent-contrast: #06070b;
-  --t-accent-soft: rgba(247, 60, 140, 0.14);
-
-  /* Pandemonium decorative-only tokens — never CTAs/focus */
-  --accent-2: #6cf0e2;
-  --accent-3: #fff157;
-  --ornament: rgba(247, 60, 140, 0.55);
-
-  /* Status */
-  --success: #6cf0a0;
-  --warning: #fff157;
-  --danger: #ff5560;
-  --info: #6cf0e2;
-}
-
-/* ============================================================
-   Painterly canvas — vignette + grain
-   Ported from themes.css.
-   ============================================================ */
-/* Lives in the components layer so Tailwind utilities (layer: utilities)
-   still win: `.canvas-grain > *` must not override `fixed -z-10` on
-   full-bleed background images (login, closed beta). `isolation: isolate`
-   keeps those negative-z backgrounds above the page's own bg-base but
-   below its content. */
+/* Gallery: forced pseudo-states so screenshots need no mouse.
+   Primitives set `data-force` only on the /design page. */
 @layer components {
-  .canvas-grain { position: relative; isolation: isolate; }
-  .canvas-grain::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(ellipse at 30% 10%, rgba(255, 220, 160, 0.06), transparent 60%),
-      radial-gradient(ellipse at 70% 90%, rgba(0, 0, 0, 0.25), transparent 50%);
-    mix-blend-mode: overlay;
-    z-index: 0;
+  [data-force="focus"] {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
-  .canvas-grain::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.5;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    mix-blend-mode: overlay;
-    z-index: 0;
-  }
-  .canvas-grain > * { position: relative; z-index: 1; }
 }
 
-/* ============================================================
-   Closed-beta hero background — theme-conditional swap.
-   Phase 17 plan 06: both <img>s render; CSS shows only the one
-   that matches the active [data-theme]. Keeps markup static
-   (no reactive `if`); theme switch is a pure-CSS visibility flip.
-   ============================================================ */
-:root .closed-beta-bg-demacia,
-[data-theme="demacia"] .closed-beta-bg-demacia { display: block; }
-[data-theme="demacia"] .closed-beta-bg-pandemonium { display: none; }
-[data-theme="pandemonium"] .closed-beta-bg-demacia { display: none; }
-[data-theme="pandemonium"] .closed-beta-bg-pandemonium { display: block; }
-
-/* Auth pages: the optional FLUX background is Demacia-only.
-   Pandemonium auth surfaces fall back to canvas-grain over
-   bg-base (UI-SPEC §"Asset versioning"). */
-:root .auth-bg-demacia,
-[data-theme="demacia"] .auth-bg-demacia { display: block; opacity: 0.55; }
-[data-theme="pandemonium"] .auth-bg-demacia { display: none; }
-
-/* ============================================================
-   Bug-report widget — Phase 19 D-05.
-   Single O(1) selector lights up every tagged element while
-   the widget is in select-mode. Toggling the
-   `data-feedback-selecting` attribute on <html> activates this
-   rule for every descendant `[data-feedback-label]` element.
-   ============================================================ */
+/* Bug-report widget: select mode outlines every tagged element. */
 [data-feedback-selecting] [data-feedback-label] {
-  outline: 2px solid var(--color-accent-soft, var(--color-accent));
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   cursor: crosshair;
 }

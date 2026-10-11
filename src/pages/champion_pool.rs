@@ -504,7 +504,6 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                     if user_has_team {
                                         return view! {
                                             <EmptyState
-                                                icon="🎯"
                                                 message="Your champion pool is empty — add champions to track your picks and matchups"
                                                 cta_label="Add a Champion"
                                                 cta_href="#add-champion"

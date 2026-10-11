@@ -155,7 +155,6 @@ pub fn RosterPage() -> impl IntoView {
             <div class="flex flex-col gap-8">
                 // No-team context message
                 <EmptyState
-                    icon="👥"
                     message="You're not part of a team yet — create a new team or join an existing one"
                 />
 
