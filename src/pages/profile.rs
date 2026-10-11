@@ -13,7 +13,6 @@ pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
         riot_summoner_name: u.riot_summoner_name,
         mode: u.mode,
         riot_region: u.riot_region,
-        theme: u.theme,
         draft_mode: u.draft_mode,
         team_dashboard_mode: u.team_dashboard_mode,
         solo_mode: u.solo_mode,
@@ -180,10 +179,10 @@ pub fn ProfilePage() -> impl IntoView {
                                 let username_for_header = username.clone();
                                 view! {
                                     <div class="flex flex-col gap-7">
-                                        // Captain's Folio header
+                                        // Profile header
                                         <header class="pt-2 pb-1">
                                             <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">
-                                                "Captain\u{2019}s Folio"
+                                                "Profile"
                                             </div>
                                             <h1 class="font-display text-display leading-tight text-primary mt-1">
                                                 {username_for_header}
@@ -195,7 +194,6 @@ pub fn ProfilePage() -> impl IntoView {
                                         <PanelCard>
                                             <div class="flex items-baseline justify-between mb-4">
                                                 <h2 class="font-display text-[22px] text-primary">"Account"</h2>
-                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Identity"</span>
                                             </div>
 
 
@@ -257,7 +255,6 @@ pub fn ProfilePage() -> impl IntoView {
                                         <PanelCard>
                                             <div class="flex items-baseline justify-between mb-4">
                                                 <h2 class="font-display text-[22px] text-primary">"Riot Account"</h2>
-                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Linked seal"</span>
                                             </div>
 
                                             {match riot_name {
@@ -372,7 +369,6 @@ pub fn ProfilePage() -> impl IntoView {
                                         <PanelCard>
                                             <div class="flex items-baseline justify-between mb-4">
                                                 <h2 class="font-display text-[22px] text-primary">"Sign out"</h2>
-                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"End session"</span>
                                             </div>
                                             <ActionForm action=logout_action>
                                                 <button

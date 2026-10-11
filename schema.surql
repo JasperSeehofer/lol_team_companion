@@ -23,8 +23,8 @@ DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
 DEFINE FIELD IF NOT EXISTS mode ON user TYPE string DEFAULT 'solo';
 DEFINE FIELD IF NOT EXISTS riot_region ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS theme ON user TYPE string DEFAULT 'demacia'
-  ASSERT $value IN ['demacia', 'pandemonium'];
+-- user.theme (Demacia/Pandemonium) was removed by migration 7 (drop_user_theme):
+-- there is one theme, and nothing reads the field.
 
 -- Phase 18 region-variants: per-route mode persistence (D-03)
 -- No ASSERT constraint — value set is wider (route-scoped) + may grow in future phases

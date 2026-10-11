@@ -21,7 +21,6 @@ pub struct PublicUser {
     pub riot_summoner_name: Option<String>,
     pub mode: String,
     pub riot_region: Option<String>,
-    pub theme: String,
     pub draft_mode: String,
     pub team_dashboard_mode: String,
     pub solo_mode: String,
