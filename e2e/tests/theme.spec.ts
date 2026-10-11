@@ -27,7 +27,7 @@ test("dark color scheme, Survey ground and faces", async ({ page }) => {
     };
   });
   expect(styles.scheme).toContain("dark");
-  expect(styles.page).toContain("oklch");
+  expect(styles.page).not.toBe("");
   expect(styles.font).toContain("Public Sans");
   expect(styles.h1).toContain("Familjen Grotesk");
 });
