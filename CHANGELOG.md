@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Opponent dossiers show how much evidence each holds (players and scouted games) and when they were last surveyed, flagged after a week; empty role slots can be filled with a Riot ID or a name.
 - Champion pool tiers can be rearranged from the keyboard: Space picks a champion up, the arrow keys choose a tier, Space drops it there.
 - Drafts can be deleted (with a confirmation).
+- Saved drafts, game plans and reviews keep their id in the address, so a reload or a shared link reopens them.
 
 #### Changed
 - The draft page is one compact tournament board: blue left, red right, five bans per side grouped by ban rotation, then the picks in pick order grouped by rotation, with only the current step lit and a counter such as "Pick 7 of 10 · Red to pick". It fits beside the champion search on a laptop screen and works entirely from the keyboard (arrows, Enter, Escape, Backspace). The earlier draft board showed three bans per side instead of five.
@@ -22,6 +23,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - Tooltips stay open while you move the pointer onto them; the command bar's search shows a focus ring; the Solo / Team switch in the navigation moves with the arrow keys and only switches on Enter, Space or a click.
 - On phones the bug-report button sits in the footer area instead of covering the page.
 - Simultaneous requests for the same champion picture share one download.
+- Lines under "Action items" in a post-game review now become action items when you save, as the form says (lines under "To improve" still do too; open duplicates are skipped).
+- Older drafts that name their opponent open with that opponent's scouting brief beside the board.
+
+#### Fixed
+- Deleting the open tree in the tree drafter no longer breaks the page.
+- A game plan started from a draft no longer replaces a name you typed while the draft was loading.
+- "Branch" in the tree drafter puts the cursor in the new branch's name field.
 
 #### Removed
 - The draft page's carousel, table and ledger views and its first-pick toggle (blue picks first in a tournament draft).
