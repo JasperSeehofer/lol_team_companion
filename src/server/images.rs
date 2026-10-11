@@ -215,10 +215,14 @@ async fn serve(kind: Kind, id: String, headers: HeaderMap, ext: Extensions) -> R
             };
             // Retire the flight once the result is stored: later misses read
             // the cache, or start a fresh download after a failure.
-            in_flight()
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .remove(&cache_key);
+            {
+                // Only this flight: a newer one for the same key (started
+                // after a failure) must keep running for its own waiters.
+                let mut map = in_flight().lock().unwrap_or_else(|p| p.into_inner());
+                if map.get(&cache_key).is_some_and(|f| Arc::ptr_eq(f, &flight)) {
+                    map.remove(&cache_key);
+                }
+            }
             match outcome {
                 Ok(entry) => entry,
                 Err(resp) => return resp,
