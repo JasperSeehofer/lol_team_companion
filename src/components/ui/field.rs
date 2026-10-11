@@ -170,8 +170,12 @@ pub fn TextField(
     let aria_invalid = move || invalid.and_then(|i| i.get().then_some("true"));
     let aria_described = move || described_by.and_then(|d| d.get());
 
-    match rows {
-        Some(rows) => {
+    // Only a bound field follows a signal. An unbound one (a plain form
+    // field such as the sign-in email) must not get `prop:value`: the
+    // property is set during hydration, which would wipe whatever the
+    // browser autofilled or the user typed before the page went live.
+    match (rows, value) {
+        (Some(rows), Some(v)) => {
             let class = join(&[CONTROL, "py-2 text-body min-h-20 resize-y leading-relaxed"]);
             view! {
                 <textarea
@@ -188,13 +192,34 @@ pub fn TextField(
                     aria-invalid=aria_invalid
                     aria-describedby=aria_described
                     data-force=force
-                    prop:value=move || value.map(|v| v.get()).unwrap_or_default()
+                    prop:value=move || v.get()
                     on:input=on_input
                 ></textarea>
             }
             .into_any()
         }
-        None => {
+        (Some(rows), None) => {
+            let class = join(&[CONTROL, "py-2 text-body min-h-20 resize-y leading-relaxed"]);
+            view! {
+                <textarea
+                    id=id
+                    name=name
+                    class=class
+                    rows=rows
+                    placeholder=placeholder
+                    required=required
+                    minlength=minlength
+                    maxlength=maxlength
+                    disabled=move || disabled.get()
+                    aria-label=aria_label
+                    aria-invalid=aria_invalid
+                    aria-describedby=aria_described
+                    data-force=force
+                ></textarea>
+            }
+            .into_any()
+        }
+        (None, Some(v)) => {
             let class = join(&[CONTROL, size.class()]);
             view! {
                 <input
@@ -212,8 +237,30 @@ pub fn TextField(
                     aria-invalid=aria_invalid
                     aria-describedby=aria_described
                     data-force=force
-                    prop:value=move || value.map(|v| v.get()).unwrap_or_default()
+                    prop:value=move || v.get()
                     on:input=on_input
+                />
+            }
+            .into_any()
+        }
+        (None, None) => {
+            let class = join(&[CONTROL, size.class()]);
+            view! {
+                <input
+                    id=id
+                    type=kind.as_str()
+                    name=name
+                    class=class
+                    placeholder=placeholder
+                    autocomplete=autocomplete
+                    required=required
+                    minlength=minlength
+                    maxlength=maxlength
+                    disabled=move || disabled.get()
+                    aria-label=aria_label
+                    aria-invalid=aria_invalid
+                    aria-describedby=aria_described
+                    data-force=force
                 />
             }
             .into_any()
