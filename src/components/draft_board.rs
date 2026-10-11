@@ -265,7 +265,7 @@ pub fn DraftBoard(
                                                     class="absolute top-0 right-0 bg-warning text-base text-xs font-bold px-1 leading-tight rounded-bl z-10 cursor-help"
                                                     title=tooltip
                                                 >
-                                                    <span class="text-caption">{"\u{26A0}"}</span>
+                                                    <span class="text-caption font-semibold">"!"</span>
                                                 </div>
                                             }
                                         })}

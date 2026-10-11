@@ -25,6 +25,10 @@ lint:
 fmt:
     cargo fmt
 
+# Design-system lint gates (docs/DESIGN.md section 9)
+lint-design:
+    ./scripts/lint_design.sh
+
 # Quick health check against the running dev server
 health:
     ./scripts/health.sh
@@ -51,7 +55,7 @@ e2e-ui:
     cd e2e && npx playwright test --ui
 
 # Full validation: check both targets + test + lint + format check
-verify: check test lint
+verify: check test lint lint-design
     cargo fmt --check
 
 # Pipeline flow test: draft → game-plan → post-game linking (requires running server)

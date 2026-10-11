@@ -1,0 +1,29 @@
+# Design lint baseline (scripts/lint_design.sh). rule<TAB>file<TAB>count.
+# Counts may only go down. Deleted at the end of M2 stage B.
+palette	src/components/bug_report_widget.rs	2
+palette	src/components/draft_board.rs	2
+palette	src/pages/champion_pool.rs	5
+palette	src/pages/draft.rs	50
+palette	src/pages/game_plan.rs	10
+palette	src/pages/post_game.rs	18
+palette	src/pages/tree_drafter.rs	1
+pulse	src/components/draft_board.rs	1
+pulse	src/pages/champion_pool.rs	1
+pulse	src/pages/draft.rs	1
+pulse	src/pages/home.rs	1
+pulse	src/pages/post_game.rs	3
+rounded-full	src/components/bug_report_widget.rs	1
+rounded-full	src/components/draft_board.rs	10
+rounded-full	src/pages/action_items.rs	6
+rounded-full	src/pages/champion_pool.rs	2
+rounded-full	src/pages/design.rs	1
+rounded-full	src/pages/draft.rs	5
+rounded-full	src/pages/game_plan.rs	4
+rounded-full	src/pages/home.rs	1
+rounded-full	src/pages/match_detail.rs	16
+rounded-full	src/pages/personal_learnings.rs	3
+rounded-full	src/pages/solo_dashboard.rs	11
+rounded-full	src/pages/stats.rs	2
+rounded-full	src/pages/team/dashboard.rs	6
+rounded-full	src/pages/team_builder.rs	5
+rounded-full	src/pages/tree_drafter.rs	2

@@ -1174,7 +1174,7 @@ fn TreeNodeView(
                 >
                     // Icon
                     {if is_improvised {
-                        view! { <span class="text-warning text-xs flex-shrink-0" title="Improvised">"\u{26A1}"</span> }.into_any()
+                        view! { <span class="text-warning text-xs flex-shrink-0" title="Improvised">"\u{2248}"</span> }.into_any()
                     } else if is_root {
                         view! { <span class="text-success text-xs flex-shrink-0">"\u{25C9}"</span> }.into_any()
                     } else {
@@ -1519,7 +1519,7 @@ fn LiveNavigator(
                                             <h2 class="text-primary text-xl font-bold">{node_label}</h2>
                                             {node_improvised.then(|| view! {
                                                 <span class="bg-warning/20 text-warning text-xs font-semibold px-2 py-0.5 rounded-full">
-                                                    "\u{26A1} Improvised"
+                                                    "Improvised"
                                                 </span>
                                             })}
                                         </div>
@@ -1589,7 +1589,7 @@ fn LiveNavigator(
                                                     }
                                                 }
                                             >
-                                                "\u{26A1} Improvise"
+                                                "Improvise"
                                             </button>
                                         </div>
                                         {if has_children {
@@ -1613,7 +1613,7 @@ fn LiveNavigator(
                                                                 <div class="flex items-center gap-2">
                                                                     <span class="text-primary text-sm font-medium group-hover:text-accent transition-colors">{child_label}</span>
                                                                     {child_improvised.then(|| view! {
-                                                                        <span class="text-warning text-xs">"\u{26A1}"</span>
+                                                                        <span class="text-warning text-xs" title="Improvised">"\u{2248}"</span>
                                                                     })}
                                                                 </div>
                                                                 {child_notes.map(|n| view! {

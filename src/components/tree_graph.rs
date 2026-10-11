@@ -618,7 +618,7 @@ pub fn TreeGraph(
                                     }
                                 }
                             >
-                                {if is_improvised { "\u{26A1}" }
+                                {if is_improvised { "\u{2248}" }
                                  else if is_root { "\u{25C9}" }
                                  else { "\u{251C}" }}
                             </text>

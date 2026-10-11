@@ -1134,7 +1134,7 @@ fn PlayerCard(
                     let champ = champ.clone();
                     view! {
                         <span class="text-xs bg-warning/15 text-warning border border-warning/30 rounded-md px-2 py-0.5">
-                            "\u{26a0} OTP: "{champ}
+                            "OTP: "{champ}
                         </span>
                     }
                 })}

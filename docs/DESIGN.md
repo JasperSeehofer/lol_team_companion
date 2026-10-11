@@ -267,7 +267,7 @@ Portraits are real (owner's decision) and never load from a third party in the b
 
 `/design`, for developers and admins only (dev builds, or `ADMIN_EMAILS`; everyone else gets the 404 page). One section per primitive with every variant and state (default, hover, focus-visible, pressed, disabled, loading, error, empty), forced states for screenshots, the token board with the measured contrast next to each pair, the type scale, the worked tournament draft example and the prep sequence example. All content is fixture text labelled as such.
 
-`e2e/tests/gallery.spec.ts` screenshots every section at 1280 and 400px and checks keyboard operation (Tabs arrows and Home/End, Select, Button, TextField). Update its baselines with `npx playwright test gallery.spec.ts --update-snapshots`.
+`e2e/tests/gallery.spec.ts` screenshots every section at 1280 and 400px (attached to the Playwright report, and written to `$GALLERY_SHOTS_DIR` as `design-<section>-<width>.png` when set), fails if the page scrolls sideways at either width, and checks keyboard operation (Tabs arrows, Home and End; Button with Enter and Space and its focus outline; TextField; Select; the error wiring of `Field`) plus the tournament order of the draft example. Screenshots are evidence for review, not pixel baselines, so font rasterisation differences between machines do not fail CI. The route-level pixel baselines live in `visual-regression.spec.ts` (re-captured with `--update-snapshots`).
 
 ## 9. Lint gates
 
@@ -275,19 +275,22 @@ Portraits are real (owner's decision) and never load from a third party in the b
 
 | Rule | Fails on | Allowed |
 |---|---|---|
-| `palette` | raw Tailwind palette colours (`text-red-400`, `bg-blue-500`, `text-white` ...) | `text-white` lines on the allow list in the script |
+| `palette` | raw Tailwind palette colours (`text-red-400`, `bg-blue-500`, `text-white` ...) | none (the remaining `text-white` on coloured buttons is in the baseline) |
+| `hex` | hex colour literals outside comments | none |
 | `px-text` | `text-[Npx]` below 12px | none |
 | `rounded-full` | `rounded-full` | inside `src/components/ui/` |
 | `blur` | `backdrop-blur`, `backdrop-filter` | none |
 | `gradient` | `bg-gradient`, `linear-gradient`, `radial-gradient` | none |
 | `drop-shadow` | `drop-shadow`, `text-shadow` | none |
-| `pulse` | `animate-pulse` | the skeleton components in `src/components/ui/feedback.rs` |
+| `pulse` | `animate-pulse` | the skeleton components (`src/components/ui/feedback.rs`, `src/components/skeleton.rs`) |
 | `ornament` | Cinzel, `font-imperial`, `font-glitch`, VT323, `canvas-grain`, fleur-de-lis and the other retired ornaments, Pandemonium | none |
-| `emoji` | emoji characters in UI strings | none |
+| `emoji` | pictographs (emoji, and `\u{...}` escapes of them) in UI strings | typographic marks: stars, check, cross |
 | `region` | `region ==`, `region=` props, `InitialTheme`, `data-theme` | none |
 | G-12 | `outline-none` without a `focus-visible:` replacement on the same line | none |
 
-A baseline (`scripts/design-lint-baseline.txt`, `rule<TAB>file<TAB>count`) lets the count ratchet during M2: a rule may not gain hits in any file, and new files start at zero. At the end of stage B the baseline is deleted and every rule is hard zero. `scripts/lint_design.sh --update-baseline` rewrites it (only ever downwards in review).
+A baseline (`scripts/design-lint-baseline.txt`, `rule<TAB>file<TAB>count`) lets the count ratchet during M2: a rule may not gain hits in any file, and new files start at zero. At the end of stage B the baseline is deleted and every rule is hard zero. `scripts/lint_design.sh --update-baseline` rewrites it (only ever downwards in review). At the end of stage A the baseline holds 170 hits: palette classes (88, mostly `draft.rs` and `post_game.rs`), `rounded-full` outside primitives (75) and skeleton-style `animate-pulse` in five pages (7). Every other rule is already at zero.
+
+Escape hatch for a legitimate exception: `lint:allow(<rule>)` in a comment on the same line (used once, for the nav avatar until batch 3 ships an avatar primitive).
 
 Two Rust tests complete the gates: the contrast test (section 3.2) and the a11y doc-comment test (section 6).
 
