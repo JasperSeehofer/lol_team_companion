@@ -98,7 +98,33 @@ type Fixtures = {
   teamPage: Page;
 };
 
+/** A 1x1 transparent PNG served in place of champion art. */
+const PLACEHOLDER_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64"
+);
+
+/**
+ * Champion and role art comes from external CDNs (Data Dragon,
+ * CommunityDragon). The page "load" event waits for every image, so one
+ * stalled CDN request (common through the cloud-session proxy) used to time
+ * out `page.goto` at random. Tests serve a placeholder instead: they check
+ * our pages, not the CDN.
+ */
+async function stubExternalImages(page: Page): Promise<void> {
+  await page.route(
+    /^https:\/\/(ddragon\.leagueoflegends\.com|raw\.communitydragon\.org)\//,
+    (route) =>
+      route.fulfill({ status: 200, contentType: "image/png", body: PLACEHOLDER_PNG })
+  );
+}
+
 export const test = base.extend<Fixtures>({
+  page: async ({ page }, use) => {
+    await stubExternalImages(page);
+    await use(page);
+  },
+
   authedPage: async ({ page }, use) => {
     await authenticatePage(page);
     await use(page);
