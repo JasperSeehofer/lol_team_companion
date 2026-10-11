@@ -76,13 +76,20 @@ impl SurrealSessionStore {
 #[async_trait]
 impl SessionStore for SurrealSessionStore {
     async fn create(&self, record: &mut Record) -> session_store::Result<()> {
-        // Loop to handle the unlikely case of an ID collision.
-        loop {
-            if self.write(record, true).await.unwrap_or(false) {
-                return Ok(());
+        // Retry with a fresh ID on the (astronomically unlikely) collision; a
+        // CREATE on an existing ID fails or returns no row. Bounded so a
+        // broken database surfaces as an error instead of a busy loop.
+        let mut last_err = None;
+        for _ in 0..5 {
+            match self.write(record, true).await {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e) => last_err = Some(e),
             }
             record.id = Id::default();
         }
+        Err(last_err
+            .unwrap_or_else(|| session_store::Error::Backend("could not create session".into())))
     }
 
     async fn save(&self, record: &Record) -> session_store::Result<()> {

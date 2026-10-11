@@ -6,7 +6,7 @@
 //! | `CLOSED_BETA` | on | `false`/`0`/`off` disables the invite gate, **only honoured in dev** |
 //! | `SESSION_SECRET` | none | key for the session auth hash (HMAC); required outside dev, at least 32 bytes |
 //! | `COOKIE_SECURE` | `true` outside dev, `false` in dev | `Secure` flag on the session cookie |
-//! | `ADMIN_EMAILS` | empty | comma-separated emails promoted to admin when they sign in |
+//! | `ADMIN_EMAILS` | empty | comma-separated emails promoted to admin when they sign in (no email verification exists: list an address only after its owner has registered it) |
 //! | `BOOTSTRAP_INVITE_CODE` | unset | ensures this invite code exists at startup |
 //! | `BOOTSTRAP_INVITE_MAX_USES` | `1` | max uses for that code when it is created |
 //! | `RATE_LIMIT_MULTIPLIER` | `1` | scales every rate-limit capacity (e.g. `100` for e2e runs) |

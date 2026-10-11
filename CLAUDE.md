@@ -78,7 +78,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes. **Required outside dev** (the server refuses to start); in dev a random key is used per run | none |
 | `CLOSED_BETA` | `false` disables the invite gate. **Honoured only in dev**; production always requires an invite | gate on |
 | `COOKIE_SECURE` | `Secure` flag on the session cookie | `true` outside dev, `false` in dev |
-| `ADMIN_EMAILS` | Comma-separated emails promoted to admin (`user.is_admin`) when they sign in or register | empty |
+| `ADMIN_EMAILS` | Comma-separated emails promoted to admin (`user.is_admin`) when they sign in or register. There is no email verification, so register the admin account first (with the bootstrap invite), then list it | empty |
 | `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs) | unset / `1` |
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities (e2e uses `100`) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy) | `false` |
