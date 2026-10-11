@@ -188,9 +188,7 @@ pub async fn delete_learning(id: String) -> Result<(), ServerFnError> {
 pub async fn get_champions_for_learnings() -> Result<Vec<Champion>, ServerFnError> {
     use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
-        .await
-        .map_err(authz::server_err)
+    data_dragon::champions().await.map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +196,7 @@ pub async fn get_champions_for_learnings() -> Result<Vec<Champion>, ServerFnErro
 // ---------------------------------------------------------------------------
 
 fn champion_icon_url(name: &str) -> String {
-    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{name}.png")
+    crate::models::ddragon::champion_icon_url(name)
 }
 
 // ---------------------------------------------------------------------------

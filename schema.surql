@@ -375,6 +375,18 @@ DEFINE FIELD IF NOT EXISTS status ON bug_report TYPE string DEFAULT 'open'
 DEFINE INDEX IF NOT EXISTS bug_report_status_created
   ON bug_report FIELDS status, created_at;
 
+-- Data Dragon (M6): the last good copy of the champion list, so a cold
+-- start without network still has champion data, and detected patch changes.
+DEFINE TABLE IF NOT EXISTS ddragon_cache SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS version ON ddragon_cache TYPE string;
+DEFINE FIELD IF NOT EXISTS champions_json ON ddragon_cache TYPE string;
+DEFINE FIELD IF NOT EXISTS fetched_at ON ddragon_cache TYPE datetime DEFAULT time::now();
+DEFINE TABLE IF NOT EXISTS patch_change SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS old_version ON patch_change TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS new_version ON patch_change TYPE string;
+DEFINE FIELD IF NOT EXISTS detected_at ON patch_change TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS patch_change_detected_at ON patch_change FIELDS detected_at;
+
 -- Record links (M6). These fields held record IDs as strings before M6;
 -- migration 5 converted existing values and tightened the types above.
 -- action_item.assigned_to stays a string: it holds the assignee's username as

@@ -207,11 +207,15 @@ impl RiotClient {
             .filter_map(|m| {
                 // Use the identifier (Data Dragon canonical name) for consistency.
                 // Fall back to the display name if identifier is unavailable.
-                let name = m
-                    .champion_id
-                    .identifier()
-                    .or_else(|| m.champion_id.name())
-                    .map(|s| s.to_string())?;
+                // Live Data Dragon key map first (knows champions newer
+                // than this riven release), then riven's built-in table.
+                let name = crate::server::data_dragon::champion_id_for_key(m.champion_id.0 as i64)
+                    .or_else(|| {
+                        m.champion_id
+                            .identifier()
+                            .or_else(|| m.champion_id.name())
+                            .map(|s| s.to_string())
+                    })?;
                 Some((name, m.champion_level, m.champion_points))
             })
             .collect();

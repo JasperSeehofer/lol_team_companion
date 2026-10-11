@@ -270,7 +270,7 @@ fn queue_label(queue_id: i32) -> &'static str {
 
 /// Champion icon URL from Data Dragon CDN
 fn champion_icon_url(champion_name: &str) -> String {
-    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png")
+    crate::models::ddragon::champion_icon_url(champion_name)
 }
 
 fn format_damage(damage: i32) -> String {

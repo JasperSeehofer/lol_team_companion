@@ -92,6 +92,14 @@ async fn main() {
         }
     };
 
+    // Data Dragon: load the stored copy, refresh from the network, then keep
+    // refreshing every 6 hours. Champion names are normalised against it.
+    lol_team_companion::server::data_dragon::init(&surreal_db).await;
+    if let Err(e) = db::migrate_champion_names(&surreal_db).await {
+        tracing::warn!("Champion name normalisation failed: {e}");
+    }
+    lol_team_companion::server::data_dragon::spawn_refresh_task(Arc::clone(&surreal_db));
+
     // One Riot client for the whole process (shared rate limiting + budget).
     let riot = Arc::new(RiotClient::from_env());
     if !riot.is_configured() {

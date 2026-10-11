@@ -110,7 +110,7 @@ pub async fn fetch_match_detail(
 // ---------------------------------------------------------------------------
 
 fn champion_icon_url(champion_name: &str) -> String {
-    format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/champion/{champion_name}.png")
+    crate::models::ddragon::champion_icon_url(champion_name)
 }
 
 fn format_damage(damage: i32) -> String {
@@ -201,7 +201,7 @@ fn ItemIcon(item_id: i32) -> impl IntoView {
     if item_id > 0 {
         view! {
             <img
-                src=format!("https://ddragon.leagueoflegends.com/cdn/15.6.1/img/item/{item_id}.png")
+                src=crate::models::ddragon::item_icon_url(item_id)
                 class="w-6 h-6 rounded border border-divider/30"
                 title=format!("Item {item_id}")
                 alt=format!("Item {item_id}")

@@ -27,7 +27,7 @@ pub fn ChampPortrait(
         "splash" => {
             format!("https://ddragon.leagueoflegends.com/cdn/img/champion/centered/{key}_0.jpg")
         }
-        _ => format!("https://ddragon.leagueoflegends.com/cdn/14.24.1/img/champion/{key}.png"),
+        _ => crate::models::ddragon::champion_icon_url(&key),
     };
     let alt = name.clone();
     view! {

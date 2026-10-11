@@ -252,10 +252,6 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     let db = Surreal::new::<SurrealKv>(path).await?;
     db.use_ns("lol_companion").use_db("app").await?;
     prepare(&db).await?;
-    // Best-effort champion name normalization (skipped if Data Dragon is unreachable)
-    if let Err(e) = migrate_champion_names(&db).await {
-        tracing::warn!("Champion name migration failed: {e}");
-    }
     Ok(Arc::new(db))
 }
 
@@ -4336,10 +4332,11 @@ pub async fn migrate_champion_names(db: &Surreal<Db>) -> DbResult<()> {
     use crate::server::data_dragon;
     use tracing::{info, warn};
 
-    let champions = match data_dragon::fetch_champions().await {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("Champion name migration skipped — could not fetch Data Dragon: {e}");
+    // Uses the cached champion list (data_dragon::init runs first).
+    let champions = match data_dragon::snapshot() {
+        Some(s) => s.champions.clone(),
+        None => {
+            warn!("Champion name normalisation skipped: no Data Dragon copy available");
             return Ok(());
         }
     };
@@ -4664,10 +4661,10 @@ async fn compute_pool_gaps_for_team(
 ) -> DbResult<Vec<PoolGapWarning>> {
     use crate::server::data_dragon;
 
-    // Fetch Data Dragon champions for class tags (best-effort)
-    let champions = match data_dragon::fetch_champions().await {
-        Ok(c) => c,
-        Err(_) => return Ok(Vec::new()),
+    // Champion class tags from the Data Dragon cache (no network on this path).
+    let champions = match data_dragon::snapshot() {
+        Some(s) => s.champions.clone(),
+        None => return Ok(Vec::new()),
     };
 
     // Get team members
@@ -5689,6 +5686,81 @@ pub async fn store_match_detail(
         .await?;
     check_tx(response)?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Data Dragon cache and patch changes (M6)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbDdragonCache {
+    version: String,
+    champions_json: String,
+}
+
+/// The last good Data Dragon copy: (version, champions JSON).
+pub async fn load_ddragon_cache(db: &Surreal<Db>) -> DbResult<Option<(String, String)>> {
+    let mut r = db
+        .query("SELECT version, champions_json FROM ddragon_cache:current")
+        .await?;
+    let row: Option<DbDdragonCache> = r.take(0)?;
+    Ok(row.map(|c| (c.version, c.champions_json)))
+}
+
+/// Replace the stored Data Dragon copy (one row, `ddragon_cache:current`).
+pub async fn save_ddragon_cache(
+    db: &Surreal<Db>,
+    version: &str,
+    champions_json: &str,
+) -> DbResult<()> {
+    db.query("UPSERT ddragon_cache:current SET version = $version, champions_json = $json, fetched_at = time::now()")
+        .bind(("version", version.to_string()))
+        .bind(("json", champions_json.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// Record that the live patch moved from `old` to `new`.
+pub async fn record_patch_change(db: &Surreal<Db>, old: &str, new: &str) -> DbResult<()> {
+    db.query(
+        "CREATE patch_change SET old_version = $old, new_version = $new, detected_at = time::now()",
+    )
+    .bind(("old", old.to_string()))
+    .bind(("new", new.to_string()))
+    .await?
+    .check()?;
+    Ok(())
+}
+
+/// A detected patch change, newest first from `list_patch_changes`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchChange {
+    pub old_version: Option<String>,
+    pub new_version: String,
+    pub detected_at: String,
+}
+
+pub async fn list_patch_changes(db: &Surreal<Db>, limit: i64) -> DbResult<Vec<PatchChange>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        old_version: Option<String>,
+        new_version: String,
+        detected_at: Datetime,
+    }
+    let mut r = db
+        .query("SELECT old_version, new_version, detected_at FROM patch_change ORDER BY detected_at DESC LIMIT $limit")
+        .bind(("limit", limit))
+        .await?;
+    let rows: Vec<Row> = r.take(0)?;
+    Ok(rows
+        .into_iter()
+        .map(|r| PatchChange {
+            old_version: r.old_version,
+            new_version: r.new_version,
+            detected_at: dt_to_string(&r.detected_at),
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------

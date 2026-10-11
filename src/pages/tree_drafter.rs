@@ -19,9 +19,7 @@ use std::collections::HashMap;
 pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
     use crate::server::authz;
     use crate::server::data_dragon;
-    data_dragon::fetch_champions()
-        .await
-        .map_err(authz::server_err)
+    data_dragon::champions().await.map_err(authz::server_err)
 }
 
 /// Whether the current user belongs to a team. Drives the empty state of the

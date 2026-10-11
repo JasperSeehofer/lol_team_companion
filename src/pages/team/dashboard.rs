@@ -1090,10 +1090,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 view! {
                                                     <div class="flex flex-col gap-2">
                                                         {matches.into_iter().map(|m| {
-                                                            let champ_img = format!(
-                                                                "https://ddragon.leagueoflegends.com/cdn/15.5.1/img/champion/{}.png",
-                                                                m.champion
-                                                            );
+                                                            let champ_img =
+                                                                crate::models::ddragon::champion_icon_url(&m.champion);
                                                             let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
                                                             let win = m.win;
                                                             let date_str = m.game_end.unwrap_or_else(|| "Unknown".into());

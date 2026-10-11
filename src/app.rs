@@ -65,6 +65,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                // Live Data Dragon version for image URLs built in the browser.
+                <meta name=crate::models::ddragon::META_NAME content=crate::models::ddragon::version() />
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
