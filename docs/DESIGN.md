@@ -313,6 +313,7 @@ Portraits are real (owner's decision) and never load from a third party in the b
 | `ornament` | Cinzel, `font-imperial`, `font-glitch`, VT323, `canvas-grain`, fleur-de-lis and the other retired ornaments, Pandemonium | none |
 | `emoji` | pictographs (emoji, and `\u{...}` escapes of them) in UI strings | typographic marks: stars, check, cross |
 | `region` | `region ==`, `region=` props, `InitialTheme`, `data-theme` | none |
+| `external-url` | an absolute URL to another host in client code, including `src/models` (SVG namespaces aside): the browser loads nothing from a third party | none |
 | `faded-text` | a text tone with an opacity modifier (`text-muted/60`): not in the contrast table, and below 4.5:1 | none |
 | G-12 | `outline-none` without a `focus-visible:` replacement on the same line | none |
 

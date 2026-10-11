@@ -15,6 +15,9 @@ export LC_ALL=C.UTF-8
 
 mapfile -t FILES < <(find src -name '*.rs' \
   ! -path 'src/server/*' ! -path 'src/models/*' ! -path 'src/bin/*' | sort)
+# Shared models build URLs the browser loads, so the external-url rule
+# also covers them.
+mapfile -t MODEL_FILES < <(find src/models -name '*.rs' | sort)
 
 PALETTE='(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)'
 PREFIX='(text|bg|border|ring|fill|stroke|from|via|to|divide|outline|decoration|placeholder|caret|accent|shadow)'
@@ -47,6 +50,10 @@ rule emoji '[\x{1F300}-\x{1FAFF}\x{2B50}\x{2B55}\x{FE0F}]|(?![\x{2605}\x{2606}\x
   'emoji in UI strings; use words or an SVG'
 rule region 'region\s*==|(?<![_\w])region=|InitialTheme|data-theme' '' \
   'theme branching is gone; there is one theme'
+# The browser loads nothing from a third party (fonts, images, scripts):
+# no absolute URL to another host in client code (SVG namespaces aside).
+rule external-url '^(?!\s*//).*https?://(?!www\.w3\.org)[a-z0-9-]+(\.[a-z0-9-]+)+' '' \
+  'third-party URL in client code; serve it from the app (see /img/...)'
 # A text tone with an opacity modifier (`text-muted/60`) is not in the
 # contrast table and falls below 4.5:1; muted is the faintest text tone.
 rule faded-text '(?<![\w-])text-(primary|secondary|muted|dimmed|accent|success|warning|danger|info|win|loss)/\d+' '' \
@@ -62,17 +69,23 @@ broken=0
 # grep exits 0 (hits), 1 (no hits) or 2 (error: bad pattern, no PCRE, bad
 # locale). An error must fail the gate, not read as "zero hits". Runs in
 # this shell (no subshell) so `broken` sticks; hits go to $GREP_OUT.
-run_grep() { # flags pattern
-  grep "$1" -- "$2" "${FILES[@]}" /dev/null >"$GREP_OUT" 2>"$GREP_ERR"
+run_grep() { # flags pattern [extra files...]
+  local flags=$1 pattern=$2
+  shift 2
+  grep "$flags" -- "$pattern" "${FILES[@]}" "$@" /dev/null >"$GREP_OUT" 2>"$GREP_ERR"
   if [ "$?" -gt 1 ]; then
-    echo "::error::design lint: grep failed for pattern '$2': $(head -c 300 "$GREP_ERR")"
+    echo "::error::design lint: grep failed for pattern '$pattern': $(head -c 300 "$GREP_ERR")"
     broken=1
   fi
 }
 
 count_rule() { # name pattern allow
   local name=$1 pattern=$2 allow=$3 line file
-  run_grep -nP "$pattern"
+  if [ "$name" = external-url ]; then
+    run_grep -nP "$pattern" "${MODEL_FILES[@]}"
+  else
+    run_grep -nP "$pattern"
+  fi
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     file=${line%%:*}
