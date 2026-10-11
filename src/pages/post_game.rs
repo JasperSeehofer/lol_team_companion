@@ -399,6 +399,23 @@ impl ReviewEd {
         self.rating
             .set(r.rating.map(|n| n.to_string()).unwrap_or_default());
     }
+    /// Subscribe to every field (for the "unsaved changes" memo).
+    fn track(&self) {
+        self.id.track();
+        for sig in [
+            self.match_id,
+            self.plan_id,
+            self.draft_id,
+            self.went_well,
+            self.improve,
+            self.actions,
+            self.notes,
+            self.outcome,
+            self.rating,
+        ] {
+            sig.track();
+        }
+    }
     fn build(&self) -> PostGameLearning {
         PostGameLearning {
             id: self.id.get_untracked(),
@@ -441,6 +458,16 @@ pub fn PostGamePage() -> impl IntoView {
     let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
     let ed = ReviewEd::new();
     let created_items = RwSignal::new(None::<usize>);
+    // The open review as loaded or last saved (as the editor builds it).
+    let saved = RwSignal::new(None::<PostGameLearning>);
+    let dirty = Memo::new(move |_| {
+        ed.track();
+        saved.with(|s| s.as_ref() != Some(&ed.build()))
+    });
+    // Bumped when the editor switches review, so a late save result does
+    // not land in another review.
+    let edit_gen = StoredValue::new(0_u64);
+    let saving = RwSignal::new(false);
 
     // `?review_id=` opens a review; `?plan_id=`/`?draft_id=` seed a new one.
     let opened = StoredValue::new(false);
@@ -456,6 +483,8 @@ pub fn PostGamePage() -> impl IntoView {
                     .find(|r| r.id.as_deref() == Some(target.as_str()))
                 {
                     ed.load(r);
+                    saved.set(Some(ed.build()));
+                    edit_gen.update_value(|g| *g += 1);
                     opened.set_value(true);
                 }
             }
@@ -473,25 +502,39 @@ pub fn PostGamePage() -> impl IntoView {
     // The open review's id goes in the address so a reload or link reopens it.
     let nav = navigator();
     let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        // One save at a time: a double click must not create two reviews.
+        if saving.get_untracked() {
+            return;
+        }
         let review = ed.build();
         let json = serde_json::to_string(&review).unwrap_or_default();
         let is_update = review.id.is_some();
+        let gen = edit_gen.get_value();
+        saving.set(true);
         leptos::task::spawn_local(async move {
             let res = if is_update {
                 update_review(json).await.map(|n| (String::new(), n))
             } else {
                 create_review(json).await
             };
+            saving.set(false);
             match res {
                 Ok((id, n)) => {
+                    reviews.refetch();
+                    toast.push.run(Toast::success("Review saved"));
+                    // The editor moved on to another review meanwhile.
+                    if edit_gen.get_value() != gen {
+                        return;
+                    }
+                    let mut sent = review;
                     if !is_update && !id.is_empty() {
                         opened.set_value(true);
                         replace_url(nav, &format!("/post-game?review_id={id}"));
+                        sent.id = Some(id.clone());
                         ed.id.set(Some(id));
                     }
+                    saved.set(Some(sent));
                     created_items.set((n > 0).then_some(n));
-                    reviews.refetch();
-                    toast.push.run(Toast::success("Review saved"));
                 }
                 Err(e) => toast
                     .push
@@ -503,6 +546,8 @@ pub fn PostGamePage() -> impl IntoView {
         opened.set_value(true);
         replace_url(nav, "/post-game");
         ed.clear();
+        saved.set(None);
+        edit_gen.update_value(|g| *g += 1);
         created_items.set(None);
     });
     let confirm_delete = RwSignal::new(false);
@@ -515,6 +560,8 @@ pub fn PostGamePage() -> impl IntoView {
                 Ok(()) => {
                     replace_url(nav, "/post-game");
                     ed.clear();
+                    saved.set(None);
+                    edit_gen.update_value(|g| *g += 1);
                     created_items.set(None);
                     reviews.refetch();
                     toast.push.run(Toast::success("Review deleted"));
@@ -554,7 +601,12 @@ pub fn PostGamePage() -> impl IntoView {
                         }}
                     </Suspense>
                     <span class="text-muted" data-testid="review-save-state">
-                        {move || if ed.id.get().is_some() { "Saved" } else { "Not saved yet" }}
+                        {move || match (ed.id.get().is_some(), saving.get(), dirty.get()) {
+                            (_, true, _) => "Saving\u{2026}",
+                            (false, _, _) => "Not saved yet",
+                            (true, _, true) => "Unsaved changes",
+                            (true, _, false) => "Saved",
+                        }}
                     </span>
                 }
                 actions=move || view! {
@@ -562,7 +614,7 @@ pub fn PostGamePage() -> impl IntoView {
                     {move || ed.id.get().map(|_| view! {
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
-                    <Button variant=ButtonVariant::Primary on_click=do_save attr:data-testid="review-save">"Save review"</Button>
+                    <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="review-save">"Save review"</Button>
                 }
             />
             <ConfirmDialog
@@ -614,6 +666,8 @@ pub fn PostGamePage() -> impl IntoView {
                                                         on_click=Callback::new(move |_| {
                                                             created_items.set(None);
                                                             ed.load(&r2);
+                                                            saved.set(Some(ed.build()));
+                                                            edit_gen.update_value(|g| *g += 1);
                                                             opened.set_value(true);
                                                             if let Some(id) = r2.id.as_deref() {
                                                                 replace_url(nav, &format!("/post-game?review_id={id}"));
