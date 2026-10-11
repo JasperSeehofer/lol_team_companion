@@ -1,5 +1,5 @@
 //! Opponents: the team's scouting dossiers. The list shows each opponent
-//! with its evidence (players, scouted games) and when it was last
+//! with its evidence (players, champions seen) and when it was last
 //! surveyed; the detail holds the players by role, scouting notes and the
 //! Riot intel refresh. Images come only from `/img/...`.
 
@@ -315,14 +315,17 @@ pub struct OpponentDossier {
     pub opponent: Opponent,
     pub players: usize,
     /// Games in the scouted match history, summed over players.
-    pub games_scouted: usize,
+    /// Champions seen per player, summed. Riot refreshes store each
+    /// player's distinct champions, not one entry per game, so this is
+    /// never a game count.
+    pub champions_seen: usize,
     /// "3 days ago" (computed on the server), `None` if never surveyed.
     pub surveyed: Option<String>,
     /// Surveyed a week or more ago.
     pub stale: bool,
 }
 
-/// The team's opponents with player counts, scouted games and the date of
+/// The team's opponents with player counts, champions seen and the date of
 /// the latest survey.
 #[server]
 pub async fn get_opponent_dossiers() -> Result<Vec<OpponentDossier>, ServerFnError> {
@@ -353,7 +356,7 @@ pub async fn get_opponent_dossiers() -> Result<Vec<OpponentDossier>, ServerFnErr
                 .iter()
                 .filter(|p| !p.name.is_empty() || p.riot_summoner_name.is_some())
                 .count(),
-            games_scouted: players.iter().map(|p| p.recent_champions.len()).sum(),
+            champions_seen: players.iter().map(|p| p.recent_champions.len()).sum(),
             surveyed: latest.as_deref().map(format_timestamp),
             stale: latest.as_deref().map(is_stale).unwrap_or(false),
             opponent,
@@ -403,17 +406,17 @@ const RIOT_BUDGET_NOTE: &str = "Refreshing reads the player's last 20 games and 
 // Page
 // ---------------------------------------------------------------------------
 
-/// "5 players, 12 games" for a dossier row.
-fn evidence_line(players: usize, games: usize) -> String {
+/// "5 players, 12 champions seen" for a dossier row.
+fn evidence_line(players: usize, champions: usize) -> String {
     let p = match players {
         0 => return "No players yet".to_string(),
         1 => "1 player".to_string(),
         n => format!("{n} players"),
     };
-    match games {
-        0 => format!("{p}, no games"),
-        1 => format!("{p}, 1 game"),
-        g => format!("{p}, {g} games"),
+    match champions {
+        0 => format!("{p}, no champions seen"),
+        1 => format!("{p}, 1 champion seen"),
+        c => format!("{p}, {c} champions seen"),
     }
 }
 
@@ -540,7 +543,7 @@ pub fn OpponentsPage() -> impl IntoView {
                                             {list.into_iter().map(|d| {
                                                 let id = d.opponent.id.clone().unwrap_or_default();
                                                 let id_click = id.clone();
-                                                let evidence = evidence_line(d.players, d.games_scouted);
+                                                let evidence = evidence_line(d.players, d.champions_seen);
                                                 let surveyed = surveyed_line(d.surveyed.as_deref(), d.stale);
                                                 let stale = d.stale;
                                                 view! {
@@ -914,7 +917,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
         .into_iter()
         .map(|(c, l, _)| (c, l))
         .collect();
-    let games = player.recent_champions.len();
+    let seen = player.recent_champions.len();
     let roles = player.role_distribution();
     let surveyed = player.last_fetched.clone().filter(|s| !s.is_empty());
     let stale = surveyed.as_deref().map(is_stale).unwrap_or(false);
@@ -980,7 +983,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                         None => "Never surveyed".to_string(),
                     }}
                 </span>
-                <span class="figures text-caption text-muted">{match games { 0 => "no games".to_string(), 1 => "1 game".to_string(), n => format!("{n} games") }}</span>
+                <span class="figures text-caption text-muted">{match seen { 0 => "no champions seen".to_string(), 1 => "1 champion seen".to_string(), n => format!("{n} champions seen") }}</span>
             </div>
             {if intel.champion_frequencies.is_empty() {
                 view! {
@@ -990,7 +993,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                 }.into_any()
             } else {
                 view! {
-                    <ul class="flex flex-wrap gap-x-4 gap-y-2" aria-label="Most played in scouted games">
+                    <ul class="flex flex-wrap gap-x-4 gap-y-2" aria-label="Champions in their recent games">
                         {intel.champion_frequencies.iter().take(8).map(|(c, n)| {
                             let level = mastery.get(c).copied();
                             view! {
@@ -1042,11 +1045,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn evidence_line_counts_players_and_games() {
+    fn evidence_line_counts_players_and_champions() {
         assert_eq!(evidence_line(0, 4), "No players yet");
-        assert_eq!(evidence_line(1, 1), "1 player, 1 game");
-        assert_eq!(evidence_line(5, 0), "5 players, no games");
-        assert_eq!(evidence_line(5, 100), "5 players, 100 games");
+        assert_eq!(evidence_line(1, 1), "1 player, 1 champion seen");
+        assert_eq!(evidence_line(5, 0), "5 players, no champions seen");
+        assert_eq!(evidence_line(5, 100), "5 players, 100 champions seen");
     }
 
     #[test]

@@ -1740,7 +1740,7 @@ fn OpponentBrief(ed: Editor, opponents: StoredValue<Vec<Opponent>>) -> impl Into
                 None => view! {
                     <EmptyState
                         size=EmptySize::Compact
-                        message="Choose an opponent under Plan to see their players and the champions they played most in scouted games."
+                        message="Choose an opponent under Plan to see their players and the champions seen in their scouted games."
                     />
                 }.into_any(),
                 Some(_) => view! {
@@ -1778,7 +1778,7 @@ fn OpponentBrief(ed: Editor, opponents: StoredValue<Vec<Opponent>>) -> impl Into
                                                         {role.map(|r| view! { <RoleLabel role=r /> })}
                                                         <span class="truncate text-label font-medium text-primary">{player_name(&p)}</span>
                                                         <span class="figures ml-auto text-caption text-muted">
-                                                            {if games == 1 { "1 game".to_string() } else { format!("{games} games") }}
+                                                            {if games == 1 { "1 champion seen".to_string() } else { format!("{games} champions seen") }}
                                                         </span>
                                                     </div>
                                                     {if top.is_empty() {

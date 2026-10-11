@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format follows [Kee
 #### Added
 - Action items have an optional due day; overdue items are flagged, and the header counts what is open, in progress, done and overdue.
 - Action items can be edited in place, deleted with Undo, and worked from the keyboard: arrow keys move between items, Space completes, E edits, Delete removes.
-- Opponent dossiers show how much evidence each holds (players and scouted games) and when they were last surveyed, flagged after a week; empty role slots can be filled with a Riot ID or a name.
+- Opponent dossiers show how much evidence each holds (players and champions seen) and when they were last surveyed, flagged after a week; empty role slots can be filled with a Riot ID or a name.
 - Champion pool tiers can be rearranged from the keyboard: Space picks a champion up, the arrow keys choose a tier, Space drops it there.
 - Drafts can be deleted (with a confirmation).
 - Saved drafts, game plans and reviews keep their id in the address, so a reload or a shared link reopens them.
