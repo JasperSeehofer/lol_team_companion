@@ -1303,6 +1303,7 @@ mod tests {
                 .len();
         }
         let per = started.elapsed() / 10;
+        eprintln!("rank: {per:?} per ranking ({} rows)", t.len());
         assert!(n > 0);
         assert!(per.as_millis() < 50, "one ranking took {per:?}");
     }

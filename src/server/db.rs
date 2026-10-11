@@ -6576,6 +6576,29 @@ pub async fn delete_team_relation(
     Ok(())
 }
 
+/// Every current member's champion-pool entries in one read:
+/// (user id, champion as stored, tier).
+pub async fn team_pool_entries(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<(String, String, String)>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        user: RecordId,
+        champion: String,
+        tier: String,
+    }
+    let mut r = db
+        .query("SELECT user, champion, tier FROM champion_pool WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key))")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<Row> = r.take(0)?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.user.to_sql(), r.champion, r.tier))
+        .collect())
+}
+
 /// One stored game of a team member, as the graph's match evidence reads it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TeamGameRow {

@@ -68,24 +68,26 @@ pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerF
             .await
             .map_err(authz::server_err)?
         {
+            let entries = db::team_pool_entries(&ctx.db, team_id)
+                .await
+                .map_err(authz::server_err)?;
             // Starters first, so a substitute never shadows the starter.
             let mut members = members;
             members.sort_by_key(|m| m.roster_type != "starter");
             for m in members {
-                let entries = db::get_champion_pool(&ctx.db, &m.user_id)
-                    .await
-                    .map_err(authz::server_err)?
-                    .into_iter()
-                    .filter_map(|e| {
+                let mine = entries
+                    .iter()
+                    .filter(|(user, _, _)| *user == m.user_id)
+                    .filter_map(|(_, champion, tier)| {
                         table
-                            .get(&e.champion)
-                            .map(|r| (r.traits.champion.clone(), e.tier))
+                            .get(champion)
+                            .map(|r| (r.traits.champion.clone(), tier.clone()))
                     })
                     .collect();
                 pools.push(fit::PoolPlayer {
                     username: m.username,
                     role: Role::parse(&m.role),
-                    entries,
+                    entries: mine,
                 });
             }
         }
@@ -273,6 +275,32 @@ fn capitalise(s: &str) -> String {
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
         None => String::new(),
+    }
+}
+
+/// The weight behind a reason, in words: "weight 3", "against, weight 2",
+/// "n=7, corroborates +1", "n=6, evidence only", "+4 fit" (pool).
+pub fn strength_text(r: &Reason) -> String {
+    let w = r.strength.abs();
+    let num = if (w - w.round()).abs() < 0.05 {
+        format!("{}", w.round() as i32)
+    } else {
+        format!("{w:.1}")
+    };
+    match r.source {
+        ReasonSource::Pool => format!("{} fit", signed((r.strength * 3.0).round() as i32)),
+        ReasonSource::MatchData => {
+            let n = r.games.unwrap_or(0);
+            if r.strength == 0.0 {
+                format!("n={n}, evidence only")
+            } else if r.strength > 0.0 {
+                format!("n={n}, corroborates +{num}")
+            } else {
+                format!("n={n}, weakens it by {num}")
+            }
+        }
+        _ if r.strength < 0.0 => format!("against, weight {num}"),
+        _ => format!("weight {num}"),
     }
 }
 
@@ -823,7 +851,6 @@ pub fn DraftGraphPanel(
                                 <LegendBlock
                                     id="graph-reasons"
                                     title="Reason lines"
-                                    columns=true
                                     entries=vec![
                                         LegendEntry::new(Swatch::Line { style: LineStyle::Solid, weight: LineWeight::Medium, ink: SwatchInk::Muted, arrow: false }, "Synergy, playstyle, timing"),
                                         LegendEntry::new(Swatch::Line { style: LineStyle::Dashed, weight: LineWeight::Medium, ink: SwatchInk::Muted, arrow: false }, "Counters"),
@@ -1175,21 +1202,7 @@ fn reason_item(
     relations: Resource<Result<Vec<TeamRelation>, ServerFnError>>,
 ) -> AnyView {
     let style = reason_line(&r);
-    let strength = if r.strength == 0.0 {
-        "evidence only".to_string()
-    } else {
-        let s = r.strength;
-        let v = if (s - s.round()).abs() < 0.05 {
-            format!("{}", s.round() as i32)
-        } else {
-            format!("{s:.1}")
-        };
-        if s > 0.0 {
-            format!("+{v}")
-        } else {
-            v.replace('-', "\u{2212}")
-        }
-    };
+    let strength = strength_text(&r);
     match r.source {
         ReasonSource::TeamNote => {
             let pair = format!(
@@ -1225,9 +1238,8 @@ fn reason_item(
             .into_any()
         }
         _ => {
-            let meta = match (r.source, &r.rule_id, r.games) {
-                (ReasonSource::MatchData, _, Some(n)) => format!("n={n} \u{b7} {strength}"),
-                (_, Some(id), _) => format!("{id} \u{b7} {strength}"),
+            let meta = match (&r.rule_id, r.source) {
+                (Some(id), _) => format!("{id} \u{b7} {strength}"),
                 _ => strength,
             };
             view! {
@@ -1308,7 +1320,7 @@ fn GraphNotesLine(notes: crate::models::graph::GraphNotes) -> impl IntoView {
             if notes.relations == 1 { "" } else { "s" }
         ));
         parts.push(format!(
-            "{} of your stored games (shown from {} games on)",
+            "your stored games ({} so far; evidence shows from {} games)",
             notes.games, notes.min_sample
         ));
         if notes.scouting {
@@ -1460,6 +1472,23 @@ mod tests {
         let mut c = cand();
         c.pool.as_mut().unwrap().tier = None;
         assert_eq!(pool_text(&c).unwrap(), "Not in Pell's pool");
+    }
+
+    #[test]
+    fn strengths_are_said_in_words() {
+        let c = cand();
+        assert_eq!(strength_text(&c.reasons[0]), "weight 1");
+        assert_eq!(strength_text(&c.reasons[1]), "against, weight 2");
+        let mut m = c.reasons[0].clone();
+        m.source = ReasonSource::MatchData;
+        m.games = Some(7);
+        assert_eq!(strength_text(&m), "n=7, corroborates +1");
+        m.strength = 0.0;
+        assert_eq!(strength_text(&m), "n=7, evidence only");
+        let mut p = c.reasons[0].clone();
+        p.source = ReasonSource::Pool;
+        p.strength = 4.0 / 3.0;
+        assert_eq!(strength_text(&p), "+4 fit");
     }
 
     #[test]

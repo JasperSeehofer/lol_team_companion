@@ -1016,7 +1016,7 @@ async fn team_relation_is_isolated_between_teams() {
 }
 
 #[tokio::test]
-async fn team_games_are_isolated_between_teams() {
+async fn team_games_and_pools_are_isolated_between_teams() {
     use lol_team_companion::server::riot::MatchData;
     let db = common::test_db().await;
     let t = tenants(&db).await;
@@ -1037,6 +1037,18 @@ async fn team_games_are_isolated_between_teams() {
     db::store_matches(&db, &t.a, vec![m("EUW1_100"), m("EUW1_101")])
         .await
         .unwrap();
+    db::add_to_champion_pool(&db, &t.a, "Ahri".into(), "mid".into())
+        .await
+        .unwrap();
+    let pools = db::team_pool_entries(&db, &t.team1).await.unwrap();
+    assert_eq!(
+        pools,
+        vec![(t.a.clone(), "Ahri".to_string(), "comfort".to_string())]
+    );
+    assert!(db::team_pool_entries(&db, &t.team2)
+        .await
+        .unwrap()
+        .is_empty());
     let mine = db::team_game_rows(&db, &t.team1).await.unwrap();
     assert_eq!(mine.len(), 2);
     assert!(mine.iter().all(|r| r.user_id == t.a));

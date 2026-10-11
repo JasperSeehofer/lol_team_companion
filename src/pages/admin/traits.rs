@@ -120,6 +120,18 @@ pub fn traits_from_keys(
     Ok(t)
 }
 
+/// The checked roles, keeping the loaded order (the first is the main role)
+/// and adding newly checked ones after it.
+pub fn ordered_roles(loaded: &[Role], checked: &[Role]) -> Vec<Role> {
+    let mut out: Vec<Role> = loaded
+        .iter()
+        .copied()
+        .filter(|r| checked.contains(r))
+        .collect();
+    out.extend(checked.iter().copied().filter(|r| !loaded.contains(r)));
+    out
+}
+
 /// Does the row match the search and filter?
 pub fn row_matches(r: &TraitRecord, query: &str, filter: &str) -> bool {
     let q = query.trim().to_lowercase();
@@ -145,6 +157,8 @@ struct TraitForm {
     champion: RwSignal<String>,
     name: RwSignal<String>,
     source: RwSignal<Option<TraitSource>>,
+    /// The row's roles as loaded (their order says which is the main role).
+    loaded_roles: RwSignal<Vec<Role>>,
     keys: [RwSignal<String>; 12],
     roles: [RwSignal<bool>; 5],
     styles: [RwSignal<bool>; 10],
@@ -157,6 +171,7 @@ impl TraitForm {
             champion: RwSignal::new(String::new()),
             name: RwSignal::new(String::new()),
             source: RwSignal::new(None),
+            loaded_roles: RwSignal::new(Vec::new()),
             keys: std::array::from_fn(|_| RwSignal::new(String::new())),
             roles: std::array::from_fn(|_| RwSignal::new(false)),
             styles: std::array::from_fn(|_| RwSignal::new(false)),
@@ -169,6 +184,7 @@ impl TraitForm {
         self.champion.set(t.champion.clone());
         self.name.set(r.name.clone());
         self.source.set(Some(r.source));
+        self.loaded_roles.set(t.roles.clone());
         let keys = [
             t.damage_type.key(),
             t.damage_profile.key(),
@@ -198,12 +214,13 @@ impl TraitForm {
     fn read(&self) -> Result<ChampionTraits, String> {
         let keys: Vec<String> = self.keys.iter().map(|k| k.get_untracked()).collect();
         let refs: [&str; 12] = std::array::from_fn(|i| keys[i].as_str());
-        let roles = Role::ALL
+        let checked: Vec<Role> = Role::ALL
             .iter()
             .zip(self.roles.iter())
             .filter(|(_, s)| s.get_untracked())
             .map(|(r, _)| *r)
             .collect();
+        let roles = ordered_roles(&self.loaded_roles.get_untracked(), &checked);
         let styles = Playstyle::ALL
             .iter()
             .zip(self.styles.iter())
@@ -512,7 +529,7 @@ fn TraitDialog(
                 <p class="font-display text-heading font-semibold text-primary">{move || form.name.get()}</p>
                 {move || error.get().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
                 <fieldset class="flex flex-col gap-2">
-                    <legend class="text-label font-medium text-secondary">"Roles (most played first is kept in table order)"</legend>
+                    <legend class="text-label font-medium text-secondary">"Roles (the order is kept: the first listed is the main role)"</legend>
                     <div class="flex flex-wrap gap-x-5 gap-y-2">
                         {Role::ALL.iter().zip(form.roles).map(|(r, sig)| view! {
                             <Checkbox label=r.label() checked=sig />
@@ -570,6 +587,16 @@ mod tests {
             edited_at: None,
             reviewed_for_patch: None,
         }
+    }
+
+    #[test]
+    fn role_order_survives_an_edit() {
+        let loaded = [Role::Jungle, Role::Top, Role::Support];
+        let checked = [Role::Top, Role::Jungle, Role::Mid];
+        assert_eq!(
+            ordered_roles(&loaded, &checked),
+            vec![Role::Jungle, Role::Top, Role::Mid]
+        );
     }
 
     #[test]

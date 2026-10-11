@@ -902,6 +902,7 @@ mod tests {
         let started = std::time::Instant::now();
         let rel = PairRelations::compute(&refs);
         let took = started.elapsed();
+        eprintln!("pair precompute: {took:?} for {} rows", rows.len());
         let idx = |id: &str| rows.iter().position(|r| r.champion == id).unwrap();
         // Kit sanity on the shipped data: Malphite's engage with Orianna's
         // area damage; Janna undoes Malphite's engage.
