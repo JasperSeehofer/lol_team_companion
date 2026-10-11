@@ -186,12 +186,15 @@ struct UserEmailRow {
 /// (`email = $email`) instead of scanning with `string::lowercase`.
 ///
 /// Rows whose lowercase form collides with another row (possible only for
-/// accounts created before M1 normalised emails) are left unchanged and
-/// logged: the unique index would reject the update, and picking which
-/// account keeps the address is an owner decision. The lowercase row is the
-/// one that can sign in.
+/// accounts created before M1 normalised emails) are logged for the owner to
+/// resolve. Login matches the lowercase form exactly, so only a lowercase row
+/// can sign in: when the group already has one, the others are left
+/// unchanged; when none is lowercase, the oldest account is lowercased so
+/// that one of them can still sign in (the others are left unchanged).
 async fn lowercase_emails(db: &Surreal<Db>) -> DbResult<()> {
-    let mut r = db.query("SELECT id, email FROM user").await?;
+    let mut r = db
+        .query("SELECT id, email, created_at FROM user ORDER BY created_at ASC, id ASC")
+        .await?;
     let rows: Vec<UserEmailRow> = r.take(0)?;
 
     let mut by_lower: HashMap<String, Vec<&UserEmailRow>> = HashMap::new();
@@ -207,15 +210,26 @@ async fn lowercase_emails(db: &Surreal<Db>) -> DbResult<()> {
         if needs_change.is_empty() {
             continue;
         }
-        if group.len() > 1 {
+        let row = if group.len() > 1 {
             let ids: Vec<String> = group.iter().map(|r| r.id.to_sql()).collect();
+            if needs_change.len() < group.len() {
+                tracing::warn!(
+                    users = ?ids,
+                    "emails differ only by case; left unchanged (resolve by hand)"
+                );
+                continue;
+            }
+            // No lowercase row: nobody in the group could sign in. Keep the
+            // oldest account usable (rows are in creation order).
             tracing::warn!(
                 users = ?ids,
-                "emails differ only by case; left unchanged (resolve by hand)"
+                lowercased = %group[0].id.to_sql(),
+                "emails differ only by case; lowercased the oldest, left the rest (resolve by hand)"
             );
-            continue;
-        }
-        let row = needs_change[0];
+            group[0]
+        } else {
+            *needs_change[0]
+        };
         db.query("UPDATE type::record('user', $key) SET email = $email")
             .bind(("key", record_key(&row.id.to_sql(), "user")))
             .bind(("email", lower.clone()))

@@ -101,6 +101,8 @@ async fn legacy_rows_are_backfilled() {
          CREATE user:old3 SET username = ' Carol ', email = 'carol@example.com', password_hash = 'h', is_admin = true; \
          CREATE user:dup1 SET username = 'Dee', email = 'dee@example.com', password_hash = 'h'; \
          CREATE user:dup2 SET username = 'DeeToo', email = 'DEE@example.com', password_hash = 'h'; \
+         CREATE user:eve1 SET username = 'Eve', email = 'Eve@Example.com', password_hash = 'h', created_at = d'2024-01-01T00:00:00Z'; \
+         CREATE user:eve2 SET username = 'EveToo', email = 'EVE@example.com', password_hash = 'h', created_at = d'2024-02-01T00:00:00Z'; \
          CREATE sessions:legacy SET data = 'x'; \
          CREATE sessions:current SET data = 'y', expires_at = 9999999999;",
     )
@@ -155,6 +157,10 @@ async fn legacy_rows_are_backfilled() {
     // Emails that differ only by case stay as they were (logged).
     assert_eq!(get("dup1").await.email, "dee@example.com");
     assert_eq!(get("dup2").await.email, "DEE@example.com");
+    // When none of them is lowercase, the oldest is lowercased so one account
+    // can still sign in (login matches the lowercase form exactly).
+    assert_eq!(get("eve1").await.email, "eve@example.com");
+    assert_eq!(get("eve2").await.email, "EVE@example.com");
 
     #[derive(Debug, serde::Deserialize, SurrealValue)]
     struct Id {
