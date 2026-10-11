@@ -114,6 +114,8 @@ DEFINE FIELD IF NOT EXISTS champion ON draft_action TYPE string;
 DEFINE FIELD IF NOT EXISTS `order` ON draft_action TYPE int;
 DEFINE FIELD IF NOT EXISTS comment ON draft_action TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS role ON draft_action TYPE option<string>;
+-- M4: the role was guessed, not set by a person (absent on older rows: confirmed).
+DEFINE FIELD IF NOT EXISTS role_guessed ON draft_action TYPE option<bool>;
 
 -- Game plans
 DEFINE TABLE IF NOT EXISTS game_plan SCHEMAFULL;

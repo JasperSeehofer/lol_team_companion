@@ -1366,6 +1366,7 @@ struct ActionRow {
     ord: i64,
     comment: Option<String>,
     role: Option<String>,
+    role_guessed: bool,
 }
 
 fn action_rows(actions: Vec<DraftAction>) -> Vec<ActionRow> {
@@ -1377,6 +1378,7 @@ fn action_rows(actions: Vec<DraftAction>) -> Vec<ActionRow> {
             champion: a.champion,
             ord: a.order as i64,
             comment: a.comment,
+            role_guessed: a.role.is_some() && a.role_guessed,
             role: a.role,
         })
         .collect()
@@ -1433,6 +1435,8 @@ struct DbDraftAction {
     comment: Option<String>,
     #[serde(default)]
     role: Option<String>,
+    #[serde(default)]
+    role_guessed: Option<bool>,
 }
 
 impl From<DbDraftAction> for DraftAction {
@@ -1446,6 +1450,7 @@ impl From<DbDraftAction> for DraftAction {
             order: a.order,
             comment: a.comment,
             role: a.role,
+            role_guessed: a.role_guessed.unwrap_or(false),
         }
     }
 }
@@ -1473,7 +1478,7 @@ pub async fn save_draft(
         .query(
             "BEGIN TRANSACTION; \
              LET $d = (CREATE ONLY draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number); \
-             FOR $a IN $actions { CREATE draft_action SET draft = $d.id, phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role; }; \
+             FOR $a IN $actions { CREATE draft_action SET draft = $d.id, phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role, role_guessed = $a.role_guessed; }; \
              RETURN { id: $d.id }; \
              COMMIT TRANSACTION;",
         )
@@ -1552,7 +1557,7 @@ pub async fn update_draft(
             "BEGIN TRANSACTION; \
              UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number=$game_number; \
              DELETE draft_action WHERE draft = type::record('draft', $draft_key); \
-             FOR $a IN $actions { CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role; }; \
+             FOR $a IN $actions { CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role, role_guessed = $a.role_guessed; }; \
              COMMIT TRANSACTION;",
         )
         .bind(("draft_key", record_key(draft_id, "draft")))
@@ -1725,6 +1730,7 @@ pub async fn get_tree_nodes(
                 order: a.order,
                 comment: a.comment,
                 role: None,
+                role_guessed: false,
             });
     }
 

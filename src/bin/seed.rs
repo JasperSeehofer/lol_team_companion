@@ -439,6 +439,7 @@ fn actions(steps: &[Step]) -> Vec<DraftAction> {
             order: *order,
             comment: None,
             role: None,
+            role_guessed: false,
         })
         .collect()
 }

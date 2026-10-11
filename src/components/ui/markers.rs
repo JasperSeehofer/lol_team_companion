@@ -96,16 +96,37 @@ impl RoleLabelStyle {
 ///
 /// A11y: the three letters are hidden from screen readers and the full
 /// word ("Jungle") is read instead. Text, so it scales and never breaks.
+/// A `guessed` role (inferred, not set by a person) is drawn as uncertain:
+/// a dashed underline and a "?" after the letters, and it is read as
+/// "Jungle, role guessed".
 #[component]
-pub fn RoleLabel(role: Role, #[prop(optional)] style: RoleLabelStyle) -> impl IntoView {
+pub fn RoleLabel(
+    role: Role,
+    #[prop(optional)] style: RoleLabelStyle,
+    /// The role was inferred, not confirmed.
+    #[prop(optional)]
+    guessed: bool,
+) -> impl IntoView {
     let class = format!(
         "inline-flex shrink-0 items-center font-mono text-caption font-medium uppercase leading-none tracking-[0.06em] {}",
         style.class()
     );
     view! {
-        <span class=class data-role=role.label()>
-            <span aria-hidden="true">{role.short()}</span>
-            <span class="sr-only">{role.label()}</span>
+        <span class=class data-role=role.label() data-role-guessed=guessed.then_some("true")>
+            {if guessed {
+                view! {
+                    <span aria-hidden="true" class="border-b border-dashed border-current pb-px">{role.short()}</span>
+                    <span aria-hidden="true">"?"</span>
+                    <span class="sr-only">{format!("{}, role guessed", role.label())}</span>
+                }
+                .into_any()
+            } else {
+                view! {
+                    <span aria-hidden="true">{role.short()}</span>
+                    <span class="sr-only">{role.label()}</span>
+                }
+                .into_any()
+            }}
         </span>
     }
 }

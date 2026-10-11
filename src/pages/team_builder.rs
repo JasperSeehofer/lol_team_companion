@@ -158,6 +158,7 @@ pub async fn save_comp_as_draft(
             order: i as i32,
             comment: None,
             role: None,
+            role_guessed: false,
         })
         .collect();
 

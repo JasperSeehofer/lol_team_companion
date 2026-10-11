@@ -206,6 +206,7 @@ fn build_actions_from_slots(slots: &[Option<String>]) -> Vec<DraftAction> {
                     order: i as i32,
                     comment: None,
                     role: None,
+                    role_guessed: false,
                 }
             })
         })

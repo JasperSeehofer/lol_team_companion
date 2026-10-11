@@ -573,6 +573,7 @@ fn build_actions(
     slots: Vec<Option<String>>,
     slot_comments: &[Option<String>],
     roles: &[Option<String>],
+    guessed: &[bool],
 ) -> Vec<DraftAction> {
     slots
         .into_iter()
@@ -589,6 +590,7 @@ fn build_actions(
                     order: i as i32,
                     comment: slot_comments.get(i).cloned().flatten(),
                     role: roles.get(i).cloned().flatten(),
+                    role_guessed: guessed.get(i).copied().unwrap_or(false),
                 }
             })
         })
@@ -761,6 +763,8 @@ const PICKER_ID: &str = "draft-picker";
 struct Snapshot {
     slots: Vec<Option<String>>,
     roles: Vec<Option<String>>,
+    /// Per slot: the role was guessed, not set by a person.
+    guessed: Vec<bool>,
     notes: Vec<Option<String>>,
     name: String,
     opponent: String,
@@ -828,6 +832,7 @@ impl Editor {
         Snapshot {
             slots: self.slots.get_untracked(),
             roles: self.roles.get_untracked(),
+            guessed: self.guessed.get_untracked(),
             notes: self.notes.get_untracked(),
             name: self.name.get_untracked(),
             opponent: self.opponent.get_untracked(),
@@ -848,6 +853,7 @@ impl Editor {
         Snapshot {
             slots: self.slots.get(),
             roles: self.roles.get(),
+            guessed: self.guessed.get(),
             notes: self.notes.get(),
             name: self.name.get(),
             opponent: self.opponent.get(),
@@ -867,7 +873,7 @@ impl Editor {
         let next = s.slots.iter().position(|c| c.is_none());
         self.slots.set(s.slots);
         self.roles.set(s.roles);
-        self.guessed.set(vec![false; 20]);
+        self.guessed.set(s.guessed);
         self.notes.set(s.notes);
         self.active.set(next);
         self.name.set(s.name);
@@ -887,6 +893,7 @@ impl Editor {
         Snapshot {
             slots: vec![None; 20],
             roles: vec![None; 20],
+            guessed: vec![false; 20],
             notes: vec![None; 20],
             name: String::new(),
             opponent: String::new(),
@@ -911,6 +918,7 @@ impl Editor {
             if o < 20 {
                 s.slots[o] = Some(a.champion.clone());
                 s.roles[o] = a.role.clone();
+                s.guessed[o] = a.role.is_some() && a.role_guessed;
                 s.notes[o] = a.comment.clone();
             }
         }
@@ -959,21 +967,50 @@ impl Editor {
         true
     }
 
-    /// Empty a slot; returns what was there (champion, role, note) for undo.
-    fn clear(&self, slot: usize) -> Option<(String, Option<String>, Option<String>)> {
-        let champ = self
+    /// Empty a slot; returns what was there for undo. A guessed role goes
+    /// with the champion; a role a person set stays on the slot.
+    fn clear(&self, slot: usize) -> Option<Cleared> {
+        let champion = self
             .slots
             .with_untracked(|s| s.get(slot).cloned().flatten())?;
         let role = self.roles.with_untracked(|r| r[slot].clone());
+        let guessed = self.guessed.with_untracked(|g| g[slot]);
         let note = self.notes.with_untracked(|n| n[slot].clone());
         self.slots.update(|s| s[slot] = None);
-        if self.guessed.with_untracked(|g| g[slot]) {
+        if guessed {
             self.roles.update(|r| r[slot] = None);
+            self.guessed.update(|g| g[slot] = false);
         }
         self.notes.update(|n| n[slot] = None);
         self.active.set(Some(slot));
-        Some((champ, role, note))
+        Some(Cleared {
+            champion,
+            role,
+            guessed,
+            note,
+        })
     }
+
+    /// Put back what [`Editor::clear`] took out.
+    fn restore_slot(&self, slot: usize, c: Cleared) {
+        self.slots.update(|s| s[slot] = Some(c.champion));
+        self.roles.update(|r| r[slot] = c.role);
+        self.guessed.update(|g| g[slot] = c.guessed);
+        self.notes.update(|n| n[slot] = c.note);
+        let next = self
+            .slots
+            .with_untracked(|s| s.iter().position(|c| c.is_none()));
+        self.active.set(next);
+    }
+}
+
+/// What a cleared slot held (for Undo).
+#[derive(Clone, Debug)]
+struct Cleared {
+    champion: String,
+    role: Option<String>,
+    guessed: bool,
+    note: Option<String>,
 }
 
 /// The arguments `save_draft`/`update_draft` take, built from a snapshot.
@@ -997,7 +1034,7 @@ fn non_empty(s: String) -> Option<String> {
 
 impl SaveArgs {
     fn from(s: &Snapshot) -> Self {
-        let actions = build_actions(s.slots.clone(), &s.notes, &s.roles);
+        let actions = build_actions(s.slots.clone(), &s.notes, &s.roles, &s.guessed);
         let series_id = non_empty(s.series_id.clone());
         let game = series_id.as_ref().and_then(|_| s.game.parse::<i32>().ok());
         Self {
@@ -1424,18 +1461,10 @@ fn DraftEditor(
         ));
     });
     let on_clear = Callback::new(move |slot: usize| {
-        if let Some((champ, role, note)) = ed.clear(slot) {
+        if let Some(cleared) = ed.clear(slot) {
             let label = TOURNAMENT_ORDER[slot].describe();
-            let champ_for_undo = champ.clone();
-            let undo = Callback::new(move |_| {
-                ed.slots.update(|s| s[slot] = Some(champ_for_undo.clone()));
-                ed.roles.update(|r| r[slot] = role.clone());
-                ed.notes.update(|n| n[slot] = note.clone());
-                let next = ed
-                    .slots
-                    .with_untracked(|s| s.iter().position(|c| c.is_none()));
-                ed.active.set(next);
-            });
+            let champ = cleared.champion.clone();
+            let undo = Callback::new(move |_| ed.restore_slot(slot, cleared.clone()));
             toast.push.run(
                 Toast::info(format!("Cleared {champ} from {label}")).with_action("Undo", undo),
             );
@@ -1546,6 +1575,7 @@ fn DraftEditor(
                     label="Draft board"
                     champions=ed.slots
                     roles=ed.roles
+                    guessed=ed.guessed
                     notes=ed.notes
                     warnings=Signal::derive(move || warnings.get())
                     current=ed.active
@@ -1650,7 +1680,7 @@ fn SlotInspector(ed: Editor, on_clear: Callback<usize>) -> impl IntoView {
                         <div class="flex flex-col gap-1.5">
                             <span class="text-label font-medium text-secondary" id="slot-role-label">
                                 "Role"
-                                {guessed.then(|| view! { <span class="font-normal text-muted">" (guessed from the class)"</span> })}
+                                {guessed.then(|| view! { <span class="font-normal text-muted" data-testid="slot-role-guessed">" (guessed; choose one to confirm it)"</span> })}
                             </span>
                             <div class="overflow-x-auto">
                                 <SegmentedControl
