@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use surrealdb::{
     engine::local::Db,
-    types::{RecordId, SurrealValue, ToSql},
+    types::{Datetime, RecordId, SurrealValue, ToSql},
     Surreal,
 };
 use thiserror::Error;
@@ -55,6 +55,22 @@ pub fn record_key(id: &str, table: &str) -> String {
         .and_then(|rest| rest.strip_prefix(':'))
         .unwrap_or(id)
         .to_string()
+}
+
+/// Format a SurrealDB datetime for the shared models: RFC 3339, UTC, `Z`
+/// suffix, sub-second digits only when present.
+///
+/// `Db*` structs load datetime fields as `Datetime` and convert with this
+/// helper, so no query has to remember a `<string>` cast. (A datetime loaded
+/// into a `String` field fails to deserialize, and `take(0).unwrap_or_default()`
+/// then silently returns an empty list: the personal-learnings bug fixed in M1.)
+pub fn dt_to_string(dt: &Datetime) -> String {
+    dt.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
+}
+
+/// `dt_to_string` for optional fields.
+pub fn opt_dt(dt: Option<Datetime>) -> Option<String> {
+    dt.as_ref().map(dt_to_string)
 }
 
 /// Succeeds only when `table:id` exists and `owner_path` (a field path on
@@ -404,10 +420,10 @@ struct DbInvite {
     id: RecordId,
     code: String,
     created_by_name: Option<String>,
-    created_at: String,
+    created_at: Datetime,
     max_uses: i64,
     uses: i64,
-    expires_at: Option<String>,
+    expires_at: Option<Datetime>,
     disabled: bool,
     note: Option<String>,
 }
@@ -418,10 +434,10 @@ impl From<DbInvite> for crate::models::invite::Invite {
             id: i.id.to_sql(),
             code: i.code,
             created_by: i.created_by_name,
-            created_at: i.created_at,
+            created_at: dt_to_string(&i.created_at),
             max_uses: i.max_uses,
             uses: i.uses,
-            expires_at: i.expires_at,
+            expires_at: opt_dt(i.expires_at),
             disabled: i.disabled,
             note: i.note,
         }
@@ -511,9 +527,11 @@ pub async fn ensure_invite(db: &Surreal<Db>, code: &str, max_uses: i64) -> DbRes
 
 pub async fn list_invites(db: &Surreal<Db>) -> DbResult<Vec<crate::models::invite::Invite>> {
     let mut r = db
-        .query("SELECT id, code, created_by.username AS created_by_name, <string>created_at AS created_at, \
-                max_uses, uses, <string>expires_at AS expires_at, disabled, note \
-                FROM invite ORDER BY created_at DESC")
+        .query(
+            "SELECT id, code, created_by.username AS created_by_name, created_at, \
+                max_uses, uses, expires_at, disabled, note \
+                FROM invite ORDER BY created_at DESC",
+        )
         .await?;
     let rows: Vec<DbInvite> = r.take(0).unwrap_or_default();
     Ok(rows.into_iter().map(Into::into).collect())
@@ -624,7 +642,7 @@ struct DbChampionNote {
     title: String,
     content: String,
     difficulty: Option<i64>,
-    created_at: String,
+    created_at: Option<Datetime>,
 }
 
 impl From<DbChampionNote> for ChampionNote {
@@ -638,7 +656,7 @@ impl From<DbChampionNote> for ChampionNote {
             title: e.title,
             content: e.content,
             difficulty: e.difficulty.map(|v| v as u8),
-            created_at: Some(e.created_at),
+            created_at: opt_dt(e.created_at),
         }
     }
 }
@@ -783,7 +801,7 @@ pub async fn get_champion_notes(
 ) -> DbResult<Vec<ChampionNote>> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let mut r = db
-        .query("SELECT *, <string>created_at AS created_at FROM champion_note WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role ORDER BY note_type, created_at DESC")
+        .query("SELECT * FROM champion_note WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role ORDER BY note_type, created_at DESC")
         .bind(("user_key", user_key))
         .bind(("champion", champion.to_string()))
         .bind(("role", role.to_string()))
@@ -802,7 +820,7 @@ pub async fn get_pool_notes_for_champions(
     }
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let mut r = db
-        .query("SELECT *, <string>created_at AS created_at FROM champion_note WHERE user = type::record('user', $user_key) AND champion IN $champions ORDER BY champion, note_type, created_at DESC")
+        .query("SELECT * FROM champion_note WHERE user = type::record('user', $user_key) AND champion IN $champions ORDER BY champion, note_type, created_at DESC")
         .bind(("user_key", user_key))
         .bind(("champions", champions.to_vec()))
         .await?;
@@ -2018,7 +2036,7 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
 
     // All player_match records for team members, enriched via the match link.
     let mut result = db
-        .query("SELECT *, match.match_id as riot_match_id, match.queue_id as queue_id, match.game_duration as game_duration, <string> match.game_end as game_end, user.username as username FROM player_match WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)) ORDER BY match.game_end DESC LIMIT 200")
+        .query("SELECT *, match.match_id as riot_match_id, match.queue_id as queue_id, match.game_duration as game_duration, match.game_end as game_end, user.username as username FROM player_match WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)) ORDER BY match.game_end DESC LIMIT 200")
         .bind(("team_key", team_key))
         .await?;
     let rows: Vec<DbTeamMatchRow> = result.take(0).unwrap_or_default();
@@ -2035,7 +2053,7 @@ struct DbTeamMatchRow {
     riot_match_id: String,
     queue_id: i32,
     game_duration: i32,
-    game_end: Option<String>,
+    game_end: Option<Datetime>,
     champion: String,
     kills: i32,
     deaths: i32,
@@ -2074,7 +2092,7 @@ impl From<DbTeamMatchRow> for TeamMatchRow {
             riot_match_id: r.riot_match_id,
             queue_id: r.queue_id,
             game_duration: r.game_duration,
-            game_end: r.game_end,
+            game_end: opt_dt(r.game_end),
             champion: r.champion,
             kills: r.kills,
             deaths: r.deaths,
@@ -2800,7 +2818,7 @@ struct DbOpponentPlayer {
     recent_champions: Vec<String>,
     notes: Option<String>,
     #[serde(default)]
-    last_fetched: Option<String>,
+    last_fetched: Option<Datetime>,
     #[serde(default)]
     mastery_data_json: Option<String>,
     #[serde(default)]
@@ -2818,7 +2836,7 @@ impl From<DbOpponentPlayer> for OpponentPlayer {
             riot_summoner_name: p.riot_summoner_name,
             recent_champions: p.recent_champions,
             notes: p.notes,
-            last_fetched: p.last_fetched,
+            last_fetched: opt_dt(p.last_fetched),
             mastery_data_json: p.mastery_data_json,
             role_distribution_json: p.role_distribution_json,
         }
@@ -2866,7 +2884,7 @@ pub async fn get_opponent(
 ) -> DbResult<Option<(Opponent, Vec<OpponentPlayer>)>> {
     let opp_key = record_key(opponent_id, "opponent");
     let mut r = db
-        .query("SELECT * FROM type::record('opponent', $opp_key) WHERE team = type::record('team', $team_key); SELECT *, <string>last_fetched AS last_fetched FROM opponent_player WHERE opponent = type::record('opponent', $opp_key) AND opponent.team = type::record('team', $team_key) ORDER BY role ASC")
+        .query("SELECT * FROM type::record('opponent', $opp_key) WHERE team = type::record('team', $team_key); SELECT * FROM opponent_player WHERE opponent = type::record('opponent', $opp_key) AND opponent.team = type::record('team', $team_key) ORDER BY role ASC")
         .bind(("opp_key", opp_key))
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
@@ -3366,7 +3384,7 @@ pub async fn get_team_matchup_notes(
             .to_string();
         let champion_owned = champion.to_string();
         let mut nr = db
-            .query("SELECT *, <string>created_at AS created_at FROM champion_note WHERE user = type::record('user', $user_key) AND note_type = 'matchup' AND (title CONTAINS $champion OR content CONTAINS $champion)")
+            .query("SELECT * FROM champion_note WHERE user = type::record('user', $user_key) AND note_type = 'matchup' AND (title CONTAINS $champion OR content CONTAINS $champion)")
             .bind(("user_key", user_key))
             .bind(("champion", champion_owned))
             .await?;
@@ -3391,8 +3409,8 @@ struct DbActionItem {
     text: String,
     status: String,
     assigned_to: Option<String>,
-    created_at: String,
-    resolved_at: Option<String>,
+    created_at: Option<Datetime>,
+    resolved_at: Option<Datetime>,
 }
 
 impl From<DbActionItem> for ActionItem {
@@ -3404,8 +3422,8 @@ impl From<DbActionItem> for ActionItem {
             text: a.text,
             status: a.status,
             assigned_to: a.assigned_to,
-            created_at: Some(a.created_at),
-            resolved_at: a.resolved_at,
+            created_at: opt_dt(a.created_at),
+            resolved_at: opt_dt(a.resolved_at),
         }
     }
 }
@@ -3438,7 +3456,7 @@ pub async fn list_action_items(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
         .query(
-            "SELECT *, <string>created_at AS created_at, <string>resolved_at AS resolved_at FROM action_item WHERE team = type::record('team', $team_key) ORDER BY status ASC, created_at DESC",
+            "SELECT * FROM action_item WHERE team = type::record('team', $team_key) ORDER BY status ASC, created_at DESC",
         )
         .bind(("team_key", team_key))
         .await?;
@@ -3450,7 +3468,7 @@ pub async fn list_open_action_items(db: &Surreal<Db>, team_id: &str) -> DbResult
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut r = db
         .query(
-            "SELECT *, <string>created_at AS created_at, <string>resolved_at AS resolved_at FROM action_item WHERE team = type::record('team', $team_key) AND (status = 'open' OR status = 'in_progress') ORDER BY status ASC, created_at DESC",
+            "SELECT * FROM action_item WHERE team = type::record('team', $team_key) AND (status = 'open' OR status = 'in_progress') ORDER BY status ASC, created_at DESC",
         )
         .bind(("team_key", team_key))
         .await?;
@@ -3567,7 +3585,7 @@ struct DbBugReport {
     category: String,
     viewport_w: Option<i64>,
     viewport_h: Option<i64>,
-    created_at: String,
+    created_at: Option<Datetime>,
     status: String,
 }
 
@@ -3582,7 +3600,7 @@ impl From<DbBugReport> for BugReport {
             category: b.category,
             viewport_w: b.viewport_w.map(|v| v as i32),
             viewport_h: b.viewport_h.map(|v| v as i32),
-            created_at: Some(b.created_at),
+            created_at: opt_dt(b.created_at),
             status: b.status,
         }
     }
@@ -3632,7 +3650,7 @@ pub async fn list_bug_reports(db: &Surreal<Db>, status: Option<&str>) -> DbResul
     let mut r = match status {
         Some(s) => {
             db.query(
-                "SELECT *, <string>created_at AS created_at \
+                "SELECT * \
                  FROM bug_report WHERE status = $status \
                  ORDER BY created_at DESC",
             )
@@ -3641,7 +3659,7 @@ pub async fn list_bug_reports(db: &Surreal<Db>, status: Option<&str>) -> DbResul
         }
         None => {
             db.query(
-                "SELECT *, <string>created_at AS created_at \
+                "SELECT * \
                  FROM bug_report ORDER BY created_at DESC",
             )
             .await?
@@ -3667,7 +3685,7 @@ struct DbTeamNote {
     author_name: String,
     content: String,
     pinned: bool,
-    created_at: String,
+    created_at: Option<Datetime>,
 }
 
 impl From<DbTeamNote> for TeamNote {
@@ -3679,7 +3697,7 @@ impl From<DbTeamNote> for TeamNote {
             author_name: n.author_name,
             content: n.content,
             pinned: n.pinned,
-            created_at: Some(n.created_at),
+            created_at: opt_dt(n.created_at),
         }
     }
 }
@@ -3713,7 +3731,7 @@ pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Te
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     let mut response = db
-        .query("SELECT *, <string>created_at AS created_at FROM team_note WHERE team = type::record('team', $team_key) ORDER BY pinned DESC, created_at DESC")
+        .query("SELECT * FROM team_note WHERE team = type::record('team', $team_key) ORDER BY pinned DESC, created_at DESC")
         .bind(("team_key", team_key))
         .await?;
 
@@ -3725,7 +3743,7 @@ pub async fn list_pinned_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     let mut response = db
-        .query("SELECT *, <string>created_at AS created_at FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true ORDER BY created_at DESC")
+        .query("SELECT * FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true ORDER BY created_at DESC")
         .bind(("team_key", team_key))
         .await?;
 
@@ -4451,13 +4469,13 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
     // 5-statement batched query (per RESEARCH.md Example 2)
     let mut result = db
         .query(
-            "SELECT id, text, <string>created_at AS created_at FROM action_item \
+            "SELECT id, text, created_at FROM action_item \
              WHERE team = type::record('team', $team_key) AND status IN ['open','in_progress'] \
              ORDER BY created_at DESC LIMIT 3; \
              SELECT count() as n FROM action_item \
              WHERE team = type::record('team', $team_key) AND status IN ['open','in_progress'] \
              GROUP ALL; \
-             SELECT id, improvements, <string>created_at AS created_at FROM post_game_learning \
+             SELECT id, improvements, created_at FROM post_game_learning \
              WHERE team = type::record('team', $team_key) \
              ORDER BY created_at DESC LIMIT 5; \
              SELECT count() as n FROM draft WHERE team = type::record('team', $team_key) \
@@ -4475,7 +4493,7 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
         id: RecordId,
         text: String,
         #[allow(dead_code)]
-        created_at: String,
+        created_at: Option<Datetime>,
     }
 
     #[derive(Debug, Deserialize, SurrealValue)]
@@ -4487,7 +4505,7 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
     struct DbPostGamePreview {
         id: RecordId,
         improvements: Vec<String>,
-        created_at: Option<String>,
+        created_at: Option<Datetime>,
     }
 
     let db_action_items: Vec<DbActionItemPreview> = result.take(0).unwrap_or_default();
@@ -4519,7 +4537,7 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
         .map(|p| PostGamePreview {
             id: p.id.to_sql(),
             improvements: p.improvements,
-            created_at: p.created_at,
+            created_at: opt_dt(p.created_at),
         })
         .collect();
 
@@ -4950,11 +4968,12 @@ pub async fn get_latest_ranked_snapshot(
         lp: i32,
         wins: i32,
         losses: i32,
-        snapshotted_at: Option<String>, // required in SELECT for ORDER BY (Rule 40)
+        #[allow(dead_code)]
+        snapshotted_at: Option<Datetime>, // required in SELECT for ORDER BY (Rule 40)
     }
 
     let mut result = db
-        .query("SELECT queue_type, tier, division, lp, wins, losses, <string>snapshotted_at AS snapshotted_at FROM ranked_snapshot WHERE user = type::record('user', $user_key) AND queue_type = $queue_type ORDER BY snapshotted_at DESC LIMIT 1")
+        .query("SELECT queue_type, tier, division, lp, wins, losses, snapshotted_at FROM ranked_snapshot WHERE user = type::record('user', $user_key) AND queue_type = $queue_type ORDER BY snapshotted_at DESC LIMIT 1")
         .bind(("user_key", user_key))
         .bind(("queue_type", queue_type.to_string()))
         .await?;
@@ -4985,7 +5004,8 @@ pub async fn get_solo_matches(
         id: RecordId,
         match_id: String,
         user_id: String,
-        game_end: String,
+        #[allow(dead_code)]
+        game_end: Option<Datetime>, // selected for ORDER BY (Rule 40)
         champion: String,
         kills: i32,
         deaths: i32,
@@ -4999,7 +5019,7 @@ pub async fn get_solo_matches(
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     // Alias RecordId fields + include game_end for ORDER BY (Rule 40: ORDER BY field must be in SELECT)
     const BASE_SELECT: &str = "SELECT id, match.match_id AS match_id, <string>user AS user_id, \
-         <string>match.game_end AS game_end, \
+         match.game_end AS game_end, \
          champion, kills, deaths, assists, cs, vision_score, damage, win \
          FROM player_match WHERE user = type::record('user', $user_key)";
 
@@ -5057,19 +5077,19 @@ pub async fn get_lp_history(
         tier: String,
         division: String,
         lp: i32,
-        snapshotted_at: String,
+        snapshotted_at: Datetime,
     }
 
     // Note: snapshotted_at MUST be in SELECT list for ORDER BY to work (Rule 40).
-    // <string>snapshotted_at AS snapshotted_at casts the SurrealDB datetime to string.
+    // It loads as a Datetime and is formatted with dt_to_string.
     let rows: Vec<DbLpRow> = if let Some(cutoff_val) = cutoff {
         let mut r = db
             .query(
-                "SELECT tier, division, lp, <string>snapshotted_at AS snapshotted_at \
+                "SELECT tier, division, lp, snapshotted_at \
                  FROM ranked_snapshot \
                  WHERE user = type::record('user', $user_key) \
                  AND queue_type = 'RANKED_SOLO_5x5' \
-                 AND snapshotted_at >= $cutoff \
+                 AND snapshotted_at >= <datetime>$cutoff \
                  ORDER BY snapshotted_at ASC",
             )
             .bind(("user_key", user_key))
@@ -5079,7 +5099,7 @@ pub async fn get_lp_history(
     } else {
         let mut r = db
             .query(
-                "SELECT tier, division, lp, <string>snapshotted_at AS snapshotted_at \
+                "SELECT tier, division, lp, snapshotted_at \
                  FROM ranked_snapshot \
                  WHERE user = type::record('user', $user_key) \
                  AND queue_type = 'RANKED_SOLO_5x5' \
@@ -5099,7 +5119,7 @@ pub async fn get_lp_history(
                 tier: r.tier,
                 division: r.division,
                 lp: r.lp,
-                snapshotted_at: r.snapshotted_at,
+                snapshotted_at: dt_to_string(&r.snapshotted_at),
                 rank_score: score,
             }
         })
@@ -5170,7 +5190,8 @@ pub async fn compute_goal_progress(
         lp: i32,
         wins: i32,
         losses: i32,
-        snapshotted_at: Option<String>, // included for ORDER BY compliance (Rule 40)
+        #[allow(dead_code)]
+        snapshotted_at: Option<Datetime>, // included for ORDER BY compliance (Rule 40)
     }
 
     // Batched 3-statement query (Rule 29).
@@ -5184,7 +5205,7 @@ pub async fn compute_goal_progress(
              FROM player_match \
              WHERE user = type::record('user', $user_key) \
              AND match.queue_id = 420; \
-             SELECT tier, division, lp, wins, losses, <string>snapshotted_at AS snapshotted_at FROM ranked_snapshot \
+             SELECT tier, division, lp, wins, losses, snapshotted_at FROM ranked_snapshot \
              WHERE user = type::record('user', $user_key) \
              AND queue_type = 'RANKED_SOLO_5x5' \
              ORDER BY snapshotted_at DESC LIMIT 1",
@@ -5330,7 +5351,7 @@ pub async fn get_champion_trends(
                  FROM player_match \
                  WHERE user = type::record('user', $user_key) \
                  AND (match.queue_id = 420 OR match.queue_id = 440) \
-                 AND match.game_end >= $cutoff",
+                 AND match.game_end >= <datetime>$cutoff",
             )
             .bind(("user_key", user_key))
             .bind(("cutoff", cutoff_val))
@@ -5576,7 +5597,7 @@ struct DbPersonalLearning {
     game_timestamp_ms: Option<i64>,
     #[serde(default)]
     event_name: Option<String>,
-    created_at: Option<String>,
+    created_at: Option<Datetime>,
 }
 
 impl From<DbPersonalLearning> for PersonalLearning {
@@ -5596,7 +5617,7 @@ impl From<DbPersonalLearning> for PersonalLearning {
             match_riot_id: d.match_riot_id,
             game_timestamp_ms: d.game_timestamp_ms,
             event_name: d.event_name,
-            created_at: d.created_at,
+            created_at: opt_dt(d.created_at),
         }
     }
 }
@@ -5643,7 +5664,7 @@ pub async fn get_personal_learning(
 ) -> DbResult<Option<PersonalLearning>> {
     let key = record_key(id, "personal_learning");
     let mut r = db
-        .query("SELECT *, <string>created_at AS created_at FROM type::record('personal_learning', $key) WHERE user = type::record('user', $user_key)")
+        .query("SELECT * FROM type::record('personal_learning', $key) WHERE user = type::record('user', $user_key)")
         .bind(("key", key))
         .bind(("user_key", record_key(user_id, "user")))
         .await?;
@@ -5657,7 +5678,7 @@ pub async fn list_personal_learnings(
 ) -> DbResult<Vec<PersonalLearning>> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let mut r = db
-        .query("SELECT *, <string>created_at AS created_at FROM personal_learning WHERE user = type::record('user', $user_key) ORDER BY created_at DESC")
+        .query("SELECT * FROM personal_learning WHERE user = type::record('user', $user_key) ORDER BY created_at DESC")
         .bind(("user_key", user_key))
         .await?;
     let rows: Vec<DbPersonalLearning> = r.take(0).unwrap_or_default();

@@ -26,12 +26,29 @@ impl Invite {
         } else if self
             .expires_at
             .as_deref()
-            .is_some_and(|e| !e.is_empty() && e < now_rfc3339)
+            .is_some_and(|e| is_before(e, now_rfc3339))
         {
             "expired"
         } else {
             "open"
         }
+    }
+}
+
+/// `a < b` for two RFC 3339 timestamps, compared as instants (the DB and
+/// `chrono` format fractional seconds differently, so comparing the strings
+/// was wrong within the expiry second). Falls back to comparing the text when
+/// either side does not parse.
+fn is_before(a: &str, b: &str) -> bool {
+    if a.is_empty() {
+        return false;
+    }
+    match (
+        chrono::DateTime::parse_from_rfc3339(a),
+        chrono::DateTime::parse_from_rfc3339(b),
+    ) {
+        (Ok(a), Ok(b)) => a < b,
+        _ => a < b,
     }
 }
 
@@ -66,5 +83,15 @@ mod tests {
         let mut i = invite();
         i.disabled = true;
         assert_eq!(i.status(now), "disabled");
+    }
+
+    #[test]
+    fn expiry_compares_instants_not_text() {
+        let mut i = invite();
+        // Same second, fractional digits on one side only: as text
+        // "…00.5Z" sorts before "…00Z", as instants it is later.
+        i.expires_at = Some("2026-10-11T00:00:00.500Z".into());
+        assert_eq!(i.status("2026-10-11T00:00:00Z"), "open");
+        assert_eq!(i.status("2026-10-11T00:00:01+00:00"), "expired");
     }
 }
