@@ -2354,12 +2354,14 @@ pub async fn save_post_game_learning(
     }
 }
 
-/// Improvements from a review that should become new action items: trimmed,
-/// non-empty, and not already an open or in-progress item of the team
-/// (case-insensitive).
+/// Lines from a review that should become new action items: trimmed,
+/// non-empty, not already an open or in-progress item of the team, and not
+/// an item this review already created in any status, so saving a review
+/// again does not bring back items the team has done (case-insensitive).
 async fn new_action_item_texts(
     db: &Surreal<Db>,
     team_id: &str,
+    review_id: Option<&str>,
     improvements: &[String],
 ) -> DbResult<Vec<String>> {
     if improvements.iter().all(|t| t.trim().is_empty()) {
@@ -2368,6 +2370,17 @@ async fn new_action_item_texts(
     let existing = list_open_action_items(db, team_id).await?;
     let mut seen: std::collections::HashSet<String> =
         existing.iter().map(|i| i.text.to_lowercase()).collect();
+    if let Some(review) = review_id {
+        let mut r = db
+            .query(
+                "SELECT VALUE text FROM action_item WHERE team = type::record('team', $team_key) AND source_review = type::record('post_game_learning', $review_key)",
+            )
+            .bind(("team_key", record_key(team_id, "team")))
+            .bind(("review_key", record_key(review, "post_game_learning")))
+            .await?;
+        let own: Vec<String> = r.take(0).unwrap_or_default();
+        seen.extend(own.into_iter().map(|t| t.to_lowercase()));
+    }
     Ok(improvements
         .iter()
         .map(|t| t.trim().to_string())
@@ -2394,7 +2407,8 @@ pub async fn create_review_with_action_items(
     db: &Surreal<Db>,
     review: PostGameLearning,
 ) -> DbResult<(String, usize)> {
-    let items = new_action_item_texts(db, &review.team_id, &review_item_lines(&review)).await?;
+    let items =
+        new_action_item_texts(db, &review.team_id, None, &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
@@ -2435,7 +2449,7 @@ pub async fn update_review_with_action_items(
 ) -> DbResult<usize> {
     let id = review.id.clone().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", &id, team_id).await?;
-    let items = new_action_item_texts(db, team_id, &review_item_lines(&review)).await?;
+    let items = new_action_item_texts(db, team_id, Some(&id), &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
@@ -3625,7 +3639,7 @@ pub async fn batch_create_action_items_from_review(
         return Ok(0);
     }
     ensure_team_record(db, "post_game_learning", review_id, team_id).await?;
-    let items = new_action_item_texts(db, team_id, improvements).await?;
+    let items = new_action_item_texts(db, team_id, Some(review_id), improvements).await?;
     let count = items.len();
     if count == 0 {
         return Ok(0);
