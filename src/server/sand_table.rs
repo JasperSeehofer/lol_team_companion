@@ -16,7 +16,7 @@
 //! of breaking the import. `alive` is not in the timeline: it is estimated
 //! from kill events and base respawn times (see [`BASE_RESPAWN_SECS`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -51,6 +51,13 @@ pub const BASE_RESPAWN_SECS: [f64; 18] = [
     6.0, 6.0, 8.0, 8.0, 10.0, 12.0, 16.0, 21.0, 26.0, 32.5, 35.0, 37.5, 40.0, 42.5, 45.0, 47.5,
     50.0, 52.5,
 ];
+
+/// Upper bounds for an imported document. Real timelines are far smaller (a
+/// 60-minute game has 61 frames, 10 participants and a few thousand events);
+/// anything bigger is rejected instead of being stored or scanned.
+pub const MAX_FRAMES: usize = 400;
+pub const MAX_PARTICIPANTS: usize = 20;
+pub const MAX_EVENTS: usize = 50_000;
 
 fn respawn_ms(level: i64) -> i64 {
     let idx = (level.clamp(1, 18) - 1) as usize;
@@ -204,6 +211,44 @@ pub fn import_timeline(doc: &Value) -> Result<ImportedTimeline, ImportError> {
         .ok_or_else(|| ImportError::Shape("info.frames is missing".into()))?;
     let frame_interval_ms = int(info, "frameInterval").unwrap_or(60_000);
 
+    // Size limits before any per-element work.
+    if raw_frames.len() > MAX_FRAMES {
+        return Err(ImportError::Shape(format!(
+            "too many frames ({} > {MAX_FRAMES})",
+            raw_frames.len()
+        )));
+    }
+    let mut event_count = 0usize;
+    for f in raw_frames {
+        event_count += f
+            .get("events")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        let pf = f
+            .get("participantFrames")
+            .and_then(Value::as_object)
+            .map_or(0, Map::len);
+        if pf > MAX_PARTICIPANTS {
+            return Err(ImportError::Shape(format!(
+                "too many participants in a frame ({pf} > {MAX_PARTICIPANTS})"
+            )));
+        }
+    }
+    if event_count > MAX_EVENTS {
+        return Err(ImportError::Shape(format!(
+            "too many events ({event_count} > {MAX_EVENTS})"
+        )));
+    }
+    if info
+        .get("participants")
+        .and_then(Value::as_array)
+        .is_some_and(|ps| ps.len() > MAX_PARTICIPANTS)
+    {
+        return Err(ImportError::Shape(format!(
+            "too many participants (> {MAX_PARTICIPANTS})"
+        )));
+    }
+
     // Participants: from info.participants, else from the first frame's keys.
     let mut participants: Vec<ReplayParticipant> = info
         .get("participants")
@@ -270,18 +315,30 @@ pub fn import_timeline(doc: &Value) -> Result<ImportedTimeline, ImportError> {
         e.seq = i as i64;
     }
 
-    // Level of each participant at each frame, for respawn estimates.
+    // Level of each participant at each frame (document order), for respawn
+    // estimates: participant ID -> [(frame timestamp, level)].
+    let mut levels: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
+    for f in raw_frames {
+        let Some(ft) = int(f, "timestamp") else {
+            continue;
+        };
+        if let Some(pf) = f.get("participantFrames").and_then(Value::as_object) {
+            for (key, p) in pf {
+                if let (Ok(pid), Some(level)) = (key.parse::<i64>(), int(p, "level")) {
+                    levels.entry(pid).or_default().push((ft, level));
+                }
+            }
+        }
+    }
     let level_at = |pid: i64, t: i64| -> i64 {
-        raw_frames
-            .iter()
-            .filter(|f| int(f, "timestamp").is_some_and(|ft| ft <= t))
-            .filter_map(|f| f.pointer(&format!("/participantFrames/{pid}/level")))
-            .filter_map(Value::as_i64)
-            .next_back()
-            .unwrap_or(1)
+        levels
+            .get(&pid)
+            .and_then(|ls| ls.iter().filter(|(ft, _)| *ft <= t).next_back())
+            .map_or(1, |(_, level)| *level)
     };
-    // (victim, died at, respawns at) from the raw kill events.
-    let deaths: Vec<(i64, i64, i64)> = raw_frames
+    // Victim -> [(died at, respawns at)] from the raw kill events.
+    let mut deaths: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
+    for (victim, from, until) in raw_frames
         .iter()
         .flat_map(|f| {
             f.get("events")
@@ -295,7 +352,9 @@ pub fn import_timeline(doc: &Value) -> Result<ImportedTimeline, ImportError> {
             let t = int(ev, "timestamp")?;
             Some((victim, t, t + respawn_ms(level_at(victim, t))))
         })
-        .collect();
+    {
+        deaths.entry(victim).or_default().push((from, until));
+    }
 
     let mut frames = Vec::with_capacity(raw_frames.len());
     for f in raw_frames {
@@ -310,9 +369,10 @@ pub fn import_timeline(doc: &Value) -> Result<ImportedTimeline, ImportError> {
                     .filter_map(|p| {
                         let pid = int(p, "participantId")?;
                         let (x, y) = position(p);
-                        let dead = deaths
-                            .iter()
-                            .any(|(v, from, until)| *v == pid && t_ms >= *from && t_ms < *until);
+                        let dead = deaths.get(&pid).is_some_and(|ds| {
+                            ds.iter()
+                                .any(|(from, until)| t_ms >= *from && t_ms < *until)
+                        });
                         Some(ParticipantFrame {
                             participant_id: pid,
                             x: x.unwrap_or(0),
@@ -484,6 +544,73 @@ mod tests {
         }))
         .unwrap();
         assert!(empty.frames.is_empty() && empty.participants.is_empty());
+    }
+
+    #[test]
+    fn oversized_documents_are_rejected() {
+        let frames: Vec<Value> = (0..=MAX_FRAMES as i64)
+            .map(|i| serde_json::json!({ "timestamp": i * 60_000 }))
+            .collect();
+        let doc = serde_json::json!({
+            "metadata": {"matchId": "X_1"},
+            "info": {"frames": frames}
+        });
+        assert!(
+            matches!(import_timeline(&doc), Err(ImportError::Shape(m)) if m.contains("frames"))
+        );
+
+        let events: Vec<Value> = (0..=MAX_EVENTS as i64)
+            .map(|i| serde_json::json!({ "type": "WARD_PLACED", "timestamp": i }))
+            .collect();
+        let doc = serde_json::json!({
+            "metadata": {"matchId": "X_1"},
+            "info": {"frames": [{"timestamp": 0, "events": events}]}
+        });
+        assert!(
+            matches!(import_timeline(&doc), Err(ImportError::Shape(m)) if m.contains("events"))
+        );
+
+        let pf: serde_json::Map<String, Value> = (1..=MAX_PARTICIPANTS as i64 + 1)
+            .map(|i| (i.to_string(), serde_json::json!({ "participantId": i })))
+            .collect();
+        let doc = serde_json::json!({
+            "metadata": {"matchId": "X_1"},
+            "info": {"frames": [{"timestamp": 0, "participantFrames": pf}]}
+        });
+        assert!(
+            matches!(import_timeline(&doc), Err(ImportError::Shape(m)) if m.contains("participants"))
+        );
+    }
+
+    #[test]
+    fn wrong_types_are_skipped_not_fatal() {
+        // Strings and floats where numbers belong, negative coordinates.
+        let doc = serde_json::json!({
+            "metadata": {"matchId": "X_1"},
+            "info": {"frames": [{
+                "timestamp": 0,
+                "participantFrames": {
+                    "1": {"participantId": 1, "position": {"x": -50, "y": "7"}, "totalGold": 1.5, "level": "3"},
+                    "2": {"participantId": "2"}
+                },
+                "events": [
+                    {"type": "CHAMPION_KILL", "timestamp": "10", "victimId": 1},
+                    {"type": 7, "timestamp": 20}
+                ]
+            }]}
+        });
+        let t = import_timeline(&doc).unwrap();
+        assert_eq!(
+            t.frames[0].participants.len(),
+            1,
+            "a non-numeric participantId is skipped"
+        );
+        let p = &t.frames[0].participants[0];
+        assert_eq!((p.x, p.y, p.gold, p.level), (-50, 0, 0, 1));
+        assert!(
+            t.events.is_empty(),
+            "events without a numeric timestamp or a type are skipped"
+        );
     }
 
     #[test]
