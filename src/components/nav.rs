@@ -34,17 +34,16 @@ pub fn ModeToggle(mode: String) -> impl IntoView {
             }
         });
     });
+    // Shown at every width: on phones it is the only way to switch.
     view! {
-        <div class="hidden sm:block">
-            <SegmentedControl
-                id="workspace"
-                label="Workspace"
-                options=vec![Segment::new("solo", "Solo"), Segment::new("team", "Team")]
-                value=value
-                size=SegmentSize::Sm
-                on_change=on_change
-            />
-        </div>
+        <SegmentedControl
+            id="workspace"
+            label="Workspace"
+            options=vec![Segment::new("solo", "Solo"), Segment::new("team", "Team")]
+            value=value
+            size=SegmentSize::Sm
+            on_change=on_change
+        />
     }
 }
 
