@@ -1,5 +1,6 @@
-//! SegmentedControl (one choice out of two to five, shown side by side)
-//! and Switch (on or off, effective immediately).
+//! SegmentedControl (one choice out of two to five, shown side by side),
+//! Switch (on or off, effective immediately) and Checkbox (a checklist
+//! item or a yes/no in a form).
 
 use leptos::prelude::*;
 
@@ -245,6 +246,57 @@ pub fn Switch(
                 </span>
             })}
         </button>
+    }
+}
+
+/// A checkbox with its label: one item of a checklist, or a yes/no inside a
+/// form. A square box with a check mark (round is for switches).
+///
+/// A11y: a native `<input type="checkbox">` inside its `<label>`, so the
+/// text is the name and Space toggles it; the checked state is the mark and
+/// the fill, and `strike` also crosses the text out (decorative, the state
+/// is read from the box).
+#[component]
+pub fn Checkbox(
+    #[prop(into)] label: String,
+    checked: RwSignal<bool>,
+    /// Cross the label out while checked (done items in a checklist).
+    #[prop(optional)]
+    strike: bool,
+    #[prop(optional, into)] disabled: Signal<bool>,
+    #[prop(optional)] on_change: Option<Callback<bool>>,
+    #[prop(optional, into)] id: Option<String>,
+) -> impl IntoView {
+    let text_class = move || {
+        if strike && checked.get() {
+            "text-body text-muted line-through"
+        } else {
+            "text-body text-primary"
+        }
+    };
+    view! {
+        <label class="group/cb inline-flex min-h-6 cursor-pointer items-start gap-2.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+            <span class="relative mt-0.5 inline-grid size-4 shrink-0 place-items-center">
+                <input
+                    id=id
+                    type="checkbox"
+                    class="peer size-4 cursor-pointer appearance-none rounded-ctl border border-outline bg-ink-2 transition-colors checked:border-accent checked:bg-accent hover:border-secondary disabled:cursor-not-allowed"
+                    prop:checked=move || checked.get()
+                    disabled=move || disabled.get()
+                    on:change=move |ev| {
+                        let v = event_target_checked(&ev);
+                        checked.set(v);
+                        if let Some(cb) = on_change {
+                            cb.run(v);
+                        }
+                    }
+                />
+                <svg class="pointer-events-none absolute size-3 text-accent-ink opacity-0 peer-checked:opacity-100" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M2.5 6.2l2.3 2.3 4.7-4.9" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </span>
+            <span class=text_class>{label}</span>
+        </label>
     }
 }
 

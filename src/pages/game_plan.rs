@@ -1,7 +1,16 @@
+//! Game plans: the plan for one game (picks, how we win, role briefs,
+//! notes, a pre-game checklist), linked to a draft and, after the game, to
+//! a review.
+
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
+use crate::components::ui::a11y::focus_id;
 use crate::components::ui::{
-    ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+    AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar, Checkbox,
+    ConfirmDialog, ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell,
+    PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment, SegmentSize,
+    SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Table, Td,
+    TextField, Th, Toast, ToastContext, Tr,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -419,14 +428,204 @@ const STRATEGY_TAGS: &[&str] = &[
     "protect-the-carry",
 ];
 
-const ROLES: [&str; 5] = ["Top", "Jungle", "Mid", "Bot", "Support"];
-
-fn textarea_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
+fn opt(s: String) -> Option<String> {
+    (!s.trim().is_empty()).then_some(s)
 }
 
-fn input_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
+fn lines(s: &str) -> Vec<String> {
+    s.lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+/// Picks of one side of a draft in pick order (champion per pick).
+fn side_picks(d: &Draft, side: &str) -> Vec<String> {
+    let mut picks: Vec<(i32, String)> = d
+        .actions
+        .iter()
+        .filter(|a| a.side == side && slot_meta(a.order as usize).1 == "pick")
+        .map(|a| (a.order, a.champion.clone()))
+        .collect();
+    picks.sort_by_key(|(o, _)| *o);
+    let mut out: Vec<String> = picks.into_iter().map(|(_, c)| c).collect();
+    out.resize(5, String::new());
+    out
+}
+
+/// The plan being edited. Every field is a signal (Copy).
+#[derive(Clone, Copy)]
+struct PlanEd {
+    id: RwSignal<Option<String>>,
+    name: RwSignal<String>,
+    draft_id: RwSignal<String>,
+    ours: [RwSignal<String>; 5],
+    theirs: [RwSignal<String>; 5],
+    win: RwSignal<String>,
+    objectives: RwSignal<String>,
+    teamfight: RwSignal<String>,
+    early: RwSignal<String>,
+    roles: [RwSignal<String>; 5],
+    notes: RwSignal<String>,
+    tag: RwSignal<String>,
+    /// Picks came from the linked draft (shown read-only until edited).
+    from_draft: RwSignal<bool>,
+}
+
+impl PlanEd {
+    fn new() -> Self {
+        let s = || RwSignal::new(String::new());
+        Self {
+            id: RwSignal::new(None),
+            name: s(),
+            draft_id: s(),
+            ours: [s(), s(), s(), s(), s()],
+            theirs: [s(), s(), s(), s(), s()],
+            win: s(),
+            objectives: s(),
+            teamfight: s(),
+            early: s(),
+            roles: [s(), s(), s(), s(), s()],
+            notes: s(),
+            tag: s(),
+            from_draft: RwSignal::new(false),
+        }
+    }
+
+    fn clear(&self) {
+        self.id.set(None);
+        for sig in [
+            self.name,
+            self.draft_id,
+            self.win,
+            self.objectives,
+            self.teamfight,
+            self.early,
+            self.notes,
+            self.tag,
+        ] {
+            sig.set(String::new());
+        }
+        for sig in self
+            .ours
+            .iter()
+            .chain(self.theirs.iter())
+            .chain(self.roles.iter())
+        {
+            sig.set(String::new());
+        }
+        self.from_draft.set(false);
+    }
+
+    fn load(&self, p: &GamePlan) {
+        self.id.set(p.id.clone());
+        self.name.set(p.name.clone());
+        self.draft_id.set(p.draft_id.clone().unwrap_or_default());
+        for (i, sig) in self.ours.iter().enumerate() {
+            sig.set(p.our_champions.get(i).cloned().unwrap_or_default());
+        }
+        for (i, sig) in self.theirs.iter().enumerate() {
+            sig.set(p.enemy_champions.get(i).cloned().unwrap_or_default());
+        }
+        self.win.set(p.win_conditions.join("\n"));
+        self.objectives.set(p.objective_priority.join("\n"));
+        self.teamfight.set(p.teamfight_strategy.clone());
+        self.early.set(p.early_game.clone().unwrap_or_default());
+        let r = [
+            &p.top_strategy,
+            &p.jungle_strategy,
+            &p.mid_strategy,
+            &p.bot_strategy,
+            &p.support_strategy,
+        ];
+        for (i, sig) in self.roles.iter().enumerate() {
+            sig.set(r[i].clone().unwrap_or_default());
+        }
+        self.notes.set(p.notes.clone().unwrap_or_default());
+        self.tag
+            .set(p.win_condition_tag.clone().unwrap_or_default());
+        self.from_draft.set(false);
+    }
+
+    /// Seed picks (and, for a new plan, name, tag, win conditions and role
+    /// notes) from a draft.
+    fn apply_draft(&self, d: &Draft, new_plan: bool) {
+        let our = if d.our_side == "red" { "red" } else { "blue" };
+        let enemy = if our == "blue" { "red" } else { "blue" };
+        for (i, c) in side_picks(d, our).into_iter().enumerate() {
+            self.ours[i].set(c);
+        }
+        for (i, c) in side_picks(d, enemy).into_iter().enumerate() {
+            self.theirs[i].set(c);
+        }
+        self.draft_id.set(d.id.clone().unwrap_or_default());
+        self.from_draft.set(true);
+        if !new_plan {
+            return;
+        }
+        if !d.name.is_empty() {
+            self.name.set(format!("{} plan", d.name));
+        }
+        if let Some(t) = most_common_tag(&d.tags) {
+            self.tag.set(t);
+        }
+        if let Some(wc) = d.win_conditions.clone().filter(|w| !w.is_empty()) {
+            self.win.set(wc);
+        }
+        for a in d
+            .actions
+            .iter()
+            .filter(|a| a.side == our && slot_meta(a.order as usize).1 == "pick")
+        {
+            if let Some(i) = a
+                .role
+                .as_deref()
+                .and_then(Role::parse)
+                .and_then(|r| Role::ALL.iter().position(|x| *x == r))
+            {
+                if self.roles[i].get_untracked().is_empty() {
+                    self.roles[i].set(format!("{}: ", a.champion));
+                }
+            }
+        }
+    }
+
+    fn build(&self, tracked: bool) -> GamePlan {
+        let g = |s: RwSignal<String>| if tracked { s.get() } else { s.get_untracked() };
+        GamePlan {
+            id: if tracked {
+                self.id.get()
+            } else {
+                self.id.get_untracked()
+            },
+            team_id: String::new(),
+            draft_id: opt(g(self.draft_id)),
+            name: g(self.name),
+            our_champions: self
+                .ours
+                .iter()
+                .map(|s| g(*s))
+                .filter(|s| !s.is_empty())
+                .collect(),
+            enemy_champions: self
+                .theirs
+                .iter()
+                .map(|s| g(*s))
+                .filter(|s| !s.is_empty())
+                .collect(),
+            win_conditions: lines(&g(self.win)),
+            objective_priority: lines(&g(self.objectives)),
+            teamfight_strategy: g(self.teamfight),
+            early_game: opt(g(self.early)),
+            top_strategy: opt(g(self.roles[0])),
+            jungle_strategy: opt(g(self.roles[1])),
+            mid_strategy: opt(g(self.roles[2])),
+            bot_strategy: opt(g(self.roles[3])),
+            support_strategy: opt(g(self.roles[4])),
+            notes: opt(g(self.notes)),
+            win_condition_tag: opt(g(self.tag)),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +634,6 @@ fn input_class() -> &'static str {
 
 #[component]
 pub fn GamePlanPage() -> impl IntoView {
-    // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -446,1502 +644,855 @@ pub fn GamePlanPage() -> impl IntoView {
         }
     });
 
-    // URL query param: ?draft_id=X for prefill
-    use leptos_router::hooks::use_query_map;
-    let query = use_query_map();
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let query = leptos_router::hooks::use_query_map();
+    let plans = Resource::new(|| (), |_| list_plans());
+    let drafts = Resource::new(|| (), |_| list_team_drafts());
+    let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
+    let win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
+    let ed = PlanEd::new();
+    let save_state = RwSignal::new("");
 
-    // Prefill Resource keyed on draft_id query param
-    let prefill_data = Resource::new(
+    // `?draft_id=` prefills a new plan from that draft, once.
+    let prefill = Resource::new(
         move || query.read().get("draft_id"),
-        |draft_id_opt| async move {
-            match draft_id_opt {
+        |id| async move {
+            match id {
                 Some(id) if !id.is_empty() => get_draft_for_prefill(id).await,
                 _ => Ok(None),
             }
         },
     );
-
-    let prefill_applied = RwSignal::new(false);
-    let (champs_locked, set_champs_locked) = signal(false);
-
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let plans = Resource::new(|| (), |_| list_plans());
-    let drafts = Resource::new(|| (), |_| list_team_drafts());
-    let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
-
-    // Editor state
-    let (editing_id, set_editing_id) = signal(Option::<String>::None);
-    let (plan_name, set_plan_name) = signal(String::new());
-    let (draft_id, set_draft_id) = signal(String::new());
-    let our_champ_signals: Vec<RwSignal<String>> =
-        (0..5).map(|_| RwSignal::new(String::new())).collect();
-    let enemy_champ_signals: Vec<RwSignal<String>> =
-        (0..5).map(|_| RwSignal::new(String::new())).collect();
-    let (win_conditions, set_win_conditions) = signal(String::new());
-    let (obj_priority, set_obj_priority) = signal(String::new());
-    let (teamfight, set_teamfight) = signal(String::new());
-    let (early_game, set_early_game) = signal(String::new());
-    let (role_strats, set_role_strats) = signal(vec![String::new(); 5]);
-    let (notes, set_notes) = signal(String::new());
-    let (win_condition_tag, set_win_condition_tag) = signal(String::new());
-    let strategy_win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
-
-    // Win condition tracker state
-    let (tracker_open, set_tracker_open) = signal(true);
-    let (tracker_vs_opponent, set_tracker_vs_opponent) = signal(false);
-    // opponent_win_rates loads when vs-opponent tab is active and an opponent is linked to the draft
-    let opponent_win_rates = Resource::new(
-        move || {
-            let show = tracker_vs_opponent.get();
-            let opp = drafts
-                .get()
-                .and_then(|r| r.ok())
-                .unwrap_or_default()
+    let prefilled = StoredValue::new(false);
+    Effect::new(move |_| {
+        if prefilled.get_value() {
+            return;
+        }
+        if let Some(Ok(Some(d))) = prefill.get() {
+            ed.clear();
+            ed.apply_draft(&d, true);
+            prefilled.set_value(true);
+        }
+    });
+    // `?plan_id=` opens that plan, once.
+    let opened = StoredValue::new(false);
+    Effect::new(move |_| {
+        if opened.get_value() {
+            return;
+        }
+        let Some(target) = query.read().get("plan_id").filter(|t| !t.is_empty()) else {
+            return;
+        };
+        if let Some(Ok(list)) = plans.get() {
+            if let Some(p) = list
                 .into_iter()
-                .find(|d| d.id.as_deref() == Some(&draft_id.get()))
-                .and_then(|d| d.opponent.clone())
-                .unwrap_or_default();
-            (show, opp)
-        },
-        move |(show, opp)| async move {
-            if !show || opp.is_empty() {
-                Ok(Vec::<(String, i32, i32)>::new())
-            } else {
-                get_strategy_win_rates_vs_opponent(opp).await
+                .find(|p| p.id.as_deref() == Some(target.as_str()))
+            {
+                ed.load(&p);
+                opened.set_value(true);
             }
-        },
-    );
+        }
+    });
 
-    // Prefill Effect: seed editor from draft when ?draft_id=X is set
-    let our_sigs_for_prefill = our_champ_signals.clone();
-    let enemy_sigs_for_prefill = enemy_champ_signals.clone();
+    // Auto-save existing plans 2 s after the last change (rule 54).
+    #[allow(unused_variables)]
+    let timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    let loaded_snapshot: StoredValue<Option<GamePlan>> = StoredValue::new(None);
     Effect::new(move |_| {
-        if prefill_applied.get() {
+        let plan = ed.build(true);
+        if plan.id.is_none() || plan.name.trim().is_empty() {
             return;
         }
-        if let Some(Ok(Some(draft))) = prefill_data.get() {
-            let our_side = draft.our_side.clone();
-            let enemy_side = if our_side == "blue" { "red" } else { "blue" };
-            let mut our_picks: Vec<String> = draft
-                .actions
-                .iter()
-                .filter(|a| a.side == our_side && a.phase.contains("pick"))
-                .map(|a| a.champion.clone())
-                .collect();
-            let mut enemy_picks: Vec<String> = draft
-                .actions
-                .iter()
-                .filter(|a| a.side == enemy_side && a.phase.contains("pick"))
-                .map(|a| a.champion.clone())
-                .collect();
-            our_picks.resize(5, String::new());
-            enemy_picks.resize(5, String::new());
-            for (i, s) in our_sigs_for_prefill.iter().enumerate() {
-                s.set(our_picks[i].clone());
-            }
-            for (i, s) in enemy_sigs_for_prefill.iter().enumerate() {
-                s.set(enemy_picks[i].clone());
-            }
-            // Seed other fields from draft
-            if let Some(wc) = &draft.win_conditions {
-                if !wc.is_empty() {
-                    set_win_conditions.set(wc.clone());
-                }
-            }
-            if let Some(n) = &draft.notes {
-                if !n.is_empty() {
-                    set_notes.set(n.clone());
-                }
-            }
-            // Set draft FK so the plan saves with the link
-            if let Some(did) = &draft.id {
-                set_draft_id.set(did.clone());
-            }
-            // D-16: Pre-fill plan name as "<draft name> plan"
-            if !draft.name.is_empty() {
-                set_plan_name.set(format!("{} plan", draft.name));
-            }
-            // D-17: Pre-fill strategy tag from most common draft tag
-            if let Some(tag) = most_common_tag(&draft.tags) {
-                set_win_condition_tag.set(tag);
-            }
-            // D-19: Pre-fill per-role strategy fields from DraftAction.role assignments
-            // role_strats is Vec<String> indexed: 0=top, 1=jungle, 2=mid, 3=bot, 4=support
-            let our_side = draft.our_side.clone();
-            let mut role_strat_values = vec![String::new(); 5];
-            for action in &draft.actions {
-                if action.side == our_side && action.phase.contains("pick") {
-                    if let Some(role) = &action.role {
-                        let idx = match role.as_str() {
-                            "top" => Some(0),
-                            "jungle" => Some(1),
-                            "mid" => Some(2),
-                            "bot" => Some(3),
-                            "support" => Some(4),
-                            _ => None,
-                        };
-                        if let Some(i) = idx {
-                            if role_strat_values[i].is_empty() {
-                                role_strat_values[i] = format!("{}: ", action.champion);
-                            }
-                        }
-                    }
-                }
-            }
-            set_role_strats.set(role_strat_values);
-            prefill_applied.set(true);
-            set_champs_locked.set(true);
-        }
-    });
-
-    // Clear editor (Callback is Copy, safe in multiple closures)
-    let our_champ_signals_clone = our_champ_signals.clone();
-    let enemy_champ_signals_clone = enemy_champ_signals.clone();
-    let clear_editor = Callback::new(move |_: ()| {
-        set_editing_id.set(None);
-        set_plan_name.set(String::new());
-        set_draft_id.set(String::new());
-        for s in &our_champ_signals_clone {
-            s.set(String::new());
-        }
-        for s in &enemy_champ_signals_clone {
-            s.set(String::new());
-        }
-        set_win_conditions.set(String::new());
-        set_obj_priority.set(String::new());
-        set_teamfight.set(String::new());
-        set_early_game.set(String::new());
-        set_role_strats.set(vec![String::new(); 5]);
-        set_notes.set(String::new());
-        set_win_condition_tag.set(String::new());
-    });
-
-    // Load a plan into editor (Callback is Copy, safe in reactive closures)
-    let our_sigs_for_load = our_champ_signals.clone();
-    let enemy_sigs_for_load = enemy_champ_signals.clone();
-    let load_plan = Callback::new(move |p: GamePlan| {
-        set_editing_id.set(p.id.clone());
-        set_plan_name.set(p.name.clone());
-        set_draft_id.set(p.draft_id.clone().unwrap_or_default());
-        let mut ours = p.our_champions.clone();
-        ours.resize(5, String::new());
-        for (i, s) in our_sigs_for_load.iter().enumerate() {
-            s.set(ours[i].clone());
-        }
-        let mut theirs = p.enemy_champions.clone();
-        theirs.resize(5, String::new());
-        for (i, s) in enemy_sigs_for_load.iter().enumerate() {
-            s.set(theirs[i].clone());
-        }
-        set_win_conditions.set(p.win_conditions.join("\n"));
-        set_obj_priority.set(p.objective_priority.join("\n"));
-        set_teamfight.set(p.teamfight_strategy.clone());
-        set_early_game.set(p.early_game.clone().unwrap_or_default());
-        set_role_strats.set(vec![
-            p.top_strategy.clone().unwrap_or_default(),
-            p.jungle_strategy.clone().unwrap_or_default(),
-            p.mid_strategy.clone().unwrap_or_default(),
-            p.bot_strategy.clone().unwrap_or_default(),
-            p.support_strategy.clone().unwrap_or_default(),
-        ]);
-        set_notes.set(p.notes.clone().unwrap_or_default());
-        set_win_condition_tag.set(p.win_condition_tag.clone().unwrap_or_default());
-    });
-
-    // BUG-02/PLAN-02: Auto-load a specific plan when ?plan_id=X is in the URL.
-    // When navigating from "View Game Plan" on the draft page, the URL includes
-    // plan_id=<id>. This Effect finds the matching plan in the loaded list and
-    // calls load_plan to populate the editor, so the correct plan opens immediately.
-    let plan_id_from_url = query.with(|q| q.get("plan_id"));
-    let plan_id_applied = RwSignal::new(false);
-    {
-        let plan_id_from_url = plan_id_from_url.clone();
-        Effect::new(move |_| {
-            if plan_id_applied.get() {
-                return;
-            }
-            let Some(ref target_id) = plan_id_from_url else {
-                return;
-            };
-            if target_id.is_empty() {
-                return;
-            }
-            if let Some(Ok(list)) = plans.get() {
-                if let Some(plan) = list
-                    .into_iter()
-                    .find(|p| p.id.as_deref() == Some(target_id.as_str()))
-                {
-                    load_plan.run(plan);
-                    plan_id_applied.set(true);
-                }
-            }
-        });
-    }
-
-    let our_sigs_for_build = our_champ_signals.clone();
-    let enemy_sigs_for_build = enemy_champ_signals.clone();
-    let build_plan = move || -> GamePlan {
-        let strats = role_strats.get_untracked();
-        GamePlan {
-            id: editing_id.get_untracked(),
-            team_id: String::new(), // filled by server
-            draft_id: {
-                let d = draft_id.get_untracked();
-                if d.is_empty() {
-                    None
-                } else {
-                    Some(d)
-                }
-            },
-            name: plan_name.get_untracked(),
-            our_champions: our_sigs_for_build
-                .iter()
-                .map(|s| s.get_untracked())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            enemy_champions: enemy_sigs_for_build
-                .iter()
-                .map(|s| s.get_untracked())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            win_conditions: win_conditions
-                .get_untracked()
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            objective_priority: obj_priority
-                .get_untracked()
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            teamfight_strategy: teamfight.get_untracked(),
-            early_game: {
-                let s = early_game.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            top_strategy: {
-                let s = strats[0].clone();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            jungle_strategy: {
-                let s = strats[1].clone();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            mid_strategy: {
-                let s = strats[2].clone();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            bot_strategy: {
-                let s = strats[3].clone();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            support_strategy: {
-                let s = strats[4].clone();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            notes: {
-                let s = notes.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            win_condition_tag: {
-                let s = win_condition_tag.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-        }
-    };
-
-    // Auto-save timer + status (same pattern as draft.rs / tree_drafter.rs)
-    #[allow(unused_variables)]
-    let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
-    let (auto_save_status, set_auto_save_status) = signal("");
-
-    let our_sigs_for_autosave = our_champ_signals.clone();
-    let enemy_sigs_for_autosave = enemy_champ_signals.clone();
-
-    #[allow(unused_variables)]
-    Effect::new(move |_| {
-        // === RULE 54: Eagerly track + capture ALL signals ===
-        let name_val = plan_name.get();
-        let existing_id = editing_id.get();
-        let draft_val = draft_id.get();
-        let wc_val = win_conditions.get();
-        let obj_val = obj_priority.get();
-        let tf_val = teamfight.get();
-        let eg_val = early_game.get();
-        let strats_val = role_strats.get();
-        let notes_val = notes.get();
-        let wct_val = win_condition_tag.get();
-        let our_vals: Vec<String> = our_sigs_for_autosave.iter().map(|s| s.get()).collect();
-        let enemy_vals: Vec<String> = enemy_sigs_for_autosave.iter().map(|s| s.get()).collect();
-
-        // Only auto-save if we have a name AND it's an existing plan
-        if name_val.trim().is_empty() || existing_id.is_none() {
+        if loaded_snapshot.with_value(|l| l.as_ref() == Some(&plan)) {
             return;
         }
-
-        // Cancel pending timer
-        #[cfg(feature = "hydrate")]
-        if let Some(timer_id) = auto_save_timer.get_untracked() {
-            if let Some(win) = web_sys::window() {
-                win.clear_timeout_with_handle(timer_id);
-            }
-        }
-
-        set_auto_save_status.set("unsaved");
-
+        save_state.set("unsaved");
         #[cfg(feature = "hydrate")]
         {
-            // Build plan from eagerly captured values
-            let plan = GamePlan {
-                id: existing_id,
-                team_id: String::new(),
-                draft_id: if draft_val.is_empty() {
-                    None
-                } else {
-                    Some(draft_val)
-                },
-                name: name_val,
-                our_champions: our_vals.into_iter().filter(|s| !s.is_empty()).collect(),
-                enemy_champions: enemy_vals.into_iter().filter(|s| !s.is_empty()).collect(),
-                win_conditions: wc_val
-                    .lines()
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect(),
-                objective_priority: obj_val
-                    .lines()
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect(),
-                teamfight_strategy: tf_val,
-                early_game: if eg_val.is_empty() {
-                    None
-                } else {
-                    Some(eg_val)
-                },
-                top_strategy: if strats_val[0].is_empty() {
-                    None
-                } else {
-                    Some(strats_val[0].clone())
-                },
-                jungle_strategy: if strats_val[1].is_empty() {
-                    None
-                } else {
-                    Some(strats_val[1].clone())
-                },
-                mid_strategy: if strats_val[2].is_empty() {
-                    None
-                } else {
-                    Some(strats_val[2].clone())
-                },
-                bot_strategy: if strats_val[3].is_empty() {
-                    None
-                } else {
-                    Some(strats_val[3].clone())
-                },
-                support_strategy: if strats_val[4].is_empty() {
-                    None
-                } else {
-                    Some(strats_val[4].clone())
-                },
-                notes: if notes_val.is_empty() {
-                    None
-                } else {
-                    Some(notes_val)
-                },
-                win_condition_tag: if wct_val.is_empty() {
-                    None
-                } else {
-                    Some(wct_val)
-                },
-            };
-            let plan_json = serde_json::to_string(&plan).unwrap_or_default();
-
             use wasm_bindgen::prelude::*;
+            if let Some(t) = timer.get_untracked() {
+                if let Some(win) = web_sys::window() {
+                    win.clear_timeout_with_handle(t);
+                }
+            }
+            let json = serde_json::to_string(&plan).unwrap_or_default();
             let cb = Closure::once(move || {
                 leptos::task::spawn_local(async move {
-                    let _ = update_plan(plan_json).await;
-                    set_auto_save_status.set("saved");
-                    plans.refetch();
-                    strategy_win_rates.refetch();
+                    if update_plan(json).await.is_ok() {
+                        loaded_snapshot.set_value(Some(plan));
+                        save_state.set("saved");
+                        plans.refetch();
+                        win_rates.refetch();
+                    }
                 });
             });
             if let Some(win) = web_sys::window() {
-                if let Ok(timer_id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                if let Ok(t) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
                     cb.as_ref().unchecked_ref(),
                     2000,
                 ) {
-                    auto_save_timer.set(Some(timer_id));
+                    timer.set(Some(t));
                 }
             }
             cb.forget();
         }
     });
+    let open_plan = Callback::new(move |p: GamePlan| {
+        loaded_snapshot.set_value(Some(p.clone()));
+        save_state.set("saved");
+        ed.load(&p);
+    });
 
-    let do_save = move |_| {
-        let plan = build_plan();
-        let plan_json = serde_json::to_string(&plan).unwrap_or_default();
-        let is_update = editing_id.get_untracked().is_some();
-
+    let name_error = RwSignal::new(None::<String>);
+    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let plan = ed.build(false);
+        if plan.name.trim().is_empty() {
+            name_error.set(Some("Name the plan so the team can find it.".into()));
+            focus_id("plan-name");
+            return;
+        }
+        name_error.set(None);
+        let json = serde_json::to_string(&plan).unwrap_or_default();
+        let is_update = plan.id.is_some();
         leptos::task::spawn_local(async move {
-            let result = if is_update {
-                update_plan(plan_json).await.map(|_| String::new())
+            let res = if is_update {
+                update_plan(json).await.map(|_| String::new())
             } else {
-                create_plan(plan_json).await
+                create_plan(json).await
             };
-            match result {
+            match res {
                 Ok(id) => {
-                    if !is_update && !id.is_empty() {
-                        set_editing_id.set(Some(id));
+                    if !is_update {
+                        ed.id.set(Some(id));
                     }
-                    toast
-                        .show
-                        .run((ToastKind::Success, "Game plan saved".into()));
+                    loaded_snapshot.set_value(Some(ed.build(false)));
+                    save_state.set("saved");
                     plans.refetch();
+                    toast.push.run(Toast::success("Game plan saved"));
                 }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not save the plan: {e}"))),
             }
         });
-    };
-
-    let do_delete = Callback::new(move |plan_id: String| {
+    });
+    let new_plan = Callback::new(move |_: leptos::ev::MouseEvent| {
+        ed.clear();
+        loaded_snapshot.set_value(None);
+        save_state.set("");
+        name_error.set(None);
+    });
+    let confirm_delete = RwSignal::new(false);
+    let do_delete = Callback::new(move |_| {
+        let Some(id) = ed.id.get_untracked() else {
+            return;
+        };
         leptos::task::spawn_local(async move {
-            match delete_plan(plan_id).await {
-                Ok(_) => {
-                    clear_editor.run(());
-                    toast
-                        .show
-                        .run((ToastKind::Success, "Game plan deleted".into()));
+            match delete_plan(id).await {
+                Ok(()) => {
+                    ed.clear();
+                    loaded_snapshot.set_value(None);
+                    save_state.set("");
                     plans.refetch();
+                    toast.push.run(Toast::success("Game plan deleted"));
                 }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not delete: {e}"))),
             }
         });
     });
 
-    let our_sigs_for_template = our_champ_signals.clone();
-    let enemy_sigs_for_template = enemy_champ_signals.clone();
-    let do_generate_template = move |_| {
-        let ours: Vec<String> = our_sigs_for_template
-            .iter()
-            .map(|s| s.get_untracked())
-            .collect();
-        let theirs: Vec<String> = enemy_sigs_for_template
-            .iter()
-            .map(|s| s.get_untracked())
-            .collect();
-        let (wc, obj, tf, eg) = generate_template(&ours, &theirs);
-        set_win_conditions.set(wc.join("\n"));
-        set_obj_priority.set(obj.join("\n"));
-        set_teamfight.set(tf);
-        set_early_game.set(eg);
-        toast.show.run((
-            ToastKind::Success,
-            "Template generated! Customize to your strategy.".into(),
-        ));
+    let title = move || {
+        let n = ed.name.get();
+        if n.trim().is_empty() {
+            "New game plan".to_string()
+        } else {
+            n
+        }
     };
 
-    // Pre-clone for multiple move closures in view!
-    let our_champs_for_draft = our_champ_signals.clone();
-    let enemy_champs_for_draft = enemy_champ_signals.clone();
-    let our_champs_for_matchup = our_champ_signals.clone();
-    let enemy_champs_for_matchup = enemy_champ_signals.clone();
-    // our_champ_signals/enemy_champ_signals used last for role-specific section
-
     view! {
-        <div class="bg-base min-h-screen" data-feedback-label="Game plan">
-            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
-                // Page header per UI-SPEC §"Game Plan Page Layout"
-                <div>
-                    <p class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Strategy"</p>
-                    <h1 class="font-display text-4xl text-primary mt-1">"Strategy plans for the field."</h1>
-                    <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups."</p>
-                </div>
-                <div class="flex justify-center"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
-
-                <div class="flex flex-col lg:flex-row gap-6 lg:min-h-[36rem]">
-                // Left: plan list
-                <div class="w-full lg:w-72 flex-shrink-0 flex flex-col gap-3">
-                    <button
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
-                        on:click=move |_| clear_editor.run(())
-                    >"+ New Plan"</button>
-
-                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
-                        {move || plans.get().map(|result| match result {
+        <PageShell density=Density::Compact attr:data-feedback-label="Game plan">
+            <PageHeader
+                title=title
+                eyebrow="Game plan"
+                meta=move || view! {
+                    <span data-testid="plan-save-state" class="text-muted">
+                        {move || match (ed.id.get().is_some(), save_state.get()) {
+                            (false, _) => "Not saved yet",
+                            (true, "unsaved") => "Unsaved changes",
+                            (true, _) => "Saved",
+                        }}
+                    </span>
+                }
+                actions=move || view! {
+                    <Button variant=ButtonVariant::Quiet on_click=new_plan>"New plan"</Button>
+                    {move || ed.id.get().map(|_| view! {
+                        <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
+                    })}
+                    <Button variant=ButtonVariant::Primary on_click=do_save attr:data-testid="plan-save">"Save plan"</Button>
+                }
+            />
+            <ConfirmDialog
+                id="delete-plan"
+                open=confirm_delete
+                title="Delete this game plan?"
+                message="The plan and its checklist are deleted. Reviews linked to it keep their notes."
+                confirm_label="Delete plan"
+                tone=ConfirmTone::Destructive
+                on_confirm=do_delete
+            />
+            <div class="grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
+                <section aria-labelledby="plans-heading" class="flex min-w-0 flex-col gap-3">
+                    <SectionHeader title="Plans" id="plans-heading" />
+                    <Suspense fallback=|| view! { <SkeletonGroup label="Loading plans"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+                        {move || plans.get().map(|r| match r {
+                            Err(_) => view! { <Callout tone=CalloutTone::Danger>"The plans did not load."</Callout> }.into_any(),
                             Ok(list) if list.is_empty() => view! {
-                                <div class="text-center py-6">
-                                    <p class="text-dimmed text-sm mb-3">"No game plans yet"</p>
-                                    <p class="text-dimmed text-xs mb-4">"Create or join a team to get started."</p>
-                                    <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
-                                        "Go to Team"
-                                    </a>
-                                </div>
+                                <EmptyState size=EmptySize::Compact message="Plans your team saves are listed here. Write one on the right, or start one from a draft with Prep a game plan." />
                             }.into_any(),
                             Ok(list) => view! {
-                                <div class="flex flex-col gap-1.5">
+                                <ul class="flex flex-col border-t border-rule" data-testid="plan-list">
                                     {list.into_iter().map(|p| {
-                                        let plan_for_load = p.clone();
-                                        let plan_id = p.id.clone().unwrap_or_default();
-                                        let plan_id_for_cls = plan_id.clone();
-                                        let plan_id_for_delete = plan_id.clone();
-                                        let name = if p.name.is_empty() { "Untitled".to_string() } else { p.name.clone() };
-                                        let champ_summary = if !p.our_champions.is_empty() && !p.enemy_champions.is_empty() {
-                                            format!("{} vs {}", p.our_champions.len(), p.enemy_champions.len())
-                                        } else {
-                                            String::new()
-                                        };
-
+                                        let id = p.id.clone().unwrap_or_default();
+                                        let name = if p.name.trim().is_empty() { "Untitled plan".to_string() } else { p.name.clone() };
+                                        let tag = p.win_condition_tag.clone();
+                                        let p2 = p.clone();
                                         view! {
-                                            <div class=move || {
-                                                let sel = editing_id.get();
-                                                if sel.as_deref() == Some(&plan_id_for_cls) {
-                                                    "bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all"
-                                                } else {
-                                                    "bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all"
-                                                }
-                                            }>
-                                                <button
-                                                    class="w-full text-left"
-                                                    on:click=move |_| load_plan.run(plan_for_load.clone())
+                                            <li class="border-b border-rule">
+                                                <Button
+                                                    variant=ButtonVariant::Quiet
+                                                    full_width=true
+                                                    pressed=Signal::derive(move || ed.id.get().as_deref() == Some(id.as_str()))
+                                                    on_click=Callback::new(move |_| open_plan.run(p2.clone()))
                                                 >
-                                                    <div class="text-primary text-sm font-medium truncate">{name}</div>
-                                                    {(!champ_summary.is_empty()).then(|| view! {
-                                                        <div class="text-dimmed text-xs mt-0.5">{champ_summary} " champs"</div>
-                                                    })}
-                                                </button>
-                                                <button
-                                                    class="text-muted hover:text-danger text-xs mt-1 transition-colors"
-                                                    on:click=move |_| do_delete.run(plan_id_for_delete.clone())
-                                                >"Delete"</button>
-                                            </div>
+                                                    <span class="flex w-full min-w-0 items-baseline justify-between gap-2 text-left">
+                                                        <span class="truncate">{name}</span>
+                                                        {tag.map(|t| view! { <span class="text-caption font-normal text-muted">{t}</span> })}
+                                                    </span>
+                                                </Button>
+                                            </li>
                                         }
                                     }).collect_view()}
-                                </div>
-                            }.into_any(),
-                            Err(e) => view! {
-                                <ErrorBanner message=format!("Failed to load plans: {e}") />
+                                </ul>
                             }.into_any(),
                         })}
                     </Suspense>
-                </div>
-
-                // Right: editor
-                <div class="flex-1 flex flex-col gap-5">
-                    // Plan name + draft link
-                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-4">
-                        // Back-reference badge: shown when a draft is linked
-                        {move || {
-                            let did = draft_id.get();
-                            if did.is_empty() {
-                                view! { <span></span> }.into_any()
-                            } else {
-                                view! {
-                                    <div class="flex items-center gap-2">
-                                        <a
-                                            href=format!("/draft?draft_id={did}")
-                                            class="inline-flex items-center gap-1 bg-surface border border-outline text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
-                                        >
-                                            <span class="text-accent">"Source Draft"</span>
-                                            <span class="text-dimmed">"- click to open"</span>
-                                        </a>
-                                        {move || if champs_locked.get() {
-                                            view! {
-                                                <span class="text-xs text-muted bg-surface border border-rule rounded px-2 py-0.5">
-                                                    "Champions pre-filled from draft"
-                                                </span>
-                                            }.into_any()
-                                        } else {
-                                            view! { <span></span> }.into_any()
-                                        }}
-                                    </div>
-                                }.into_any()
-                            }
-                        }}
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Plan Name"</label>
-                                <input type="text" class=input_class()
-                                    placeholder="e.g. Comp A vs Scaling"
-                                    prop:value=move || plan_name.get()
-                                    on:input=move |ev| set_plan_name.set(event_target_value(&ev))
-                                />
-                            </div>
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Linked Draft (optional)"</label>
-                                <Suspense fallback=|| view! { <SkeletonLine width="w-full" height="h-9" /> }>
-                                    {move || {
-                                        let our_sigs = our_champs_for_draft.clone();
-                                        let enemy_sigs = enemy_champs_for_draft.clone();
-                                        drafts.get().map(move |result| match result {
-                                            Ok(list) => {
-                                                let list_for_handler = list.clone();
-                                                let our_sigs = our_sigs.clone();
-                                                let enemy_sigs = enemy_sigs.clone();
-                                                view! {
-                                                    <select class=input_class()
-                                                        prop:value=move || draft_id.get()
-                                                        on:change=move |ev| {
-                                                            let selected_id = event_target_value(&ev);
-                                                            set_draft_id.set(selected_id.clone());
-                                                            // Auto-populate champions from the selected draft
-                                                            if let Some(draft) = list_for_handler.iter().find(|d| d.id.as_deref() == Some(&selected_id)) {
-                                                                let our_side = &draft.our_side;
-                                                                let enemy_side = if our_side == "blue" { "red" } else { "blue" };
-                                                                let mut our_picks: Vec<String> = Vec::new();
-                                                                let mut enemy_picks: Vec<String> = Vec::new();
-                                                                for action in &draft.actions {
-                                                                    let (_side, kind, _) = slot_meta(action.order as usize);
-                                                                    if !kind.contains("pick") { continue; }
-                                                                    if action.side == *our_side {
-                                                                        our_picks.push(action.champion.clone());
-                                                                    } else if action.side == *enemy_side {
-                                                                        enemy_picks.push(action.champion.clone());
-                                                                    }
-                                                                }
-                                                                our_picks.resize(5, String::new());
-                                                                enemy_picks.resize(5, String::new());
-                                                                for (i, s) in our_sigs.iter().enumerate() { s.set(our_picks[i].clone()); }
-                                                                for (i, s) in enemy_sigs.iter().enumerate() { s.set(enemy_picks[i].clone()); }
-                                                            }
-                                                        }
-                                                    >
-                                                        <option value="">"None"</option>
-                                                        {list.into_iter().map(|d| {
-                                                            let id = d.id.clone().unwrap_or_default();
-                                                            let label = d.name.clone();
-                                                            view! { <option value=id>{label}</option> }
-                                                        }).collect_view()}
-                                                    </select>
-                                                }.into_any()
-                                            },
-                                            Err(_) => view! { <p class="text-dimmed text-sm">"No drafts"</p> }.into_any(),
-                                        })
-                                    }}
-                                </Suspense>
-                            </div>
-                        </div>
-                    </div>
-
-                    // Matchup: Your 5 vs Enemy 5
-                    <div class="bg-elevated border border-outline rounded-xl p-6">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-primary font-semibold text-sm">"Champion Matchup"</h3>
-                            <button
-                                class="bg-overlay hover:bg-overlay-strong text-secondary text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                on:click=do_generate_template
-                            >"Generate Template"</button>
-                        </div>
-                        <Suspense fallback=|| view! { <SkeletonGrid cols=3 rows=1 card_height="h-8" /> }>
-                            {move || {
-                                let our_sigs = our_champs_for_matchup.clone();
-                                let enemy_sigs = enemy_champs_for_matchup.clone();
-                                champions.get().map(move |result| {
-                                    let champ_list = result.unwrap_or_default();
-                                    let champ_list2 = champ_list.clone();
-                                    view! {
-                                        <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start" data-feedback-label="Game plan → Champion picker">
-                                            // Our team
-                                            <div class="flex flex-col gap-2">
-                                                <div class="flex items-center justify-between">
-                                                    <span class="eyebrow">"Your team"</span>
-                                                    {move || if champs_locked.get() {
-                                                        view! {
-                                                            <button
-                                                                class="text-muted hover:text-accent text-xs transition-colors"
-                                                                on:click=move |_| set_champs_locked.set(false)
-                                                            >"Edit"</button>
-                                                        }.into_any()
-                                                    } else {
-                                                        view! { <span></span> }.into_any()
-                                                    }}
-                                                </div>
-                                                {our_sigs.iter().enumerate().map(|(i, sig)| {
-                                                    let role = ROLES[i];
-                                                    let champs_locked_branch = champ_list.clone();
-                                                    let sig_for_lock = *sig;
-                                                    view! {
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="text-dimmed text-xs w-14">{role}</span>
-                                                            {move || {
-                                                                let champs_for_input = champs_locked_branch.clone();
-                                                                if champs_locked.get() {
-                                                                    let val = sig_for_lock.get();
-                                                                    let display = if val.is_empty() {
-                                                                        "-".to_string()
-                                                                    } else {
-                                                                        champs_for_input.iter()
-                                                                            .find(|c| c.id == val)
-                                                                            .map(|c| c.name.clone())
-                                                                            .unwrap_or(val)
-                                                                    };
-                                                                    view! {
-                                                                        <div class="flex-1 bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm">
-                                                                            {display}
-                                                                        </div>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! {
-                                                                        <ChampionAutocomplete
-                                                                            champions=champs_for_input
-                                                                            value=sig_for_lock
-                                                                            placeholder=role
-                                                                        />
-                                                                    }.into_any()
-                                                                }
-                                                            }}
-                                                        </div>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                            <div class="flex items-center justify-center self-center text-dimmed font-bold text-sm pt-6">"VS"</div>
-                                            // Enemy team
-                                            <div class="flex flex-col gap-2">
-                                                <span class="eyebrow">"Enemy team"</span>
-                                                {enemy_sigs.iter().enumerate().map(|(i, sig)| {
-                                                    let role = ROLES[i];
-                                                    let champs = champ_list2.clone();
-                                                    view! {
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="text-dimmed text-xs w-14">{role}</span>
-                                                            <ChampionAutocomplete
-                                                                champions=champs
-                                                                value=*sig
-                                                                placeholder=role
-                                                            />
-                                                        </div>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        </div>
-                                    }
-                                })
-                            }}
-                        </Suspense>
-                    </div>
-
-                    // Strategy Tag
-                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-3">
-                        <h3 class="text-primary font-semibold text-sm">"Strategy Tag"</h3>
-                        <div class="flex flex-wrap gap-2">
-                            {STRATEGY_TAGS.iter().map(|&tag| {
-                                let tag_str = tag.to_string();
-                                let tag_for_cls = tag_str.clone();
-                                view! {
-                                    <button
-                                        class=move || {
-                                            let current = win_condition_tag.get();
-                                            if current == tag_for_cls {
-                                                "px-3 py-1.5 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
-                                            } else {
-                                                "px-3 py-1.5 rounded-lg text-sm font-medium bg-overlay hover:bg-overlay-strong text-secondary transition-colors cursor-pointer"
-                                            }
-                                        }
-                                        on:click=move |_| {
-                                            let current = win_condition_tag.get_untracked();
-                                            if current == tag_str {
-                                                set_win_condition_tag.set(String::new());
-                                            } else {
-                                                set_win_condition_tag.set(tag_str.clone());
-                                            }
-                                        }
-                                    >{tag}</button>
-                                }
-                            }).collect_view()}
-                        </div>
-                        // Show historical win rate for selected tag
-                        <Suspense fallback=|| ()>
-                            {move || {
-                                let tag = win_condition_tag.get();
-                                if tag.is_empty() {
-                                    return None;
-                                }
-                                strategy_win_rates.get().map(|result| {
-                                    match result {
-                                        Ok(rates) => {
-                                            if let Some((_, games, wins)) = rates.iter().find(|(t, _, _)| *t == tag) {
-                                                if *games > 0 {
-                                                    view! {
-                                                        <div class="text-sm text-muted">
-                                                            {format!("Your team is {wins}-{losses} with this strategy", losses = games - wins)}
-                                                        </div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! {
-                                                        <div class="text-sm text-dimmed">"No game results yet for this strategy"</div>
-                                                    }.into_any()
-                                                }
-                                            } else {
-                                                view! {
-                                                    <div class="text-sm text-dimmed">"No game results yet for this strategy"</div>
-                                                }.into_any()
-                                            }
-                                        },
-                                        Err(_) => view! { <div></div> }.into_any(),
-                                    }
-                                })
-                            }}
-                        </Suspense>
-                    </div>
-
-                    // Win Condition Tracker panel
-                    <div class="bg-elevated border border-outline rounded-xl">
-                        // Panel header with collapse toggle and tab switcher
-                        <div class="flex items-center justify-between px-4 py-3 border-b border-divider/50">
-                            <button
-                                class="flex items-center gap-2 text-primary font-medium text-sm hover:text-accent transition-colors"
-                                on:click=move |_| set_tracker_open.update(|v| *v = !*v)
-                            >
-                                {move || if tracker_open.get() { "\u{25bc}" } else { "\u{25b6}" }}
-                                " Win Condition History"
-                            </button>
-                            {move || if tracker_open.get() {
-                                // Determine if an opponent is linked for enabling vs tab
-                                let linked_opponent = drafts
-                                    .get()
-                                    .and_then(|r| r.ok())
-                                    .unwrap_or_default()
-                                    .into_iter()
-                                    .find(|d| d.id.as_deref() == Some(&draft_id.get()))
-                                    .and_then(|d| d.opponent.clone())
-                                    .unwrap_or_default();
-                                let has_opponent = !linked_opponent.is_empty();
-                                let vs_label = if has_opponent {
-                                    format!("vs {linked_opponent}")
-                                } else {
-                                    "vs Opponent".to_string()
-                                };
-                                view! {
-                                    <div class="flex items-center gap-1">
-                                        <button
-                                            class=move || {
-                                                if !tracker_vs_opponent.get() {
-                                                    "px-2.5 py-1 rounded text-xs font-medium bg-accent text-accent-contrast transition-colors"
-                                                } else {
-                                                    "px-2.5 py-1 rounded text-xs font-medium bg-overlay hover:bg-overlay-strong text-secondary transition-colors"
-                                                }
-                                            }
-                                            on:click=move |_| set_tracker_vs_opponent.set(false)
-                                        >"All-Time"</button>
-                                        <button
-                                            class=move || {
-                                                let active = tracker_vs_opponent.get();
-                                                if !has_opponent {
-                                                    "px-2.5 py-1 rounded text-xs font-medium bg-overlay text-dimmed cursor-not-allowed opacity-50"
-                                                } else if active {
-                                                    "px-2.5 py-1 rounded text-xs font-medium bg-accent text-accent-contrast transition-colors"
-                                                } else {
-                                                    "px-2.5 py-1 rounded text-xs font-medium bg-overlay hover:bg-overlay-strong text-secondary transition-colors"
-                                                }
-                                            }
-                                            disabled=!has_opponent
-                                            on:click=move |_| {
-                                                if has_opponent {
-                                                    set_tracker_vs_opponent.set(true);
-                                                }
-                                            }
-                                        >{vs_label}</button>
-                                    </div>
-                                }.into_any()
-                            } else {
-                                view! { <span></span> }.into_any()
-                            }}
-                        </div>
-                        // Panel body
-                        {move || if tracker_open.get() {
-                            let current_tag = win_condition_tag.get();
-                            let show_vs = tracker_vs_opponent.get();
-                            view! {
-                                <div class="p-4">
-                                    <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
-                                        {move || {
-                                            let rates_result = if show_vs {
-                                                opponent_win_rates.get()
-                                            } else {
-                                                strategy_win_rates.get()
-                                            };
-                                            let current_tag_inner = current_tag.clone();
-                                            rates_result.map(|result| match result {
-                                                Ok(rates) if rates.is_empty() => view! {
-                                                    <div class="text-center py-4">
-                                                        <p class="text-muted text-sm">"No win condition data yet."</p>
-                                                        <p class="text-dimmed text-xs mt-1">
-                                                            "Complete post-game reviews with tagged win conditions to see trends here."
-                                                        </p>
-                                                    </div>
-                                                }.into_any(),
-                                                Ok(rates) => {
-                                                    let max_games = rates.iter().map(|(_, t, _)| *t).max().unwrap_or(1).max(1);
-                                                    view! {
-                                                        <div class="flex flex-col divide-y divide-divider/30">
-                                                            {rates.into_iter().map(|(tag, total, wins)| {
-                                                                let win_pct = if total > 0 { (wins * 100) / total } else { 0 };
-                                                                let bar_pct = if max_games > 0 { (total * 100) / max_games } else { 0 };
-                                                                let is_current = tag == current_tag_inner;
-                                                                let bar_color = if win_pct > 60 {
-                                                                    "bg-win"
-                                                                } else if win_pct >= 40 {
-                                                                    "bg-warning"
-                                                                } else {
-                                                                    "bg-loss"
-                                                                };
-                                                                let row_class = if is_current {
-                                                                    "py-2 px-2 rounded bg-accent/10 border-l-2 border-accent flex items-center gap-3"
-                                                                } else {
-                                                                    "py-2 flex items-center gap-3"
-                                                                };
-                                                                view! {
-                                                                    <div class=row_class>
-                                                                        <span class="text-primary text-xs font-medium w-36 shrink-0 truncate">{tag}</span>
-                                                                        <div class="flex-1 bg-overlay/50 h-2 overflow-hidden">
-                                                                            <div
-                                                                                class=format!("{bar_color} h-2 transition-all")
-                                                                                style=format!("width: {bar_pct}%")
-                                                                            ></div>
-                                                                        </div>
-                                                                        <span class="text-muted text-xs w-12 text-right shrink-0">
-                                                                            {format!("{wins}/{total}")}
-                                                                        </span>
-                                                                        <span class="text-secondary text-xs w-10 text-right shrink-0">
-                                                                            {format!("{win_pct}%")}
-                                                                        </span>
-                                                                    </div>
-                                                                }
-                                                            }).collect_view()}
-                                                        </div>
-                                                    }.into_any()
-                                                },
-                                                Err(_) => view! {
-                                                    <div class="text-center py-4">
-                                                        <p class="text-muted text-sm">"No win condition data yet."</p>
-                                                        <p class="text-dimmed text-xs mt-1">
-                                                            "Complete post-game reviews with tagged win conditions to see trends here."
-                                                        </p>
-                                                    </div>
-                                                }.into_any(),
-                                            })
-                                        }}
-                                    </Suspense>
-                                </div>
-                            }.into_any()
-                        } else {
-                            view! { <div></div> }.into_any()
-                        }}
-                    </div>
-
-                    // Macro strategy
-                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-4">
-                        <h3 class="text-primary font-semibold text-sm">"Macro Strategy"</h3>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Win Conditions (one per line)"</label>
-                                <textarea rows="4" class=textarea_class()
-                                    placeholder="Force early teamfights\nControl Dragon side"
-                                    prop:value=move || win_conditions.get()
-                                    on:input=move |ev| set_win_conditions.set(event_target_value(&ev))
-                                />
-                            </div>
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Objective Priority (one per line)"</label>
-                                <textarea rows="4" class=textarea_class()
-                                    placeholder="Dragon\nRift Herald\nBaron"
-                                    prop:value=move || obj_priority.get()
-                                    on:input=move |ev| set_obj_priority.set(event_target_value(&ev))
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-muted text-xs font-medium mb-1">"Teamfight Strategy"</label>
-                            <textarea rows="2" class=textarea_class()
-                                placeholder="Front-to-back: protect ADC while top zones..."
-                                prop:value=move || teamfight.get()
-                                on:input=move |ev| set_teamfight.set(event_target_value(&ev))
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-muted text-xs font-medium mb-1">"Early Game Plan"</label>
-                            <textarea rows="2" class=textarea_class()
-                                placeholder="Contest level 1 vision, jungle path..."
-                                prop:value=move || early_game.get()
-                                on:input=move |ev| set_early_game.set(event_target_value(&ev))
-                            />
-                        </div>
-                    </div>
-
-                    // Role-specific strategy
-                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-3">
-                        <h3 class="text-primary font-semibold text-sm">"Role-Specific Strategy"</h3>
-                        <div class="grid grid-cols-1 gap-3">
-                            {ROLES.iter().enumerate().map(|(i, &role)| {
-                                let our_sig = our_champ_signals[i];
-                                let enemy_sig = enemy_champ_signals[i];
-                                view! {
-                                    <div class="flex gap-3 items-start">
-                                        <div class="w-16 flex-shrink-0 pt-2">
-                                            <span class="text-accent text-xs font-semibold">{role}</span>
-                                            {move || {
-                                                let o = our_sig.get();
-                                                let t = enemy_sig.get();
-                                                if !o.is_empty() && !t.is_empty() {
-                                                    let champ_list = champions.get()
-                                                        .and_then(|r| r.ok())
-                                                        .unwrap_or_default();
-                                                    let o_name = champ_list.iter()
-                                                        .find(|c| c.id == o)
-                                                        .map(|c| c.name.clone())
-                                                        .unwrap_or(o);
-                                                    let t_name = champ_list.iter()
-                                                        .find(|c| c.id == t)
-                                                        .map(|c| c.name.clone())
-                                                        .unwrap_or(t);
-                                                    view! {
-                                                        <div class="text-dimmed text-xs mt-0.5">{format!("{o_name} vs {t_name}")}</div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! { <div></div> }.into_any()
-                                                }
-                                            }}
-                                        </div>
-                                        <textarea rows="2" class=format!("{} flex-1", textarea_class())
-                                            placeholder=format!("Strategy for {role}...")
-                                            prop:value=move || role_strats.get().get(i).cloned().unwrap_or_default()
-                                            on:input=move |ev| {
-                                                let val = event_target_value(&ev);
-                                                set_role_strats.update(|v| {
-                                                    if i < v.len() { v[i] = val; }
-                                                });
-                                            }
-                                        />
-                                    </div>
-                                }
-                            }).collect_view()}
-                        </div>
-                    </div>
-
-                    // Notes
-                    <div class="bg-elevated border border-outline rounded-xl p-6" data-feedback-label="Game plan → Plan body">
-                        <label class="block text-muted text-xs font-medium mb-1">"Additional Notes"</label>
-                        <textarea rows="3" class=textarea_class()
-                            placeholder="Anything else the team should know..."
-                            prop:value=move || notes.get()
-                            on:input=move |ev| set_notes.set(event_target_value(&ev))
-                        />
-                    </div>
-
-                    // Pre-Game Checklist section
-                    <ChecklistSection editing_id=editing_id toast=toast />
-
-                    // Start Post-Game Review button
-                    {move || {
-                        let eid = editing_id.get();
-                        let did = draft_id.get();
-                        eid.map(|plan_id| {
-                            let plan_id_clone = plan_id.clone();
-                            let draft_for_review = if did.is_empty() { None } else { Some(did.clone()) };
-                            view! {
-                                <div class="bg-elevated border border-outline rounded-xl p-6 flex items-center justify-between">
-                                    <div>
-                                        <h3 class="text-primary font-semibold text-sm">"Game Complete?"</h3>
-                                        <p class="text-muted text-xs mt-0.5">"Start a post-game review with this plan pre-linked"</p>
-                                    </div>
-                                    <button
-                                        class="bg-accent hover:bg-accent-hover text-accent-ink font-semibold rounded-ctl px-5 py-2 text-sm transition-colors"
-                                        on:click=move |_| {
-                                            let pid = plan_id_clone.clone();
-                                            let did = draft_for_review.clone();
-                                            leptos::task::spawn_local(async move {
-                                                match start_post_game_review(pid, did).await {
-                                                    #[allow(unused_variables)]
-                                                    Ok(review_id) => {
-                                                        #[cfg(feature = "hydrate")]
-                                                        if let Some(window) = web_sys::window() {
-                                                            let _ = window.location().set_href(
-                                                                &format!("/post-game?review_id={review_id}")
-                                                            );
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        toast.show.run((ToastKind::Error, format!("{e}")));
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    >"Start Post-Game Review"</button>
-                                </div>
-                            }
-                        })
-                    }}
-
-                    // Save buttons + auto-save status
-                    <div class="flex gap-3 items-center">
-                        <button
-                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
-                            on:click=do_save
-                        >
-                            {move || if editing_id.get().is_some() { "Update Plan" } else { "Save Plan" }}
-                        </button>
-                        <button
-                            class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
-                            on:click=move |_| clear_editor.run(())
-                        >"Clear"</button>
-                        {move || {
-                            let status = auto_save_status.get();
-                            match status {
-                                "saved" => view! {
-                                    <span class="text-success text-xs font-medium">"\u{2713} Saved"</span>
-                                }.into_any(),
-                                "unsaved" => view! {
-                                    <span class="text-accent text-xs font-medium">"\u{25cf} Unsaved changes"</span>
-                                }.into_any(),
-                                _ => view! { <span></span> }.into_any(),
-                            }
-                        }}
-                    </div>
+                </section>
+                <div class="flex min-w-0 flex-col gap-12">
+                    <PlanSteps ed=ed />
+                    <BasicsSection ed=ed drafts=drafts name_error=name_error />
+                    <MatchupSection ed=ed champions=champions />
+                    <StrategySection ed=ed win_rates=win_rates />
+                    <RolesSection ed=ed champions=champions />
+                    <section aria-labelledby="plan-notes-heading" class="flex flex-col gap-3">
+                        <SectionHeader title="Notes" id="plan-notes-heading" />
+                        <Field id="plan-notes" label="Anything else the team should know">
+                            <TextField value=ed.notes rows=3 placeholder="Swap lanes if they pick Kalista." />
+                        </Field>
+                    </section>
+                    <ChecklistSection ed=ed />
+                    <HistorySection ed=ed drafts=drafts win_rates=win_rates />
+                    <ReviewSection ed=ed />
                 </div>
             </div>
-            </div>
-        </div>
+        </PageShell>
     }
 }
 
-// ---------------------------------------------------------------------------
-// Checklist section component
-// ---------------------------------------------------------------------------
+/// The plan's own steps: draft, strategy, roles, checklist, review.
+#[component]
+fn PlanSteps(ed: PlanEd) -> impl IntoView {
+    view! {
+        <section aria-label="Plan steps">
+            {move || {
+                let has_draft = !ed.draft_id.get().is_empty();
+                let has_picks = ed.ours.iter().any(|s| !s.get().is_empty());
+                let has_strategy = !ed.win.get().trim().is_empty() || !ed.teamfight.get().trim().is_empty();
+                let has_roles = ed.roles.iter().filter(|s| !s.get().trim().is_empty()).count();
+                let saved = ed.id.get().is_some();
+                let steps = [
+                    ("Link the draft", has_draft || has_picks, if has_draft { "Linked; the picks come from it" } else if has_picks { "Picks entered by hand" } else { "Or enter the picks yourself" }.to_string(), "#plan-basics-heading"),
+                    ("Write how you win", has_strategy, if has_strategy { "Win conditions written".to_string() } else { "Win conditions, objectives, fights".to_string() }, "#plan-strategy-heading"),
+                    ("Brief each role", has_roles == 5, format!("{has_roles} of 5 roles briefed"), "#plan-roles-heading"),
+                    ("Save and run the checklist", saved, if saved { "Saved; tick the checklist before the game".to_string() } else { "Save the plan to keep a checklist".to_string() }, "#plan-checklist-heading"),
+                    ("Review the game", false, "After the game, start a review linked to this plan".to_string(), "#plan-review-heading"),
+                ];
+                let next = steps.iter().position(|s| !s.1);
+                let items: Vec<PrepStep> = steps
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (t, done, detail, href))| {
+                        let state = if *done { PrepState::Done } else if Some(i) == next { PrepState::Next } else { PrepState::Todo };
+                        let step = PrepStep::new(*t, state).detail(detail.clone());
+                        if state == PrepState::Next { step.link(*href, "Go there") } else { step }
+                    })
+                    .collect();
+                view! { <PrepSequence label="Plan steps" steps=items /> }
+            }}
+        </section>
+    }
+}
 
 #[component]
-fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext) -> impl IntoView {
-    let (checklist_open, set_checklist_open) = signal(false);
-    let (checklist_items, set_checklist_items) = signal(Vec::<String>::new());
-    let (checklist_checked, set_checklist_checked) = signal(Vec::<bool>::new());
-    let (checklist_instance_id, set_checklist_instance_id) = signal(Option::<String>::None);
-    let (new_item_text, set_new_item_text) = signal(String::new());
-
-    let templates = Resource::new(|| (), |_| get_checklist_templates());
-
-    // Load checklist when plan changes
-    Effect::new(move || {
-        let plan_id = editing_id.get();
-        if let Some(pid) = plan_id {
-            let pid = pid.clone();
-            leptos::task::spawn_local(async move {
-                match get_plan_checklist(pid).await {
-                    Ok(Some(inst)) => {
-                        set_checklist_instance_id.set(inst.id.clone());
-                        set_checklist_items.set(inst.items.clone());
-                        set_checklist_checked.set(inst.checked.clone());
-                    }
-                    Ok(None) => {
-                        set_checklist_instance_id.set(None);
-                        set_checklist_items.set(Vec::new());
-                        set_checklist_checked.set(Vec::new());
-                    }
-                    Err(_) => {
-                        set_checklist_instance_id.set(None);
-                        set_checklist_items.set(Vec::new());
-                        set_checklist_checked.set(Vec::new());
-                    }
-                }
-            });
-        } else {
-            set_checklist_instance_id.set(None);
-            set_checklist_items.set(Vec::new());
-            set_checklist_checked.set(Vec::new());
+fn BasicsSection(
+    ed: PlanEd,
+    drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
+    name_error: RwSignal<Option<String>>,
+) -> impl IntoView {
+    // Choosing a draft fills the picks from it.
+    let chosen = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        let v = ed.draft_id.get();
+        if chosen.get_untracked() != v {
+            chosen.set(v);
         }
     });
-
-    let do_add_item = move |_| {
-        let text = new_item_text.get_untracked();
-        if text.trim().is_empty() {
+    Effect::new(move |prev: Option<()>| {
+        let v = chosen.get();
+        if prev.is_none() || v == ed.draft_id.get_untracked() {
             return;
         }
-        set_checklist_items.update(|items| items.push(text.trim().to_string()));
-        set_checklist_checked.update(|c| c.push(false));
-        set_new_item_text.set(String::new());
-    };
+        if v.is_empty() {
+            ed.draft_id.set(String::new());
+            ed.from_draft.set(false);
+            return;
+        }
+        if let Some(Ok(list)) = drafts.get_untracked() {
+            if let Some(d) = list.iter().find(|d| d.id.as_deref() == Some(v.as_str())) {
+                ed.apply_draft(d, false);
+            }
+        }
+    });
+    view! {
+        <section aria-labelledby="plan-basics-heading" class="flex flex-col gap-4">
+            <SectionHeader title="Plan" id="plan-basics-heading" />
+            <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
+                <Field id="plan-name" label="Plan name" required=true error=Signal::derive(move || name_error.get())>
+                    <TextField value=ed.name placeholder="Front-to-back vs Riverside" maxlength=120 />
+                </Field>
+                <div class="flex flex-col gap-1.5">
+                    <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                        {move || drafts.get().map(|r| {
+                            let mut opts = vec![SelectOption::new("", "No draft")];
+                            opts.extend(r.unwrap_or_default().into_iter().map(|d| SelectOption::new(d.id.unwrap_or_default(), d.name)));
+                            view! {
+                                <Field id="plan-draft" label="Draft" hint="Choosing a draft fills both teams' picks.">
+                                    <Select value=chosen options=opts />
+                                </Field>
+                            }
+                        })}
+                    </Suspense>
+                    {move || {
+                        let d = ed.draft_id.get();
+                        (!d.is_empty()).then(|| view! {
+                            <div><Button variant=ButtonVariant::Quiet size=ButtonSize::Sm href=format!("/draft?draft_id={d}")>"Open the draft"</Button></div>
+                        })
+                    }}
+                </div>
+            </div>
+        </section>
+    }
+}
 
-    let do_use_template = Callback::new(move |tmpl: ChecklistTemplate| {
-        set_checklist_items.set(tmpl.items.clone());
-        set_checklist_checked.set(vec![false; tmpl.items.len()]);
-        set_checklist_instance_id.set(None); // Will create new on save
-        toast.show.run((
-            ToastKind::Success,
-            format!("Loaded template: {}", tmpl.name),
+/// Five picks per side, read-only when they came from the draft.
+#[component]
+fn MatchupSection(
+    ed: PlanEd,
+    champions: Resource<Result<Vec<Champion>, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <section aria-labelledby="plan-matchup-heading" class="flex flex-col gap-4">
+            <SectionHeader
+                title="Matchup"
+                id="plan-matchup-heading"
+                actions=move || view! {
+                    {move || ed.from_draft.get().then(|| view! {
+                        <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| ed.from_draft.set(false))>"Edit picks"</Button>
+                    })}
+                }
+            />
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading champions"><Skeleton shape=SkeletonShape::Line lines=5 /></SkeletonGroup> }>
+                {move || champions.get().map(|r| {
+                    let champs = StoredValue::new(r.unwrap_or_default());
+                    let side = move |label: &'static str, sigs: [RwSignal<String>; 5], key: &'static str| view! {
+                        <div class="flex min-w-0 flex-col gap-2">
+                            <h3 class="font-display text-heading font-semibold text-primary">{label}</h3>
+                            <ul class="flex flex-col border-t border-rule">
+                                {Role::ALL.iter().enumerate().map(|(i, role)| {
+                                    let sig = sigs[i];
+                                    let id = format!("plan-{key}-{}", role.label().to_lowercase());
+                                    let aria = format!("{label}: {}", role.label());
+                                    view! {
+                                        <li class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2 border-b border-rule py-1.5">
+                                            <RoleLabel role=*role />
+                                            {move || if ed.from_draft.get() {
+                                                let v = sig.get();
+                                                let name = champs.with_value(|l| l.iter().find(|c| c.id == v || c.name == v).map(|c| c.name.clone())).unwrap_or_else(|| v.clone());
+                                                if v.is_empty() {
+                                                    view! { <span class="text-label text-muted">"\u{2014}"</span> }.into_any()
+                                                } else {
+                                                    view! {
+                                                        <span class="flex min-w-0 items-center gap-2">
+                                                            <ChampionAvatar name=name.clone() size=AvatarSize::Sm decorative=true />
+                                                            <span class="truncate text-label font-medium text-primary">{name}</span>
+                                                        </span>
+                                                    }.into_any()
+                                                }
+                                            } else {
+                                                view! {
+                                                    <ChampionAutocomplete champions=champs.get_value() value=sig placeholder="Champion" id=id.clone() aria_label=aria.clone() />
+                                                }.into_any()
+                                            }}
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        </div>
+                    };
+                    view! {
+                        <div class="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
+                            {side("Our team", ed.ours, "ours")}
+                            {side("Their team", ed.theirs, "theirs")}
+                        </div>
+                    }
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+#[component]
+fn StrategySection(
+    ed: PlanEd,
+    win_rates: Resource<Result<Vec<(String, i32, i32)>, ServerFnError>>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let outline = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let ours: Vec<String> = ed.ours.iter().map(|s| s.get_untracked()).collect();
+        let theirs: Vec<String> = ed.theirs.iter().map(|s| s.get_untracked()).collect();
+        let (wc, obj, tf, eg) = generate_template(&ours, &theirs);
+        let fill = |sig: RwSignal<String>, v: String| {
+            if sig.get_untracked().trim().is_empty() {
+                sig.set(v);
+            }
+        };
+        fill(ed.win, wc.join("\n"));
+        fill(ed.objectives, obj.join("\n"));
+        fill(ed.teamfight, tf);
+        fill(ed.early, eg);
+        toast.push.run(Toast::info(
+            "Starter outline added to the empty fields; rewrite it for your team.",
         ));
     });
+    view! {
+        <section aria-labelledby="plan-strategy-heading" class="flex flex-col gap-4">
+            <SectionHeader
+                title="How we win"
+                id="plan-strategy-heading"
+                actions=move || view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=outline>"Starter outline"</Button> }
+            />
+            <div class="flex flex-col gap-1.5">
+                <span class="text-label font-medium text-secondary" id="plan-tag-label">"Strategy"</span>
+                <div role="group" aria-labelledby="plan-tag-label" class="flex flex-wrap gap-1">
+                    {STRATEGY_TAGS.iter().map(|&t| view! {
+                        <Button
+                            size=ButtonSize::Sm
+                            pressed=Signal::derive(move || ed.tag.get() == t)
+                            on_click=Callback::new(move |_| ed.tag.update(|cur| { *cur = if cur == t { String::new() } else { t.to_string() }; }))
+                        >{t}</Button>
+                    }).collect_view()}
+                </div>
+                <Suspense fallback=|| ()>
+                    {move || {
+                        let tag = ed.tag.get();
+                        (!tag.is_empty()).then(|| win_rates.get().map(|r| {
+                            let found = r.unwrap_or_default().into_iter().find(|(t, _, _)| *t == tag);
+                            let text = match found {
+                                Some((_, g, w)) if g > 0 => format!("Your team is {w}-{} with this strategy in reviewed games.", g - w),
+                                _ => "No reviewed games with this strategy yet.".to_string(),
+                            };
+                            view! { <p class="text-caption text-muted">{text}</p> }
+                        }))
+                    }}
+                </Suspense>
+            </div>
+            <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
+                <Field id="plan-win" label="Win conditions" hint="One per line.">
+                    <TextField value=ed.win rows=4 placeholder="Force fights at the second dragon" />
+                </Field>
+                <Field id="plan-objectives" label="Objective priority" hint="One per line, most important first.">
+                    <TextField value=ed.objectives rows=4 placeholder="Dragon" />
+                </Field>
+                <Field id="plan-teamfight" label="Teamfights">
+                    <TextField value=ed.teamfight rows=3 placeholder="Front-to-back: protect Jinx, Ornn zones." />
+                </Field>
+                <Field id="plan-early" label="Early game">
+                    <TextField value=ed.early rows=3 placeholder="Contest level 1 vision; path towards bot." />
+                </Field>
+            </div>
+        </section>
+    }
+}
 
-    let do_save_checklist = move |_| {
-        let plan_id = editing_id.get_untracked();
-        let items = checklist_items.get_untracked();
-        let checked = checklist_checked.get_untracked();
-        let instance_id = checklist_instance_id.get_untracked();
+#[component]
+fn RolesSection(
+    ed: PlanEd,
+    champions: Resource<Result<Vec<Champion>, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <section aria-labelledby="plan-roles-heading" class="flex flex-col gap-4">
+            <SectionHeader title="Roles" id="plan-roles-heading" />
+            <Suspense fallback=|| ()>
+                {move || {
+                    let champs = champions.get().and_then(|r| r.ok()).unwrap_or_default();
+                    let champs = StoredValue::new(champs);
+                    view! {
+                        <ul class="flex flex-col border-t border-rule">
+                            {Role::ALL.iter().enumerate().map(move |(i, role)| {
+                                let (ours, theirs, note) = (ed.ours[i], ed.theirs[i], ed.roles[i]);
+                                let id = format!("plan-role-{}", role.label().to_lowercase());
+                                let name = move |v: String| champs.with_value(|l| l.iter().find(|c| c.id == v || c.name == v).map(|c| c.name.clone())).unwrap_or(v);
+                                view! {
+                                    <li class="grid grid-cols-1 gap-2 border-b border-rule py-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                                        <div class="flex flex-col gap-0.5">
+                                            <RoleLabel role=*role />
+                                            <span class="text-caption text-muted">
+                                                {move || {
+                                                    let (o, t) = (ours.get(), theirs.get());
+                                                    match (o.is_empty(), t.is_empty()) {
+                                                        (false, false) => format!("{} vs {}", name(o), name(t)),
+                                                        (false, true) => name(o),
+                                                        _ => String::new(),
+                                                    }
+                                                }}
+                                            </span>
+                                        </div>
+                                        <TextField id=id value=note rows=2 aria_label=format!("{} brief", role.label()) placeholder="What this player plays for, and when." />
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                    }
+                }}
+            </Suspense>
+        </section>
+    }
+}
 
-        if items.is_empty() {
-            toast
-                .show
-                .run((ToastKind::Error, "No checklist items to save.".into()));
+/// The pre-game checklist: ticks save at once.
+#[component]
+fn ChecklistSection(ed: PlanEd) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let items = RwSignal::new(Vec::<String>::new());
+    let checked = RwSignal::new(Vec::<bool>::new());
+    let instance = RwSignal::new(None::<String>);
+    let new_item = RwSignal::new(String::new());
+    let templates = Resource::new(|| (), |_| get_checklist_templates());
+
+    Effect::new(move |_| {
+        let id = ed.id.get();
+        match id {
+            Some(pid) => leptos::task::spawn_local(async move {
+                let found = get_plan_checklist(pid).await.ok().flatten();
+                instance.set(found.as_ref().and_then(|i| i.id.clone()));
+                items.set(found.as_ref().map(|i| i.items.clone()).unwrap_or_default());
+                checked.set(found.map(|i| i.checked).unwrap_or_default());
+            }),
+            None => {
+                instance.set(None);
+                items.set(Vec::new());
+                checked.set(Vec::new());
+            }
+        }
+    });
+
+    let persist_checks = move || {
+        if let Some(iid) = instance.get_untracked() {
+            let json = serde_json::to_string(&checked.get_untracked()).unwrap_or_default();
+            leptos::task::spawn_local(async move {
+                if let Err(e) = update_checklist(iid, json).await {
+                    toast
+                        .push
+                        .run(Toast::error(format!("Could not save the tick: {e}")));
+                }
+            });
+        }
+    };
+    let add = Callback::new(move |_: ()| {
+        let t = new_item.get_untracked().trim().to_string();
+        if t.is_empty() {
             return;
         }
-
-        let Some(pid) = plan_id else {
-            toast.show.run((
-                ToastKind::Error,
-                "Save the plan first before adding a checklist.".into(),
+        items.update(|v| v.push(t));
+        checked.update(|c| c.push(false));
+        new_item.set(String::new());
+    });
+    let save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let Some(pid) = ed.id.get_untracked() else {
+            toast.push.run(Toast::error(
+                "Save the plan first; the checklist belongs to it.",
             ));
             return;
         };
-
-        leptos::task::spawn_local(async move {
-            if let Some(iid) = instance_id {
-                // Update existing
-                let checked_json = serde_json::to_string(&checked).unwrap_or_default();
-                match update_checklist(iid, checked_json).await {
-                    Ok(_) => toast
-                        .show
-                        .run((ToastKind::Success, "Checklist updated!".into())),
-                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                }
-            } else {
-                // Create new
-                let items_json = serde_json::to_string(&items).unwrap_or_default();
-                match create_plan_checklist(pid, None, items_json).await {
-                    Ok(id) => {
-                        set_checklist_instance_id.set(Some(id));
-                        toast
-                            .show
-                            .run((ToastKind::Success, "Checklist created!".into()));
-                    }
-                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                }
-            }
-        });
-    };
-
-    let do_save_as_template = move |_| {
-        let items = checklist_items.get_untracked();
-        if items.is_empty() {
-            toast
-                .show
-                .run((ToastKind::Error, "No items to save as template.".into()));
+        let list = items.get_untracked();
+        if list.is_empty() {
+            toast.push.run(Toast::error("Add at least one item."));
             return;
         }
-        let items_json = serde_json::to_string(&items).unwrap_or_default();
+        let json = serde_json::to_string(&list).unwrap_or_default();
         leptos::task::spawn_local(async move {
-            match save_checklist_template("Pre-Game Checklist".to_string(), items_json).await {
-                Ok(_) => {
-                    toast
-                        .show
-                        .run((ToastKind::Success, "Saved as template!".into()));
-                    templates.refetch();
+            // A changed list is a new instance; ticks of an unchanged one update.
+            match create_plan_checklist(pid, None, json).await {
+                Ok(id) => {
+                    instance.set(Some(id));
+                    toast.push.run(Toast::success("Checklist saved"));
                 }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
             }
         });
-    };
+    });
+    let save_template = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let list = items.get_untracked();
+        if list.is_empty() {
+            return;
+        }
+        let json = serde_json::to_string(&list).unwrap_or_default();
+        leptos::task::spawn_local(async move {
+            match save_checklist_template("Pre-game checklist".to_string(), json).await {
+                Ok(_) => {
+                    templates.refetch();
+                    toast.push.run(Toast::success("Saved as a template"));
+                }
+                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+            }
+        });
+    });
 
     view! {
-        <div class="bg-elevated border border-outline rounded-xl">
-            <button
-                class="w-full text-left p-6 flex items-center justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 rounded-xl"
-                on:click=move |_| set_checklist_open.update(|v| *v = !*v)
-            >
-                <div class="flex items-center gap-2">
-                    <h3 class="text-primary font-semibold text-sm">"Pre-Game Checklist"</h3>
-                    {move || {
-                        let items = checklist_items.get();
-                        let checked = checklist_checked.get();
-                        if items.is_empty() {
-                            view! { <span class="text-dimmed text-xs">"No items"</span> }.into_any()
-                        } else {
-                            let done = checked.iter().filter(|c| **c).count();
-                            let total = items.len();
-                            view! {
-                                <span class="text-muted text-xs">{format!("{done}/{total} complete")}</span>
-                            }.into_any()
-                        }
-                    }}
+        <section aria-labelledby="plan-checklist-heading" class="flex flex-col gap-4">
+            <SectionHeader
+                title="Pre-game checklist"
+                id="plan-checklist-heading"
+            />
+            <p class="text-label text-secondary" aria-live="polite" data-testid="checklist-progress">
+                {move || {
+                    let total = items.get().len();
+                    let done = checked.get().iter().filter(|c| **c).count();
+                    if total == 0 { "No items yet. Add what the team checks before the game, or start from a template.".to_string() } else { format!("{done} of {total} done") }
+                }}
+            </p>
+            <ul class="flex flex-col">
+                {move || items.get().into_iter().enumerate().map(|(i, text)| {
+                    let state = RwSignal::new(checked.with_untracked(|c| c.get(i).copied().unwrap_or(false)));
+                    view! {
+                        <li class="flex items-center justify-between gap-3 border-b border-rule py-1.5 last:border-b-0">
+                            <Checkbox
+                                label=text
+                                checked=state
+                                strike=true
+                                on_change=Callback::new(move |v: bool| {
+                                    checked.update(|c| {
+                                        if c.len() <= i { c.resize(i + 1, false); }
+                                        c[i] = v;
+                                    });
+                                    persist_checks();
+                                })
+                            />
+                            <Button variant=ButtonVariant::Quiet size=ButtonSize::Sm on_click=Callback::new(move |_| {
+                                items.update(|v| { if i < v.len() { v.remove(i); } });
+                                checked.update(|c| { if i < c.len() { c.remove(i); } });
+                            })>"Remove"</Button>
+                        </li>
+                    }
+                }).collect_view()}
+            </ul>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div class="min-w-0 flex-1">
+                    <Field id="checklist-new" label="New item">
+                        <TextField
+                            value=new_item
+                            placeholder="Check summoner spells"
+                            on_keydown=Callback::new(move |ev: leptos::ev::KeyboardEvent| {
+                                if ev.key() == "Enter" { ev.prevent_default(); add.run(()); }
+                            })
+                        />
+                    </Field>
                 </div>
-                <span class="text-dimmed text-sm">
-                    {move || if checklist_open.get() { "\u{25BC}" } else { "\u{25B6}" }}
-                </span>
-            </button>
-
-            {move || checklist_open.get().then(|| {
-                let items = checklist_items.get();
-                let checked = checklist_checked.get();
-                let total = items.len();
-                let done = checked.iter().filter(|c| **c).count();
-
-                view! {
-                    <div class="px-6 pb-6 flex flex-col gap-3">
-                        // Progress bar
-                        {(total > 0).then(|| {
-                            let pct = (done * 100).checked_div(total).unwrap_or(0);
-                            view! {
-                                <div class="w-full bg-overlay h-2">
-                                    <div
-                                        class="bg-accent h-2 transition-all"
-                                        style=format!("width: {}%", pct)
-                                    />
-                                </div>
-                            }
-                        })}
-
-                        // Checklist items
-                        <div class="flex flex-col gap-1">
-                            {items.iter().enumerate().map(|(i, item)| {
-                                let item_text = item.clone();
-                                let is_checked = checked.get(i).copied().unwrap_or(false);
+                <Button on_click=Callback::new(move |_| add.run(()))>"Add item"</Button>
+            </div>
+            <Suspense fallback=|| ()>
+                {move || templates.get().map(|r| {
+                    let list = r.unwrap_or_default();
+                    (!list.is_empty()).then(|| view! {
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-label text-muted">"Templates:"</span>
+                            {list.into_iter().map(|t| {
+                                let t2 = t.clone();
+                                let tid = t.id.clone().unwrap_or_default();
+                                let n = t.items.len();
                                 view! {
-                                    <label class="flex items-center gap-2 py-1 px-2 rounded hover:bg-overlay/30 cursor-pointer transition-colors">
-                                        <input
-                                            type="checkbox"
-                                            class="accent-accent"
-                                            prop:checked=is_checked
-                                            on:change=move |ev| {
-                                                let val = event_target_checked(&ev);
-                                                set_checklist_checked.update(|c| {
-                                                    if i < c.len() { c[i] = val; }
-                                                });
-                                                // Auto-save check state
-                                                let instance_id = checklist_instance_id.get_untracked();
-                                                if let Some(iid) = instance_id {
-                                                    let checked_now = checklist_checked.get_untracked();
-                                                    let checked_json = serde_json::to_string(&checked_now).unwrap_or_default();
-                                                    leptos::task::spawn_local(async move {
-                                                        let _ = update_checklist(iid, checked_json).await;
-                                                    });
-                                                }
-                                            }
-                                        />
-                                        <span class=move || {
-                                            let c = checklist_checked.get();
-                                            if c.get(i).copied().unwrap_or(false) {
-                                                "text-muted text-sm line-through"
-                                            } else {
-                                                "text-primary text-sm"
-                                            }
-                                        }>{item_text}</span>
-                                        <button
-                                            class="ml-auto text-muted hover:text-danger text-xs transition-colors"
-                                            on:click=move |_| {
-                                                set_checklist_items.update(|items| { if i < items.len() { items.remove(i); } });
-                                                set_checklist_checked.update(|c| { if i < c.len() { c.remove(i); } });
-                                            }
-                                        >"x"</button>
-                                    </label>
+                                    <span class="inline-flex items-center">
+                                        <Button size=ButtonSize::Sm on_click=Callback::new(move |_| {
+                                            items.set(t2.items.clone());
+                                            checked.set(vec![false; t2.items.len()]);
+                                            instance.set(None);
+                                            toast.push.run(Toast::info(format!("Loaded \u{201c}{}\u{201d}; save the checklist to keep it.", t2.name)));
+                                        })>{format!("{} ({n})", t.name)}</Button>
+                                        <Button variant=ButtonVariant::Quiet size=ButtonSize::Sm aria_label=format!("Delete template {}", t.name) on_click=Callback::new(move |_| {
+                                            let id = tid.clone();
+                                            leptos::task::spawn_local(async move {
+                                                let _ = delete_checklist_template_fn(id).await;
+                                                templates.refetch();
+                                            });
+                                        })>"Delete"</Button>
+                                    </span>
                                 }
                             }).collect_view()}
                         </div>
+                    })
+                })}
+            </Suspense>
+            <div class="flex flex-wrap gap-2">
+                <Button on_click=save>"Save checklist"</Button>
+                <Button variant=ButtonVariant::Quiet on_click=save_template>"Save as template"</Button>
+            </div>
+        </section>
+    }
+}
 
-                        // Add new item
-                        <div class="flex gap-2">
-                            <input
-                                type="text"
-                                class=input_class()
-                                placeholder="Add checklist item..."
-                                prop:value=move || new_item_text.get()
-                                on:input=move |ev| set_new_item_text.set(event_target_value(&ev))
-                                on:keydown=move |ev: leptos::ev::KeyboardEvent| {
-                                    if ev.key() == "Enter" {
-                                        ev.prevent_default();
-                                        let text = new_item_text.get_untracked();
-                                        if !text.trim().is_empty() {
-                                            set_checklist_items.update(|items| items.push(text.trim().to_string()));
-                                            set_checklist_checked.update(|c| c.push(false));
-                                            set_new_item_text.set(String::new());
-                                        }
-                                    }
-                                }
-                            />
-                            <button
-                                class="bg-overlay hover:bg-overlay-strong text-secondary text-sm font-medium px-3 py-2 rounded-lg transition-colors flex-shrink-0"
-                                on:click=do_add_item
-                            >"Add"</button>
-                        </div>
-
-                        // Template selector
-                        <Suspense fallback=|| ()>
-                            {move || templates.get().map(|result| match result {
-                                Ok(tmpls) if !tmpls.is_empty() => {
-                                    view! {
-                                        <div class="flex flex-wrap gap-2 items-center">
-                                            <span class="text-muted text-xs">"Templates:"</span>
-                                            {tmpls.into_iter().map(|t| {
-                                                let t_for_use = t.clone();
-                                                let t_id = t.id.clone().unwrap_or_default();
-                                                let t_name = t.name.clone();
-                                                view! {
-                                                    <button
-                                                        class="bg-overlay hover:bg-overlay-strong text-secondary text-xs px-2 py-1 rounded transition-colors"
-                                                        on:click=move |_| do_use_template.run(t_for_use.clone())
-                                                    >{t_name}</button>
-                                                    <button
-                                                        class="text-muted hover:text-danger text-xs transition-colors"
-                                                        on:click=move |_| {
-                                                            let id = t_id.clone();
-                                                            leptos::task::spawn_local(async move {
-                                                                let _ = delete_checklist_template_fn(id).await;
-                                                                templates.refetch();
-                                                            });
-                                                        }
-                                                    >"x"</button>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                    }.into_any()
-                                },
-                                _ => view! { <span></span> }.into_any(),
-                            })}
-                        </Suspense>
-
-                        // Action buttons
-                        <div class="flex gap-2">
-                            <button
-                                class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-                                on:click=do_save_checklist
-                            >"Save Checklist"</button>
-                            <button
-                                class="bg-overlay hover:bg-overlay-strong text-secondary text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-                                on:click=do_save_as_template
-                            >"Save as Template"</button>
-                        </div>
-                    </div>
+/// Win rate per strategy tag, all time or against the linked opponent.
+#[component]
+fn HistorySection(
+    ed: PlanEd,
+    drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
+    win_rates: Resource<Result<Vec<(String, i32, i32)>, ServerFnError>>,
+) -> impl IntoView {
+    let scope = RwSignal::new("all".to_string());
+    let opponent = Memo::new(move |_| {
+        let id = ed.draft_id.get();
+        drafts
+            .get()
+            .and_then(|r| r.ok())
+            .unwrap_or_default()
+            .into_iter()
+            .find(|d| d.id.as_deref() == Some(id.as_str()))
+            .and_then(|d| d.opponent)
+            .filter(|o| !o.is_empty())
+    });
+    let vs = Resource::new(
+        move || (scope.get(), opponent.get()),
+        |(s, o)| async move {
+            match (s.as_str(), o) {
+                ("vs", Some(o)) => get_strategy_win_rates_vs_opponent(o).await,
+                _ => Ok(Vec::new()),
+            }
+        },
+    );
+    view! {
+        <section aria-labelledby="plan-history-heading" class="flex flex-col gap-4">
+            <SectionHeader
+                title="Strategy record"
+                id="plan-history-heading"
+                actions=move || view! {
+                    <SegmentedControl
+                        id="plan-history-scope"
+                        label="Games counted"
+                        options=vec![Segment::new("all", "All games"), Segment::new("vs", "Against this opponent")]
+                        value=scope
+                        size=SegmentSize::Sm
+                    />
                 }
-            })}
-        </div>
+            />
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading the record"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+                {move || {
+                    let rows = if scope.get() == "vs" {
+                        if opponent.get().is_none() {
+                            return Some(view! {
+                                <EmptyState size=EmptySize::Compact message="Link a draft with an opponent to see your record against them." />
+                            }.into_any());
+                        }
+                        vs.get()
+                    } else {
+                        win_rates.get()
+                    };
+                    let current = ed.tag.get();
+                    rows.map(|r| {
+                        let rows = r.unwrap_or_default();
+                        if rows.is_empty() {
+                            return view! {
+                                <EmptyState size=EmptySize::Compact message="Your record per strategy appears once post-game reviews are linked to tagged plans." />
+                            }.into_any();
+                        }
+                        view! {
+                            <Table caption="Win rate by strategy" caption_hidden=true>
+                                <thead><tr><Th>"Strategy"</Th><Th numeric=true>"Games"</Th><Th numeric=true>"Won"</Th><Th numeric=true>"Win rate"</Th></tr></thead>
+                                <tbody>
+                                    {rows.into_iter().map(|(tag, games, wins)| {
+                                        let pct = if games > 0 { wins * 100 / games } else { 0 };
+                                        view! {
+                                            <Tr selected=tag == current>
+                                                <Td header=true>{tag}</Td>
+                                                <Td numeric=true>{games}</Td>
+                                                <Td numeric=true>{wins}</Td>
+                                                <Td numeric=true>{format!("{pct}%")}</Td>
+                                            </Tr>
+                                        }
+                                    }).collect_view()}
+                                </tbody>
+                            </Table>
+                        }.into_any()
+                    })
+                }}
+            </Suspense>
+        </section>
+    }
+}
+
+/// After the game: a review linked to this plan and its draft.
+#[component]
+fn ReviewSection(ed: PlanEd) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let busy = RwSignal::new(false);
+    let start = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let Some(pid) = ed.id.get_untracked() else {
+            return;
+        };
+        let did = opt(ed.draft_id.get_untracked());
+        busy.set(true);
+        leptos::task::spawn_local(async move {
+            match start_post_game_review(pid, did).await {
+                #[allow(unused_variables)]
+                Ok(review_id) =>
+                {
+                    #[cfg(feature = "hydrate")]
+                    if let Some(window) = web_sys::window() {
+                        let _ = window
+                            .location()
+                            .set_href(&format!("/post-game?review_id={review_id}"));
+                    }
+                }
+                Err(e) => {
+                    busy.set(false);
+                    toast
+                        .push
+                        .run(Toast::error(format!("Could not start the review: {e}")));
+                }
+            }
+        });
+    });
+    view! {
+        <section aria-labelledby="plan-review-heading" class="flex flex-col gap-3">
+            <SectionHeader title="After the game" id="plan-review-heading" />
+            {move || if ed.id.get().is_some() {
+                view! {
+                    <p class="text-body text-secondary">"Start a review that is already linked to this plan and its draft."</p>
+                    <div><Button on_click=start loading=Signal::derive(move || busy.get())>"Start the review"</Button></div>
+                }.into_any()
+            } else {
+                view! { <p class="text-body text-secondary">"Save the plan to start a review linked to it after the game."</p> }.into_any()
+            }}
+        </section>
     }
 }

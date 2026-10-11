@@ -5,10 +5,10 @@ use leptos::prelude::*;
 
 use crate::components::ui::toast::ToastItem;
 use crate::components::ui::{
-    Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Command, CommandBar, ConfirmDialog,
-    ConfirmTone, Dialog, DialogSize, EmptySize, EmptyState, Field, Force, Keycap, Menu, MenuAlign,
-    MenuItem, Segment, SegmentedControl, Skeleton, SkeletonGroup, SkeletonShape, Switch, TextField,
-    Toast, ToastContext, ToastEntry, ToastKind, Tooltip, TooltipPlacement,
+    Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Checkbox, Command, CommandBar,
+    ConfirmDialog, ConfirmTone, Dialog, DialogSize, EmptySize, EmptyState, Field, Force, Keycap,
+    Menu, MenuAlign, MenuItem, Segment, SegmentedControl, Skeleton, SkeletonGroup, SkeletonShape,
+    Switch, TextField, Toast, ToastContext, ToastEntry, ToastKind, Tooltip, TooltipPlacement,
 };
 use crate::pages::design::{GallerySection, Sample};
 
@@ -354,8 +354,12 @@ pub fn TogglesSection() -> impl IntoView {
     let compact = RwSignal::new(false);
     let off = RwSignal::new(false);
     let on = RwSignal::new(true);
+    let manual = RwSignal::new("solo".to_string());
+    let item_a = RwSignal::new(true);
+    let item_b = RwSignal::new(false);
+    let item_off = RwSignal::new(false);
     view! {
-        <GallerySection id="toggles" title="Segmented control and switch" lede="Segmented: one of two to five short options that switch a view at once (radio semantics, arrow keys, one Tab stop). Switch: on or off, effective immediately, label always visible. Both are toggles, so the switch is round.">
+        <GallerySection id="toggles" title="Segmented control, switch and checkbox" lede="Segmented: one of two to five short options that switch a view at once (radio semantics, arrow keys, one Tab stop; manual activation when switching has a side effect). Switch: on or off, effective immediately, label always visible; round, because it is a toggle. Checkbox: a checklist item or a yes/no in a form; square.">
             <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
                 <div class="flex flex-col gap-5">
                     <Sample label="Default (live)">
@@ -376,6 +380,12 @@ pub fn TogglesSection() -> impl IntoView {
                     <Sample label="Disabled">
                         <SegmentedControl id="gal-fixed" label="Locked" options=vec![Segment::new("solo", "Solo"), Segment::new("team", "Team")] value=fixed disabled=true />
                     </Sample>
+                    <Sample label="Manual activation: arrows move focus, Enter or Space selects">
+                        <div class="flex flex-wrap items-center gap-3" data-testid="segmented-manual">
+                            <SegmentedControl id="gal-manual" label="Workspace (manual)" options=vec![Segment::new("solo", "Solo"), Segment::new("team", "Team")] value=manual manual=true />
+                            <output class="text-label text-secondary" data-testid="segmented-manual-value">{move || format!("Workspace: {}", manual.get())}</output>
+                        </div>
+                    </Sample>
                 </div>
                 <div class="flex flex-col gap-5">
                     <Sample label="Switch (live), with state written out">
@@ -389,6 +399,13 @@ pub fn TogglesSection() -> impl IntoView {
                     </Sample>
                     <Sample label="Disabled">
                         <Switch label="Share with scouts" checked=off disabled=true />
+                    </Sample>
+                    <Sample label="Checkbox: a checklist (done items struck through)">
+                        <div class="flex flex-col gap-2" data-testid="checkbox-demo">
+                            <Checkbox label="Read the opponent brief" checked=item_a strike=true />
+                            <Checkbox label="Agree on the level 1 plan" checked=item_b strike=true />
+                            <Checkbox label="Disabled item" checked=item_off disabled=true />
+                        </div>
                     </Sample>
                 </div>
             </div>

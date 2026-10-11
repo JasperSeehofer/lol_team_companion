@@ -4,7 +4,7 @@
 //! Button (+ Keycap), Field, TextField, Select, Badge, Table, Tabs, and the
 //! domain primitives DraftBoard (the tournament draft) and PrepSequence.
 //! Batch 2 (interaction): Dialog/ConfirmDialog, Menu, CommandBar, Toast,
-//! Callout, EmptyState, Skeleton, Tooltip, SegmentedControl, Switch.
+//! Callout, EmptyState, Skeleton, Tooltip, SegmentedControl, Switch, Checkbox.
 //! Batch 3 (domain): ChampionAvatar/UserAvatar, RoleLabel, SideMarker,
 //! ResultGlyph, StatReadout, LegendBlock, CanvasFrame/ScaleBar,
 //! Annotation, TimelineScrub.
@@ -78,7 +78,7 @@ pub use tabs::{TabItem, TabPanel, Tabs};
 pub use text::{Text, TextRole, TextTag, Tone};
 pub use timeline::{Moment, TimelineScrub};
 pub use toast::{Toast, ToastAction, ToastContext, ToastEntry, ToastKind, ToastProvider};
-pub use toggle::{Segment, SegmentSize, SegmentedControl, Switch};
+pub use toggle::{Checkbox, Segment, SegmentSize, SegmentedControl, Switch};
 pub use tooltip::{Tooltip, TooltipPlacement};
 
 #[cfg(test)]
