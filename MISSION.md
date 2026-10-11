@@ -99,3 +99,20 @@ Follow strictly: security requirements; legal and compliance content and the mon
 Creative freedom (the agent decides and shows; the owner can veto at gates): visual design within the chosen direction; component APIs and naming; the Draft Graph's and Sand Table's models, visuals and interactions; micro-copy and empty states; survey wording (owner approves before it reaches users); information architecture details; test strategy; internal refactors.
 
 Ask first: anything that changes the Release 1 goal; deleting user-facing features; anything touching money or legal wording; adding external services or costs; merging to main or deploying.
+
+## 8. Decision log
+
+Decisions the owner took after the contract was agreed. Each entry is dated; later entries win over earlier text in this file.
+
+2026-10-11 (M2 direction gate)
+- Visual direction: C "Survey" is the visual language. Night-map green-slate ground, OKLCH tonal layers, one accent, matched blue and red side colours, win and loss never reuse the side colours, coordinate frames and legends only on canvases (map, graph), plain type everywhere else, surveyor's notes in serif italic for annotations only, radius has meaning (0 for structure, 3px for controls, round only for avatars and toggles). No glow, no gradients, no glass, no neon, no card soup, no icon confetti, no emoji, no Inter or Geist, no Cinzel or fleur-de-lis, no "gamer" look.
+- One idea from direction B "Instrument": the Match Day page guides the user through the preparation steps explicitly (brief read, draft plans, game plan, open items). In the owner's words: "if the user is properly guided through this it maybe doesn't need the visualization of it." M2 provides the primitive (a quiet numbered checklist with the next step emphasised); the pages that use it are M3 and M5.
+- Tournament draft is visualised correctly: 5 bans per side and the set pick order. Ban phase 1: Blue, Red, Blue, Red, Blue, Red. Pick phase 1: B1, R1, R2, B2, B3, R3. Ban phase 2: Red, Blue, Red, Blue. Pick phase 2: R4, B4, B5, R5. M2 ships the domain primitive; the draft page rebuild is M3.
+- Champion pictures are real portraits, served through the app's own server with a cache, so the browser never calls a third party.
+- Team notes stay editable by every member but get undo (M5).
+- One team per account stays. Teams get benched substitutes (roster role "substitute"), in M5 with the data change in M5's own migration.
+- Admins are set through `ADMIN_EMAILS` for the closed beta; a promote command follows in M8.
+- The champion list stays public, served from the server cache (done in M6).
+- The login lockout is accepted for the beta.
+- The commit history is left as it is.
+- The migration data cleanup is accepted.
