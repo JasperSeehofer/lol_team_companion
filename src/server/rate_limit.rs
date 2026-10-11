@@ -26,6 +26,9 @@ pub enum Bucket {
     /// Image requests that miss the server cache and go to Data Dragon,
     /// per client IP (`/img/...` is public).
     ImageFetch,
+    /// Draft Graph rankings, per client IP (the page asks again after
+    /// each draft change, debounced).
+    Graph,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -63,6 +66,11 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::ImageFetch => Limit {
             capacity: 400.0,
             refill_per_sec: 5.0,
+        },
+        // 60 rankings, then two a second.
+        Bucket::Graph => Limit {
+            capacity: 60.0,
+            refill_per_sec: 2.0,
         },
     }
 }

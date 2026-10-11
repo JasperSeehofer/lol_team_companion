@@ -778,6 +778,18 @@ pub struct GraphResult {
     pub notes: GraphNotes,
 }
 
+/// A champion-pool tier in words ("match_ready" -> "match ready").
+pub fn tier_label(tier: &str) -> &'static str {
+    match tier {
+        "comfort" => "comfort",
+        "match_ready" => "match ready",
+        "scrim_ready" => "scrim ready",
+        "practicing" => "practicing",
+        "to_practice" => "to practise",
+        _ => "in the pool",
+    }
+}
+
 /// Candidates returned (the canvas draws at most 24 of them).
 pub const MAX_CANDIDATES: usize = 30;
 /// Candidates the canvas may draw (stage B).

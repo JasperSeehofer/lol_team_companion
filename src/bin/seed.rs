@@ -26,6 +26,7 @@ use lol_team_companion::{
         champion::ChampionNote,
         draft::DraftAction,
         game_plan::{GamePlan, PostGameLearning},
+        graph::{NewRelation, RelationKind},
     },
     server::{
         auth::hash_password,
@@ -319,6 +320,7 @@ async fn cleanup(db: &Surreal<Db>) -> Result<(), String> {
         DELETE post_game_learning WHERE team IN $teams; \
         DELETE action_item WHERE team IN $teams; \
         DELETE team_note WHERE team IN $teams; \
+        DELETE team_relation WHERE team IN $teams; \
         DELETE series WHERE team IN $teams; \
         DELETE ban_priority WHERE team IN $teams; \
         DELETE checklist_template WHERE team IN $teams; \
@@ -480,7 +482,9 @@ async fn populate(
                 .map_err(err)?;
         }
         for (j, champ) in pool.iter().take(3).enumerate() {
-            let tier = ["S", "A", "B"][j];
+            // The pool page's tiers (the first three; the rest stay at
+            // the default "comfort" until moved).
+            let tier = ["comfort", "match_ready", "scrim_ready"][j];
             db::update_champion_tier(db, user_id, champ, role, tier.to_string())
                 .await
                 .map_err(err)?;
@@ -659,6 +663,60 @@ async fn populate(
     )
     .await
     .map_err(err)?;
+
+    // Two team notes on pairs for the Draft Graph.
+    let relations: [(&str, &str, RelationKind, u8, &str); 2] = if spec.name == TEAMS[0].name {
+        [
+            (
+                "Jinx",
+                "Thresh",
+                RelationKind::Synergy,
+                3,
+                "Lantern gets Jinx out after she resets into the fight",
+            ),
+            (
+                "Akali",
+                "Syndra",
+                RelationKind::Counter,
+                2,
+                "Shroud dodges the stun; our mid needs a ward on the flank",
+            ),
+        ]
+    } else {
+        [
+            (
+                "Kaisa",
+                "Rakan",
+                RelationKind::Synergy,
+                3,
+                "Rakan's knock-up lets Kai'Sa ult in safely",
+            ),
+            (
+                "Braum",
+                "Jinx",
+                RelationKind::Counter,
+                2,
+                "The shield eats Jinx's rockets in every siege",
+            ),
+        ]
+    };
+    for (a, b, kind, weight, reason) in relations {
+        db::create_team_relation(
+            db,
+            &team.id,
+            leader,
+            spec.players[0].username,
+            NewRelation {
+                a: a.to_string(),
+                b: b.to_string(),
+                kind,
+                weight,
+                reason: reason.to_string(),
+            },
+        )
+        .await
+        .map_err(err)?;
+    }
 
     // Scouting profile of the rival team.
     let players: Vec<(String, Option<String>)> = ROLES

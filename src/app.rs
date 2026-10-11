@@ -13,6 +13,7 @@ use crate::error_template::NotFound;
 use crate::pages::{
     action_items::ActionItemsPage,
     admin::invites::AdminInvitesPage,
+    admin::traits::AdminTraitsPage,
     analytics::AnalyticsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
@@ -101,6 +102,7 @@ pub fn App() -> impl IntoView {
                         // Phase 17 plan 17-01 stubs (filled by plan 06)
                         <Route path=path!("/closed-beta") view=ClosedBetaPage />
                         <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/traits") view=AdminTraitsPage ssr=SsrMode::Async />
                         <Route path=path!("/design") view=DesignGalleryPage ssr=SsrMode::Async />
                         <Route path=path!("/legal/impressum") view=ImpressumPage />
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />

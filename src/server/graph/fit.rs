@@ -33,6 +33,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::components::ui::{pick_slots, DraftAction, DraftSide, TOURNAMENT_ORDER};
+use crate::models::graph::tier_label;
 use crate::models::graph::{
     Candidate, CompProfile, Component, DamageType, DraftState, Engage, FitPart, GraphEdge,
     GraphNode, GraphNotes, GraphResult, GraphTarget, Playstyle, PoolStatus, Reason, ReasonSource,
@@ -91,18 +92,6 @@ pub fn tier_points(tier: Option<&str>) -> i32 {
         Some("to_practice") => -2,
         Some(_) => 0,
         None => -8,
-    }
-}
-
-/// A pool tier in words.
-pub fn tier_label(tier: &str) -> &'static str {
-    match tier {
-        "comfort" => "comfort",
-        "match_ready" => "match ready",
-        "scrim_ready" => "scrim ready",
-        "practicing" => "practicing",
-        "to_practice" => "to practise",
-        _ => "in the pool",
     }
 }
 
