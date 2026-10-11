@@ -43,6 +43,8 @@ pub fn ModeToggle(mode: String) -> impl IntoView {
             value=value
             size=SegmentSize::Sm
             on_change=on_change
+            // Switching saves the mode and reloads: arrows only move focus.
+            manual=true
         />
     }
 }
@@ -437,7 +439,7 @@ pub fn Nav() -> impl IntoView {
                                                     <path d="M10.5 10.5L14 14" stroke-linecap="round" />
                                                 </svg>
                                                 <span class="sr-only lg:not-sr-only">"Go to"</span>
-                                                <kbd class="hidden rounded-ctl border border-outline/70 px-1 text-caption leading-4 text-muted sm:inline-block" aria-hidden="true">"Ctrl K"</kbd>
+                                                <kbd class="hidden rounded-ctl border border-outline px-1 text-caption leading-4 text-muted sm:inline-block" aria-hidden="true">"Ctrl K"</kbd>
                                             </button>
                                             <CommandBar id="command-bar" open=command_open commands=commands />
                                             <Menu

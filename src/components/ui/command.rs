@@ -239,7 +239,7 @@ pub fn CommandBar(
     view! {
         <dialog
             node_ref=dialog_ref
-            class="mx-auto mb-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-visible border border-outline/70 bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim"
+            class="mx-auto mb-auto mt-[12vh] w-[min(36rem,calc(100vw-2rem))] overflow-visible border border-outline bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim"
             aria-label="Command bar"
             aria-modal="true"
             data-dialog=id
@@ -247,7 +247,7 @@ pub fn CommandBar(
             on:click=on_click
         >
             <div class="flex flex-col">
-                <div class="flex items-center gap-3 border-b border-rule px-4 focus-within:border-accent">
+                <div class="flex items-center gap-3 border-b border-rule px-4 focus-within:border-accent focus-within:outline-2 focus-within:outline-solid focus-within:outline-accent focus-within:-outline-offset-2">
                     <svg class="size-4 shrink-0 text-muted" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                         <circle cx="7" cy="7" r="4.5" />
                         <path d="M10.5 10.5L14 14" stroke-linecap="round" />

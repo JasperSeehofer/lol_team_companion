@@ -55,9 +55,12 @@ const SEG_OFF: &str = "cursor-pointer whitespace-nowrap rounded-[2px] text-muted
 /// immediately; for tabs with panels use `Tabs`, for long lists `Select`.
 ///
 /// A11y: `role="radiogroup"` with a name, segments are `role="radio"` with
-/// `aria-checked`. Roving tabindex: one Tab stop (the checked segment);
-/// Left/Right and Up/Down move and select (wrapping), Home/End jump. The
-/// checked segment is marked by fill and weight, not colour alone.
+/// `aria-checked`. Roving tabindex: one Tab stop (the checked segment, or
+/// the first one when nothing is checked); Left/Right and Up/Down move and
+/// select (wrapping), Home/End jump. With `manual` the arrows only move
+/// focus and Enter, Space or a click selects: use it when selecting has a
+/// side effect such as a reload (the nav's workspace switch). The checked
+/// segment is marked by fill and weight, not colour alone.
 #[component]
 pub fn SegmentedControl(
     /// Prefix for DOM ids; unique on the page.
@@ -72,6 +75,10 @@ pub fn SegmentedControl(
     #[prop(optional)]
     on_change: Option<Callback<String>>,
     #[prop(optional, into)] disabled: Signal<bool>,
+    /// Manual activation: arrow keys move focus only; Enter, Space or a
+    /// click selects.
+    #[prop(optional)]
+    manual: bool,
     /// Gallery only: force a state on the first unchecked segment.
     #[prop(optional)]
     force: Option<Force>,
@@ -95,22 +102,32 @@ pub fn SegmentedControl(
             return;
         }
         let key = ev.key();
-        let cur = values.with_value(|vs| vs.iter().position(|v| *v == value.get_untracked()));
+        let cur = if manual { focused_index(id, len) } else { None }.or_else(|| {
+            values.with_value(|vs| vs.iter().position(|v| *v == value.get_untracked()))
+        });
         let horizontal = roving_index(&key, cur, len, false);
         let vertical = roving_index(&key, cur, len, true);
         if let Some(next) = horizontal.or(vertical) {
             ev.prevent_default();
-            select(next);
+            if !manual {
+                select(next);
+            }
             focus_id(&segment_id(id, next));
         }
     };
+    // Nothing checked (a value no option has): the first segment takes the
+    // Tab stop so the group stays reachable.
+    let none_checked = Memo::new(move |_| {
+        let v = value.get();
+        values.with_value(|vs| !vs.contains(&v))
+    });
     let first_unchecked_forced = StoredValue::new(false);
     view! {
         <div
             role="radiogroup"
             aria-label=label
             aria-disabled=move || disabled.get().then_some("true")
-            class="inline-flex items-stretch gap-0.5 rounded-ctl border border-outline/60 p-0.5 aria-disabled:opacity-50"
+            class="inline-flex items-stretch gap-0.5 rounded-ctl border border-outline p-0.5 aria-disabled:opacity-50"
             data-segmented=id
             on:keydown=on_keydown
         >
@@ -137,7 +154,9 @@ pub fn SegmentedControl(
                             role="radio"
                             id=segment_id(id, i)
                             aria-checked=move || if checked.get() { "true" } else { "false" }
-                            tabindex=move || if checked.get() { "0" } else { "-1" }
+                            tabindex=move || {
+                                if checked.get() || (i == 0 && none_checked.get()) { "0" } else { "-1" }
+                            }
                             disabled=move || disabled.get()
                             data-force=seg_force.map(Force::as_str)
                             data-value=opt.value.clone()
@@ -150,6 +169,23 @@ pub fn SegmentedControl(
                 })
                 .collect_view()}
         </div>
+    }
+}
+
+/// Index of the segment that has focus, if focus is inside the group.
+fn focused_index(group: &str, len: usize) -> Option<usize> {
+    #[cfg(feature = "hydrate")]
+    {
+        let active = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.active_element())
+            .map(|e| e.id())?;
+        (0..len).find(|i| segment_id(group, *i) == active)
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (group, len);
+        None
     }
 }
 

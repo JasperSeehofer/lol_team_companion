@@ -15,13 +15,19 @@ pub enum TooltipPlacement {
 impl TooltipPlacement {
     fn class(self) -> &'static str {
         match self {
-            TooltipPlacement::Top => "bottom-full mb-2",
-            TooltipPlacement::Bottom => "top-full mt-2",
+            // The `after:` strip bridges the gap to the trigger, so the
+            // pointer can move onto the bubble without it closing.
+            TooltipPlacement::Top => {
+                "bottom-full mb-2 after:absolute after:inset-x-0 after:top-full after:h-2 after:content-['']"
+            }
+            TooltipPlacement::Bottom => {
+                "top-full mt-2 after:absolute after:inset-x-0 after:bottom-full after:h-2 after:content-['']"
+            }
         }
     }
 }
 
-const BUBBLE: &str = "pointer-events-none absolute left-1/2 z-(--z-popover) w-max max-w-64 -translate-x-1/2 rounded-ctl border border-outline/60 bg-ink-3 px-2 py-1 text-caption text-primary shadow-overlay transition-opacity duration-150";
+const BUBBLE: &str = "absolute left-1/2 z-(--z-popover) w-max max-w-64 -translate-x-1/2 rounded-ctl border border-outline bg-ink-3 px-2 py-1 text-caption text-primary shadow-overlay transition-opacity duration-150";
 const HIDDEN: &str = "invisible opacity-0 group-hover/tip:visible group-hover/tip:opacity-100 group-hover/tip:delay-300 group-focus-within/tip:visible group-focus-within/tip:opacity-100 group-focus-within/tip:delay-300";
 const SHOWN: &str = "visible opacity-100";
 
@@ -32,8 +38,9 @@ const SHOWN: &str = "visible opacity-100";
 /// `aria-describedby` pointing at it once the page is interactive, so
 /// screen readers read the hint after the name. It appears on focus as
 /// well as hover (after 300ms), Escape hides it until the pointer or focus
-/// leaves, and it never takes focus or holds interactive content. Do not
-/// put information only here.
+/// leaves, and it never takes focus or holds interactive content. The
+/// pointer can move onto the bubble (WCAG 1.4.13 "hoverable") and it stays
+/// open there. Do not put information only here.
 #[component]
 pub fn Tooltip(
     /// DOM id of the bubble; unique on the page.
