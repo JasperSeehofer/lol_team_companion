@@ -57,10 +57,11 @@ test("full pipeline: keyboard draft -> linked plan -> linked review -> action it
   await page.waitForURL(/\/game-plan\?draft_id=/, { timeout: 10000 });
   await page.waitForLoadState("networkidle");
   await expect(page.locator("#plan-draft")).toHaveValue(draftId ?? "", { timeout: 10000 });
-  await expect(page.getByRole("button", { name: "Open the draft" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open the draft" })).toBeVisible();
   await page.locator("#plan-name").fill(planName);
   await page.getByTestId("plan-save").click();
   await expect(page.getByTestId("plan-save-state")).toHaveText("Saved", { timeout: 10000 });
+  await expect(page).toHaveURL(/plan_id=/);
   await expect(page.getByTestId("plan-list").getByText(planName)).toBeVisible();
 
   // --- 3. A review linked to the plan ---

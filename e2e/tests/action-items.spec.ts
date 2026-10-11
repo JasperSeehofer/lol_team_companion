@@ -40,6 +40,7 @@ test("action items: create, complete, edit and delete with undo", async ({ teamP
   await page.keyboard.press("e");
   const editor = page.locator("[data-item-editor]");
   await expect(editor).toBeVisible();
+  await expect(editor.getByLabel("Item")).toBeFocused();
   await page.keyboard.press("End");
   await page.keyboard.type(" (both sides)");
   await page.keyboard.press("Enter");

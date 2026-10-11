@@ -51,7 +51,7 @@ test("draft: delete a draft", async ({ teamPage }) => {
   await createDraft(page, draftName);
 
   await page.getByRole("button", { name: "Delete", exact: true }).click();
-  await page.locator('[data-confirm="confirm"]').click();
+  await page.locator('dialog[data-dialog="delete-draft"] [data-confirm="confirm"]').click();
 
   // The editor is back to a new draft and the list no longer has it.
   await expect(page.getByTestId("draft-save-state")).toHaveText("Not saved yet", { timeout: 5000 });

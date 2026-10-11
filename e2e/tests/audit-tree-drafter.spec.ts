@@ -5,7 +5,8 @@
  *
  * Page facts (src/pages/tree_drafter.rs): the tree list is
  * [data-testid=tree-list]; the new tree form has #tree-name and "Create
- * tree"; a created tree opens at once; branches are role=treeitem rows with
+ * tree"; a created tree opens at once with a root node named after it;
+ * branches are role=treeitem rows with
  * "Branch" and "Delete" buttons; the node editor has #node-label, "Save
  * node" and [data-testid=node-save-state].
  */
@@ -25,19 +26,15 @@ async function createTree(page: Page, name: string): Promise<void> {
   );
 }
 
-/** Add the open tree's root draft. */
-async function addRoot(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Add the root draft" }).click();
-  await expect(page.locator("#branch-label")).toHaveValue("Root");
-  await page.getByRole("button", { name: "Add branch" }).click();
-  await expect(page.getByRole("treeitem").first()).toBeVisible({ timeout: 5000 });
-}
-
 test("tree-drafter: create a new tree", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
-  await createTree(page, `AuditTree_${Date.now()}`);
-  await expect(page.getByText("This tree has no nodes yet.")).toBeVisible();
+  const name = `AuditTree_${Date.now()}`;
+  await createTree(page, name);
+  // The tree starts with its root node.
+  const root = page.getByRole("treeitem").first();
+  await expect(root).toContainText(name);
+  await expect(root).toContainText("Root");
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
@@ -45,7 +42,6 @@ test("tree-drafter: add and edit a node", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
   await createTree(page, `AuditNodeTree_${Date.now()}`);
-  await addRoot(page);
 
   // Branch off the root.
   const branch = `If they ban Jinx ${Date.now()}`;
@@ -53,7 +49,8 @@ test("tree-drafter: add and edit a node", async ({ teamPage }) => {
   await expect(page.locator("#branch-label")).toBeFocused();
   await page.locator("#branch-label").fill(branch);
   await page.getByRole("button", { name: "Add branch" }).click();
-  const row = page.getByRole("treeitem").filter({ hasText: branch });
+  // Tree items nest, so the branch is the innermost (last) match.
+  const row = page.getByRole("treeitem").filter({ hasText: branch }).last();
   await expect(row).toBeVisible({ timeout: 5000 });
 
   // Open it and rename it.
@@ -62,7 +59,7 @@ test("tree-drafter: add and edit a node", async ({ teamPage }) => {
   await page.locator("#node-label").fill(`${branch} (edited)`);
   await page.getByRole("button", { name: "Save node" }).click();
   await expect(page.getByTestId("node-save-state")).toHaveText("Saved", { timeout: 5000 });
-  await expect(page.getByRole("treeitem").filter({ hasText: `${branch} (edited)` })).toBeVisible();
+  await expect(page.getByRole("treeitem").filter({ hasText: `${branch} (edited)` }).last()).toBeVisible();
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
@@ -106,7 +103,7 @@ test("tree-drafter: delete a tree", async ({ teamPage }) => {
 
   // Deleting asks for confirmation first.
   await page.getByRole("button", { name: "Delete tree" }).click();
-  await page.locator('[data-confirm="confirm"]').click();
+  await page.locator('dialog[data-dialog="delete-tree"] [data-confirm="confirm"]').click();
 
   await expect(page.getByTestId("tree-list").getByRole("button", { name: treeName })).toHaveCount(0, {
     timeout: 5000,

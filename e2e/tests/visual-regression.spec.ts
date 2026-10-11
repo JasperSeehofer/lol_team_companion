@@ -16,12 +16,14 @@
  *            /opponents, /action-items, /stats, /analytics,
  *            /personal-learnings, /admin/invites
  *   Scoped authed (subfolder baselines, Phase 18):
- *            /draft (3 modes), /solo (3 modes), /team/dashboard,
+ *            /draft (one board), /solo (3 modes), /team/dashboard,
  *            /tree-drafter, /champion-pool, /match/:id, /post-game
  *
  * M0 removed the second theme and the Game Day Brief, so their
  * baselines are gone. M2 re-captured every remaining baseline on the Survey
  * design system (`--update-snapshots`); theme names left the file names.
+ * M3 re-captured the rebuilt strategy pages (draft, tree drafter, champion
+ * pool, game plan, post-game, opponents, action items).
  */
 import { test, expect, setMode } from "./fixtures";
 
@@ -153,40 +155,14 @@ test.describe("utility auth-required routes", () => {
 // Scoped routes — subfolder baselines per region × mode (Phase 18)
 // ---------------------------------------------------------------------------
 
-test.describe("scoped routes - /draft (3 baselines)", () => {
-  test("/draft carousel baseline", async ({ authedPage }) => {
+test.describe("scoped routes - /draft (1 baseline)", () => {
+  // M3: one tournament board replaced the carousel, table and ledger views.
+  test("/draft board baseline", async ({ authedPage }) => {
     await authedPage.goto("/draft");
-    await setMode(authedPage, "carousel");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-draft", "carousel.png"],
-      VR_OPTS
-    );
+    await expect(authedPage).toHaveScreenshot(["authed-draft", "board.png"], VR_OPTS);
   });
-
-  test("/draft war-table baseline", async ({ authedPage }) => {
-    await authedPage.goto("/draft");
-    await setMode(authedPage, "war-table");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-draft", "war-table.png"],
-      VR_OPTS
-    );
-  });
-
-  test("/draft ledger baseline", async ({ authedPage }) => {
-    await authedPage.goto("/draft");
-    await setMode(authedPage, "ledger");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-draft", "ledger.png"],
-      VR_OPTS
-    );
-  });
-
 });
 
 test.describe("scoped routes - /solo (3 baselines)", () => {

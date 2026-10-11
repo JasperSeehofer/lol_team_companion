@@ -101,7 +101,7 @@ test("team: dashboard shows action items panel", async ({ teamPage }) => {
   }
 
   // Panel heading must be visible — hard assertion
-  const actionItemsHeading = page.locator("h3").filter({ hasText: /Open Action Items/i });
+  const actionItemsHeading = page.locator("h2").filter({ hasText: /Open Action Items/i });
   await expect(actionItemsHeading).toBeVisible({ timeout: 5000 });
 
   // Check for empty state text or "View all" link to /action-items
@@ -128,7 +128,7 @@ test("team: dashboard shows post-game reviews panel", async ({ teamPage }) => {
   }
 
   // Panel heading must be visible — hard assertion
-  const reviewsHeading = page.locator("h3").filter({ hasText: /Recent Reviews/i });
+  const reviewsHeading = page.locator("h2").filter({ hasText: /Recent Reviews/i });
   await expect(reviewsHeading).toBeVisible({ timeout: 5000 });
 
   // Check for empty state text or CTA link
@@ -155,7 +155,7 @@ test("team: dashboard shows pool gap warnings panel", async ({ teamPage }) => {
   }
 
   // Panel heading must be visible — hard assertion
-  const poolGapHeading = page.locator("h3").filter({ hasText: /Pool Gap Warnings/i });
+  const poolGapHeading = page.locator("h2").filter({ hasText: /Pool gaps/i });
   await expect(poolGapHeading).toBeVisible({ timeout: 5000 });
 
   // Check for empty state text or CTA link

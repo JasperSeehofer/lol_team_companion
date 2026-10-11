@@ -128,20 +128,19 @@ test("stale theme cookie is ignored", async ({ authedPage }) => {
 // 3. Interactivity after hydration
 // ---------------------------------------------------------------------------
 //
-// Default modes (src/pages/draft.rs::resolve_mode): /draft = carousel,
-// /solo = constellation. We click a non-default mode so the toggle produces
-// an observable `aria-checked` change on the segmented control.
+// /solo has a page-mode toggle (default constellation); the draft page has
+// one board, so its check switches "Our side" instead. Either way a click
+// must produce an observable `aria-checked` change after hydration.
 
-test("mode-toggle observable on /draft", async ({ authedPage }) => {
+test("segmented control observable on /draft", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
   await authedPage.goto("/draft");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
-  await setMode(authedPage, "war-table");
-  await expect(
-    authedPage.locator('[data-segmented="page-mode"] [role="radio"][aria-checked="true"]:text-is("Table")')
-  ).toBeVisible({ timeout: 2000 });
-  expect(errors, `Panic during /draft mode-toggle: ${errors.join("\n")}`).toEqual([]);
+  const red = authedPage.locator('[data-segmented="our-side"] [role="radio"]:text-is("Red")');
+  await red.click({ timeout: 10000 });
+  await expect(red).toHaveAttribute("aria-checked", "true", { timeout: 2000 });
+  expect(errors, `Panic during /draft side switch: ${errors.join("\n")}`).toEqual([]);
 });
 
 test("mode-toggle observable on /solo", async ({ authedPage }) => {
@@ -162,14 +161,14 @@ test("draft slot click-fill", async ({ authedPage }) => {
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
 
-  const searchInput = authedPage.locator('input[placeholder="Search champion..."]');
-  await expect(searchInput).toBeVisible({ timeout: 5000 });
-  await searchInput.fill("Ahri");
-  await authedPage.waitForTimeout(300);
-  const ahriBtn = authedPage.locator('div[style*="display:grid"] button img[alt="Ahri"]');
-  await ahriBtn.first().click();
+  // Click the first ban, then click Ahri in the picker beside the board.
+  const slot = authedPage.locator("#draft-board-slot-0");
+  await slot.click();
+  await authedPage.locator("#draft-picker-search").fill("Ahri");
+  await authedPage.locator('#draft-picker-list li[data-champion="Ahri"]').click();
 
-  // Observable change: "Ahri" appears on the page (grid + filled slot).
-  await expect(authedPage.locator("text=Ahri").first()).toBeVisible({ timeout: 2000 });
+  // Observable change: the slot is filled and names the champion.
+  await expect(slot).toHaveAttribute("data-filled", "true", { timeout: 2000 });
+  await expect(slot).toHaveAttribute("aria-label", /: Ahri/);
   expect(errors, `Panic during draft slot click-fill: ${errors.join("\n")}`).toEqual([]);
 });
