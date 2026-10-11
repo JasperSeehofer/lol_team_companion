@@ -46,13 +46,16 @@ pub fn Field(
             if has_hint {
                 ids.push(hint_id.clone());
             }
-            if error.with(|e| e.is_some()) {
+            if error.try_with(|e| e.is_some()).unwrap_or(false) {
                 ids.push(error_id.clone());
             }
             (!ids.is_empty()).then(|| ids.join(" "))
         })
     };
-    let invalid = Signal::derive(move || error.with(|e| e.is_some()));
+    // `try_*` reads: a field inside a view that is being torn down (a
+    // dialog in a panel that unmounts) may run once more after its Field's
+    // signals are gone; that must not panic.
+    let invalid = Signal::derive(move || error.try_with(|e| e.is_some()).unwrap_or(false));
     provide_context(FieldContext {
         id: id.clone(),
         described_by,
@@ -206,8 +209,12 @@ pub fn TextField(
             v.set(event_target_value(&ev));
         }
     };
-    let aria_invalid = move || invalid.and_then(|i| i.get().then_some("true"));
-    let aria_described = move || described_by.and_then(|d| d.get());
+    let aria_invalid = move || {
+        invalid
+            .and_then(|i| i.try_get())
+            .and_then(|b| b.then_some("true"))
+    };
+    let aria_described = move || described_by.and_then(|d| d.try_get().flatten());
 
     // Only a bound field follows a signal. An unbound one (a plain form
     // field such as the sign-in email) must not get `prop:value`: the
@@ -376,8 +383,12 @@ pub fn Select(
             }
         })
         .collect_view();
-    let aria_invalid = move || invalid.and_then(|i| i.get().then_some("true"));
-    let aria_described = move || described_by.and_then(|d| d.get());
+    let aria_invalid = move || {
+        invalid
+            .and_then(|i| i.try_get())
+            .and_then(|b| b.then_some("true"))
+    };
+    let aria_described = move || described_by.and_then(|d| d.try_get().flatten());
     // Only a bound select follows a signal; an unbound one keeps the
     // browser's default (the first option) instead of an empty value.
     let select = match value {
