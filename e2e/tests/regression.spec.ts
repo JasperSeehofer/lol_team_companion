@@ -219,9 +219,9 @@ test.describe("BUG-03", () => {
     // and creates a team for them. The creator is the team leader.
     // Their username should appear in the page (in the roster area).
 
-    // The "Bench / Substitutes" section should show the leader since they
-    // were just created — they won't have a role slot assigned yet.
-    const benchSection = page.locator('h3:has-text("Bench / Substitutes")');
+    // The "Bench" section should show the leader since they were just
+    // created — they won't have a role slot assigned yet.
+    const benchSection = page.locator('h2', { hasText: /^Bench$/ });
     await expect(benchSection).toBeVisible({ timeout: 5000 });
 
     // The bench section should NOT show "No players on the bench"

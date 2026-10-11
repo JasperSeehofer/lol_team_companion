@@ -115,7 +115,8 @@ export async function signInAsAdmin(page: Page): Promise<void> {
   await page.fill("input[name=password]", TEST_PASSWORD);
   await page.click("main button[type=submit]");
   const landed = await page
-    .waitForURL(/\/(solo|team\/dashboard)/, { timeout: 8000 })
+    // Generous: argon2 in a debug build under a long e2e run can take a while.
+    .waitForURL(/\/(solo|team\/dashboard)/, { timeout: 15000 })
     .then(() => true)
     .catch(() => false);
   if (!landed) {
