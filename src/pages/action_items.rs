@@ -127,6 +127,15 @@ pub async fn restore_item(
 
     let ctx = authz::authed().await?;
     let team_id = ctx.require_team().await?;
+    // A review deleted since keeps its items: restore without the link
+    // rather than failing the Undo. A review of another team is dropped too.
+    let source_review = match source_review {
+        Some(r) => db::ensure_team_record(&ctx.db, "post_game_learning", &r, &team_id)
+            .await
+            .ok()
+            .map(|_| r),
+        None => None,
+    };
     let id = db::create_action_item(&ctx.db, &team_id, text, source_review, assigned_to, due)
         .await
         .map_err(authz::server_err)?;
