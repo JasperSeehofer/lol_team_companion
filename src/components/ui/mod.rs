@@ -2,7 +2,7 @@
 //!
 //! Batch 1: layout (PageShell, PageHeader, SectionHeader, Surface), Text,
 //! Button (+ Keycap), Field, TextField, Select, Badge, Table, Tabs, and the
-//! domain primitives DraftSlot/DraftSequence and PrepSequence.
+//! domain primitives DraftBoard (the tournament draft) and PrepSequence.
 //! Batch 2 (interaction): Dialog/ConfirmDialog, Menu, CommandBar, Toast,
 //! Callout, EmptyState, Skeleton, Tooltip, SegmentedControl, Switch.
 //! Batch 3 (domain): ChampionAvatar/UserAvatar, RoleLabel, SideMarker,
@@ -53,11 +53,13 @@ pub use canvas::{
 pub use command::{Command, CommandBar};
 pub use dialog::{ConfirmDialog, ConfirmTone, Dialog, DialogSize};
 pub use draft::{
-    DraftAction, DraftPhase, DraftSequence, DraftSide, DraftSlot, DraftStep, SlotState,
-    TOURNAMENT_ORDER,
+    ban_slots, pick_slots, slot_dom_id, step_status, DraftAction, DraftBoard, DraftFormat,
+    DraftPhase, DraftSide, DraftStep, TOURNAMENT_ORDER,
 };
 pub use empty::{EmptySize, EmptyState, NoTeamState};
-pub use field::{Field, FieldContext, FieldSize, InputKind, Select, SelectOption, TextField};
+pub use field::{
+    Combobox, Field, FieldContext, FieldSize, InputKind, Select, SelectOption, TextField,
+};
 pub use layout::{
     Density, Edge, HeadingLevel, Layer, Pad, PageHeader, PageShell, PageWidth, SectionHeader,
     Surface, SurfaceTag,

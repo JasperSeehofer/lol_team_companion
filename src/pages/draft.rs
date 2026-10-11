@@ -1,21 +1,28 @@
 // The #[server] macro generates a client stub that does not inherit item-level
 // attributes, so clippy::too_many_arguments is allowed for this file: save/update
-// server fns take one argument per form field. A params struct is planned with
-// the API-layer refactor.
+// server fns take one argument per form field.
 #![allow(clippy::too_many_arguments)]
+//! The draft page: the tournament draft board with the champion picker
+//! and the intel rail beside it, then the plan (name, side, opponent,
+//! series, rating, composition, notes), comments, next steps, saved drafts
+//! and insights.
+
 use crate::components::champion_picker::ChampionPicker;
-use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{Card, Eyebrow, ModeToggle, SectionHead};
-use crate::components::skeleton::PageLoading;
+use crate::components::draft_board::slot_meta;
+use crate::components::ui::a11y::focus_id;
 use crate::components::ui::{
-    EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
+    slot_dom_id, AvatarSize, AvatarState, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
+    ChampionAvatar, ConfirmDialog, ConfirmTone, Density, Dialog, DraftBoard, DraftSide, EmptySize,
+    EmptyState, Field, FieldSize, PageHeader, PageShell, Role, RoleLabel, RowLink, SectionHeader,
+    Segment, SegmentSize, SegmentedControl, Select, SelectOption, SideMarker, SideText, Skeleton,
+    SkeletonGroup, SkeletonShape, StatReadout, Switch, TabItem, TabPanel, Table, Tabs, Td,
+    TextField, Th, Toast, ToastContext, Tr, TOURNAMENT_ORDER,
 };
-use crate::components::ui::{Skeleton, SkeletonShape};
 use crate::models::champion::{
-    note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES,
+    note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
-use crate::models::opponent::{Opponent, OpponentPlayerIntel};
+use crate::models::opponent::Opponent;
 use crate::models::series::Series;
 use crate::models::team::Team;
 use crate::pages::game_plan::check_draft_has_game_plan;
@@ -143,6 +150,19 @@ pub async fn update_draft(
     )
     .await
     .map_err(authz::server_err)
+}
+
+/// Delete one of the team's drafts (and its actions).
+#[server]
+pub async fn delete_draft_fn(draft_id: String) -> Result<(), ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
+    db::delete_draft(&db, &team_id, &draft_id)
+        .await
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -381,84 +401,6 @@ pub async fn get_opponent_intel(
     }
 }
 
-/// Get enriched opponent intel: champion frequencies, OTP detection, and Riot API mastery data.
-///
-/// Keyed on opponent_id — loads once per opponent selection. Does not depend on pick state.
-#[server]
-pub async fn get_opponent_intel_full(
-    opponent_id: String,
-) -> Result<Vec<OpponentPlayerIntel>, ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-    use crate::server::rate_limit::Bucket;
-    use crate::server::riot;
-    use std::collections::HashMap;
-
-    let authz::Ctx { db, user } = authz::authed().await?;
-    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
-        return Ok(Vec::new());
-    };
-    // Calls the Riot API once per scouted player.
-    authz::rate_limit(Bucket::Riot).await?;
-    let riot_client = authz::riot()?;
-    // Opponents are scouted on the team's server.
-    let platform = riot::platform_for(&[db::get_team_region(&db, &team_id)
-        .await
-        .map_err(authz::server_err)?
-        .as_deref()]);
-
-    let players = match db::get_opponent(&db, &team_id, &opponent_id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some((_, players)) => players,
-        None => return Ok(Vec::new()),
-    };
-
-    let mut results = Vec::new();
-    for player in players {
-        // Compute champion frequencies from scouted recent_champions list.
-        let mut freq_map: HashMap<String, u32> = HashMap::new();
-        for champ in &player.recent_champions {
-            *freq_map.entry(champ.clone()).or_insert(0) += 1;
-        }
-        let total_games = player.recent_champions.len() as u32;
-        let mut champion_frequencies: Vec<(String, u32)> = freq_map.into_iter().collect();
-        champion_frequencies.sort_by_key(|e| std::cmp::Reverse(e.1));
-
-        // OTP detection: most-played champion accounts for >60% of scouted games.
-        let otp_champion = champion_frequencies.first().and_then(|(name, count)| {
-            if total_games > 0 && (*count as f64 / total_games as f64) > 0.60 {
-                Some(name.clone())
-            } else {
-                None
-            }
-        });
-
-        // Mastery data — gracefully absent when API key missing or no PUUID.
-        let mastery_data = if riot_client.is_configured() {
-            if let Some(ref puuid) = player.riot_puuid {
-                match riot_client.fetch_champion_masteries(puuid, platform).await {
-                    Ok(masteries) => masteries.into_iter().take(10).collect(),
-                    Err(_) => Vec::new(),
-                }
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        };
-
-        results.push(OpponentPlayerIntel {
-            player,
-            champion_frequencies,
-            mastery_data,
-            otp_champion,
-        });
-    }
-    Ok(results)
-}
-
 /// Get all matchup notes from team members that mention a specific champion.
 #[server]
 pub async fn get_matchup_notes_for_champion(
@@ -662,20 +604,6 @@ const COMPOSITION_TAGS: &[&str] = &[
     "protect-the-carry",
 ];
 
-fn tier_badge_class(tier: &str) -> &'static str {
-    match tier {
-        "S+" => "bg-accent text-accent-ink",
-        "S" => "border border-accent text-accent",
-        "A" => "bg-ink-3 text-primary",
-        "B" => "border border-outline text-primary",
-        "C" => "border border-outline text-secondary",
-        "D" => "border border-rule text-muted",
-        _ => "border border-rule text-muted",
-    }
-}
-
-const TIERS: &[&str] = &["S+", "S", "A", "B", "C", "D"];
-
 /// Compute pool warning annotations for each of the 20 draft slots.
 ///
 /// Returns a `Vec<Option<(player_name, class_gap_detail)>>` of length 20.
@@ -816,41 +744,411 @@ fn normalize_role(role: &str) -> &str {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 18-08: Mode toggle persistence
+// Editor state
 // ---------------------------------------------------------------------------
 
-/// Persist the user's draft mode preference. Validates against allowlist before DB write.
-/// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
-#[server]
-pub async fn set_draft_mode_pref(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
+/// Rating ladder for a draft. Neutral chips (no accent): a rating is an
+/// opinion, not the next action.
+const RATINGS: &[&str] = &["S+", "S", "A", "B", "C", "D"];
 
-    // App-layer validation — DB has no ASSERT per Research Pitfall 4
-    const VALID: &[&str] = &["auto", "carousel", "war-table", "ledger"];
-    if !VALID.contains(&mode.as_str()) {
-        return Err(ServerFnError::new("Invalid draft mode"));
+/// Board and picker DOM id prefixes (the e2e suite uses them too).
+const BOARD_ID: &str = "draft-board";
+const PICKER_ID: &str = "draft-picker";
+
+/// Everything the editor holds, for undo and for "has this changed".
+#[derive(Clone, Debug, PartialEq)]
+struct Snapshot {
+    slots: Vec<Option<String>>,
+    roles: Vec<Option<String>>,
+    notes: Vec<Option<String>>,
+    name: String,
+    opponent: String,
+    side: String,
+    rating: Option<String>,
+    tags: Vec<String>,
+    win: String,
+    watch: String,
+    comments: Vec<String>,
+    loaded_id: Option<String>,
+    series_id: String,
+    game: String,
+}
+
+/// The draft being edited. Every field is a signal, so the struct is Copy
+/// and every part of the page shares it.
+#[derive(Clone, Copy)]
+struct Editor {
+    slots: RwSignal<Vec<Option<String>>>,
+    roles: RwSignal<Vec<Option<String>>>,
+    /// Roles guessed from the champion's class (not confirmed by a person).
+    guessed: RwSignal<Vec<bool>>,
+    notes: RwSignal<Vec<Option<String>>>,
+    /// The slot being filled: the one lit thing on the board.
+    active: RwSignal<Option<usize>>,
+    name: RwSignal<String>,
+    /// Opponent id, or the free text of a draft saved before opponents
+    /// were records.
+    opponent: RwSignal<String>,
+    side: RwSignal<String>,
+    rating: RwSignal<Option<String>>,
+    tags: RwSignal<Vec<String>>,
+    win: RwSignal<String>,
+    watch: RwSignal<String>,
+    comments: RwSignal<Vec<String>>,
+    loaded_id: RwSignal<Option<String>>,
+    series_id: RwSignal<String>,
+    game: RwSignal<String>,
+}
+
+impl Editor {
+    fn new() -> Self {
+        Self {
+            slots: RwSignal::new(vec![None; 20]),
+            roles: RwSignal::new(vec![None; 20]),
+            guessed: RwSignal::new(vec![false; 20]),
+            notes: RwSignal::new(vec![None; 20]),
+            active: RwSignal::new(Some(0)),
+            name: RwSignal::new(String::new()),
+            opponent: RwSignal::new(String::new()),
+            side: RwSignal::new("blue".to_string()),
+            rating: RwSignal::new(None),
+            tags: RwSignal::new(Vec::new()),
+            win: RwSignal::new(String::new()),
+            watch: RwSignal::new(String::new()),
+            comments: RwSignal::new(Vec::new()),
+            loaded_id: RwSignal::new(None),
+            series_id: RwSignal::new(String::new()),
+            game: RwSignal::new("1".to_string()),
+        }
     }
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-    db::set_user_draft_mode(&db, &user.id, &mode)
+    /// The current state, read untracked (for event handlers).
+    fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            slots: self.slots.get_untracked(),
+            roles: self.roles.get_untracked(),
+            notes: self.notes.get_untracked(),
+            name: self.name.get_untracked(),
+            opponent: self.opponent.get_untracked(),
+            side: self.side.get_untracked(),
+            rating: self.rating.get_untracked(),
+            tags: self.tags.get_untracked(),
+            win: self.win.get_untracked(),
+            watch: self.watch.get_untracked(),
+            comments: self.comments.get_untracked(),
+            loaded_id: self.loaded_id.get_untracked(),
+            series_id: self.series_id.get_untracked(),
+            game: self.game.get_untracked(),
+        }
+    }
+
+    /// The current state, tracked (for effects).
+    fn snapshot_tracked(&self) -> Snapshot {
+        Snapshot {
+            slots: self.slots.get(),
+            roles: self.roles.get(),
+            notes: self.notes.get(),
+            name: self.name.get(),
+            opponent: self.opponent.get(),
+            side: self.side.get(),
+            rating: self.rating.get(),
+            tags: self.tags.get(),
+            win: self.win.get(),
+            watch: self.watch.get(),
+            comments: self.comments.get(),
+            loaded_id: self.loaded_id.get(),
+            series_id: self.series_id.get(),
+            game: self.game.get(),
+        }
+    }
+
+    fn restore(&self, s: Snapshot) {
+        let next = s.slots.iter().position(|c| c.is_none());
+        self.slots.set(s.slots);
+        self.roles.set(s.roles);
+        self.guessed.set(vec![false; 20]);
+        self.notes.set(s.notes);
+        self.active.set(next);
+        self.name.set(s.name);
+        self.opponent.set(s.opponent);
+        self.side.set(s.side);
+        self.rating.set(s.rating);
+        self.tags.set(s.tags);
+        self.win.set(s.win);
+        self.watch.set(s.watch);
+        self.comments.set(s.comments);
+        self.loaded_id.set(s.loaded_id);
+        self.series_id.set(s.series_id);
+        self.game.set(s.game);
+    }
+
+    fn blank() -> Snapshot {
+        Snapshot {
+            slots: vec![None; 20],
+            roles: vec![None; 20],
+            notes: vec![None; 20],
+            name: String::new(),
+            opponent: String::new(),
+            side: "blue".to_string(),
+            rating: None,
+            tags: Vec::new(),
+            win: String::new(),
+            watch: String::new(),
+            comments: Vec::new(),
+            loaded_id: None,
+            series_id: String::new(),
+            game: "1".to_string(),
+        }
+    }
+
+    fn from_draft(d: &Draft) -> Snapshot {
+        let mut s = Self::blank();
+        for a in &d.actions {
+            let o = a.order as usize;
+            if o < 20 {
+                s.slots[o] = Some(a.champion.clone());
+                s.roles[o] = a.role.clone();
+                s.notes[o] = a.comment.clone();
+            }
+        }
+        s.name = d.name.clone();
+        s.opponent = d.opponent.clone().unwrap_or_default();
+        s.side = if d.our_side == "red" { "red" } else { "blue" }.to_string();
+        s.rating = d.rating.clone();
+        s.tags = d.tags.clone();
+        s.win = d.win_conditions.clone().unwrap_or_default();
+        s.watch = d.watch_out.clone().unwrap_or_default();
+        s.comments = d.comments.clone();
+        s.loaded_id = d.id.clone();
+        s.series_id = d.series_id.clone().unwrap_or_default();
+        s.game = d.game_number.unwrap_or(1).to_string();
+        s
+    }
+
+    /// Put a champion in a slot (by display name). A champion already on
+    /// the board is refused. Picks get a role guessed from the class unless
+    /// one is set. The lit slot moves to the next empty one.
+    fn fill(&self, slot: usize, champion: String, champs: &[Champion]) -> bool {
+        if slot >= 20 {
+            return false;
+        }
+        let taken = self
+            .slots
+            .with_untracked(|s| s.iter().any(|c| c.as_deref() == Some(champion.as_str())));
+        if taken {
+            return false;
+        }
+        self.slots.update(|s| s[slot] = Some(champion.clone()));
+        if slot_meta(slot).1 == "pick" && self.roles.with_untracked(|r| r[slot].is_none()) {
+            let guess = champs
+                .iter()
+                .find(|c| c.name == champion || c.id == champion)
+                .map(|c| guess_role_from_tags(&c.tags).to_string());
+            if let Some(g) = guess {
+                self.roles.update(|r| r[slot] = Some(g));
+                self.guessed.update(|g| g[slot] = true);
+            }
+        }
+        let next = self
+            .slots
+            .with_untracked(|s| s.iter().position(|c| c.is_none()));
+        self.active.set(next);
+        true
+    }
+
+    /// Empty a slot; returns what was there (champion, role, note) for undo.
+    fn clear(&self, slot: usize) -> Option<(String, Option<String>, Option<String>)> {
+        let champ = self
+            .slots
+            .with_untracked(|s| s.get(slot).cloned().flatten())?;
+        let role = self.roles.with_untracked(|r| r[slot].clone());
+        let note = self.notes.with_untracked(|n| n[slot].clone());
+        self.slots.update(|s| s[slot] = None);
+        if self.guessed.with_untracked(|g| g[slot]) {
+            self.roles.update(|r| r[slot] = None);
+        }
+        self.notes.update(|n| n[slot] = None);
+        self.active.set(Some(slot));
+        Some((champ, role, note))
+    }
+}
+
+/// The arguments `save_draft`/`update_draft` take, built from a snapshot.
+struct SaveArgs {
+    name: String,
+    opponent: Option<String>,
+    actions_json: String,
+    comments_json: String,
+    rating: Option<String>,
+    side: String,
+    tags_json: String,
+    win: Option<String>,
+    watch: Option<String>,
+    series_id: Option<String>,
+    game: Option<i32>,
+}
+
+fn non_empty(s: String) -> Option<String> {
+    (!s.trim().is_empty()).then_some(s)
+}
+
+impl SaveArgs {
+    fn from(s: &Snapshot) -> Self {
+        let actions = build_actions(s.slots.clone(), &s.notes, &s.roles);
+        let series_id = non_empty(s.series_id.clone());
+        let game = series_id.as_ref().and_then(|_| s.game.parse::<i32>().ok());
+        Self {
+            name: s.name.trim().to_string(),
+            opponent: non_empty(s.opponent.clone()),
+            actions_json: serde_json::to_string(&actions).unwrap_or_default(),
+            comments_json: serde_json::to_string(&s.comments).unwrap_or_default(),
+            rating: s.rating.clone(),
+            side: s.side.clone(),
+            tags_json: serde_json::to_string(&s.tags).unwrap_or_default(),
+            win: non_empty(s.win.clone()),
+            watch: non_empty(s.watch.clone()),
+            series_id,
+            game,
+        }
+    }
+}
+
+/// Save a snapshot: update when it has an id, else create. Returns the id.
+async fn persist(s: Snapshot) -> Result<String, ServerFnError> {
+    let a = SaveArgs::from(&s);
+    match s.loaded_id {
+        Some(id) => update_draft(
+            id.clone(),
+            a.name,
+            a.opponent,
+            a.actions_json,
+            a.comments_json,
+            a.rating,
+            Some(a.side),
+            a.tags_json,
+            a.win,
+            a.watch,
+            a.series_id,
+            a.game,
+        )
         .await
-        .map_err(authz::server_err)?;
-    Ok(())
-}
-
-/// Resolve the effective draft view from a stored preference: an explicit
-/// pick wins; "auto" (or anything unknown) is the carousel.
-fn resolve_mode(stored: &str) -> String {
-    match stored {
-        "carousel" | "war-table" | "ledger" => stored.to_string(),
-        _ => "carousel".to_string(),
+        .map(|_| id),
+        None => {
+            save_draft(
+                a.name,
+                a.opponent,
+                None,
+                a.actions_json,
+                a.comments_json,
+                a.rating,
+                Some(a.side),
+                a.tags_json,
+                a.win,
+                a.watch,
+                a.series_id,
+                a.game,
+            )
+            .await
+        }
     }
 }
+
+/// Saved state of the editor, shown in the header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SaveState {
+    /// Never saved.
+    New,
+    /// Saved, then changed.
+    Dirty,
+    Saving,
+    Saved,
+}
+
+/// Warnings per slot in words ("Not in Kim's pool, no mage coverage").
+fn warning_texts(raw: Vec<Option<(String, String)>>) -> Vec<Option<String>> {
+    raw.into_iter()
+        .map(|w| {
+            w.map(|(player, detail)| format!("Not in {player}'s pool, {}", detail.to_lowercase()))
+        })
+        .collect()
+}
+
+/// Display name of the opponent value (an id from the list, or legacy text).
+fn opponent_name(value: &str, list: &[Opponent]) -> Option<String> {
+    if value.is_empty() {
+        return None;
+    }
+    Some(
+        list.iter()
+            .find(|o| o.id.as_deref() == Some(value))
+            .map(|o| o.name.clone())
+            .unwrap_or_else(|| value.to_string()),
+    )
+}
+
+/// A client-side navigation function that can be called later (from an
+/// event handler or after an await), captured while the component runs.
+/// Browser only: on the server there is nothing to navigate (and a local
+/// stored value must not cross threads).
+#[derive(Clone, Copy)]
+struct Nav {
+    #[cfg(feature = "hydrate")]
+    f: StoredValue<std::rc::Rc<dyn Fn(&str)>, LocalStorage>,
+}
+
+/// A scouted player's name: the name, else the Riot ID, else a placeholder.
+fn player_name(p: &crate::models::opponent::OpponentPlayer) -> String {
+    if !p.name.trim().is_empty() {
+        return p.name.clone();
+    }
+    p.riot_summoner_name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| "Unnamed player".to_string())
+}
+
+fn navigator() -> Nav {
+    #[cfg(feature = "hydrate")]
+    {
+        let navigate = leptos_router::hooks::use_navigate();
+        let f: std::rc::Rc<dyn Fn(&str)> =
+            std::rc::Rc::new(move |p: &str| navigate(p, Default::default()));
+        Nav {
+            f: StoredValue::new_local(f),
+        }
+    }
+    #[cfg(not(feature = "hydrate"))]
+    Nav {}
+}
+
+fn go(nav: Nav, path: &str) {
+    #[cfg(feature = "hydrate")]
+    {
+        let _ = nav.f.try_with_value(|f| f(path));
+    }
+    #[cfg(not(feature = "hydrate"))]
+    let _ = (nav, path);
+}
+
+/// Shared page plumbing the editor's parts need.
+#[derive(Clone, Copy)]
+struct Ctx {
+    ed: Editor,
+    drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
+    series: Resource<Result<Vec<Series>, ServerFnError>>,
+    plan_counts: Resource<Result<Vec<(String, usize)>, ServerFnError>>,
+    save_state: RwSignal<SaveState>,
+    last_saved: StoredValue<Option<Snapshot>>,
+    url_loaded: StoredValue<Option<String>>,
+    fearless_used: RwSignal<Vec<String>>,
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 #[component]
 pub fn DraftPage() -> impl IntoView {
-    // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -861,3349 +1159,1583 @@ pub fn DraftPage() -> impl IntoView {
         }
     });
 
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-
-    // Mode preference — signal-driven, persisted via set_draft_mode_pref server fn (18-08)
-    // Initialised from auth_user resource; resolve_mode() applies the default when "auto".
-    let (mode_current, set_mode_current) = signal(resolve_mode("auto"));
-    // Keep mode_current synced with DB value when auth_user loads/refetches
-    Effect::new(move |_| {
-        if let Some(Ok(Some(user))) = auth_user.get() {
-            let resolved = resolve_mode(&user.draft_mode);
-            set_mode_current.set(resolved);
-        }
-    });
-    let set_mode_action = Action::new(move |new_mode: &String| {
-        let m = new_mode.clone();
-        async move { set_draft_mode_pref(m).await }
-    });
-    // Refetch user after successful mode persist so mode_current stays in sync
-    Effect::new(move |_| {
-        if let Some(Ok(())) = set_mode_action.value().get() {
-            auth_user.refetch();
-        }
-    });
-    let on_mode_select = Callback::new(move |new_mode: String| {
-        set_mode_current.set(new_mode.clone()); // optimistic update
-        set_mode_action.dispatch(new_mode);
-    });
-
-    let (draft_name, set_draft_name) = signal(String::new());
-    let (opponent, set_opponent) = signal(String::new());
-    let (opp_filter_text, set_opp_filter_text) = signal(String::new());
-    let (opp_dropdown_open, set_opp_dropdown_open) = signal(false);
-    let (selected_team_id, set_selected_team_id) = signal(String::new());
-    let (rating, set_rating) = signal(Option::<String>::None);
-    let (our_side, set_our_side) = signal("blue".to_string());
-    let (draft_slots, set_draft_slots) = signal(vec![None::<String>; 20]);
-    let (active_slot, set_active_slot) = signal(Some(0_usize));
-    let (highlighted_slot, set_highlighted_slot) = signal(Option::<usize>::None);
-    let (comments, set_comments) = signal(Vec::<String>::new());
-    let (comment_input, set_comment_input) = signal(String::new());
-    let (loaded_draft_id, set_loaded_draft_id) = signal(Option::<String>::None);
-    // Per-slot rationale comments (Phase 1)
-    let (slot_comments, set_slot_comments) = signal(vec![None::<String>; 20]);
-    let (slot_comment_input, set_slot_comment_input) = signal(String::new());
-    // Role assignments per pick slot (Phase 8 - role badges)
-    let (role_assignments, set_role_assignments) = signal(vec![None::<String>; 20]);
-    let (role_auto_guessed, set_role_auto_guessed) = signal(vec![true; 20]);
-    // Composition tags + win conditions (Phase 2)
-    let (tags, set_tags) = signal(Vec::<String>::new());
-    let (win_conditions, set_win_conditions) = signal(String::new());
-    let (watch_out, set_watch_out) = signal(String::new());
-    // Tag filter for saved drafts list
-    let (filter_tag, set_filter_tag) = signal(String::new());
-    // Series mode (Phase 3 - Fearless Draft)
-    let (series_panel_open, set_series_panel_open) = signal(false);
-    let (active_series, set_active_series) = signal(Option::<Series>::None);
-    let (active_game_number, set_active_game_number) = signal(1_i32);
-    let (fearless_used, set_fearless_used) = signal(Vec::<String>::new());
-    let (series_name_input, set_series_name_input) = signal(String::new());
-    let (series_opponent_input, set_series_opponent_input) = signal(String::new());
-    let (series_format_input, set_series_format_input) = signal("bo3".to_string());
-    let (series_fearless_input, set_series_fearless_input) = signal(false);
-    let (series_status, set_series_status) = signal(Option::<String>::None);
-    let series_resource = Resource::new(|| (), |_| list_series_fn());
-
-    // Ban priorities (Phase 4)
-    let ban_priorities = Resource::new(|| (), |_| get_ban_priorities());
-    let (ban_panel_open, set_ban_panel_open) = signal(false);
-    let (editing_bans, set_editing_bans) = signal(false);
-    let (ban_edit_list, set_ban_edit_list) = signal(Vec::<BanPriority>::new());
-    let (ban_new_champ, set_ban_new_champ) = signal(String::new());
-    let (ban_new_reason, set_ban_new_reason) = signal(String::new());
-    let (ban_status, set_ban_status) = signal(Option::<String>::None);
-
-    // Intel sidebar (Phase 5 — Pool Awareness & Matchup Surfacing)
-    let (intel_open, set_intel_open) = signal(false);
-    let (intel_tab, set_intel_tab) = signal("pools".to_string());
-    let (selected_opponent_id, set_selected_opponent_id) = signal(String::new());
-    let (matchup_champion, set_matchup_champion) = signal(Option::<String>::None);
-    // Notes tab signals (Phase 09-02 — Pool Notes in Draft)
-    let (notes_champion_tab, set_notes_champion_tab) = signal(String::new());
-    let (collapsed_note_types, set_collapsed_note_types) = signal(vec![
-        "power_spike".to_string(),
-        "combo".to_string(),
-        "lesson".to_string(),
-        "synergy".to_string(),
-        "positioning".to_string(),
-    ]);
-
-    let team_pools = Resource::new(|| (), |_| get_team_pools());
-    let team_stats = Resource::new(|| (), |_| get_team_champion_stats());
+    let ed = Editor::new();
+    let champions_resource = Resource::new(|| (), |_| get_champions());
+    let teams_resource = Resource::new(|| (), |_| list_user_teams());
     let opponents_list = Resource::new(|| (), |_| crate::pages::opponents::get_opponents());
-    let opponent_players = Resource::new(
-        move || selected_opponent_id.get(),
-        move |opp_id| async move {
-            if opp_id.is_empty() {
-                Ok(Vec::<OpponentPlayerIntel>::new())
-            } else {
-                get_opponent_intel_full(opp_id).await
-            }
-        },
-    );
-    let filtered_opponents = move || {
-        let text = opp_filter_text.get().to_lowercase();
-        let all: Vec<Opponent> = opponents_list
+    let team_pools = Resource::new(|| (), |_| get_team_pools());
+    let cx = Ctx {
+        ed,
+        drafts: Resource::new(|| (), |_| list_drafts()),
+        series: Resource::new(|| (), |_| list_series_fn()),
+        plan_counts: Resource::new(|| (), |_| get_draft_game_plan_counts()),
+        save_state: RwSignal::new(SaveState::New),
+        last_saved: StoredValue::new(None),
+        url_loaded: StoredValue::new(None),
+        fearless_used: RwSignal::new(Vec::new()),
+    };
+
+    // Fearless: champions used in the series' other drafts.
+    Effect::new(move |_| {
+        let id = ed.series_id.get();
+        let series = cx
+            .series
             .get()
             .and_then(|r| r.ok())
-            .unwrap_or_default();
-        if text.is_empty() {
-            all
-        } else {
-            all.into_iter()
-                .filter(|o| o.name.to_lowercase().contains(&text))
-                .take(8)
-                .collect()
-        }
-    };
-
-    let matchup_notes = Resource::new(
-        move || matchup_champion.get(),
-        move |champ_opt| async move {
-            match champ_opt {
-                Some(champ) if !champ.is_empty() => get_matchup_notes_for_champion(champ).await,
-                _ => Ok(Vec::<(String, ChampionNote)>::new()),
-            }
-        },
-    );
-
-    // Pool notes for our-side picks (Phase 09-02 — Pool Notes in Draft)
-    let our_picks_for_notes = move || {
-        let slots = draft_slots.get();
-        let our = our_side.get();
-        slots
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| {
-                let (side, kind, _) = slot_meta(*i);
-                side == our.as_str() && kind == "pick"
-            })
-            .filter_map(|(_, s)| s.clone())
-            .collect::<Vec<String>>()
-    };
-    let pool_notes = Resource::new(our_picks_for_notes, move |picks: Vec<String>| async move {
-        if picks.is_empty() {
-            return Ok(vec![]);
-        }
-        let json = serde_json::to_string(&picks).unwrap_or_default();
-        get_pool_notes_for_champions(json).await
-    });
-
-    let champions_resource = Resource::new(|| (), |_| get_champions());
-    let drafts = Resource::new(|| (), |_| list_drafts());
-    let teams_resource = Resource::new(|| (), |_| list_user_teams());
-
-    // Analytics resources (Phase 7a + 7c)
-    let (tendencies_open, set_tendencies_open) = signal(false);
-    let (analytics_open, set_analytics_open) = signal(false);
-    let tendency_data = Resource::new(|| (), |_| get_draft_tendency_data());
-    let analytics_data = Resource::new(|| (), |_| get_draft_analytics());
-
-    // Pipeline CTAs: game plan count badges per draft
-    let game_plan_counts = Resource::new(|| (), |_| get_draft_game_plan_counts());
-
-    // Pipeline CTAs: duplicate prompt (draft_id, existing_plan_id) when "Prep for This Draft"
-    // detects an existing game plan
-    let (duplicate_prompt, set_duplicate_prompt) = signal(Option::<(String, String)>::None);
-    let (cta_loading, set_cta_loading) = signal(false);
-    let (cta_status, set_cta_status) = signal(Option::<String>::None);
-
-    // URL param auto-load: ?draft_id=X deep-links to a specific draft
-    use leptos_router::hooks::use_query_map;
-    let query = use_query_map();
-    let (url_draft_loaded, set_url_draft_loaded) = signal(false);
-
-    // Auto-select first team when resource loads
-    Effect::new(move |_| {
-        if let Some(Ok(teams)) = teams_resource.get() {
-            if selected_team_id.get_untracked().is_empty() {
-                if let Some(first) = teams.first() {
-                    set_selected_team_id.set(first.id.clone().unwrap_or_default());
-                }
-            }
-        }
-    });
-
-    // URL param auto-load: when ?draft_id=X is present, load that draft once the draft list resolves
-    Effect::new(move |_| {
-        let param_id = query.read().get("draft_id");
-        let Some(target_id) = param_id else { return };
-        if url_draft_loaded.get_untracked() {
-            return;
-        }
-        if let Some(Ok(list)) = drafts.get() {
-            if let Some(d) = list.iter().find(|d| d.id.as_deref() == Some(&target_id)) {
-                let d_id = d.id.clone();
-                let d_name = d.name.clone();
-                let d_opp = d.opponent.clone().unwrap_or_default();
-                let d_comments = d.comments.clone();
-                let d_actions = d.actions.clone();
-                let d_team_id = d.team_id.clone();
-                let d_rating = d.rating.clone();
-                let d_our_side = d.our_side.clone();
-                let d_tags = d.tags.clone();
-                let d_win_conditions = d.win_conditions.clone().unwrap_or_default();
-                let d_watch_out = d.watch_out.clone().unwrap_or_default();
-                let d_game_number = d.game_number;
-
-                set_loaded_draft_id.set(d_id);
-                set_draft_name.set(d_name);
-                // D-05: backward compat — d_opp may be an opponent ID or legacy free-text name
-                if !d_opp.is_empty() {
-                    set_opponent.set(d_opp.clone());
-                    if let Some(Ok(opps)) = opponents_list.get_untracked() {
-                        if let Some(matched) = opps
-                            .iter()
-                            .find(|o| o.id.as_deref() == Some(d_opp.as_str()))
-                        {
-                            set_opp_filter_text.set(matched.name.clone());
-                            set_selected_opponent_id.set(d_opp.clone());
-                        } else {
-                            // Legacy free-text fallback
-                            set_opp_filter_text.set(d_opp.clone());
-                        }
-                    } else {
-                        set_opp_filter_text.set(d_opp.clone());
-                    }
-                }
-                set_selected_team_id.set(d_team_id);
-                set_rating.set(d_rating);
-                set_our_side.set(d_our_side);
-                set_comments.set(d_comments);
-                set_tags.set(d_tags);
-                set_win_conditions.set(d_win_conditions);
-                set_watch_out.set(d_watch_out);
-                set_highlighted_slot.set(None);
-                let mut slots = vec![None::<String>; 20];
-                let mut sc = vec![None::<String>; 20];
-                for action in &d_actions {
-                    let o = action.order as usize;
-                    if o < 20 {
-                        slots[o] = Some(action.champion.clone());
-                        sc[o] = action.comment.clone();
-                    }
-                }
-                let next = (0..20).find(|&i| slots[i].is_none());
-                // Populate role_assignments from loaded actions
-                let mut loaded_roles = vec![None::<String>; 20];
-                for action in &d_actions {
-                    let idx = action.order as usize;
-                    if idx < 20 {
-                        loaded_roles[idx] = action.role.clone();
-                    }
-                }
-                set_draft_slots.set(slots);
-                set_slot_comments.set(sc);
-                set_slot_comment_input.set(String::new());
-                set_active_slot.set(next);
-                set_role_assignments.set(loaded_roles);
-                set_role_auto_guessed.set(vec![false; 20]); // loaded roles are user-confirmed
-                if let Some(gn) = d_game_number {
-                    set_active_game_number.set(gn);
-                }
-                set_url_draft_loaded.set(true);
-            }
-        }
-    });
-
-    // Auto-open Notes tab when a newly picked champion has pool notes (D-13)
-    let prev_our_picks_count = RwSignal::new(0usize);
-    Effect::new(move |_| {
-        let picks = our_picks_for_notes();
-        let current_count = picks.len();
-        let prev_count = prev_our_picks_count.get_untracked();
-
-        if current_count > prev_count {
-            // A new pick was just added
-            if let Some(new_champ) = picks.last() {
-                if let Some(Ok(notes_data)) = pool_notes.get() {
-                    if notes_data
-                        .iter()
-                        .any(|(c, ns)| c == new_champ && !ns.is_empty())
-                    {
-                        set_intel_open.set(true);
-                        set_intel_tab.set("notes".to_string());
-                        set_notes_champion_tab.set(new_champ.clone());
-                        // Reset collapsed sections for new champion
-                        set_collapsed_note_types.set(vec![
-                            "power_spike".to_string(),
-                            "combo".to_string(),
-                            "lesson".to_string(),
-                            "synergy".to_string(),
-                            "positioning".to_string(),
-                        ]);
-                    }
-                }
-            }
-        }
-        prev_our_picks_count.set(current_count);
-    });
-
-    // Auto-select first champion sub-tab when Notes tab is opened and no sub-tab is selected (D-11)
-    Effect::new(move |_| {
-        let tab = intel_tab.get();
-        if tab == "notes" && notes_champion_tab.get_untracked().is_empty() {
-            let picks = our_picks_for_notes();
-            if let Some(first) = picks.first() {
-                set_notes_champion_tab.set(first.clone());
-            }
-        }
-    });
-
-    let used_champions = move || {
-        let mut used: Vec<String> = draft_slots.get().into_iter().flatten().collect();
-        // In fearless mode, also include champions used in prior series games
-        for champ in fearless_used.get() {
-            if !used.contains(&champ) {
-                used.push(champ);
-            }
-        }
-        used
-    };
-
-    // Derive the set of banned champion names from draft slots (D-07)
-    let banned_champions = move || {
-        draft_slots
-            .get()
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| {
-                let (_, kind, _) = slot_meta(*i);
-                kind == "ban"
-            })
-            .filter_map(|(_, s)| s.clone())
-            .collect::<Vec<String>>()
-    };
-
-    let fill_slot = move |slot_idx: usize, champion_name: String| {
-        let already_used = draft_slots
-            .get_untracked()
-            .iter()
-            .any(|s| s.as_deref() == Some(&champion_name));
-        if already_used {
-            return;
-        }
-        set_draft_slots.update(|s| s[slot_idx] = Some(champion_name.clone()));
-        set_highlighted_slot.set(None);
-        let updated = draft_slots.get_untracked();
-        let next = (0..20).find(|&i| updated[i].is_none());
-        set_active_slot.set(next);
-
-        // Auto-guess role for pick slots only (Phase 8)
-        let (_, kind, _) = slot_meta(slot_idx);
-        if kind == "pick" {
-            let guessed = champions_resource
-                .get_untracked()
-                .and_then(|r| r.ok())
-                .and_then(|champs| {
-                    champs
-                        .into_iter()
-                        .find(|c| c.name == champion_name || c.id == champion_name)
-                })
-                .map(|c| guess_role_from_tags(&c.tags).to_string())
-                .unwrap_or_else(|| "mid".to_string());
-            set_role_assignments.update(|roles| {
-                if let Some(slot) = roles.get_mut(slot_idx) {
-                    *slot = Some(guessed);
-                }
-            });
-            set_role_auto_guessed.update(|flags| {
-                if let Some(flag) = flags.get_mut(slot_idx) {
-                    *flag = true;
-                }
-            });
-        }
-    };
-
-    let on_role_set_cb = Callback::new(move |(slot_idx, role): (usize, String)| {
-        set_role_assignments.update(|roles| {
-            if let Some(slot) = roles.get_mut(slot_idx) {
-                *slot = Some(role);
-            }
-        });
-        set_role_auto_guessed.update(|flags| {
-            if let Some(flag) = flags.get_mut(slot_idx) {
-                *flag = false;
-            }
-        });
-    });
-
-    let on_champion_select = Callback::new(move |champ: Champion| {
-        if let Some(slot) = active_slot.get_untracked() {
-            fill_slot(slot, champ.name);
-        }
-    });
-
-    let on_slot_drop = Callback::new(move |(slot_idx, name): (usize, String)| {
-        fill_slot(slot_idx, name);
-    });
-
-    let on_slot_click = Callback::new(move |slot_idx: usize| {
-        let slots = draft_slots.get_untracked();
-        if slots.get(slot_idx).and_then(|s| s.as_ref()).is_some() {
-            let currently_highlighted = highlighted_slot.get_untracked();
-            if currently_highlighted == Some(slot_idx) {
-                // Second click: set as active_slot for champion replacement
-                set_active_slot.set(Some(slot_idx));
-            } else {
-                // First click: just highlight, set as active
-                set_highlighted_slot.set(Some(slot_idx));
-                set_active_slot.set(Some(slot_idx));
-            }
-        } else {
-            set_highlighted_slot.set(None);
-            set_active_slot.update(|a| {
-                *a = if *a == Some(slot_idx) {
-                    None
-                } else {
-                    Some(slot_idx)
-                };
-            });
-        }
-    });
-
-    let on_slot_clear = Callback::new(move |slot_idx: usize| {
-        set_draft_slots.update(|s| s[slot_idx] = None);
-        set_highlighted_slot.set(None);
-        set_active_slot.set(Some(slot_idx));
-        // Also clear role for this slot
-        set_role_assignments.update(|roles| {
-            if let Some(slot) = roles.get_mut(slot_idx) {
-                *slot = None;
-            }
-        });
-        set_role_auto_guessed.update(|flags| {
-            if let Some(flag) = flags.get_mut(slot_idx) {
-                *flag = true;
-            }
-        });
-    });
-
-    let phase_label = move || match active_slot.get() {
-        Some(0..=5) => "Phase 1 — Bans",
-        Some(6..=11) => "Phase 1 — Picks",
-        Some(12..=15) => "Phase 2 — Bans",
-        Some(16..=19) => "Phase 2 — Picks",
-        None => "Draft Complete",
-        _ => "",
-    };
-
-    let active_slot_label = move || {
-        active_slot.get().map(|i| {
-            let (side, _, label) = slot_meta(i);
-            let side_cap = if side == "blue" { "Blue" } else { "Red" };
-            format!("Selecting for: {side_cap} {label}")
-        })
-    };
-
-    let do_save = move |_| {
-        let name = draft_name.get_untracked();
-        if name.trim().is_empty() {
-            toast.show.run((
-                ToastKind::Error,
-                "Give this draft a name before saving.".into(),
-            ));
-            return;
-        }
-        let opp = opponent.get_untracked();
-        let tid = selected_team_id.get_untracked();
-        let rate = rating.get_untracked();
-        let side = our_side.get_untracked();
-        let sc = slot_comments.get_untracked();
-        let ra = role_assignments.get_untracked();
-        let actions = build_actions(draft_slots.get_untracked(), &sc, &ra);
-        let acts_json = serde_json::to_string(&actions).unwrap_or_default();
-        let cmts_json = serde_json::to_string(&comments.get_untracked()).unwrap_or_default();
-        let tags_json = serde_json::to_string(&tags.get_untracked()).unwrap_or_default();
-        let wc = {
-            let s = win_conditions.get_untracked();
-            if s.is_empty() {
-                None
-            } else {
-                Some(s)
-            }
-        };
-        let wo = {
-            let s = watch_out.get_untracked();
-            if s.is_empty() {
-                None
-            } else {
-                Some(s)
-            }
-        };
-        let existing_id = loaded_draft_id.get_untracked();
-        let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-        let g_num = if s_id.is_some() {
-            Some(active_game_number.get_untracked())
-        } else {
-            None
-        };
-
-        leptos::task::spawn_local(async move {
-            let opp_opt = if opp.is_empty() { None } else { Some(opp) };
-            let team_opt = if tid.is_empty() { None } else { Some(tid) };
-
-            if let Some(draft_id) = existing_id {
-                match update_draft(
-                    draft_id,
-                    name,
-                    opp_opt,
-                    acts_json,
-                    cmts_json,
-                    rate,
-                    Some(side),
-                    tags_json,
-                    wc,
-                    wo,
-                    s_id,
-                    g_num,
-                )
-                .await
-                {
-                    Ok(_) => {
-                        toast.show.run((ToastKind::Success, "Draft saved".into()));
-                        drafts.refetch();
-                    }
-                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                }
-            } else {
-                match save_draft(
-                    name,
-                    opp_opt,
-                    team_opt,
-                    acts_json,
-                    cmts_json,
-                    rate,
-                    Some(side),
-                    tags_json,
-                    wc,
-                    wo,
-                    s_id,
-                    g_num,
-                )
-                .await
-                {
-                    Ok(id) => {
-                        toast.show.run((ToastKind::Success, "Draft saved".into()));
-                        set_loaded_draft_id.set(Some(id));
-                        drafts.refetch();
-                    }
-                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                }
-            }
-        });
-    };
-
-    // Sync slot_comment_input and matchup champion when highlighted_slot changes
-    Effect::new(move |_| {
-        let hl = highlighted_slot.get();
-        if let Some(idx) = hl {
-            let sc = slot_comments.get_untracked();
-            set_slot_comment_input.set(sc.get(idx).cloned().flatten().unwrap_or_default());
-            // Update matchup champion for Intel sidebar
-            let slots = draft_slots.get_untracked();
-            let champ = slots.get(idx).and_then(|s| s.clone());
-            set_matchup_champion.set(champ);
-        } else {
-            set_slot_comment_input.set(String::new());
-            set_matchup_champion.set(None);
-        }
-    });
-
-    // Auto-save timer handle (only used in hydrate/WASM builds)
-    #[allow(unused_variables)]
-    let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
-    let (auto_save_status, set_auto_save_status) = signal(""); // "", "unsaved", "saved"
-
-    #[allow(unused_variables)]
-    Effect::new(move |_| {
-        // Eagerly track + capture ALL content signals (CLAUDE.md rule 54)
-        let slots_val = draft_slots.get();
-        let comments_val = comments.get();
-        let name = draft_name.get();
-        let existing_id = loaded_draft_id.get();
-        let opp = opponent.get();
-        let rate = rating.get();
-        let side = our_side.get();
-        let sc = slot_comments.get();
-        let ra_val = role_assignments.get();
-        let tags_val = tags.get();
-        let wc_val = win_conditions.get();
-        let wo_val = watch_out.get();
-
-        // Only auto-save if we have a name AND it's an existing draft
-        if name.trim().is_empty() || existing_id.is_none() {
-            return;
-        }
-
-        // Cancel pending timer
-        #[cfg(feature = "hydrate")]
-        if let Some(timer_id) = auto_save_timer.get_untracked() {
-            if let Some(win) = web_sys::window() {
-                win.clear_timeout_with_handle(timer_id);
-            }
-        }
-
-        set_auto_save_status.set("unsaved");
-
-        // Schedule new 2s auto-save
-        #[cfg(feature = "hydrate")]
-        {
-            // Pre-compute all values before the closure
-            let actions = build_actions(slots_val, &sc, &ra_val);
-            let acts_json = serde_json::to_string(&actions).unwrap_or_default();
-            let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
-            let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
-            let wc = if wc_val.is_empty() {
-                None
-            } else {
-                Some(wc_val)
-            };
-            let wo = if wo_val.is_empty() {
-                None
-            } else {
-                Some(wo_val)
-            };
-            let opp_opt = if opp.is_empty() { None } else { Some(opp) };
-            let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-            let g_num = if s_id.is_some() {
-                Some(active_game_number.get_untracked())
-            } else {
-                None
-            };
-
-            use wasm_bindgen::prelude::*;
-            let cb = Closure::once(move || {
-                if let Some(draft_id) = existing_id {
+            .and_then(|l| l.into_iter().find(|s| s.id.as_deref() == Some(id.as_str())));
+        let exclude = ed.loaded_id.get_untracked();
+        match series {
+            Some(s) if s.is_fearless => {
+                if let Some(sid) = s.id {
                     leptos::task::spawn_local(async move {
-                        let _ = update_draft(
-                            draft_id,
-                            name,
-                            opp_opt,
-                            acts_json,
-                            cmts_json,
-                            rate,
-                            Some(side),
-                            tags_json,
-                            wc,
-                            wo,
-                            s_id,
-                            g_num,
-                        )
-                        .await;
-                        set_auto_save_status.set("saved");
-                        drafts.refetch();
+                        if let Ok(champs) = get_fearless_champions(sid, exclude).await {
+                            cx.fearless_used.set(champs);
+                        }
                     });
                 }
+            }
+            _ => cx.fearless_used.set(Vec::new()),
+        }
+    });
+
+    // Open a draft from the URL (`?draft_id=`), once per value; the saved
+    // drafts list links here, so opening one is a normal navigation.
+    let query = leptos_router::hooks::use_query_map();
+    Effect::new(move |_| {
+        let param = query.read().get("draft_id");
+        let Some(target) = param else {
+            cx.url_loaded.set_value(None);
+            return;
+        };
+        if cx.url_loaded.get_value().as_deref() == Some(target.as_str()) {
+            return;
+        }
+        if let Some(Ok(list)) = cx.drafts.get() {
+            if let Some(d) = list
+                .iter()
+                .find(|d| d.id.as_deref() == Some(target.as_str()))
+            {
+                let snap = Editor::from_draft(d);
+                cx.last_saved.set_value(Some(snap.clone()));
+                ed.restore(snap);
+                cx.url_loaded.set_value(Some(target));
+            }
+        }
+    });
+
+    // Save state and auto-save (existing drafts only, 2 s after the last
+    // change). Values are captured eagerly (leptos rule 54).
+    #[allow(unused_variables)]
+    let auto_save_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+    Effect::new(move |_| {
+        let snap = ed.snapshot_tracked();
+        if snap.loaded_id.is_none() {
+            cx.save_state.set(SaveState::New);
+            return;
+        }
+        if cx.last_saved.with_value(|l| l.as_ref() == Some(&snap)) {
+            cx.save_state.set(SaveState::Saved);
+            return;
+        }
+        cx.save_state.set(SaveState::Dirty);
+        if snap.name.trim().is_empty() {
+            return;
+        }
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::prelude::*;
+            if let Some(id) = auto_save_timer.get_untracked() {
+                if let Some(win) = web_sys::window() {
+                    win.clear_timeout_with_handle(id);
+                }
+            }
+            let cb = Closure::once(move || {
+                leptos::task::spawn_local(async move {
+                    if persist(snap.clone()).await.is_ok() {
+                        cx.last_saved.set_value(Some(snap.clone()));
+                        if ed.snapshot() == snap {
+                            cx.save_state.set(SaveState::Saved);
+                        }
+                        cx.drafts.refetch();
+                    }
+                });
             });
             if let Some(win) = web_sys::window() {
-                if let Ok(timer_id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                if let Ok(id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
                     cb.as_ref().unchecked_ref(),
                     2000,
                 ) {
-                    auto_save_timer.set(Some(timer_id));
+                    auto_save_timer.set(Some(id));
                 }
             }
             cb.forget();
         }
     });
 
-    // Pool warning computation (Phase 4 - Inline Intel)
-    let (role_overrides, set_role_overrides) = signal(HashMap::<usize, String>::new());
+    view! {
+        <PageShell density=Density::Compact attr:data-feedback-label="Draft">
+            <Suspense fallback=|| view! {
+                <PageHeader title="Draft" eyebrow="Draft" />
+                <SkeletonGroup label="Loading the draft board">
+                    <Skeleton shape=SkeletonShape::Block size="h-96 w-full" />
+                </SkeletonGroup>
+            }>
+                {move || Suspend::new(async move {
+                    let champs = champions_resource.await.unwrap_or_default();
+                    let opponents = opponents_list.await.unwrap_or_default();
+                    let team_name = teams_resource
+                        .await
+                        .ok()
+                        .and_then(|t| t.into_iter().next())
+                        .map(|t| t.name);
+                    let pools = team_pools.await.unwrap_or_default();
+                    view! {
+                        <DraftEditor
+                            cx=cx
+                            champs=champs
+                            opponents=opponents
+                            team_name=team_name
+                            pools=pools
+                        />
+                    }
+                })}
+            </Suspense>
+        </PageShell>
+    }
+}
 
-    let warning_slots_memo = Memo::new(move |_| {
-        let slots = draft_slots.get(); // tracked
-        let side = our_side.get(); // tracked
-        let overrides = role_overrides.get(); // tracked
-        let pools = team_pools.get().and_then(|r| r.ok()).unwrap_or_default();
-        let champs = champions_resource
-            .get()
-            .and_then(|r| r.ok())
-            .map(|v| {
-                v.into_iter()
-                    .map(|c| (c.name.clone(), c))
-                    .collect::<HashMap<_, _>>()
-            })
-            .unwrap_or_default();
-        compute_slot_warnings(&slots, &pools, &champs, &side, &overrides)
+/// The editor, once the champion list, opponents, team and pools are in.
+#[component]
+fn DraftEditor(
+    cx: Ctx,
+    champs: Vec<Champion>,
+    opponents: Vec<Opponent>,
+    team_name: Option<String>,
+    pools: Vec<(String, String, Vec<ChampionPoolEntry>)>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let nav = navigator();
+    let ed = cx.ed;
+    let champ_list = champs.clone();
+    let champs = StoredValue::new(champs);
+    let opponents = StoredValue::new(opponents);
+    let pools = StoredValue::new(pools);
+    let opp_name =
+        Memo::new(move |_| opponents.with_value(|o| opponent_name(&ed.opponent.get(), o)));
+
+    let name_error = RwSignal::new(None::<String>);
+    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let snap = ed.snapshot();
+        if snap.name.trim().is_empty() {
+            name_error.set(Some(
+                "Give the draft a name so you can find it again.".into(),
+            ));
+            focus_id("draft-name");
+            return;
+        }
+        name_error.set(None);
+        cx.save_state.set(SaveState::Saving);
+        leptos::task::spawn_local(async move {
+            match persist(snap.clone()).await {
+                Ok(id) => {
+                    let mut saved = snap.clone();
+                    saved.loaded_id = Some(id.clone());
+                    cx.last_saved.set_value(Some(saved));
+                    cx.url_loaded.set_value(Some(id.clone()));
+                    ed.loaded_id.set(Some(id.clone()));
+                    toast.push.run(Toast::success("Draft saved"));
+                    cx.drafts.refetch();
+                    go(nav, &format!("/draft?draft_id={id}"));
+                }
+                Err(e) => {
+                    cx.save_state.set(SaveState::Dirty);
+                    toast
+                        .push
+                        .run(Toast::error(format!("Could not save the draft: {e}")));
+                }
+            }
+        });
     });
 
-    // Role ordering for pool display
-    let role_order = |r: &str| -> u8 {
-        match r {
-            "top" => 0,
-            "jungle" | "jng" => 1,
-            "mid" | "middle" => 2,
-            "bot" | "adc" => 3,
-            "support" | "sup" => 4,
-            _ => 5,
+    let new_draft = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let before = ed.snapshot();
+        ed.restore(Editor::blank());
+        cx.last_saved.set_value(None);
+        go(nav, "/draft");
+        if before != Editor::blank() {
+            let undo = Callback::new(move |_| {
+                if let Some(id) = before.loaded_id.clone() {
+                    cx.url_loaded.set_value(Some(id));
+                }
+                ed.restore(before.clone());
+            });
+            toast
+                .push
+                .run(Toast::info("Started a new draft").with_action("Undo", undo));
+        }
+    });
+
+    let confirm_delete = RwSignal::new(false);
+    let on_delete = Callback::new(move |_| {
+        let Some(id) = ed.loaded_id.get_untracked() else {
+            return;
+        };
+        let name = ed.name.get_untracked();
+        leptos::task::spawn_local(async move {
+            match delete_draft_fn(id).await {
+                Ok(()) => {
+                    ed.restore(Editor::blank());
+                    cx.last_saved.set_value(None);
+                    cx.drafts.refetch();
+                    cx.plan_counts.refetch();
+                    go(nav, "/draft");
+                    toast
+                        .push
+                        .run(Toast::success(format!("Deleted \u{201c}{name}\u{201d}")));
+                }
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not delete: {e}"))),
+            }
+        });
+    });
+
+    // Board callbacks.
+    let unavailable = Signal::derive(move || {
+        let mut used: Vec<String> = ed.slots.get().into_iter().flatten().collect();
+        used.extend(cx.fearless_used.get());
+        used
+    });
+    let fill = Callback::new(move |(slot, name): (usize, String)| {
+        let display = champs.with_value(|list| {
+            list.iter()
+                .find(|c| c.id == name || c.name == name)
+                .map(|c| c.name.clone())
+                .unwrap_or(name)
+        });
+        if cx.fearless_used.with_untracked(|f| f.contains(&display)) {
+            toast.push.run(Toast::info(format!(
+                "{display} was played earlier in this fearless series."
+            )));
+            return;
+        }
+        champs.with_value(|list| ed.fill(slot, display, list));
+    });
+    let on_pick = Callback::new(move |c: Champion| {
+        if let Some(slot) = ed.active.get_untracked() {
+            fill.run((slot, c.name));
+        }
+    });
+    let on_select = Callback::new(move |slot: usize| ed.active.set(Some(slot)));
+    let on_open = Callback::new(move |_slot: usize| {
+        focus_id(&crate::components::champion_picker::picker_input_id(
+            PICKER_ID,
+        ));
+    });
+    let on_clear = Callback::new(move |slot: usize| {
+        if let Some((champ, role, note)) = ed.clear(slot) {
+            let label = TOURNAMENT_ORDER[slot].describe();
+            let champ_for_undo = champ.clone();
+            let undo = Callback::new(move |_| {
+                ed.slots.update(|s| s[slot] = Some(champ_for_undo.clone()));
+                ed.roles.update(|r| r[slot] = role.clone());
+                ed.notes.update(|n| n[slot] = note.clone());
+                let next = ed
+                    .slots
+                    .with_untracked(|s| s.iter().position(|c| c.is_none()));
+                ed.active.set(next);
+            });
+            toast.push.run(
+                Toast::info(format!("Cleared {champ} from {label}")).with_action("Undo", undo),
+            );
+        }
+    });
+    let on_escape = Callback::new(move |_| {
+        let slot = ed.active.get_untracked().unwrap_or(19);
+        focus_id(&slot_dom_id(BOARD_ID, slot));
+    });
+    let on_drop = Callback::new(move |(slot, name): (usize, String)| fill.run((slot, name)));
+
+    // Pool warnings for our picks.
+    let warnings = Memo::new(move |_| {
+        let slots = ed.slots.get();
+        let side = ed.side.get();
+        let roles = ed.roles.get();
+        let by_name: HashMap<String, Champion> =
+            champs.with_value(|l| l.iter().map(|c| (c.name.clone(), c.clone())).collect());
+        let overrides: HashMap<usize, String> = roles
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| r.clone().map(|r| (i, r)))
+            .collect();
+        pools.with_value(|p| {
+            warning_texts(compute_slot_warnings(
+                &slots, p, &by_name, &side, &overrides,
+            ))
+        })
+    });
+
+    let our_side =
+        Signal::derive(move || DraftSide::parse(&ed.side.get()).unwrap_or(DraftSide::Blue));
+    let team_name = StoredValue::new(team_name);
+    let blue_team = Signal::derive(move || match our_side.get() {
+        DraftSide::Blue => team_name.get_value(),
+        DraftSide::Red => opp_name.get(),
+    });
+    let red_team = Signal::derive(move || match our_side.get() {
+        DraftSide::Red => team_name.get_value(),
+        DraftSide::Blue => opp_name.get(),
+    });
+    let picker_label = Signal::derive(move || match ed.active.get() {
+        Some(i) => format!("Champion for {}", TOURNAMENT_ORDER[i].describe()),
+        None => "Draft complete: choose a slot on the board to change it".to_string(),
+    });
+    let title = move || {
+        let n = ed.name.get();
+        if n.trim().is_empty() {
+            "New draft".to_string()
+        } else {
+            n
         }
     };
+    let save_state = cx.save_state;
+    let has_champs = !champ_list.is_empty();
 
     view! {
-        <div class="bg-base min-h-screen" data-feedback-label="Draft">
-            <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
-            // War Table header strip — sigil, phase badge, opponent name, intel toggle
-            <div class="bg-surface/80 border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → Header">
-                <span class="bg-accent text-accent-contrast font-mono uppercase tracking-[0.18em] text-caption px-3 py-1 rounded">
-                    {phase_label}
-                </span>
-                <span class="font-display text-secondary text-sm">
-                    {move || {
-                        let opp_text = opp_filter_text.get();
-                        if opp_text.is_empty() {
-                            "Draft planner".to_string()
-                        } else {
-                            format!("vs {opp_text}")
-                        }
+        <PageHeader
+            title=title
+            eyebrow="Draft"
+            meta=move || view! {
+                {move || opp_name.get().map(|o| view! { <span>"vs " {o}</span> })}
+                <SideMarker side=our_side.get() text=SideText::Long />
+                <span data-testid="draft-save-state" class="text-muted">
+                    {move || match save_state.get() {
+                        SaveState::New => "Not saved yet",
+                        SaveState::Dirty => "Unsaved changes",
+                        SaveState::Saving => "Saving\u{2026}",
+                        SaveState::Saved => "Saved",
                     }}
                 </span>
-                {move || loaded_draft_id.get().map(|_| {
-                    let status = auto_save_status.get();
-                    let (cls, text) = match status {
-                        "saved" => ("font-mono text-success text-xs px-2 py-1 border border-divider rounded-md", "Saved"),
-                        "unsaved" => ("font-mono text-warning text-xs px-2 py-1 border border-divider rounded-md", "Unsaved"),
-                        _ => ("font-mono text-muted text-xs px-2 py-1 border border-divider rounded-md", "Editing"),
-                    };
-                    view! { <span class=cls>{text}</span> }
+            }
+            actions=move || view! {
+                <Button variant=ButtonVariant::Quiet on_click=new_draft>"New draft"</Button>
+                {move || ed.loaded_id.get().map(|_| view! {
+                    <Button
+                        variant=ButtonVariant::Danger
+                        on_click=Callback::new(move |_| confirm_delete.set(true))
+                    >"Delete"</Button>
                 })}
-                // Mode toggle — carousel / war-table / ledger (18-08)
-                <ModeToggle
-                    current=mode_current
-                    options=vec![
-                        ("carousel".to_string(), "Carousel".to_string()),
-                        ("war-table".to_string(), "Table".to_string()),
-                        ("ledger".to_string(), "Ledger".to_string()),
-                    ]
-                    on_select=on_mode_select
+                <Button
+                    variant=ButtonVariant::Primary
+                    on_click=do_save
+                    loading=Signal::derive(move || save_state.get() == SaveState::Saving)
+                    attr:data-testid="draft-save"
+                >"Save draft"</Button>
+            }
+        />
+        <ConfirmDialog
+            id="delete-draft"
+            open=confirm_delete
+            title="Delete this draft?"
+            message="The draft, its picks and its comments are deleted. Game plans made from it stay, without the link."
+            confirm_label="Delete draft"
+            tone=ConfirmTone::Destructive
+            on_confirm=on_delete
+        />
+
+        // Board, picker and the side rail.
+        <section
+            aria-labelledby="draft-board-heading"
+            class="grid grid-cols-1 gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)_17rem]"
+        >
+            <h2 id="draft-board-heading" class="sr-only">"Board"</h2>
+            <div class="flex min-w-0 flex-col gap-4">
+                <DraftBoard
+                    id=BOARD_ID
+                    label="Draft board"
+                    champions=ed.slots
+                    roles=ed.roles
+                    notes=ed.notes
+                    warnings=Signal::derive(move || warnings.get())
+                    current=ed.active
+                    blue_team=blue_team
+                    red_team=red_team
+                    on_select=on_select
+                    on_open=on_open
+                    on_clear=on_clear
+                    on_drop=on_drop
+                    hints=true
                 />
-                <div class="ml-auto flex items-center gap-3">
-                    <button
-                        class=move || if intel_open.get() {
-                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                        } else {
-                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-elevated border border-divider text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                        }
-                        on:click=move |_| set_intel_open.update(|v| *v = !*v)
-                    >
-                        <span class="font-mono uppercase tracking-[0.14em] text-xs">"Intel"</span>
-                        <span>{move || if intel_open.get() { "▼" } else { "▶" }}</span>
-                    </button>
-                </div>
+                <SlotInspector ed=ed on_clear=on_clear />
             </div>
-
-            // Hero divider
-            <div class="flex justify-center -mt-2">
-                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
+            <div class="min-w-0">
+                {if has_champs {
+                    view! {
+                        <ChampionPicker
+                            id=PICKER_ID
+                            champions=champ_list
+                            unavailable=unavailable
+                            on_select=on_pick
+                            on_escape=on_escape
+                            label=picker_label
+                            enabled=Signal::derive(move || ed.active.get().is_some())
+                        />
+                    }.into_any()
+                } else {
+                    view! {
+                        <Callout tone=CalloutTone::Danger title="Champions did not load">
+                            "The champion list comes from the server's cache. Reload the page; if it stays empty, the server could not reach Data Dragon."
+                        </Callout>
+                    }.into_any()
+                }}
             </div>
+            <div class="min-w-0 lg:col-span-2 xl:col-span-1">
+                <DraftRail ed=ed opponents=opponents pools=pools champs=champs fill=fill />
+            </div>
+        </section>
 
-            // Header form
-            <div class="bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-4">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    // Draft Name
+        <PlanSection cx=cx opponents=opponents name_error=name_error />
+        <CommentsSection ed=ed />
+        <NextSteps cx=cx />
+        <SavedDrafts cx=cx opponents=opponents />
+        <Insights />
+    }
+}
+
+/// Role, note and clear for the slot that is lit, when it holds a champion.
+#[component]
+fn SlotInspector(ed: Editor, on_clear: Callback<usize>) -> impl IntoView {
+    let role_edit = RwSignal::new(String::new());
+    let note_edit = RwSignal::new(String::new());
+    // Follow the lit slot.
+    Effect::new(move |_| {
+        let slot = ed.active.get();
+        let role = slot.and_then(|i| ed.roles.with(|r| r[i].clone()));
+        role_edit.set(
+            role.as_deref()
+                .and_then(Role::parse)
+                .map(|r| r.label().to_lowercase())
+                .unwrap_or_default(),
+        );
+    });
+    Effect::new(move |_| {
+        let slot = ed.active.get();
+        let note = slot.and_then(|i| ed.notes.with_untracked(|n| n[i].clone()));
+        note_edit.set(note.unwrap_or_default());
+    });
+    // Write the note back as it is typed.
+    Effect::new(move |_| {
+        let text = note_edit.get();
+        let Some(slot) = ed.active.get_untracked() else {
+            return;
+        };
+        let value = non_empty(text);
+        if ed.notes.with_untracked(|n| n[slot] != value)
+            && ed.slots.with_untracked(|s| s[slot].is_some())
+        {
+            ed.notes.update(|n| n[slot] = value);
+        }
+    });
+    let on_role = Callback::new(move |r: String| {
+        if let Some(slot) = ed.active.get_untracked() {
+            ed.roles.update(|roles| roles[slot] = Some(r));
+            ed.guessed.update(|g| g[slot] = false);
+        }
+    });
+    view! {
+        {move || {
+            let slot = ed.active.get()?;
+            let champ = ed.slots.with(|s| s[slot].clone())?;
+            let step = TOURNAMENT_ORDER[slot];
+            let is_pick = slot_meta(slot).1 == "pick";
+            let guessed = ed.guessed.with(|g| g[slot]);
+            Some(view! {
+                <div class="flex flex-col gap-3 border-t border-rule pt-4" data-testid="slot-inspector">
+                    <p class="flex flex-wrap items-baseline gap-x-2">
+                        <span class="eyebrow">{step.describe()}</span>
+                        <span class="font-display text-heading font-semibold text-primary">{champ}</span>
+                    </p>
+                    {is_pick.then(|| view! {
+                        <div class="flex flex-col gap-1.5">
+                            <span class="text-label font-medium text-secondary" id="slot-role-label">
+                                "Role"
+                                {guessed.then(|| view! { <span class="font-normal text-muted">" (guessed from the class)"</span> })}
+                            </span>
+                            <div class="overflow-x-auto">
+                                <SegmentedControl
+                                    id="slot-role"
+                                    label="Role"
+                                    options={Role::ALL.iter().map(|r| Segment::new(r.label().to_lowercase(), r.label())).collect::<Vec<_>>()}
+                                    value=role_edit
+                                    size=SegmentSize::Sm
+                                    on_change=on_role
+                                />
+                            </div>
+                        </div>
+                        <Field id="slot-note" label="Why this pick" hint="Shown under the champion on the board.">
+                            <TextField value=note_edit placeholder="Engage for Jinx, safe blind" maxlength=140 />
+                        </Field>
+                    })}
                     <div>
-                        <label class="block text-secondary text-sm mb-1">"Draft Name"</label>
-                        <input
-                            type="text"
-                            prop:value=move || draft_name.get()
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                            on:input=move |ev| set_draft_name.set(event_target_value(&ev))
+                        <Button
+                            variant=ButtonVariant::Quiet
+                            size=ButtonSize::Sm
+                            shortcut="Backspace"
+                            on_click=Callback::new(move |_| on_clear.run(slot))
+                        >"Clear slot"</Button>
+                    </div>
+                </div>
+            })
+        }}
+    }
+}
+
+/// The side rail: opponent brief, our pools, notes on the lit champion.
+#[component]
+fn DraftRail(
+    ed: Editor,
+    opponents: StoredValue<Vec<Opponent>>,
+    pools: StoredValue<Vec<(String, String, Vec<ChampionPoolEntry>)>>,
+    champs: StoredValue<Vec<Champion>>,
+    fill: Callback<(usize, String)>,
+) -> impl IntoView {
+    let tab = RwSignal::new("opponent".to_string());
+    view! {
+        <aside aria-label="Draft intel" class="flex min-w-0 flex-col gap-4">
+            <Tabs
+                group="draft-rail"
+                label="Draft intel"
+                tabs=vec![
+                    TabItem::new("opponent", "Opponent"),
+                    TabItem::new("pools", "Our pools"),
+                    TabItem::new("notes", "Notes"),
+                ]
+                selected=tab
+            />
+            <TabPanel group="draft-rail" tab="opponent" selected=tab>
+                <OpponentBrief ed=ed opponents=opponents />
+            </TabPanel>
+            <TabPanel group="draft-rail" tab="pools" selected=tab>
+                <PoolsPanel ed=ed pools=pools champs=champs fill=fill />
+            </TabPanel>
+            <TabPanel group="draft-rail" tab="notes" selected=tab>
+                <NotesPanel ed=ed />
+            </TabPanel>
+        </aside>
+    }
+}
+
+/// Their players and the champions they played most in scouted games.
+#[component]
+fn OpponentBrief(ed: Editor, opponents: StoredValue<Vec<Opponent>>) -> impl IntoView {
+    let opp_id = Memo::new(move |_| {
+        let v = ed.opponent.get();
+        opponents
+            .with_value(|l| l.iter().any(|o| o.id.as_deref() == Some(v.as_str())))
+            .then_some(v)
+    });
+    let players = Resource::new(
+        move || opp_id.get(),
+        |id| async move {
+            match id {
+                Some(id) => get_opponent_intel(id).await,
+                None => Ok(Vec::new()),
+            }
+        },
+    );
+    view! {
+        <div class="flex flex-col gap-3" data-testid="opponent-brief">
+            {move || match opp_id.get() {
+                None => view! {
+                    <EmptyState
+                        size=EmptySize::Compact
+                        message="Choose an opponent under Plan to see their players and the champions they played most in scouted games."
+                    />
+                }.into_any(),
+                Some(_) => view! {
+                    <Suspense fallback=|| view! {
+                        <SkeletonGroup label="Loading the opponent">
+                            <Skeleton shape=SkeletonShape::Line lines=4 />
+                        </SkeletonGroup>
+                    }>
+                        {move || players.get().map(|r| match r {
+                            Err(_) => view! {
+                                <Callout tone=CalloutTone::Danger>"The opponent's players did not load."</Callout>
+                            }.into_any(),
+                            Ok(list) if list.is_empty() => view! {
+                                <EmptyState
+                                    size=EmptySize::Compact
+                                    message="No players scouted for this opponent yet. Add them on the Opponents page and their recent champions appear here."
+                                    cta_label="Open Opponents"
+                                    cta_href="/opponents"
+                                />
+                            }.into_any(),
+                            Ok(mut list) => {
+                                list.sort_by_key(|p| Role::parse(&p.role).map(|r| Role::ALL.iter().position(|x| *x == r).unwrap_or(9)).unwrap_or(9));
+                                let drafted = ed.slots.get();
+                                view! {
+                                    <ul class="flex flex-col">
+                                        {list.into_iter().map(|p| {
+                                            let intel = p.compute_intel();
+                                            let role = Role::parse(&p.role);
+                                            let games = p.recent_champions.len();
+                                            let top: Vec<(String, u32)> = intel.champion_frequencies.into_iter().take(5).collect();
+                                            let drafted = drafted.clone();
+                                            view! {
+                                                <li class="flex flex-col gap-1.5 border-b border-rule py-2.5 last:border-b-0">
+                                                    <div class="flex items-center gap-2">
+                                                        {role.map(|r| view! { <RoleLabel role=r /> })}
+                                                        <span class="truncate text-label font-medium text-primary">{player_name(&p)}</span>
+                                                        <span class="figures ml-auto text-caption text-muted">
+                                                            {if games == 1 { "1 game".to_string() } else { format!("{games} games") }}
+                                                        </span>
+                                                    </div>
+                                                    {if top.is_empty() {
+                                                        view! { <p class="text-caption text-muted">"No recent games scouted."</p> }.into_any()
+                                                    } else {
+                                                        view! {
+                                                            <ul class="flex flex-wrap gap-x-2 gap-y-1">
+                                                                {top.into_iter().map(|(c, n)| {
+                                                                    let taken = drafted.iter().any(|d| d.as_deref() == Some(c.as_str()));
+                                                                    view! {
+                                                                        <li class="inline-flex items-center gap-1">
+                                                                            <ChampionAvatar
+                                                                                name=c.clone()
+                                                                                size=AvatarSize::Sm
+                                                                                state=if taken { AvatarState::Dimmed } else { AvatarState::Normal }
+                                                                            />
+                                                                            <span class="figures text-caption text-secondary">{format!("\u{00d7}{n}")}</span>
+                                                                            {taken.then(|| view! { <span class="sr-only">" (on the board)"</span> })}
+                                                                        </li>
+                                                                    }
+                                                                }).collect_view()}
+                                                            </ul>
+                                                        }.into_any()
+                                                    }}
+                                                    {intel.otp_champion.map(|c| view! {
+                                                        <p class="text-caption text-warning">{format!("One-trick: {c}")}</p>
+                                                    })}
+                                                </li>
+                                            }
+                                        }).collect_view()}
+                                    </ul>
+                                    <p class="text-caption text-muted">
+                                        "From scouted match history; bans are not part of it. Dimmed champions are already on the board."
+                                    </p>
+                                }.into_any()
+                            }
+                        })}
+                    </Suspense>
+                }.into_any(),
+            }}
+        </div>
+    }
+}
+
+/// Our starters' pools; a champion fills the lit slot.
+#[component]
+fn PoolsPanel(
+    ed: Editor,
+    pools: StoredValue<Vec<(String, String, Vec<ChampionPoolEntry>)>>,
+    champs: StoredValue<Vec<Champion>>,
+    fill: Callback<(usize, String)>,
+) -> impl IntoView {
+    let tier_rank = |t: &str| match t {
+        "comfort" => 0,
+        "match_ready" => 1,
+        "scrim_ready" => 2,
+        "practicing" => 3,
+        _ => 4,
+    };
+    view! {
+            {match pools.get_value() {
+                pools if pools.iter().all(|(_, _, e)| e.is_empty()) => view! {
+                    <EmptyState
+                        size=EmptySize::Compact
+                        message="Your starters' champion pools appear here once they add champions on the Champion pool page."
+                        cta_label="Open Champion pool"
+                        cta_href="/champion-pool"
+                    />
+                }.into_any(),
+                mut pools => {
+                    pools.sort_by_key(|(_, role, _)| Role::parse(role).map(|r| Role::ALL.iter().position(|x| *x == r).unwrap_or(9)).unwrap_or(9));
+                    let names: HashMap<String, String> = champs.with_value(|l| l.iter().map(|c| (c.id.clone(), c.name.clone())).collect());
+                    view! {
+                        <ul class="flex flex-col">
+                            {pools.into_iter().map(|(user, role, mut entries)| {
+                                entries.sort_by_key(|e| tier_rank(&e.tier));
+                                let role = Role::parse(&role);
+                                let names = names.clone();
+                                view! {
+                                    <li class="flex flex-col gap-1.5 border-b border-rule py-2.5 last:border-b-0">
+                                        <div class="flex items-center gap-2">
+                                            {role.map(|r| view! { <RoleLabel role=r /> })}
+                                            <span class="truncate text-label font-medium text-primary">{user}</span>
+                                        </div>
+                                        {if entries.is_empty() {
+                                            view! { <p class="text-caption text-muted">"No champions in the pool yet."</p> }.into_any()
+                                        } else {
+                                            view! {
+                                                <div class="flex flex-wrap gap-1">
+                                                    {entries.into_iter().map(|e| {
+                                                        let display = names.get(&e.champion).cloned().unwrap_or_else(|| e.champion.clone());
+                                                        let for_click = display.clone();
+                                                        let icon_name = display.clone();
+                                                        view! {
+                                                            <Button
+                                                                variant=ButtonVariant::Quiet
+                                                                size=ButtonSize::Sm
+                                                                icon=move || view! { <ChampionAvatar name=icon_name.clone() size=AvatarSize::Xs decorative=true /> }
+                                                                on_click=Callback::new(move |_| {
+                                                                    if let Some(slot) = ed.active.get_untracked() {
+                                                                        fill.run((slot, for_click.clone()));
+                                                                    }
+                                                                })
+                                                            >{display}</Button>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }.into_any()
+                                        }}
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                        <p class="text-caption text-muted">"Choosing a champion here fills the lit slot."</p>
+                    }.into_any()
+                }
+            }}
+    }
+}
+
+/// Our pool notes and the team's matchup notes on the lit champion.
+#[component]
+fn NotesPanel(ed: Editor) -> impl IntoView {
+    let champ = Memo::new(move |_| {
+        ed.active
+            .get()
+            .and_then(|i| ed.slots.with(|s| s[i].clone()))
+    });
+    let notes = Resource::new(
+        move || champ.get(),
+        |c| async move {
+            let Some(c) = c else {
+                return Ok((Vec::new(), Vec::new()));
+            };
+            let json = serde_json::to_string(&vec![c.clone()]).unwrap_or_default();
+            let pool = get_pool_notes_for_champions(json)
+                .await?
+                .into_iter()
+                .flat_map(|(_, n)| n)
+                .collect::<Vec<ChampionNote>>();
+            let matchup = get_matchup_notes_for_champion(c).await?;
+            Ok::<_, ServerFnError>((pool, matchup))
+        },
+    );
+    view! {
+        {move || match champ.get() {
+            None => view! {
+                <EmptyState
+                    size=EmptySize::Compact
+                    message="Select a champion on the board to see your pool notes and your team's matchup notes on it."
+                />
+            }.into_any(),
+            Some(c) => view! {
+                <div class="flex flex-col gap-3">
+                    <p class="font-display text-heading font-semibold text-primary">{c.clone()}</p>
+                    <Suspense fallback=|| view! { <SkeletonGroup label="Loading notes"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+                        {move || notes.get().map(|r| match r {
+                            Err(_) => view! { <Callout tone=CalloutTone::Danger>"The notes did not load."</Callout> }.into_any(),
+                            Ok((pool, matchup)) if pool.is_empty() && matchup.is_empty() => view! {
+                                <EmptyState
+                                    size=EmptySize::Compact
+                                    message="No notes on this champion yet. Notes written on the Champion pool page appear here."
+                                />
+                            }.into_any(),
+                            Ok((pool, matchup)) => view! {
+                                <ul class="flex flex-col">
+                                    {pool.into_iter().map(|n| view! {
+                                        <li class="flex flex-col gap-0.5 border-b border-rule py-2 last:border-b-0">
+                                            <span class="eyebrow">{note_type_label(&n.note_type)}</span>
+                                            {(!n.title.is_empty()).then(|| view! { <span class="text-label font-medium text-primary">{n.title.clone()}</span> })}
+                                            <span class="text-label text-secondary">{n.content.clone()}</span>
+                                        </li>
+                                    }).collect_view()}
+                                    {matchup.into_iter().map(|(author, n)| view! {
+                                        <li class="flex flex-col gap-0.5 border-b border-rule py-2 last:border-b-0">
+                                            <span class="eyebrow">{format!("Matchup \u{00b7} {author}")}</span>
+                                            {(!n.title.is_empty()).then(|| view! { <span class="text-label font-medium text-primary">{n.title.clone()}</span> })}
+                                            <span class="text-label text-secondary">{n.content.clone()}</span>
+                                        </li>
+                                    }).collect_view()}
+                                </ul>
+                            }.into_any(),
+                        })}
+                    </Suspense>
+                </div>
+            }.into_any(),
+        }}
+    }
+}
+
+/// Name, side, opponent, series, rating, tags and the two plan notes.
+#[component]
+fn PlanSection(
+    cx: Ctx,
+    opponents: StoredValue<Vec<Opponent>>,
+    name_error: RwSignal<Option<String>>,
+) -> impl IntoView {
+    let ed = cx.ed;
+    let series_resource = cx.series;
+    let fearless_used = cx.fearless_used;
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let nav = navigator();
+    // A stored opponent that is not in the list (free text from before
+    // opponents were records) stays selectable.
+    let opponent_options = Memo::new(move |_| {
+        // Recomputed when a draft is opened (a legacy opponent appears);
+        // not on every selection, so the select keeps focus.
+        let _ = ed.loaded_id.get();
+        let list = opponents.get_value();
+        let current = ed.opponent.get_untracked();
+        let mut opts = vec![SelectOption::new("", "No opponent")];
+        let mut known = false;
+        for o in &list {
+            let id = o.id.clone().unwrap_or_default();
+            known |= id == current;
+            opts.push(SelectOption::new(id, o.name.clone()));
+        }
+        if !current.is_empty() && !known {
+            opts.push(SelectOption::new(
+                current.clone(),
+                format!("{current} (not in Opponents)"),
+            ));
+        }
+        opts
+    });
+    let series_options = move |list: Vec<Series>| {
+        let mut opts = vec![SelectOption::new("", "Not part of a series")];
+        for s in list {
+            let label = format!(
+                "{} ({}{})",
+                s.name,
+                s.format.to_uppercase(),
+                if s.is_fearless { ", fearless" } else { "" }
+            );
+            opts.push(SelectOption::new(s.id.unwrap_or_default(), label));
+        }
+        opts
+    };
+
+    // New series dialog.
+    let series_open = RwSignal::new(false);
+    let s_name = RwSignal::new(String::new());
+    let s_opp = RwSignal::new(String::new());
+    let s_format = RwSignal::new("bo3".to_string());
+    let s_fearless = RwSignal::new(false);
+    let s_error = RwSignal::new(None::<String>);
+    let create_series = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let name = s_name.get_untracked();
+        if name.trim().is_empty() {
+            s_error.set(Some("Give the series a name.".into()));
+            return;
+        }
+        s_error.set(None);
+        let opp = non_empty(s_opp.get_untracked());
+        let fmt = s_format.get_untracked();
+        let fearless = s_fearless.get_untracked();
+        leptos::task::spawn_local(async move {
+            match create_series_fn(name.trim().to_string(), opp, fmt, fearless).await {
+                Ok(id) => {
+                    series_resource.refetch();
+                    ed.series_id.set(id);
+                    ed.game.set("1".to_string());
+                    s_name.set(String::new());
+                    s_opp.set(String::new());
+                    series_open.set(false);
+                    toast.push.run(Toast::success("Series created"));
+                }
+                Err(e) => s_error.set(Some(format!("Could not create the series: {e}"))),
+            }
+        });
+    });
+
+    // Save the draft, then go and scout a new opponent (comes back here).
+    let new_opponent = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let snap = ed.snapshot();
+        if snap.name.trim().is_empty() {
+            name_error.set(Some(
+                "Name the draft first; it is saved before you leave.".into(),
+            ));
+            focus_id("draft-name");
+            return;
+        }
+        leptos::task::spawn_local(async move {
+            match persist(snap).await {
+                Ok(id) => go(nav, &format!("/opponents?return_to=draft&draft_id={id}")),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not save the draft: {e}"))),
+            }
+        });
+    });
+
+    let side_value = ed.side;
+    view! {
+        <section aria-labelledby="draft-plan-heading" class="mt-12">
+            <SectionHeader title="Plan" id="draft-plan-heading" />
+            <div class="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+                <Field id="draft-name" label="Draft name" required=true error=Signal::derive(move || name_error.get())>
+                    <TextField value=ed.name placeholder="vs Riverside, game 1" maxlength=120 />
+                </Field>
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-label font-medium text-secondary">"Our side"</span>
+                    <div>
+                        <SegmentedControl
+                            id="our-side"
+                            label="Our side"
+                            options=vec![Segment::new("blue", "Blue"), Segment::new("red", "Red")]
+                            value=side_value
                         />
                     </div>
-                    // Team selection
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    {move || {
+                        let opts = opponent_options.get();
+                        view! {
+                            <Field id="draft-opponent" label="Opponent">
+                                <Select value=ed.opponent options=opts />
+                            </Field>
+                        }
+                    }}
                     <div>
-                        <label class="block text-secondary text-sm mb-1">"Team"</label>
-                        <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9" /> }>
-                            {move || teams_resource.get().map(|result| match result {
-                                Ok(teams) if teams.is_empty() => view! {
-                                    <p class="text-dimmed text-sm py-2">"Not part of a team yet."</p>
-                                }.into_any(),
-                                Ok(teams) => view! {
-                                    <select
-                                        prop:value=move || selected_team_id.get()
-                                        on:change=move |ev| set_selected_team_id.set(event_target_value(&ev))
-                                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                    >
-                                        {teams.into_iter().map(|t| {
-                                            let id = t.id.clone().unwrap_or_default();
-                                            let name = t.name.clone();
-                                            view! { <option value=id>{name}</option> }
+                        <Button variant=ButtonVariant::Quiet size=ButtonSize::Sm on_click=new_opponent>
+                            "Scout a new opponent"
+                        </Button>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                        {move || series_resource.get().map(|r| {
+                            let list = r.unwrap_or_default();
+                            let opts = series_options(list.clone());
+                            let list = StoredValue::new(list);
+                            view! {
+                                <Field id="draft-series" label="Series" hint="Fearless series rule out champions played in the series' other games.">
+                                    <Select value=ed.series_id options=opts />
+                                </Field>
+                                {move || {
+                                    let id = ed.series_id.get();
+                                    list.with_value(|l| l.iter().find(|s| s.id.as_deref() == Some(id.as_str())).cloned())
+                                }.map(|s| {
+                                    let n = match s.format.as_str() { "bo5" => 5, "bo3" => 3, _ => 1 };
+                                    let opts = (1..=n).map(|g| Segment::new(g.to_string(), format!("Game {g}"))).collect::<Vec<_>>();
+                                    view! {
+                                        <div class="pt-1">
+                                            <SegmentedControl id="series-game" label="Game in the series" options=opts value=ed.game size=SegmentSize::Sm />
+                                        </div>
+                                    }
+                                })}
+                            }
+                        })}
+                    </Suspense>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <Button variant=ButtonVariant::Quiet size=ButtonSize::Sm on_click=Callback::new(move |_| series_open.set(true))>
+                            "New series"
+                        </Button>
+                    </div>
+                    {move || {
+                        let used = fearless_used.get();
+                        (!used.is_empty()).then(|| view! {
+                            <p class="text-caption text-secondary">
+                                <span class="font-medium">"Played earlier in the series: "</span>
+                                {used.join(", ")}
+                            </p>
+                        })
+                    }}
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-label font-medium text-secondary" id="draft-rating-label">"Rating"</span>
+                    <div role="group" aria-labelledby="draft-rating-label" class="flex flex-wrap gap-1">
+                        {RATINGS.iter().map(|&r| view! {
+                            <Button
+                                size=ButtonSize::Sm
+                                pressed=Signal::derive(move || ed.rating.get().as_deref() == Some(r))
+                                on_click=Callback::new(move |_| ed.rating.update(|cur| {
+                                    *cur = if cur.as_deref() == Some(r) { None } else { Some(r.to_string()) };
+                                }))
+                            >{r}</Button>
+                        }).collect_view()}
+                    </div>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-label font-medium text-secondary" id="draft-tags-label">"Composition"</span>
+                    <div role="group" aria-labelledby="draft-tags-label" class="flex flex-wrap gap-1">
+                        {COMPOSITION_TAGS.iter().map(|&t| view! {
+                            <Button
+                                size=ButtonSize::Sm
+                                pressed=Signal::derive(move || ed.tags.get().iter().any(|x| x == t))
+                                on_click=Callback::new(move |_| ed.tags.update(|tags| {
+                                    if let Some(p) = tags.iter().position(|x| x == t) {
+                                        tags.remove(p);
+                                    } else {
+                                        tags.push(t.to_string());
+                                    }
+                                }))
+                            >{t}</Button>
+                        }).collect_view()}
+                    </div>
+                </div>
+                <Field id="draft-win" label="How we win">
+                    <TextField value=ed.win rows=3 placeholder="Front-to-back around Jinx; play for dragon soul." />
+                </Field>
+                <Field id="draft-watch" label="Watch out for">
+                    <TextField value=ed.watch rows=3 placeholder="Their engage on our carry before 15 minutes." />
+                </Field>
+            </div>
+            <Dialog
+                id="new-series"
+                open=series_open
+                title="New series"
+                description="Drafts in a series share a game count; a fearless series rules out champions already played."
+                dismiss_on_scrim=false
+                footer=move || view! {
+                    <Button variant=ButtonVariant::Secondary on_click=Callback::new(move |_| series_open.set(false))>"Cancel"</Button>
+                    <Button variant=ButtonVariant::Primary on_click=create_series>"Create series"</Button>
+                }
+            >
+                <div class="flex flex-col gap-4 px-5 py-4">
+                    <Field id="series-name" label="Name" required=true error=Signal::derive(move || s_error.get())>
+                        <TextField value=s_name placeholder="Spring split week 3" />
+                    </Field>
+                    <Field id="series-opponent" label="Opponent">
+                        <TextField value=s_opp placeholder="Riverside Rooks" />
+                    </Field>
+                    <Field id="series-format" label="Format">
+                        <Select value=s_format options=vec![
+                            SelectOption::new("bo1", "Best of 1"),
+                            SelectOption::new("bo3", "Best of 3"),
+                            SelectOption::new("bo5", "Best of 5"),
+                        ] />
+                    </Field>
+                    <Switch label="Fearless" checked=s_fearless show_state=true />
+                </div>
+            </Dialog>
+        </section>
+    }
+}
+
+/// Team comments on the draft (saved with it).
+#[component]
+fn CommentsSection(ed: Editor) -> impl IntoView {
+    let input = RwSignal::new(String::new());
+    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let text = input.get_untracked().trim().to_string();
+        if !text.is_empty() {
+            ed.comments.update(|c| c.push(text));
+            input.set(String::new());
+        }
+    });
+    view! {
+        <section aria-labelledby="draft-comments-heading" class="mt-12">
+            <SectionHeader title="Comments" id="draft-comments-heading" />
+            <div class="flex max-w-3xl flex-col gap-4">
+                {move || {
+                    let list = ed.comments.get();
+                    if list.is_empty() {
+                        view! {
+                            <p class="text-body text-secondary">"No comments yet. Comments are saved with the draft."</p>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <ul class="flex flex-col">
+                                {list.into_iter().map(|c| view! {
+                                    <li class="border-b border-rule py-2 text-reading text-primary last:border-b-0">{c}</li>
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }
+                }}
+                <Field id="draft-comment" label="Add a comment">
+                    <TextField value=input rows=2 placeholder="Ask the jungler about level 3 timings." />
+                </Field>
+                <div><Button on_click=add>"Add comment"</Button></div>
+            </div>
+        </section>
+    }
+}
+
+/// From a saved draft to its game plan and review.
+#[component]
+fn NextSteps(cx: Ctx) -> impl IntoView {
+    let ed = cx.ed;
+    let game_plan_counts = cx.plan_counts;
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let nav = navigator();
+    let existing = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+    Effect::new(move |_| {
+        let _ = ed.loaded_id.get();
+        existing.set(None);
+    });
+    let prep = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let Some(id) = ed.loaded_id.get_untracked() else {
+            return;
+        };
+        busy.set(true);
+        leptos::task::spawn_local(async move {
+            match check_draft_has_game_plan(id.clone()).await {
+                Ok(None) => go(nav, &format!("/game-plan?draft_id={id}")),
+                Ok(Some(plan)) => existing.set(Some(plan)),
+                Err(e) => toast.push.run(Toast::error(format!("{e}"))),
+            }
+            busy.set(false);
+        });
+    });
+    view! {
+        <Suspense fallback=|| ()>
+        {move || ed.loaded_id.get().map(|id| {
+            let plans = game_plan_counts
+                .get()
+                .and_then(|r| r.ok())
+                .and_then(|l| l.into_iter().find(|(d, _)| *d == id).map(|(_, n)| n))
+                .unwrap_or(0);
+            let id_review = id.clone();
+            let id_new = id.clone();
+            view! {
+                <section aria-labelledby="draft-next-heading" class="mt-12">
+                    <SectionHeader title="Next steps" id="draft-next-heading" />
+                    <div class="flex flex-col gap-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Button on_click=prep loading=Signal::derive(move || busy.get())>"Prep a game plan"</Button>
+                            {(plans > 0).then(|| view! {
+                                <Button href=format!("/post-game?draft_id={id_review}")>"Review this game"</Button>
+                            })}
+                            <span class="text-label text-muted">
+                                {match plans { 0 => "No game plan yet".to_string(), 1 => "1 game plan".to_string(), n => format!("{n} game plans") }}
+                            </span>
+                        </div>
+                        {move || existing.get().map(|plan| {
+                            let new_href = format!("/game-plan?draft_id={id_new}");
+                            view! {
+                                <Callout
+                                    tone=CalloutTone::Info
+                                    title="This draft already has a game plan"
+                                    action=move || view! {
+                                        <div class="flex flex-wrap gap-2">
+                                            <Button size=ButtonSize::Sm href=format!("/game-plan?plan_id={plan}")>"Open it"</Button>
+                                            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=new_href.clone()>"Make another"</Button>
+                                        </div>
+                                    }
+                                >
+                                    "Open the existing plan or start a second one for this draft."
+                                </Callout>
+                            }
+                        })}
+                    </div>
+                </section>
+            }
+        })}
+        </Suspense>
+    }
+}
+
+/// The team's drafts, newest first, with a tag filter.
+#[component]
+fn SavedDrafts(cx: Ctx, opponents: StoredValue<Vec<Opponent>>) -> impl IntoView {
+    let drafts = cx.drafts;
+    let game_plan_counts = cx.plan_counts;
+    let tag = RwSignal::new(String::new());
+    let tag_options = {
+        let mut o = vec![SelectOption::new("", "All drafts")];
+        o.extend(COMPOSITION_TAGS.iter().map(|t| SelectOption::new(*t, *t)));
+        o
+    };
+    view! {
+        <section aria-labelledby="saved-drafts-heading" class="mt-12">
+            <SectionHeader
+                title="Saved drafts"
+                id="saved-drafts-heading"
+                actions=move || {
+                    let opts = tag_options.clone();
+                    view! {
+                        <div class="w-44">
+                            <Select value=tag options=opts size=FieldSize::Sm aria_label="Filter by composition" />
+                        </div>
+                    }
+                }
+            />
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading drafts"><Skeleton shape=SkeletonShape::Line lines=4 /></SkeletonGroup> }>
+                {move || drafts.get().map(|r| match r {
+                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The drafts did not load."</Callout> }.into_any(),
+                    Ok(list) if list.is_empty() => view! {
+                        <EmptyState size=EmptySize::Compact message="Drafts you save appear here, with their picks, rating and game plans." />
+                    }.into_any(),
+                    Ok(list) => {
+                        let t = tag.get();
+                        let list: Vec<Draft> = list.into_iter().filter(|d| t.is_empty() || d.tags.contains(&t)).collect();
+                        if list.is_empty() {
+                            return view! {
+                                <EmptyState size=EmptySize::Compact message="No saved draft has this composition tag." />
+                            }.into_any();
+                        }
+                        let counts: HashMap<String, usize> = game_plan_counts.get().and_then(|r| r.ok()).unwrap_or_default().into_iter().collect();
+                        let opps = opponents.get_value();
+                        view! {
+                            <Table caption="Saved drafts" caption_hidden=true>
+                                <thead>
+                                    <tr>
+                                        <Th>"Draft"</Th>
+                                        <Th>"Opponent"</Th>
+                                        <Th>"Side"</Th>
+                                        <Th>"Our picks"</Th>
+                                        <Th>"Rating"</Th>
+                                        <Th>"Tags"</Th>
+                                        <Th numeric=true>"Plans"</Th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {list.into_iter().map(|d| {
+                                        let id = d.id.clone().unwrap_or_default();
+                                        let side = DraftSide::parse(&d.our_side).unwrap_or(DraftSide::Blue);
+                                        let mut picks: Vec<(usize, String)> = d.actions.iter()
+                                            .filter(|a| a.side == side.as_str() && slot_meta(a.order as usize).1 == "pick")
+                                            .map(|a| (a.order as usize, a.champion.clone()))
+                                            .collect();
+                                        picks.sort_by_key(|(o, _)| *o);
+                                        let opp = d.opponent.as_deref().and_then(|o| opponent_name(o, &opps));
+                                        let no_opp = opp.is_none();
+                                        let plans = counts.get(&id).copied().unwrap_or(0);
+                                        let no_rating = d.rating.is_none();
+                                        view! {
+                                            <Tr>
+                                                <Td header=true><RowLink href=format!("/draft?draft_id={id}")>{d.name.clone()}</RowLink></Td>
+                                                <Td muted=no_opp>{opp.unwrap_or_else(|| "\u{2014}".to_string())}</Td>
+                                                <Td><SideMarker side=side text=SideText::Short /></Td>
+                                                <Td>
+                                                    {if picks.is_empty() {
+                                                        view! { <span class="text-muted">"\u{2014}"</span> }.into_any()
+                                                    } else {
+                                                        view! {
+                                                            <span class="flex gap-0.5">
+                                                                {picks.into_iter().map(|(_, c)| view! { <ChampionAvatar name=c size=AvatarSize::Xs /> }).collect_view()}
+                                                            </span>
+                                                        }.into_any()
+                                                    }}
+                                                </Td>
+                                                <Td muted=no_rating>{d.rating.clone().unwrap_or_else(|| "\u{2014}".to_string())}</Td>
+                                                <Td muted=true>{if d.tags.is_empty() { "\u{2014}".to_string() } else { d.tags.join(", ") }}</Td>
+                                                <Td numeric=true muted=plans == 0>{plans}</Td>
+                                            </Tr>
+                                        }
+                                    }).collect_view()}
+                                </tbody>
+                            </Table>
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+/// Ban priorities, tendencies and outcomes, one tab each.
+#[component]
+fn Insights() -> impl IntoView {
+    let tab = RwSignal::new("bans".to_string());
+    view! {
+        <section aria-labelledby="draft-insights-heading" class="mt-12">
+            <SectionHeader title="Insights" id="draft-insights-heading" />
+            <div class="flex flex-col gap-4">
+                <Tabs
+                    group="draft-insights"
+                    label="Draft insights"
+                    tabs=vec![
+                        TabItem::new("bans", "Ban priorities"),
+                        TabItem::new("tendencies", "Tendencies"),
+                        TabItem::new("outcomes", "Outcomes"),
+                    ]
+                    selected=tab
+                />
+                <TabPanel group="draft-insights" tab="bans" selected=tab><BanPriorities /></TabPanel>
+                <TabPanel group="draft-insights" tab="tendencies" selected=tab><Tendencies /></TabPanel>
+                <TabPanel group="draft-insights" tab="outcomes" selected=tab><Outcomes /></TabPanel>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn BanPriorities() -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let list = Resource::new(|| (), |_| get_ban_priorities());
+    let editing = RwSignal::new(false);
+    let edit = RwSignal::new(Vec::<BanPriority>::new());
+    let champ = RwSignal::new(String::new());
+    let reason = RwSignal::new(String::new());
+    let start = Callback::new(move |_: leptos::ev::MouseEvent| {
+        edit.set(
+            list.get_untracked()
+                .and_then(|r| r.ok())
+                .unwrap_or_default(),
+        );
+        editing.set(true);
+    });
+    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let c = champ.get_untracked().trim().to_string();
+        if c.is_empty() {
+            return;
+        }
+        let r = non_empty(reason.get_untracked());
+        edit.update(|l| {
+            let rank = l.len() as i32;
+            l.push(BanPriority {
+                id: None,
+                team_id: String::new(),
+                champion: c,
+                rank,
+                reason: r,
+            });
+        });
+        champ.set(String::new());
+        reason.set(String::new());
+        focus_id("ban-champion");
+    });
+    let save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let json = serde_json::to_string(&edit.get_untracked()).unwrap_or_default();
+        leptos::task::spawn_local(async move {
+            match save_ban_priorities(json).await {
+                Ok(()) => {
+                    list.refetch();
+                    editing.set(false);
+                    toast.push.run(Toast::success("Ban priorities saved"));
+                }
+                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+            }
+        });
+    });
+    view! {
+        <div class="flex max-w-3xl flex-col gap-4">
+            {move || if editing.get() {
+                view! {
+                    <div class="flex flex-col gap-4">
+                        {move || {
+                            let items = edit.get();
+                            if items.is_empty() {
+                                view! { <p class="text-body text-secondary">"No priorities yet. Add the champions you want banned first."</p> }.into_any()
+                            } else {
+                                view! {
+                                    <ol class="flex flex-col">
+                                        {items.into_iter().enumerate().map(|(i, b)| view! {
+                                            <li class="flex items-center gap-3 border-b border-rule py-2 last:border-b-0">
+                                                <span class="figures w-6 text-label text-muted">{i + 1}</span>
+                                                <ChampionAvatar name=b.champion.clone() size=AvatarSize::Sm decorative=true />
+                                                <span class="text-label font-medium text-primary">{b.champion.clone()}</span>
+                                                <span class="min-w-0 flex-1 truncate text-label text-secondary">{b.reason.clone().unwrap_or_default()}</span>
+                                                <Button
+                                                    variant=ButtonVariant::Quiet
+                                                    size=ButtonSize::Sm
+                                                    aria_label=format!("Remove {}", b.champion)
+                                                    on_click=Callback::new(move |_| edit.update(|l| {
+                                                        if i < l.len() {
+                                                            l.remove(i);
+                                                        }
+                                                        for (j, x) in l.iter_mut().enumerate() {
+                                                            x.rank = j as i32;
+                                                        }
+                                                    }))
+                                                >"Remove"</Button>
+                                            </li>
                                         }).collect_view()}
-                                    </select>
+                                    </ol>
+                                }.into_any()
+                            }
+                        }}
+                        <div class="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_2fr_auto]">
+                            <Field id="ban-champion" label="Champion">
+                                <TextField value=champ placeholder="Kalista" />
+                            </Field>
+                            <Field id="ban-reason" label="Reason">
+                                <TextField value=reason placeholder="Their bot lane's comfort pick" />
+                            </Field>
+                            <Button on_click=add>"Add"</Button>
+                        </div>
+                        <div class="flex gap-2">
+                            <Button variant=ButtonVariant::Primary on_click=save>"Save priorities"</Button>
+                            <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| editing.set(false))>"Cancel"</Button>
+                        </div>
+                    </div>
+                }.into_any()
+            } else {
+                view! {
+                    <div class="flex flex-col gap-4">
+                        <Suspense fallback=|| view! { <SkeletonGroup label="Loading ban priorities"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+                            {move || list.get().map(|r| match r {
+                                Err(_) => view! { <Callout tone=CalloutTone::Danger>"Ban priorities did not load."</Callout> }.into_any(),
+                                Ok(l) if l.is_empty() => view! {
+                                    <EmptyState size=EmptySize::Compact message="No ban priorities yet. List the champions your team bans first, with a reason, and they appear here for every draft." />
                                 }.into_any(),
-                                Err(_) => view! {
-                                    <p class="text-danger text-sm py-2">"Failed to load teams."</p>
+                                Ok(l) => view! {
+                                    <ol class="flex flex-col">
+                                        {l.into_iter().map(|b| view! {
+                                            <li class="flex items-center gap-3 border-b border-rule py-2 last:border-b-0">
+                                                <span class="figures w-6 text-label text-muted">{b.rank + 1}</span>
+                                                <ChampionAvatar name=b.champion.clone() size=AvatarSize::Sm decorative=true />
+                                                <span class="text-label font-medium text-primary">{b.champion.clone()}</span>
+                                                <span class="min-w-0 flex-1 truncate text-label text-secondary">{b.reason.unwrap_or_default()}</span>
+                                            </li>
+                                        }).collect_view()}
+                                    </ol>
                                 }.into_any(),
                             })}
                         </Suspense>
+                        <div><Button on_click=start>"Edit priorities"</Button></div>
                     </div>
-                    // Opponent — searchable dropdown + Add New button (D-01, D-02, D-03)
-                    <div>
-                        <label class="block text-secondary text-sm mb-1">"Opponent (optional)"</label>
-                        <div class="flex flex-wrap gap-2 items-start">
-                            <div class="relative min-w-[12rem] flex-1">
-                                <input
-                                    type="text"
-                                    prop:value=move || opp_filter_text.get()
-                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent/50 transition-colors"
-                                    placeholder="Search opponents..."
-                                    on:input=move |ev| {
-                                        let val = event_target_value(&ev);
-                                        set_opp_filter_text.set(val.clone());
-                                        // Clear the stored opponent ID when user types freely
-                                        set_opponent.set(String::new());
-                                        set_opp_dropdown_open.set(true);
-                                    }
-                                    on:focus=move |_| set_opp_dropdown_open.set(true)
-                                    on:blur=move |_| {
-                                        #[cfg(feature = "hydrate")]
-                                        {
-                                            use wasm_bindgen::prelude::*;
-                                            let cb = Closure::once(move || set_opp_dropdown_open.set(false));
-                                            if let Some(win) = web_sys::window() {
-                                                let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
-                                                    cb.as_ref().unchecked_ref(), 150,
-                                                );
-                                            }
-                                            cb.forget();
-                                        }
-                                        #[cfg(not(feature = "hydrate"))]
-                                        set_opp_dropdown_open.set(false);
-                                    }
-                                />
-                                {move || {
-                                    if !opp_dropdown_open.get() {
-                                        return view! { <div></div> }.into_any();
-                                    }
-                                    let items = filtered_opponents();
-                                    let filter_val = opp_filter_text.get();
-                                    if items.is_empty() {
-                                        view! {
-                                            <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden">
-                                                <div class="px-3 py-2 text-dimmed text-sm">
-                                                    {if filter_val.is_empty() {
-                                                        "No opponents scouted yet"
-                                                    } else {
-                                                        "No opponents match"
-                                                    }}
-                                                </div>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="absolute z-50 mt-1 w-full bg-elevated border border-divider rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
-                                                {items.into_iter().map(|opp| {
-                                                    let id = opp.id.clone().unwrap_or_default();
-                                                    let name = opp.name.clone();
-                                                    let id_for_select = id.clone();
-                                                    let name_for_select = name.clone();
-                                                    view! {
-                                                        <button
-                                                            class="w-full flex items-center gap-2 px-3 py-2 hover:bg-overlay transition-colors text-left cursor-pointer text-primary text-sm"
-                                                            on:mousedown=move |ev| {
-                                                                ev.prevent_default();
-                                                                set_opponent.set(id_for_select.clone());
-                                                                set_opp_filter_text.set(name_for_select.clone());
-                                                                set_opp_dropdown_open.set(false);
-                                                                // D-04: auto-open intel sidebar
-                                                                set_selected_opponent_id.set(id_for_select.clone());
-                                                                set_intel_open.set(true);
-                                                            }
-                                                        >
-                                                            {name}
-                                                        </button>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        }.into_any()
-                                    }
-                                }}
-                            </div>
-                            // D-03: Add New Opponent button
-                            <button
-                                class="px-3 py-2 rounded-lg bg-overlay hover:bg-overlay-strong text-secondary hover:text-primary text-sm transition-colors cursor-pointer flex-shrink-0"
-                                on:click=move |_| {
-                                    let name_val = draft_name.get_untracked();
-                                    let opp_val = opponent.get_untracked();
-                                    let side_val = our_side.get_untracked();
-                                    let rate_val = rating.get_untracked();
-                                    let slots_val = draft_slots.get_untracked();
-                                    let comments_val = comments.get_untracked();
-                                    let sc_val = slot_comments.get_untracked();
-                                    let ra_val = role_assignments.get_untracked();
-                                    let tags_val = tags.get_untracked();
-                                    let wc_val = win_conditions.get_untracked();
-                                    let wo_val = watch_out.get_untracked();
-                                    let existing_id = loaded_draft_id.get_untracked();
-                                    let team_id_val = selected_team_id.get_untracked();
-                                    let s_id = active_series.get_untracked().and_then(|s| s.id.clone());
-                                    let g_num = if s_id.is_some() { Some(active_game_number.get_untracked()) } else { None };
+                }.into_any()
+            }}
+        </div>
+    }
+}
 
-                                    if name_val.trim().is_empty() {
-                                        toast.show.run((ToastKind::Error, "Give this draft a name first -- notes weren't saved.".into()));
-                                        return;
-                                    }
-
-                                    leptos::task::spawn_local(async move {
-                                        let saved_id = if let Some(ref did) = existing_id {
-                                            let actions = build_actions(slots_val, &sc_val, &ra_val);
-                                            let acts_json = serde_json::to_string(&actions).unwrap_or_default();
-                                            let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
-                                            let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
-                                            let opp_opt = if opp_val.is_empty() { None } else { Some(opp_val) };
-                                            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
-                                            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
-                                            match update_draft(did.clone(), name_val, opp_opt, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await {
-                                                Ok(()) => Some(did.clone()),
-                                                Err(_) => Some(did.clone()),
-                                            }
-                                        } else {
-                                            let actions = build_actions(slots_val, &sc_val, &ra_val);
-                                            let acts_json = serde_json::to_string(&actions).unwrap_or_default();
-                                            let cmts_json = serde_json::to_string(&comments_val).unwrap_or_default();
-                                            let tags_json = serde_json::to_string(&tags_val).unwrap_or_default();
-                                            let opp_opt = if opp_val.is_empty() { None } else { Some(opp_val) };
-                                            let wc = if wc_val.is_empty() { None } else { Some(wc_val) };
-                                            let wo = if wo_val.is_empty() { None } else { Some(wo_val) };
-                                            let tid = if team_id_val.is_empty() { None } else { Some(team_id_val) };
-                                            save_draft(name_val, opp_opt, tid, acts_json, cmts_json, rate_val, Some(side_val), tags_json, wc, wo, s_id, g_num).await.ok()
-                                        };
-
-                                        #[allow(unused_variables)]
-                                        if let Some(did) = saved_id {
-                                            #[cfg(feature = "hydrate")]
-                                            if let Some(window) = web_sys::window() {
-                                                let url = format!("/opponents?return_to=draft&draft_id={}", did);
-                                                let _ = window.location().set_href(&url);
-                                            }
-                                        }
-                                    });
-                                }
-                            >
-                                "+ Add New Opponent"
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                // Our Side toggle
-                <div class="flex items-center gap-4">
-                    <label class="text-secondary text-sm">"Our Side"</label>
-                    <div class="flex gap-1">
-                        <button
-                            class=move || if our_side.get() == "blue" {
-                                "px-3 py-1 rounded text-sm font-medium bg-side-blue-deep border border-side-blue text-primary cursor-pointer"
-                            } else {
-                                "px-3 py-1 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                            }
-                            on:click=move |_| set_our_side.set("blue".to_string())
-                        >"Blue"</button>
-                        <button
-                            class=move || if our_side.get() == "red" {
-                                "px-3 py-1 rounded text-sm font-medium bg-side-red-deep border border-side-red text-primary cursor-pointer"
-                            } else {
-                                "px-3 py-1 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                            }
-                            on:click=move |_| set_our_side.set("red".to_string())
-                        >"Red"</button>
-                    </div>
-                </div>
-
-                // Rating picker
-                <div>
-                    <label class="block text-secondary text-sm mb-2">"Rating"</label>
-                    <div class="flex gap-1.5">
-                        {TIERS.iter().map(|&tier| {
-                            view! {
-                                <button
-                                    class=move || {
-                                        let selected = rating.get().as_deref() == Some(tier);
-                                        if selected {
-                                            format!("rounded px-3 py-1 text-sm font-bold transition-colors {}", tier_badge_class(tier))
-                                        } else {
-                                            "rounded px-3 py-1 text-sm font-bold transition-colors bg-overlay hover:bg-overlay-strong text-muted".to_string()
-                                        }
-                                    }
-                                    on:click=move |_| {
-                                        let current = rating.get_untracked();
-                                        set_rating.set(
-                                            if current.as_deref() == Some(tier) { None }
-                                            else { Some(tier.to_string()) }
-                                        );
-                                    }
-                                >
-                                    {tier}
-                                </button>
-                            }
-                        }).collect_view()}
-                    </div>
-                </div>
-
-                // Composition tags
-                <div>
-                    <label class="block text-secondary text-sm mb-2">"Composition Tags"</label>
-                    <div class="flex flex-wrap gap-1.5">
-                        {COMPOSITION_TAGS.iter().map(|&tag| {
-                            let tag_str = tag.to_string();
-                            let tag_for_class = tag_str.clone();
-                            let tag_for_click = tag_str.clone();
-                            view! {
-                                <button
-                                    class=move || {
-                                        let selected = tags.get().contains(&tag_for_class);
-                                        if selected {
-                                            "rounded px-3 py-1 text-sm font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
-                                        } else {
-                                            "rounded px-3 py-1 text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                                        }
-                                    }
-                                    on:click=move |_| {
-                                        let tag_val = tag_for_click.clone();
-                                        set_tags.update(|t| {
-                                            if let Some(pos) = t.iter().position(|x| x == &tag_val) {
-                                                t.remove(pos);
-                                            } else {
-                                                t.push(tag_val);
-                                            }
-                                        });
-                                    }
-                                >
-                                    {tag}
-                                </button>
-                            }
-                        }).collect_view()}
-                    </div>
-                </div>
-
-                // Win condition + watch out textareas
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-secondary text-sm mb-1">"How We Win"</label>
-                        <textarea
-                            rows="3"
-                            placeholder="Win condition notes..."
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
-                            prop:value=move || win_conditions.get()
-                            on:input=move |ev| set_win_conditions.set(event_target_value(&ev))
-                        />
-                    </div>
-                    <div>
-                        <label class="block text-secondary text-sm mb-1">"Watch Out For"</label>
-                        <textarea
-                            rows="3"
-                            placeholder="Threats to be aware of..."
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
-                            prop:value=move || watch_out.get()
-                            on:input=move |ev| set_watch_out.set(event_target_value(&ev))
-                        />
-                    </div>
-                </div>
-            </div>
-
-            // Series Mode (Fearless Draft)
-            <div class="bg-elevated border border-divider rounded-lg">
-                <button
-                    class="w-full flex items-center justify-between px-4 py-3 text-secondary text-sm font-medium hover:text-primary transition-colors"
-                    on:click=move |_| set_series_panel_open.update(|v| *v = !*v)
-                >
-                    <span class="flex items-center gap-2">
-                        {move || if active_series.get().is_some() {
-                            view! { <span class="size-2 rotate-45 bg-success" aria-hidden="true"></span> }.into_any()
-                        } else {
-                            view! { <span class="w-2 h-2 rounded-ctl bg-overlay-strong"></span> }.into_any()
-                        }}
-                        "Series Mode"
-                        {move || active_series.get().map(|s| {
-                            let label = if s.is_fearless {
-                                format!(" - {} (Fearless {})", s.name, s.format.to_uppercase())
-                            } else {
-                                format!(" - {} ({})", s.name, s.format.to_uppercase())
-                            };
-                            view! { <span class="text-accent">{label}</span> }
-                        })}
-                    </span>
-                    <span class="text-muted">{move || if series_panel_open.get() { "▲" } else { "▼" }}</span>
-                </button>
-
-                {move || if series_panel_open.get() {
-                    view! {
-                        <div class="border-t border-divider px-4 py-4 flex flex-col gap-4">
-                            // Active series header with game tabs
-                            {move || if let Some(series) = active_series.get() {
-                                let max_games = match series.format.as_str() {
-                                    "bo3" => 3,
-                                    "bo5" => 5,
-                                    _ => 1,
-                                };
-                                let is_fearless = series.is_fearless;
-                                view! {
-                                    <div class="flex flex-col gap-3">
-                                        <div class="flex items-center justify-between">
-                                            <div class="flex items-center gap-3">
-                                                <span class="text-primary font-medium">{series.name.clone()}</span>
-                                                {if is_fearless {
-                                                    view! { <span class="px-2 py-0.5 rounded-ctl border border-accent/60 text-caption font-semibold text-accent">"Fearless"</span> }.into_any()
-                                                } else {
-                                                    view! { <span></span> }.into_any()
-                                                }}
-                                                {series.opponent_name.clone().map(|opp| view! {
-                                                    <span class="text-secondary text-sm">"vs " {opp}</span>
-                                                })}
-                                            </div>
-                                            <button
-                                                class="text-xs text-muted hover:text-danger transition-colors"
-                                                on:click=move |_| {
-                                                    set_active_series.set(None);
-                                                    set_fearless_used.set(Vec::new());
-                                                    set_active_game_number.set(1);
-                                                }
-                                            >"Exit Series"</button>
-                                        </div>
-                                        // Game tabs
-                                        <div class="flex gap-1">
-                                            {(1..=max_games).map(|g| {
-                                                view! {
-                                                    <button
-                                                        class=move || if active_game_number.get() == g {
-                                                            "px-4 py-1.5 rounded text-sm font-medium bg-accent text-accent-contrast cursor-pointer"
-                                                        } else {
-                                                            "px-4 py-1.5 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                                                        }
-                                                        on:click=move |_| {
-                                                            set_active_game_number.set(g);
-                                                            // Clear current draft and load if a draft exists for this game
-                                                            set_draft_slots.set(vec![None::<String>; 20]);
-                                                            set_slot_comments.set(vec![None::<String>; 20]);
-                                                            set_loaded_draft_id.set(None);
-                                                            set_draft_name.set(String::new());
-                                                            set_comments.set(Vec::new());
-                                                            set_tags.set(Vec::new());
-                                                            set_win_conditions.set(String::new());
-                                                            set_watch_out.set(String::new());
-                                                            set_rating.set(None);
-                                                            set_active_slot.set(Some(0));
-
-                                                            // Fetch fearless used champions for this game
-                                                            let s = active_series.get_untracked();
-                                                            if let Some(ref series) = s {
-                                                                if series.is_fearless {
-                                                                    if let Some(sid) = series.id.clone() {
-                                                                        leptos::task::spawn_local(async move {
-                                                                            if let Ok(champs) = get_fearless_champions(sid, None).await {
-                                                                                set_fearless_used.set(champs);
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    >
-                                                        {format!("Game {g}")}
-                                                    </button>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                        {move || if is_fearless && !fearless_used.get().is_empty() {
-                                            view! {
-                                                <div class="text-xs text-muted">
-                                                    <span class="font-medium text-secondary">"Fearless bans: "</span>
-                                                    {fearless_used.get().join(", ")}
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! { <span></span> }.into_any()
-                                        }}
-                                    </div>
-                                }.into_any()
-                            } else {
-                                // No active series: show create form + existing series list
-                                view! {
-                                    <div class="flex flex-col gap-4">
-                                        // Create new series
-                                        <div class="flex flex-col gap-2">
-                                            <span class="text-secondary text-sm font-medium">"Start New Series"</span>
-                                            <div class="grid grid-cols-4 gap-3">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Series name..."
-                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || series_name_input.get()
-                                                    on:input=move |ev| set_series_name_input.set(event_target_value(&ev))
-                                                />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Opponent name..."
-                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || series_opponent_input.get()
-                                                    on:input=move |ev| set_series_opponent_input.set(event_target_value(&ev))
-                                                />
-                                                <select
-                                                    class="bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || series_format_input.get()
-                                                    on:change=move |ev| set_series_format_input.set(event_target_value(&ev))
-                                                >
-                                                    <option value="bo1">"Bo1"</option>
-                                                    <option value="bo3" selected>"Bo3"</option>
-                                                    <option value="bo5">"Bo5"</option>
-                                                </select>
-                                                <div class="flex items-center gap-3">
-                                                    <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer">
-                                                        <input
-                                                            type="checkbox"
-                                                            class="accent-accent"
-                                                            prop:checked=move || series_fearless_input.get()
-                                                            on:change=move |ev| {
-                                                                let checked = event_target_checked(&ev);
-                                                                set_series_fearless_input.set(checked);
-                                                            }
-                                                        />
-                                                        "Fearless"
-                                                    </label>
-                                                    <button
-                                                        class="px-3 py-1.5 rounded text-sm font-medium bg-accent text-accent-contrast hover:opacity-90 transition-opacity cursor-pointer"
-                                                        on:click=move |_| {
-                                                            let name = series_name_input.get_untracked();
-                                                            if name.trim().is_empty() {
-                                                                set_series_status.set(Some("Give the series a name.".into()));
-                                                                return;
-                                                            }
-                                                            let opp = series_opponent_input.get_untracked();
-                                                            let opp_opt = if opp.is_empty() { None } else { Some(opp) };
-                                                            let fmt = series_format_input.get_untracked();
-                                                            let fearless = series_fearless_input.get_untracked();
-                                                            leptos::task::spawn_local(async move {
-                                                                match create_series_fn(name.clone(), opp_opt.clone(), fmt.clone(), fearless).await {
-                                                                    Ok(id) => {
-                                                                        let new_series = Series {
-                                                                            id: Some(id),
-                                                                            name,
-                                                                            team_id: String::new(),
-                                                                            opponent_id: None,
-                                                                            opponent_name: opp_opt,
-                                                                            format: fmt,
-                                                                            is_fearless: fearless,
-                                                                            notes: None,
-                                                                            created_by: String::new(),
-                                                                        };
-                                                                        set_active_series.set(Some(new_series));
-                                                                        set_active_game_number.set(1);
-                                                                        set_series_name_input.set(String::new());
-                                                                        set_series_opponent_input.set(String::new());
-                                                                        set_series_status.set(Some("Series created!".into()));
-                                                                        series_resource.refetch();
-                                                                    }
-                                                                    Err(e) => set_series_status.set(Some(format!("Error: {e}"))),
-                                                                }
-                                                            });
-                                                        }
-                                                    >"Create"</button>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        // Existing series list
-                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonLine width="w-24" height="h-4" /><SkeletonCard height="h-8" /><SkeletonCard height="h-8" /></div> }>
-                                            {move || series_resource.get().map(|result| match result {
-                                                Ok(list) if list.is_empty() => view! {
-                                                    <p class="text-dimmed text-sm">"No series yet."</p>
-                                                }.into_any(),
-                                                Ok(list) => view! {
-                                                    <div class="flex flex-col gap-1">
-                                                        <span class="text-secondary text-sm font-medium">"Existing Series"</span>
-                                                        {list.into_iter().map(|s| {
-                                                            let series_clone = s.clone();
-                                                            let label = format!(
-                                                                "{} {}{}",
-                                                                s.name,
-                                                                s.format.to_uppercase(),
-                                                                if s.is_fearless { " (Fearless)" } else { "" }
-                                                            );
-                                                            let opp_label = s.opponent_name.clone().unwrap_or_default();
-                                                            view! {
-                                                                <button
-                                                                    class="flex items-center justify-between w-full px-3 py-2 rounded bg-overlay hover:bg-overlay-strong text-sm text-primary transition-colors cursor-pointer"
-                                                                    on:click=move |_| {
-                                                                        let sc = series_clone.clone();
-                                                                        let is_fearless = sc.is_fearless;
-                                                                        let sid = sc.id.clone();
-                                                                        set_active_series.set(Some(sc));
-                                                                        set_active_game_number.set(1);
-                                                                        // Load fearless bans if applicable
-                                                                        if is_fearless {
-                                                                            if let Some(sid) = sid {
-                                                                                leptos::task::spawn_local(async move {
-                                                                                    if let Ok(champs) = get_fearless_champions(sid, None).await {
-                                                                                        set_fearless_used.set(champs);
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                >
-                                                                    <span>{label}</span>
-                                                                    {if !opp_label.is_empty() {
-                                                                        view! { <span class="text-muted text-xs">"vs " {opp_label}</span> }.into_any()
-                                                                    } else {
-                                                                        view! { <span></span> }.into_any()
-                                                                    }}
-                                                                </button>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any(),
-                                                Err(e) => view! {
-                                                    <p class="text-danger text-sm">"Failed to load series: " {e.to_string()}</p>
-                                                }.into_any(),
-                                            })}
-                                        </Suspense>
-
-                                        {move || series_status.get().map(|msg| view! {
-                                            <p class="text-sm text-accent">{msg}</p>
-                                        })}
-                                    </div>
-                                }.into_any()
-                            }}
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
-                }}
-            </div>
-
-            // Board + Comments — mode-dispatched (18-04: carousel/war-table; 18-07: ledger; 18-08: signal-driven)
-            <div class="flex flex-col xl:flex-row gap-4">
-                {move || match mode_current.get().as_str() {
-                    "war-table" => view! {
-                        <DraftWarTableView
-                            champions_resource=champions_resource
-                            draft_slots=draft_slots
-                            active_slot=active_slot
-                            highlighted_slot=highlighted_slot
-                            on_slot_click=on_slot_click
-                            on_slot_drop=on_slot_drop
-                            on_slot_clear=on_slot_clear
-                            slot_comments=slot_comments
-                            warning_slots_memo=warning_slots_memo
-                            role_assignments=role_assignments
-                            role_auto_guessed=role_auto_guessed
-                            on_role_set=on_role_set_cb
-                            our_side=our_side
-                            role_overrides=role_overrides
-                            set_role_overrides=set_role_overrides
-                            slot_comment_input=slot_comment_input
-                            set_slot_comment_input=set_slot_comment_input
-                            set_slot_comments=set_slot_comments
-                        />
-                    }.into_any(),
-                    "ledger" => view! {
-                        <DraftLedgerView
-                            draft_slots=draft_slots
-                            our_side=our_side
-                        />
-                    }.into_any(),
-                    _ => view! {
-                        <DraftCarouselView
-                            champions_resource=champions_resource
-                            draft_slots=draft_slots
-                            active_slot=active_slot
-                            highlighted_slot=highlighted_slot
-                            on_slot_click=on_slot_click
-                            on_slot_drop=on_slot_drop
-                            on_slot_clear=on_slot_clear
-                            slot_comments=slot_comments
-                            warning_slots_memo=warning_slots_memo
-                            role_assignments=role_assignments
-                            role_auto_guessed=role_auto_guessed
-                            on_role_set=on_role_set_cb
-                            our_side=our_side
-                            role_overrides=role_overrides
-                            set_role_overrides=set_role_overrides
-                            slot_comment_input=slot_comment_input
-                            set_slot_comment_input=set_slot_comment_input
-                            set_slot_comments=set_slot_comments
-                        />
-                    }.into_any(),
-                }}
-
-                // Comments sidebar
-                <div class="w-full xl:w-72 shrink-0 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3">
-                    <h3 class="text-primary font-bold">"Comments"</h3>
-                    <div class="flex flex-col gap-1 max-h-64 overflow-y-auto flex-1">
-                        {move || {
-                            let list = comments.get();
-                            if list.is_empty() {
-                                view! { <p class="text-dimmed text-sm">"No comments yet."</p> }.into_any()
-                            } else {
-                                view! {
-                                    <div class="flex flex-col gap-1">
-                                        {list.into_iter().map(|c| view! {
-                                            <div class="bg-surface rounded p-2 text-sm text-secondary">{c}</div>
-                                        }).collect_view()}
-                                    </div>
-                                }.into_any()
-                            }
-                        }}
-                    </div>
-                    <textarea
-                        rows="3"
-                        placeholder="Add a comment..."
-                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
-                        on:input=move |ev| set_comment_input.set(event_target_value(&ev))
-                        prop:value=move || comment_input.get()
-                    />
-                    <button
-                        class="bg-overlay-strong hover:bg-overlay-strong text-primary text-sm rounded px-3 py-1 transition-colors"
-                        on:click=move |_| {
-                            let text = comment_input.get_untracked();
-                            let trimmed = text.trim().to_string();
-                            if !trimmed.is_empty() {
-                                set_comments.update(|c| c.push(trimmed));
-                                set_comment_input.set(String::new());
-                            }
+/// Champions that keep appearing in the same step of the team's drafts.
+#[component]
+fn Tendencies() -> impl IntoView {
+    let data = Resource::new(|| (), |_| get_draft_tendency_data());
+    view! {
+        <Suspense fallback=|| view! { <SkeletonGroup label="Loading tendencies"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+            {move || data.get().map(|r| match r {
+                Err(_) => view! { <Callout tone=CalloutTone::Danger>"Tendencies did not load."</Callout> }.into_any(),
+                Ok(rows) => {
+                    // Per champion: total appearances and the most common step.
+                    let mut by_champ: HashMap<String, (i32, i32, i32)> = HashMap::new();
+                    for t in &rows {
+                        let e = by_champ.entry(t.champion.clone()).or_insert((0, -1, 0));
+                        e.0 += t.count;
+                        if t.count > e.2 {
+                            e.1 = t.order;
+                            e.2 = t.count;
                         }
-                    >
-                        "+ Add Comment"
-                    </button>
-                </div>
-
-                // Intel Sidebar
-                {move || if intel_open.get() {
-                    let current_tab = intel_tab.get();
-                    let draft_champs = draft_slots.get();
-                    let all_draft_champs: Vec<String> = draft_champs.iter().filter_map(|s| s.clone()).collect();
-                    let all_draft_champs_for_matchup = all_draft_champs.clone();
-                    view! {
-                        <div class="w-[350px] flex-shrink-0 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3 max-h-[600px] overflow-y-auto">
-                            // Tab buttons
-                            <div class="flex gap-1">
-                                {["pools", "their_picks", "matchups", "notes"].iter().map(|&tab| {
-                                    let tab_str = tab.to_string();
-                                    let tab_for_class = tab_str.clone();
-                                    let tab_for_click = tab_str.clone();
-                                    let label = match tab {
-                                        "pools" => "Our Pools",
-                                        "their_picks" => "Their Picks",
-                                        "matchups" => "Matchups",
-                                        "notes" => "Notes",
-                                        _ => "",
-                                    };
-                                    view! {
-                                        <button
-                                            class=move || {
-                                                if intel_tab.get() == tab_for_class {
-                                                    "flex-1 px-2 py-1.5 rounded text-xs font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
-                                                } else {
-                                                    "flex-1 px-2 py-1.5 rounded text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                                                }
-                                            }
-                                            on:click=move |_| set_intel_tab.set(tab_for_click.clone())
-                                        >
-                                            {label}
-                                        </button>
-                                    }
-                                }).collect_view()}
-                            </div>
-
-                            // Tab content
-                            {if current_tab == "pools" {
-                                view! {
-                                    <div class="flex flex-col gap-3">
-                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-16" /><SkeletonCard height="h-16" /></div> }>
-                                            {move || team_pools.get().map(|result| match result {
-                                                Ok(pools) if pools.is_empty() => view! {
-                                                    <p class="text-dimmed text-sm">"No starters with champion pools yet."</p>
-                                                }.into_any(),
-                                                Ok(mut pools) => {
-                                                    pools.sort_by_key(|(_, role, _)| role_order(role));
-                                                    view! {
-                                                        <div class="flex flex-col gap-3">
-                                                            // Collect team stats into a lookup map: username -> Vec<ChampionStatSummary>
-                                                            {let all_stats: std::collections::HashMap<String, Vec<ChampionStatSummary>> = team_stats.get()
-                                                                .and_then(|r| r.ok())
-                                                                .map(|v| v.into_iter().collect())
-                                                                .unwrap_or_default();
-                                                            pools.into_iter().map(|(username, role, entries)| {
-                                                                let user_stats = all_stats.get(&username).cloned().unwrap_or_default();
-                                                                let role_label = match role.as_str() {
-                                                                    "top" => "TOP",
-                                                                    "jungle" | "jng" => "JNG",
-                                                                    "mid" | "middle" => "MID",
-                                                                    "bot" | "adc" => "BOT",
-                                                                    "support" | "sup" => "SUP",
-                                                                    other => other,
-                                                                };
-                                                                view! {
-                                                                    <div class="bg-surface rounded p-2">
-                                                                        <div class="flex items-center gap-2 mb-1.5">
-                                                                            <span class="text-xs font-bold text-accent uppercase">{role_label.to_string()}</span>
-                                                                            <span class="text-xs text-secondary">{username}</span>
-                                                                        </div>
-                                                                        {if entries.is_empty() {
-                                                                            view! { <p class="text-dimmed text-xs">"No champions"</p> }.into_any()
-                                                                        } else {
-                                                                            // Group by tier
-                                                                            let tiers_order = ["comfort", "match_ready", "scrim_ready", "practicing", "to_practice"];
-                                                                            fn tier_label_fn(t: &str) -> &'static str {
-                                                                                match t {
-                                                                                    "comfort" => "Comfort",
-                                                                                    "match_ready" => "Match Ready",
-                                                                                    "scrim_ready" => "Scrim Ready",
-                                                                                    "practicing" => "Practicing",
-                                                                                    "to_practice" => "To Practice",
-                                                                                    _ => "Other",
-                                                                                }
-                                                                            }
-                                                                            view! {
-                                                                                <div class="flex flex-col gap-1">
-                                                                                    {tiers_order.iter().filter_map(|&tier| {
-                                                                                        let tier_entries: Vec<_> = entries.iter().filter(|e| e.tier == tier).collect();
-                                                                                        if tier_entries.is_empty() {
-                                                                                            return None;
-                                                                                        }
-                                                                                        let tier_cls = match tier {
-                                                                                            "comfort" => "text-success",
-                                                                                            "match_ready" => "text-info",
-                                                                                            "scrim_ready" => "text-warning",
-                                                                                            "practicing" => "text-muted",
-                                                                                            "to_practice" => "text-muted",
-                                                                                            _ => "text-muted",
-                                                                                        };
-                                                                                        let label = tier_label_fn(tier);
-                                                                                        Some(view! {
-                                                                                            <div>
-                                                                                                <span class=format!("text-caption font-bold uppercase {tier_cls}")>{label.to_string()}</span>
-                                                                                                <div class="flex flex-wrap gap-1 mt-0.5">
-                                                                                                    {tier_entries.into_iter().map(|entry| {
-                                                                                                        let champ_name = entry.champion.clone();
-                                                                                                        let champ_for_click = champ_name.clone();
-                                                                                                        let champ_for_title = champ_name.clone();
-                                                                                                        let champ_for_display = champ_name.clone();
-                                                                                                        let comfort = entry.comfort_level.unwrap_or(0);
-                                                                                                        // Look up match stats for this champion
-                                                                                                        let stat = user_stats.iter().find(|s| s.champion == champ_name).cloned();
-                                                                                                        let title_text = if let Some(ref s) = stat {
-                                                                                                            let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
-                                                                                                            format!("{} - {}G {}%W {:.1} KDA", champ_for_title, s.games, wr, s.avg_kda)
-                                                                                                        } else {
-                                                                                                            format!("Click to add {} to active slot", champ_for_title)
-                                                                                                        };
-                                                                                                        let comfort_dots = (0..5).map(|i| {
-                                                                                                            if i < comfort {
-                                                                                                                view! { <span class="w-1 h-1 rounded-ctl bg-accent inline-block"></span> }
-                                                                                                            } else {
-                                                                                                                view! { <span class="w-1 h-1 rounded-ctl bg-overlay-strong inline-block"></span> }
-                                                                                                            }
-                                                                                                        }).collect_view();
-                                                                                                        let stat_badge = stat.map(|s| {
-                                                                                                            let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
-                                                                                                            format!("{}G/{}%", s.games, wr)
-                                                                                                        });
-                                                                                                        view! {
-                                                                                                            <button
-                                                                                                                class="bg-overlay rounded px-1.5 py-0.5 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer flex items-center gap-1"
-                                                                                                                title=title_text
-                                                                                                                on:click=move |_| {
-                                                                                                                    if let Some(slot) = active_slot.get_untracked() {
-                                                                                                                        fill_slot(slot, champ_for_click.clone());
-                                                                                                                    }
-                                                                                                                }
-                                                                                                            >
-                                                                                                                <span>{champ_for_display}</span>
-                                                                                                                <span class="flex gap-px">{comfort_dots}</span>
-                                                                                                                {stat_badge.map(|badge| view! {
-                                                                                                                    <span class="text-caption text-muted ml-0.5">{badge}</span>
-                                                                                                                })}
-                                                                                                            </button>
-                                                                                                        }
-                                                                                                    }).collect_view()}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        })
-                                                                                    }).collect_view()}
-                                                                                </div>
-                                                                            }.into_any()
-                                                                        }}
-                                                                    </div>
-                                                                }
-                                                            }).collect_view()}
-                                                        </div>
-                                                    }.into_any()
-                                                },
-                                                Err(e) => view! {
-                                                    <p class="text-danger text-sm">{format!("Error: {e}")}</p>
-                                                }.into_any(),
-                                            })}
-                                        </Suspense>
-                                    </div>
-                                }.into_any()
-                            } else if current_tab == "their_picks" {
-                                view! {
-                                    <div class="flex flex-col gap-3">
-                                        // D-06: Opponent select removed — header dropdown is the single source of truth.
-                                        // selected_opponent_id is set by the header opponent autocomplete.
-                                        {move || {
-                                            let opp_id = selected_opponent_id.get();
-                                            if opp_id.is_empty() {
-                                                view! {
-                                                    <p class="text-dimmed text-sm">"Select an opponent from the draft header to view their intel."</p>
-                                                }.into_any()
-                                            } else {
-                                                view! { <span></span> }.into_any()
-                                            }
-                                        }}
-                                        // Opponent players — enhanced intel: frequencies, OTP badge, mastery
-                                        <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
-                                            {move || {
-                                                let draft_champs = all_draft_champs.clone();
-                                                opponent_players.get().map(move |result| match result {
-                                                    Ok(intel) if intel.is_empty() && !selected_opponent_id.get_untracked().is_empty() => view! {
-                                                        <p class="text-dimmed text-sm">"No players scouted for this opponent."</p>
-                                                    }.into_any(),
-                                                    Ok(intel) if intel.is_empty() => view! {
-                                                        <span></span>
-                                                    }.into_any(),
-                                                    Ok(intel) => {
-                                                        let draft_set = draft_champs.clone();
-                                                        view! {
-                                                            <div class="flex flex-col gap-2">
-                                                                {intel.into_iter().map(|pi| {
-                                                                    let draft_set_inner = draft_set.clone();
-                                                                    let player = pi.player.clone();
-                                                                    let role_label = match player.role.as_str() {
-                                                                        "top" => "TOP",
-                                                                        "jungle" | "jng" => "JNG",
-                                                                        "mid" | "middle" => "MID",
-                                                                        "bot" | "adc" => "BOT",
-                                                                        "support" | "sup" => "SUP",
-                                                                        other => other,
-                                                                    };
-                                                                    let otp = pi.otp_champion.clone();
-                                                                    let freqs = pi.champion_frequencies.clone();
-                                                                    let mastery = pi.mastery_data.clone();
-                                                                    let no_puuid = player.riot_puuid.is_none();
-                                                                    view! {
-                                                                        <div class="bg-surface rounded p-2">
-                                                                            // Player header with role, name, and OTP badge
-                                                                            <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                                                                <span class="font-mono text-caption font-medium uppercase text-muted">{role_label.to_string()}</span>
-                                                                                <span class="text-xs text-secondary">{player.name.clone()}</span>
-                                                                                {otp.map(|otp_name| view! {
-                                                                                    <span class="rounded-ctl border border-warning/50 px-1.5 py-0.5 text-caption text-warning">
-                                                                                        "OTP: " {otp_name}
-                                                                                    </span>
-                                                                                })}
-                                                                            </div>
-                                                                            // Champion frequency list
-                                                                            {if freqs.is_empty() {
-                                                                                view! { <p class="text-dimmed text-xs">"No recent champions"</p> }.into_any()
-                                                                            } else {
-                                                                                view! {
-                                                                                    <div class="flex flex-wrap gap-1">
-                                                                                        {freqs.into_iter().map(|(champ, count)| {
-                                                                                            let is_drafted = draft_set_inner.contains(&champ);
-                                                                                            let label = format!("{} ({})", champ, count);
-                                                                                            let cls = if is_drafted {
-                                                                                                "bg-overlay rounded px-1.5 py-0.5 text-xs text-dimmed line-through opacity-50"
-                                                                                            } else {
-                                                                                                "bg-overlay rounded px-1.5 py-0.5 text-xs text-primary"
-                                                                                            };
-                                                                                            view! {
-                                                                                                <span class=cls>{label}</span>
-                                                                                            }
-                                                                                        }).collect_view()}
-                                                                                    </div>
-                                                                                }.into_any()
-                                                                            }}
-                                                                            // Mastery section (only shown when mastery data available)
-                                                                            {if mastery.is_empty() {
-                                                                                if no_puuid {
-                                                                                    view! {
-                                                                                        <p class="text-dimmed text-xs mt-1 italic">"No Riot account linked — mastery data unavailable"</p>
-                                                                                    }.into_any()
-                                                                                } else {
-                                                                                    view! { <span></span> }.into_any()
-                                                                                }
-                                                                            } else {
-                                                                                view! {
-                                                                                    <div class="mt-2">
-                                                                                        <p class="text-muted text-xs font-medium mb-1">"Mastery"</p>
-                                                                                        <div class="flex flex-wrap gap-1">
-                                                                                            {mastery.into_iter().map(|(champ_name, level, points)| {
-                                                                                                let pts_k = points / 1000;
-                                                                                                let label = format!("{} Lv.{} ({}k)", champ_name, level, pts_k);
-                                                                                                view! {
-                                                                                                    <span class="bg-overlay rounded px-1.5 py-0.5 text-xs text-secondary">{label}</span>
-                                                                                                }
-                                                                                            }).collect_view()}
-                                                                                        </div>
-                                                                                    </div>
-                                                                                }.into_any()
-                                                                            }}
-                                                                            // Player notes
-                                                                            {player.notes.as_ref().map(|notes| view! {
-                                                                                <p class="text-dimmed text-xs mt-1 italic">{notes.clone()}</p>
-                                                                            })}
-                                                                        </div>
-                                                                    }
-                                                                }).collect_view()}
-                                                            </div>
-                                                        }.into_any()
-                                                    },
-                                                    Err(e) => view! {
-                                                        <p class="text-danger text-sm">{format!("Error: {e}")}</p>
-                                                    }.into_any(),
-                                                })
-                                            }}
-                                        </Suspense>
-                                    </div>
-                                }.into_any()
-                            } else if current_tab == "matchups" {
-                                // Matchups tab
-                                view! {
-                                    <div class="flex flex-col gap-3">
-                                        {move || {
-                                            let champ = matchup_champion.get();
-                                            let draft_champs_inner = all_draft_champs_for_matchup.clone();
-                                            // D-07: collect banned champions to filter from matchup selection
-                                            let banned = banned_champions();
-                                            if let Some(ref c) = champ {
-                                                view! {
-                                                    <div>
-                                                        // D-08: Back button to return to champion list
-                                                        <button
-                                                            class="flex items-center gap-1 text-xs text-muted hover:text-secondary transition-colors cursor-pointer mb-2"
-                                                            on:click=move |_| set_matchup_champion.set(None)
-                                                        >
-                                                            <span>"\u{2190} Back to champions"</span>
-                                                        </button>
-                                                        <p class="text-sm text-secondary mb-2">
-                                                            "Matchup notes for "
-                                                            <span class="text-primary font-medium">{c.clone()}</span>
-                                                        </p>
-                                                        <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonLine width="w-full" height="h-3" /><SkeletonLine width="w-3/4" height="h-3" /></div> }>
-                                                            {move || matchup_notes.get().map(|result| match result {
-                                                                Ok(notes) if notes.is_empty() => view! {
-                                                                    <p class="text-dimmed text-sm">"No matchup notes found for this champion."</p>
-                                                                }.into_any(),
-                                                                Ok(notes) => view! {
-                                                                    <div class="flex flex-col gap-2">
-                                                                        {notes.into_iter().map(|(author, note)| {
-                                                                            view! {
-                                                                                <div class="bg-surface rounded p-2">
-                                                                                    <div class="flex items-center gap-2 mb-1">
-                                                                                        <span class="text-xs font-medium text-accent">{author}</span>
-                                                                                        <span class="text-xs text-muted">{note.champion.clone()}" "{note.role.clone()}</span>
-                                                                                        {note.difficulty.map(|d| {
-                                                                                            let diff_cls = match d {
-                                                                                                1..=2 => "text-success",
-                                                                                                3 => "text-warning",
-                                                                                                4..=5 => "text-danger",
-                                                                                                _ => "text-muted",
-                                                                                            };
-                                                                                            view! {
-                                                                                                <span class=format!("text-xs {diff_cls}")>{format!("Diff: {d}/5")}</span>
-                                                                                            }
-                                                                                        })}
-                                                                                    </div>
-                                                                                    <p class="text-xs text-primary font-medium">{note.title.clone()}</p>
-                                                                                    <p class="text-xs text-secondary mt-0.5">{note.content.clone()}</p>
-                                                                                </div>
-                                                                            }
-                                                                        }).collect_view()}
-                                                                    </div>
-                                                                }.into_any(),
-                                                                Err(e) => view! {
-                                                                    <p class="text-danger text-sm">{format!("Error: {e}")}</p>
-                                                                }.into_any(),
-                                                            })}
-                                                        </Suspense>
-                                                    </div>
-                                                }.into_any()
-                                            } else {
-                                                // Show clickable list of drafted champions (D-07: ban filtered)
-                                                view! {
-                                                    <div>
-                                                        <p class="text-dimmed text-sm mb-2">"Select a drafted champion to view matchup notes."</p>
-                                                        {
-                                                            // D-07: filter out banned champions from matchup selection
-                                                            let available: Vec<String> = draft_champs_inner
-                                                                .into_iter()
-                                                                .filter(|champ| !banned.contains(champ))
-                                                                .collect();
-                                                            if available.is_empty() {
-                                                                view! { <p class="text-dimmed text-xs">"No non-banned champions drafted yet."</p> }.into_any()
-                                                            } else {
-                                                                view! {
-                                                                    <div class="flex flex-wrap gap-1">
-                                                                        {available.into_iter().map(|champ| {
-                                                                            let champ_for_click = champ.clone();
-                                                                            view! {
-                                                                                <button
-                                                                                    class="bg-overlay rounded px-2 py-1 text-xs text-primary hover:bg-accent hover:text-accent-contrast transition-colors cursor-pointer"
-                                                                                    on:click=move |_| set_matchup_champion.set(Some(champ_for_click.clone()))
-                                                                                >
-                                                                                    {champ.clone()}
-                                                                                </button>
-                                                                            }
-                                                                        }).collect_view()}
-                                                                    </div>
-                                                                }.into_any()
-                                                            }
-                                                        }
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                        }}
-                                    </div>
-                                }.into_any()
-                            } else {
-                                // Notes tab (D-10 through D-14)
-                                let toggle_note_type = Callback::new(move |nt: String| {
-                                    set_collapsed_note_types.update(|v| {
-                                        if v.contains(&nt) {
-                                            v.retain(|t| t != &nt);
-                                        } else {
-                                            v.push(nt);
-                                        }
-                                    });
-                                });
-                                view! {
-                                    <div class="flex flex-col gap-3">
-                                        {move || {
-                                            let picks = our_picks_for_notes();
-                                            if picks.is_empty() {
-                                                view! {
-                                                    <p class="text-dimmed text-sm">"Pick champions on your side to see pool notes."</p>
-                                                }.into_any()
-                                            } else {
-                                                let selected_tab = notes_champion_tab.get();
-                                                view! {
-                                                    <div class="flex flex-col gap-2">
-                                                        // Champion sub-tab row (D-11)
-                                                        <div class="flex gap-1 flex-wrap border-b border-divider pb-2">
-                                                            {picks.clone().into_iter().map(|champ| {
-                                                                let champ_for_click = champ.clone();
-                                                                let is_active = selected_tab == champ;
-                                                                view! {
-                                                                    <button
-                                                                        class=if is_active {
-                                                                            "px-2 py-1 rounded-t text-xs font-semibold border-b-2 border-accent text-primary bg-transparent cursor-pointer"
-                                                                        } else {
-                                                                            "px-2 py-1 rounded-t text-xs font-semibold text-muted hover:text-secondary transition-colors cursor-pointer"
-                                                                        }
-                                                                        on:click=move |_| set_notes_champion_tab.set(champ_for_click.clone())
-                                                                    >
-                                                                        {champ.clone()}
-                                                                    </button>
-                                                                }
-                                                            }).collect_view()}
-                                                        </div>
-                                                        // Selected champion's notes (D-12)
-                                                        {move || {
-                                                            let current_champ = notes_champion_tab.get();
-                                                            if current_champ.is_empty() {
-                                                                return view! { <span></span> }.into_any();
-                                                            }
-                                                            match pool_notes.get() {
-                                                                None => view! {
-                                                                    <div class="flex flex-col gap-1">
-                                                                        <SkeletonLine width="w-full" height="h-3" />
-                                                                        <SkeletonLine width="w-3/4" height="h-3" />
-                                                                    </div>
-                                                                }.into_any(),
-                                                                Some(Err(e)) => view! {
-                                                                    <p class="text-danger text-sm">{format!("Error: {e}")}</p>
-                                                                }.into_any(),
-                                                                Some(Ok(notes_data)) => {
-                                                                    let champ_notes = notes_data
-                                                                        .iter()
-                                                                        .find(|(c, _)| c == &current_champ)
-                                                                        .map(|(_, ns)| ns.clone())
-                                                                        .unwrap_or_default();
-                                                                    if champ_notes.is_empty() {
-                                                                        // Empty state (D-14)
-                                                                        view! {
-                                                                            <div class="flex flex-col items-center gap-2 py-6 text-center">
-                                                                                <span class="text-sm text-dimmed">"No notes for " {current_champ.clone()} " yet."</span>
-                                                                                <a href="/champion-pool" class="text-xs text-accent hover:underline cursor-pointer">"Add notes in Champion Pool"</a>
-                                                                            </div>
-                                                                        }.into_any()
-                                                                    } else {
-                                                                        // Group by note_type in collapsible sections (D-12)
-                                                                        view! {
-                                                                            <div class="flex flex-col">
-                                                                                {NOTE_TYPES.iter().filter_map(|&nt| {
-                                                                                    let notes_of_type: Vec<_> = champ_notes.iter()
-                                                                                        .filter(|n| n.note_type == nt)
-                                                                                        .collect();
-                                                                                    if notes_of_type.is_empty() {
-                                                                                        return None;
-                                                                                    }
-                                                                                    let nt_str = nt.to_string();
-                                                                                    let nt_for_toggle = nt_str.clone();
-                                                                                    let label = note_type_label(nt);
-                                                                                    let is_collapsed = collapsed_note_types.get().contains(&nt_str);
-                                                                                    let chevron = if is_collapsed { "▶" } else { "▼" };
-                                                                                    Some(view! {
-                                                                                        <div class="border-b border-divider last:border-b-0">
-                                                                                            <div
-                                                                                                class="flex items-center justify-between py-2 cursor-pointer hover:text-primary transition-colors"
-                                                                                                on:click=move |_| toggle_note_type.run(nt_for_toggle.clone())
-                                                                                            >
-                                                                                                <span class="text-xs font-semibold text-secondary uppercase tracking-wide">{label}</span>
-                                                                                                <span class="text-xs text-muted">{chevron}</span>
-                                                                                            </div>
-                                                                                            {if !is_collapsed {
-                                                                                                view! {
-                                                                                                    <div class="flex flex-col gap-1 pb-2">
-                                                                                                        {notes_of_type.into_iter().map(|note| {
-                                                                                                            let display = if note.title.is_empty() {
-                                                                                                                note.content.clone()
-                                                                                                            } else {
-                                                                                                                format!("{}: {}", note.title, note.content)
-                                                                                                            };
-                                                                                                            view! {
-                                                                                                                <p class="text-xs text-muted leading-relaxed">{display}</p>
-                                                                                                            }
-                                                                                                        }).collect_view()}
-                                                                                                    </div>
-                                                                                                }.into_any()
-                                                                                            } else {
-                                                                                                view! { <span></span> }.into_any()
-                                                                                            }}
-                                                                                        </div>
-                                                                                    })
-                                                                                }).collect_view()}
-                                                                            </div>
-                                                                        }.into_any()
-                                                                    }
-                                                                },
-                                                            }
-                                                        }}
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                        }}
-                                    </div>
-                                }.into_any()
-                            }}
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
-                }}
-            </div>
-
-            // Champion Picker
-            <div class="bg-elevated border border-divider rounded-lg p-4">
-                {move || active_slot_label().map(|label| view! {
-                    <p class="text-accent-hover text-sm font-medium mb-2">{label}</p>
-                })}
-                <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
-                    {move || champions_resource.get().map(|result| match result {
-                        Err(e) => view! {
-                            <ErrorBanner message=format!("Failed to load champions: {e}") />
-                        }.into_any(),
-                        Ok(champs) => view! {
-                            <ChampionPicker
-                                champions=champs
-                                used_champions=used_champions()
-                                on_select=on_champion_select
-                            />
-                        }.into_any(),
-                    })}
-                </Suspense>
-            </div>
-
-            // Action buttons
-            <div class="flex gap-3 items-center">
-                <button
-                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-6 py-2 transition-colors"
-                    on:click=do_save
-                >
-                    {move || if loaded_draft_id.get().is_some() { "Update Draft" } else { "Save Draft" }}
-                </button>
-                <button
-                    class="bg-overlay-strong hover:bg-overlay-strong text-primary rounded px-4 py-2 transition-colors"
-                    on:click=move |_| {
-                        set_draft_slots.set(vec![None; 20]);
-                        set_active_slot.set(Some(0));
-                        set_highlighted_slot.set(None);
-                        set_comments.set(Vec::new());
-                        set_loaded_draft_id.set(None);
-                        set_draft_name.set(String::new());
-                        set_opponent.set(String::new());
-                        set_opp_filter_text.set(String::new());
-                        set_rating.set(None);
-                        set_tags.set(Vec::new());
-                        set_win_conditions.set(String::new());
-                        set_watch_out.set(String::new());
-                        set_slot_comments.set(vec![None; 20]);
-                        set_slot_comment_input.set(String::new());
-                        // Keep selected_team_id — the user probably wants the same team
                     }
-                >
-                    {move || if loaded_draft_id.get().is_some() { "New Draft" } else { "Clear" }}
-                </button>
-                // Pipeline CTAs for loaded draft
-                {move || {
-                    let did = loaded_draft_id.get();
-                    if let Some(current_draft_id) = did {
-                        let draft_id_for_prep = current_draft_id.clone();
-                        let draft_id_for_review = current_draft_id.clone();
-                        let draft_id_for_review2 = current_draft_id.clone();
-                        view! {
-                            <div class="flex items-center gap-2 flex-wrap">
-                                // Prep for This Draft CTA
-                                <button
-                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors disabled:opacity-50"
-                                    disabled=move || cta_loading.get()
-                                    on:click=move |_| {
-                                        let did2 = draft_id_for_prep.clone();
-                                        set_cta_loading.set(true);
-                                        set_cta_status.set(None);
-                                        leptos::task::spawn_local(async move {
-                                            match check_draft_has_game_plan(did2.clone()).await {
-                                                Ok(None) => {
-                                                    set_cta_loading.set(false);
-                                                    #[cfg(feature = "hydrate")]
-                                                    if let Some(window) = web_sys::window() {
-                                                        let _ = window.location().set_href(&format!("/game-plan?draft_id={did2}"));
-                                                    }
-                                                }
-                                                Ok(Some(plan_id)) => {
-                                                    set_cta_loading.set(false);
-                                                    set_duplicate_prompt.set(Some((did2, plan_id)));
-                                                }
-                                                Err(e) => {
-                                                    set_cta_loading.set(false);
-                                                    set_cta_status.set(Some(format!("Error: {e}")));
-                                                }
-                                            }
-                                        });
-                                    }
-                                >"Prep for This Draft"</button>
-                                // Review This Game CTA (only when draft has linked game plans)
-                                {move || {
-                                    let bid = draft_id_for_review.clone();
-                                    let has_plan = game_plan_counts.get()
-                                        .and_then(|r| r.ok())
-                                        .and_then(|pairs| pairs.into_iter().find(|(id, _)| id == &bid).map(|(_, c)| c))
-                                        .unwrap_or(0) > 0;
-                                    if has_plan {
-                                        let dr2 = draft_id_for_review2.clone();
-                                        view! {
-                                            <button
-                                                class="bg-accent hover:bg-accent-hover text-accent-ink font-semibold rounded-ctl px-4 py-2 text-sm transition-colors"
-                                                on:click=move |_| {
-                                                    #[allow(unused_variables)]
-                                                    let did3 = dr2.clone();
-                                                    #[cfg(feature = "hydrate")]
-                                                    if let Some(window) = web_sys::window() {
-                                                        let _ = window.location().set_href(&format!("/post-game?draft_id={did3}"));
-                                                    }
-                                                }
-                                            >"Review This Game"</button>
-                                        }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }
-                                }}
-                                {move || cta_status.get().map(|msg| view! {
-                                    <span class="text-danger text-sm">{msg}</span>
-                                })}
-                            </div>
-                        }.into_any()
-                    } else {
-                        view! { <span></span> }.into_any()
+                    let mut list: Vec<(String, i32, i32, i32)> = by_champ
+                        .into_iter()
+                        .filter(|(_, (total, _, _))| *total >= 2)
+                        .map(|(c, (total, order, count))| (c, total, order, count))
+                        .collect();
+                    list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                    if list.is_empty() {
+                        return view! {
+                            <EmptyState size=EmptySize::Compact message="Tendencies appear once a champion shows up in two or more saved drafts: which step it usually takes, and whether that is predictable." />
+                        }.into_any();
                     }
-                }}
-            </div>
-
-            // Saved Drafts
-            <div>
-                <h2 class="text-xl font-bold text-primary mb-3">"Saved Drafts"</h2>
-                // Tag filter buttons
-                <div class="flex flex-wrap gap-1.5 mb-3">
-                    <button
-                        class=move || if filter_tag.get().is_empty() {
-                            "rounded px-2.5 py-0.5 text-xs font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
-                        } else {
-                            "rounded px-2.5 py-0.5 text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                        }
-                        on:click=move |_| set_filter_tag.set(String::new())
-                    >"All"</button>
-                    {COMPOSITION_TAGS.iter().map(|&tag| {
-                        let tag_str = tag.to_string();
-                        let tag_for_class = tag_str.clone();
-                        let tag_for_click = tag_str.clone();
-                        view! {
-                            <button
-                                class=move || if filter_tag.get() == tag_for_class {
-                                    "rounded px-2.5 py-0.5 text-xs font-medium bg-accent text-accent-contrast transition-colors cursor-pointer"
-                                } else {
-                                    "rounded px-2.5 py-0.5 text-xs font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
-                                }
-                                on:click=move |_| set_filter_tag.set(tag_for_click.clone())
-                            >{tag}</button>
-                        }
-                    }).collect_view()}
-                </div>
-                <Suspense fallback=|| view! { <SkeletonGrid cols=4 rows=3 card_height="h-12" /> }>
-                    {move || {
-                        let champ_url_map: HashMap<String, String> = champions_resource.get()
-                            .and_then(|r| r.ok())
-                            .map(|champs| champs.into_iter().map(|c| (c.name, c.image_full)).collect())
-                            .unwrap_or_default();
-                        let champ_map_sv = StoredValue::new(champ_url_map);
-
-                        drafts.get().map(move |result| match result {
-                            Ok(list) if list.is_empty() => view! {
-                                <p class="text-dimmed">"No drafts yet."</p>
-                            }.into_any(),
-                            Ok(list) => {
-                                let ft = filter_tag.get();
-                                let filtered: Vec<Draft> = if ft.is_empty() {
-                                    list
-                                } else {
-                                    list.into_iter().filter(|d| d.tags.contains(&ft)).collect()
-                                };
-                                if filtered.is_empty() {
-                                    return view! {
-                                        <p class="text-dimmed">"No drafts match this filter."</p>
-                                    }.into_any();
-                                }
-                                view! {
-                                <div class="flex flex-col gap-2">
-                                    {filtered.into_iter().map(|d| {
-                                        let d_id = d.id.clone();
-                                        let d_id_for_cta = d.id.clone().unwrap_or_default();
-                                        let d_id_for_badge = d.id.clone().unwrap_or_default();
-                                        let d_name = d.name.clone();
-                                        let d_opp = d.opponent.clone().unwrap_or_default();
-                                        let d_comments = d.comments.clone();
-                                        let d_actions = d.actions.clone();
-                                        let d_team_id = d.team_id.clone();
-                                        let d_rating = d.rating.clone();
-                                        let d_our_side = d.our_side.clone();
-                                        let d_tags = d.tags.clone();
-                                        let d_win_conditions = d.win_conditions.clone().unwrap_or_default();
-                                        let d_watch_out = d.watch_out.clone().unwrap_or_default();
-                                        let _d_series_id = d.series_id.clone();
-                                        let d_game_number = d.game_number;
-
-                                        let icon_url = |a: &DraftAction| champ_map_sv.with_value(|m| m.get(&a.champion).cloned().unwrap_or_default());
-
-                                        // Blue bans: phase1 = orders 0,2,4  phase2 = orders 13,15
-                                        let blue_ban_p1: Vec<(String, String)> = d.actions.iter()
-                                            .filter(|a| a.side == "blue" && matches!(a.order, 0 | 2 | 4))
-                                            .map(|a| (a.champion.clone(), icon_url(a)))
-                                            .collect();
-                                        let blue_ban_p2: Vec<(String, String)> = d.actions.iter()
-                                            .filter(|a| a.side == "blue" && matches!(a.order, 13 | 15))
-                                            .map(|a| (a.champion.clone(), icon_url(a)))
-                                            .collect();
-                                        // Red bans: phase1 = orders 1,3,5  phase2 = orders 12,14
-                                        let red_ban_p1: Vec<(String, String)> = d.actions.iter()
-                                            .filter(|a| a.side == "red" && matches!(a.order, 1 | 3 | 5))
-                                            .map(|a| (a.champion.clone(), icon_url(a)))
-                                            .collect();
-                                        let red_ban_p2: Vec<(String, String)> = d.actions.iter()
-                                            .filter(|a| a.side == "red" && matches!(a.order, 12 | 14))
-                                            .map(|a| (a.champion.clone(), icon_url(a)))
-                                            .collect();
-
-                                        let blue_pick_icons: Vec<(String, String)> = d.actions.iter()
-                                            .filter(|a| { let o = a.order as usize; !(o < 6 || (12..16).contains(&o)) && a.side == "blue" })
-                                            .map(|a| (a.champion.clone(), icon_url(a)))
-                                            .collect();
-                                        let red_pick_icons: Vec<(String, String)> = d.actions.iter()
-                                            .filter(|a| { let o = a.order as usize; !(o < 6 || (12..16).contains(&o)) && a.side == "red" })
-                                            .map(|a| (a.champion.clone(), icon_url(a)))
-                                            .collect();
-
-                                        let has_picks = !blue_pick_icons.is_empty() || !red_pick_icons.is_empty();
-                                        let has_both_sides = !blue_pick_icons.is_empty() && !red_pick_icons.is_empty();
-                                        let has_left_bans = !blue_ban_p1.is_empty() || !blue_ban_p2.is_empty();
-                                        let has_right_bans = !red_ban_p1.is_empty() || !red_ban_p2.is_empty();
-
-                                        let display_name = d.name.clone();
-                                        let display_opp = d.opponent.clone();
-                                        let display_rating = d_rating.clone();
-                                        let display_tags = d.tags.clone();
-
+                    let predictable: Vec<String> = list
+                        .iter()
+                        .filter(|(_, total, _, count)| *total >= 3 && (*count as f64 / *total as f64) >= 0.7)
+                        .map(|(c, total, order, count)| {
+                            let step = TOURNAMENT_ORDER.get(*order as usize).map(|s| s.describe()).unwrap_or_default();
+                            format!("{c}: {count} of {total} drafts as {step}")
+                        })
+                        .collect();
+                    view! {
+                        <div class="flex flex-col gap-4">
+                            {(!predictable.is_empty()).then(|| view! {
+                                <Callout tone=CalloutTone::Warning title="Predictable patterns">
+                                    <ul class="flex flex-col gap-0.5">
+                                        {predictable.into_iter().map(|p| view! { <li>{p}</li> }).collect_view()}
+                                    </ul>
+                                </Callout>
+                            })}
+                            <Table caption="Champions by appearances in saved drafts">
+                                <thead>
+                                    <tr>
+                                        <Th>"Champion"</Th>
+                                        <Th numeric=true>"Drafts"</Th>
+                                        <Th>"Most common step"</Th>
+                                        <Th numeric=true>"Share"</Th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {list.into_iter().map(|(c, total, order, count)| {
+                                        let step = TOURNAMENT_ORDER.get(order as usize).map(|s| s.describe()).unwrap_or_default();
+                                        let share = (count as f64 / total.max(1) as f64 * 100.0).round() as i32;
                                         view! {
-                                            <div class="bg-elevated border border-divider rounded px-4 py-3 flex items-center gap-4">
-                                                <div class="flex-1 min-w-0">
-                                                    // Name + opponent + rating badge
-                                                    <div class="flex items-center gap-2 mb-1.5">
-                                                        <span class="text-primary font-medium">{display_name}</span>
-                                                        {display_opp.map(|o| view! {
-                                                            <span class="text-muted text-sm">"vs " {o}</span>
-                                                        })}
-                                                        {display_rating.map(|r| {
-                                                            let cls = format!("rounded px-1.5 py-0.5 text-xs font-bold {}", tier_badge_class(&r));
-                                                            view! { <span class=cls>{r}</span> }
-                                                        })}
-                                                        {display_tags.into_iter().map(|tag| {
-                                                            view! { <span class="rounded px-1.5 py-0.5 text-xs font-medium bg-overlay-strong text-secondary">{tag}</span> }
-                                                        }).collect_view()}
-                                                        // Game plan count badge
-                                                        {move || {
-                                                            let bid = d_id_for_badge.clone();
-                                                            let count = game_plan_counts.get()
-                                                                .and_then(|r| r.ok())
-                                                                .and_then(|pairs| pairs.into_iter().find(|(id, _)| id == &bid).map(|(_, c)| c))
-                                                                .unwrap_or(0);
-                                                            if count > 0 {
-                                                                let label = if count == 1 { "1 game plan".to_string() } else { format!("{count} game plans") };
-                                                                view! {
-                                                                    <a href="/game-plan"
-                                                                       class="bg-surface border border-outline text-muted text-xs rounded px-2 py-0.5 hover:text-primary hover:border-accent/50 transition-colors">
-                                                                        {label}
-                                                                    </a>
-                                                                }.into_any()
-                                                            } else {
-                                                                view! { <span></span> }.into_any()
-                                                            }
-                                                        }}
-                                                    </div>
-                                                    // Icon summary: [blue bans] | [picks] | [red bans]
-                                                    <div class="flex items-center gap-0.5 flex-wrap">
-                                                        // Blue bans (left)
-                                                        {blue_ban_p1.into_iter().map(|(name, url)| view! {
-                                                            <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
-                                                                    <img src=url alt=name.clone() class="w-full h-full object-cover" />
-                                                                </div>
-                                                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
-                                                                </div>
-                                                            </div>
-                                                        }).collect_view()}
-                                                        // Small gap between phase-1 and phase-2 blue bans
-                                                        {if !blue_ban_p2.is_empty() {
-                                                            view! { <span class="w-1.5 flex-shrink-0 inline-block"></span> }.into_any()
-                                                        } else {
-                                                            view! { <span></span> }.into_any()
-                                                        }}
-                                                        {blue_ban_p2.into_iter().map(|(name, url)| view! {
-                                                            <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
-                                                                    <img src=url alt=name.clone() class="w-full h-full object-cover" />
-                                                                </div>
-                                                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
-                                                                </div>
-                                                            </div>
-                                                        }).collect_view()}
-                                                        // Separator between bans and picks
-                                                        {if has_left_bans && has_picks {
-                                                            view! { <span class="text-overlay-strong text-xs mx-0.5 flex-shrink-0">"|"</span> }.into_any()
-                                                        } else {
-                                                            view! { <span></span> }.into_any()
-                                                        }}
-                                                        // Blue picks
-                                                        {blue_pick_icons.into_iter().map(|(name, url)| view! {
-                                                            <div class="w-6 h-6 rounded overflow-hidden border border-side-blue flex-shrink-0" title=name.clone()>
-                                                                <img src=url alt=name.clone() class="w-full h-full object-cover" />
-                                                            </div>
-                                                        }).collect_view()}
-                                                        // VS separator
-                                                        {if has_both_sides {
-                                                            view! { <span class="text-dimmed text-xs mx-0.5 flex-shrink-0">"vs"</span> }.into_any()
-                                                        } else {
-                                                            view! { <span></span> }.into_any()
-                                                        }}
-                                                        // Red picks
-                                                        {red_pick_icons.into_iter().map(|(name, url)| view! {
-                                                            <div class="w-6 h-6 rounded overflow-hidden border border-side-red flex-shrink-0" title=name.clone()>
-                                                                <img src=url alt=name.clone() class="w-full h-full object-cover" />
-                                                            </div>
-                                                        }).collect_view()}
-                                                        // Separator between picks and red bans
-                                                        {if has_right_bans && has_picks {
-                                                            view! { <span class="text-overlay-strong text-xs mx-0.5 flex-shrink-0">"|"</span> }.into_any()
-                                                        } else {
-                                                            view! { <span></span> }.into_any()
-                                                        }}
-                                                        // Red bans (right)
-                                                        {red_ban_p1.into_iter().map(|(name, url)| view! {
-                                                            <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
-                                                                    <img src=url alt=name.clone() class="w-full h-full object-cover" />
-                                                                </div>
-                                                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
-                                                                </div>
-                                                            </div>
-                                                        }).collect_view()}
-                                                        // Small gap between phase-1 and phase-2 red bans
-                                                        {if !red_ban_p2.is_empty() {
-                                                            view! { <span class="w-1.5 flex-shrink-0 inline-block"></span> }.into_any()
-                                                        } else {
-                                                            view! { <span></span> }.into_any()
-                                                        }}
-                                                        {red_ban_p2.into_iter().map(|(name, url)| view! {
-                                                            <div class="relative w-6 h-6 flex-shrink-0" title=name.clone()>
-                                                                <div class="w-6 h-6 rounded overflow-hidden border border-outline grayscale opacity-50">
-                                                                    <img src=url alt=name.clone() class="w-full h-full object-cover" />
-                                                                </div>
-                                                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
-                                                                </div>
-                                                            </div>
-                                                        }).collect_view()}
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    class="flex-shrink-0 bg-overlay hover:bg-accent hover:text-accent-contrast text-secondary text-sm font-medium rounded px-3 py-1.5 transition-colors"
-                                                    on:click=move |_| {
-                                                        set_loaded_draft_id.set(d_id.clone());
-                                                        set_draft_name.set(d_name.clone());
-                                                        set_opponent.set(d_opp.clone());
-                                                        set_selected_team_id.set(d_team_id.clone());
-                                                        set_rating.set(d_rating.clone());
-                                                        set_our_side.set(d_our_side.clone());
-                                                        set_comments.set(d_comments.clone());
-                                                        set_tags.set(d_tags.clone());
-                                                        set_win_conditions.set(d_win_conditions.clone());
-                                                        set_watch_out.set(d_watch_out.clone());
-                                                        set_highlighted_slot.set(None);
-                                                        let mut slots = vec![None::<String>; 20];
-                                                        let mut sc = vec![None::<String>; 20];
-                                                        for action in &d_actions {
-                                                            let o = action.order as usize;
-                                                            if o < 20 {
-                                                                slots[o] = Some(action.champion.clone());
-                                                                sc[o] = action.comment.clone();
-                                                            }
-                                                        }
-                                                        let next = (0..20).find(|&i| slots[i].is_none());
-                                                        set_draft_slots.set(slots);
-                                                        set_slot_comments.set(sc);
-                                                        set_slot_comment_input.set(String::new());
-                                                        set_active_slot.set(next);
-
-                                                        // If this draft belongs to a series, set game number
-                                                        if let Some(gn) = d_game_number {
-                                                            set_active_game_number.set(gn);
-                                                        }
-                                                    }
-                                                >
-                                                    "Open"
-                                                </button>
-                                                // "Prep for This Draft" CTA or duplicate prompt
-                                                {move || {
-                                                    let cta_draft_id = d_id_for_cta.clone();
-                                                    let prompt = duplicate_prompt.get();
-                                                    if prompt.as_ref().map(|(id, _)| id == &cta_draft_id).unwrap_or(false) {
-                                                        // Show duplicate prompt for this draft
-                                                        let (_, existing_plan_id) = prompt.unwrap();
-                                                        let cta_draft_id2 = cta_draft_id.clone();
-                                                        view! {
-                                                            <div class="flex-shrink-0 flex flex-col gap-1 bg-surface border border-outline rounded-lg px-3 py-2 text-xs">
-                                                                <span class="text-muted">"A game plan already exists."</span>
-                                                                <div class="flex gap-1.5">
-                                                                    <a href=format!("/game-plan?plan_id={existing_plan_id}")
-                                                                       class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded px-2 py-0.5 transition-colors">
-                                                                        "View Game Plan"
-                                                                    </a>
-                                                                    <button
-                                                                        class="bg-overlay hover:bg-overlay-strong text-secondary border border-outline font-semibold rounded px-2 py-0.5 transition-colors"
-                                                                        on:click=move |_| {
-                                                                            #[allow(unused_variables)]
-                                                                            let did = cta_draft_id2.clone();
-                                                                            #[cfg(feature = "hydrate")]
-                                                                            if let Some(window) = web_sys::window() {
-                                                                                let _ = window.location().set_href(&format!("/game-plan?draft_id={did}"));
-                                                                            }
-                                                                            let _ = existing_plan_id.clone(); // consumed
-                                                                        }
-                                                                    >"Create New"</button>
-                                                                    <button
-                                                                        class="text-muted hover:text-primary text-xs px-1 transition-colors"
-                                                                        on:click=move |_| set_duplicate_prompt.set(None)
-                                                                    >"Cancel"</button>
-                                                                </div>
-                                                            </div>
-                                                        }.into_any()
-                                                    } else {
-                                                        let is_loading = cta_loading.get();
-                                                        let cta_draft_id3 = cta_draft_id.clone();
-                                                        view! {
-                                                            <button
-                                                                class="flex-shrink-0 bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
-                                                                disabled=is_loading
-                                                                on:click=move |_| {
-                                                                    let did = cta_draft_id3.clone();
-                                                                    set_cta_loading.set(true);
-                                                                    set_cta_status.set(None);
-                                                                    leptos::task::spawn_local(async move {
-                                                                        match check_draft_has_game_plan(did.clone()).await {
-                                                                            Ok(None) => {
-                                                                                set_cta_loading.set(false);
-                                                                                #[cfg(feature = "hydrate")]
-                                                                                if let Some(window) = web_sys::window() {
-                                                                                    let _ = window.location().set_href(&format!("/game-plan?draft_id={did}"));
-                                                                                }
-                                                                            }
-                                                                            Ok(Some(plan_id)) => {
-                                                                                set_cta_loading.set(false);
-                                                                                set_duplicate_prompt.set(Some((did, plan_id)));
-                                                                            }
-                                                                            Err(e) => {
-                                                                                set_cta_loading.set(false);
-                                                                                set_cta_status.set(Some(format!("Error: {e}")));
-                                                                            }
-                                                                        }
-                                                                    });
-                                                                }
-                                                            >"Prep for This Draft"</button>
-                                                        }.into_any()
-                                                    }
-                                                }}
-                                            </div>
+                                            <Tr>
+                                                <Td header=true>
+                                                    <span class="inline-flex items-center gap-2">
+                                                        <ChampionAvatar name=c.clone() size=AvatarSize::Xs decorative=true />{c}
+                                                    </span>
+                                                </Td>
+                                                <Td numeric=true>{total}</Td>
+                                                <Td>{step}</Td>
+                                                <Td numeric=true>{format!("{share}%")}</Td>
+                                            </Tr>
                                         }
                                     }).collect_view()}
-                                </div>
-                                }.into_any()
-                            },
-                            Err(e) => view! {
-                                <ErrorBanner message=format!("Failed to load drafts: {e}") />
-                            }.into_any(),
+                                </tbody>
+                            </Table>
+                        </div>
+                    }.into_any()
+                }
+            })}
+        </Suspense>
+    }
+}
+
+/// Win rates by side, composition tag and first pick (from reviewed games).
+#[component]
+fn Outcomes() -> impl IntoView {
+    let data = Resource::new(|| (), |_| get_draft_analytics());
+    let pct = |w: i32, g: i32| {
+        if g > 0 {
+            format!("{:.0}", w as f64 / g as f64 * 100.0)
+        } else {
+            "0".to_string()
+        }
+    };
+    view! {
+        <Suspense fallback=|| view! { <SkeletonGroup label="Loading outcomes"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+            {move || data.get().map(|r| match r {
+                Err(_) => view! { <Callout tone=CalloutTone::Danger>"Outcomes did not load."</Callout> }.into_any(),
+                Ok(d) if d.blue_games + d.red_games == 0 && d.tag_stats.is_empty() && d.first_pick_stats.is_empty() => view! {
+                    <EmptyState size=EmptySize::Compact message="Outcomes appear once post-game reviews are linked to drafts: win rates by side, composition and first pick." />
+                }.into_any(),
+                Ok(d) => {
+                    let blue = if d.blue_games > 0 {
+                        view! { <StatReadout label="Blue side" value=pct(d.blue_wins, d.blue_games) unit=format!("% won, {}-{}", d.blue_wins, d.blue_games - d.blue_wins) /> }.into_any()
+                    } else {
+                        view! { <StatReadout label="Blue side" value="" empty_reason="No reviewed games on blue yet" /> }.into_any()
+                    };
+                    let red = if d.red_games > 0 {
+                        view! { <StatReadout label="Red side" value=pct(d.red_wins, d.red_games) unit=format!("% won, {}-{}", d.red_wins, d.red_games - d.red_wins) /> }.into_any()
+                    } else {
+                        view! { <StatReadout label="Red side" value="" empty_reason="No reviewed games on red yet" /> }.into_any()
+                    };
+                    let table = |caption: &'static str, first: &'static str, rows: Vec<(String, i32, i32)>| {
+                        (!rows.is_empty()).then(|| view! {
+                            <Table caption=caption>
+                                <thead><tr><Th>{first}</Th><Th numeric=true>"Games"</Th><Th numeric=true>"Won"</Th><Th numeric=true>"Win rate"</Th></tr></thead>
+                                <tbody>
+                                    {rows.into_iter().map(|(k, g, w)| view! {
+                                        <Tr>
+                                            <Td header=true>{k}</Td>
+                                            <Td numeric=true>{g}</Td>
+                                            <Td numeric=true>{w}</Td>
+                                            <Td numeric=true>{format!("{}%", if g > 0 { (w as f64 / g as f64 * 100.0).round() as i32 } else { 0 })}</Td>
+                                        </Tr>
+                                    }).collect_view()}
+                                </tbody>
+                            </Table>
                         })
-                    }}
-                </Suspense>
-            </div>
-
-            // Draft Tendencies Panel (Phase 7a)
-            <div class="bg-elevated border border-divider rounded-lg">
-                <button
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
-                    on:click=move |_| set_tendencies_open.update(|v| *v = !*v)
-                >
-                    <h2 class="text-xl font-bold text-primary">"Draft Tendencies"</h2>
-                    <span class="text-muted">{move || if tendencies_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
-                </button>
-                {move || tendencies_open.get().then(|| {
+                    };
                     view! {
-                        <div class="px-4 pb-4">
-                            <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
-                                {move || tendency_data.get().map(|result| match result {
-                                    Ok(tendencies) => {
-                                        // Filter to champions with 2+ appearances
-                                        let mut champ_totals: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-                                        for t in &tendencies {
-                                            *champ_totals.entry(t.champion.clone()).or_insert(0) += t.count;
-                                        }
-                                        let mut champs: Vec<(String, i32)> = champ_totals.into_iter().filter(|(_, c)| *c >= 2).collect();
-                                        champs.sort_by_key(|e| std::cmp::Reverse(e.1));
-
-                                        if champs.is_empty() {
-                                            return view! {
-                                                <p class="text-dimmed text-sm">"Not enough draft data yet (need 2+ appearances for a champion)."</p>
-                                            }.into_any();
-                                        }
-
-                                        // Build position counts per champion
-                                        let mut champ_position_counts: std::collections::HashMap<String, std::collections::HashMap<i32, i32>> = std::collections::HashMap::new();
-                                        for t in &tendencies {
-                                            champ_position_counts
-                                                .entry(t.champion.clone())
-                                                .or_default()
-                                                .insert(t.order, t.count);
-                                        }
-
-                                        // Detect predictable patterns (70%+ in same position, 3+ games)
-                                        let mut warnings: Vec<String> = Vec::new();
-                                        for (champ, total) in &champs {
-                                            if let Some(positions) = champ_position_counts.get(champ) {
-                                                for (&order, &count) in positions {
-                                                    if *total >= 3 && (count as f64 / *total as f64) >= 0.7 {
-                                                        let (side, kind, _) = crate::components::draft_board::slot_meta(order as usize);
-                                                        warnings.push(format!("{champ}: {:.0}% in {side} {kind} (slot {})", count as f64 / *total as f64 * 100.0, order + 1));
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        let warnings_clone = warnings.clone();
-
-                                        view! {
-                                            <div class="flex flex-col gap-3">
-                                                // Warnings
-                                                {if !warnings_clone.is_empty() {
-                                                    view! {
-                                                        <div class="bg-warning/8 border border-warning/40 rounded-ctl p-3">
-                                                            <p class="text-warning text-caption font-semibold mb-1">"! Predictable patterns"</p>
-                                                            {warnings_clone.into_iter().map(|w| view! {
-                                                                <p class="text-secondary text-caption">{w}</p>
-                                                            }).collect_view()}
-                                                        </div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! { <div></div> }.into_any()
-                                                }}
-
-                                                // Heatmap table
-                                                <div class="overflow-x-auto">
-                                                    <table class="text-xs w-full">
-                                                        <thead>
-                                                            <tr>
-                                                                <th class="text-left text-muted px-2 py-1 sticky left-0 bg-elevated">"Champion"</th>
-                                                                <th class="text-muted px-1 py-1">"Total"</th>
-                                                                {(0..20).map(|i| {
-                                                                    let (side, kind, _) = crate::components::draft_board::slot_meta(i);
-                                                                    let label = format!("{}{}", side[..1].to_uppercase(), if kind.contains("ban") { "B" } else { "P" });
-                                                                    view! { <th class="text-muted px-0.5 py-1 text-center" title=format!("{side} {kind}")>{label}</th> }
-                                                                }).collect_view()}
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {champs.into_iter().map(|(champ, total)| {
-                                                                let positions = champ_position_counts.get(&champ).cloned().unwrap_or_default();
-                                                                view! {
-                                                                    <tr class="border-t border-divider/30">
-                                                                        <td class="text-primary px-2 py-1 font-medium sticky left-0 bg-elevated whitespace-nowrap">{champ.clone()}</td>
-                                                                        <td class="text-secondary px-1 py-1 text-center">{total}</td>
-                                                                        {(0..20).map(|i| {
-                                                                            let count = positions.get(&i).copied().unwrap_or(0);
-                                                                            let opacity = if count == 0 {
-                                                                                "bg-transparent"
-                                                                            } else if count == 1 {
-                                                                                "bg-accent/20"
-                                                                            } else if count == 2 {
-                                                                                "bg-accent/40"
-                                                                            } else if count == 3 {
-                                                                                "bg-accent/60"
-                                                                            } else {
-                                                                                "bg-accent/80"
-                                                                            };
-                                                                            view! {
-                                                                                <td class=format!("px-0.5 py-1 text-center {opacity} rounded-sm")>
-                                                                                    {if count > 0 { format!("{count}") } else { String::new() }}
-                                                                                </td>
-                                                                            }
-                                                                        }).collect_view()}
-                                                                    </tr>
-                                                                }
-                                                            }).collect_view()}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        }.into_any()
-                                    },
-                                    Err(e) => view! {
-                                        <ErrorBanner message=format!("Failed to load tendencies: {e}") />
-                                    }.into_any(),
-                                })}
-                            </Suspense>
+                        <div class="flex flex-col gap-6">
+                            <div class="flex flex-wrap gap-x-12 gap-y-4">{blue}{red}</div>
+                            {table("Win rate by composition tag", "Composition", d.tag_stats)}
+                            {table("Win rate by first pick", "First pick", d.first_pick_stats)}
                         </div>
-                    }
-                })}
-            </div>
-
-            // Draft Analytics Panel (Phase 7c)
-            <div class="bg-elevated border border-divider rounded-lg">
-                <button
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
-                    on:click=move |_| set_analytics_open.update(|v| *v = !*v)
-                >
-                    <h2 class="text-xl font-bold text-primary">"Draft Analytics"</h2>
-                    <span class="text-muted">{move || if analytics_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
-                </button>
-                {move || analytics_open.get().then(|| {
-                    view! {
-                        <div class="px-4 pb-4">
-                            <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-16" /><SkeletonCard height="h-16" /></div> }>
-                                {move || analytics_data.get().map(|result| match result {
-                                    Ok(data) => {
-                                        let has_data = data.blue_games + data.red_games > 0
-                                            || !data.tag_stats.is_empty()
-                                            || !data.first_pick_stats.is_empty();
-
-                                        if !has_data {
-                                            return view! {
-                                                <p class="text-dimmed text-sm">"No draft outcome data yet. Link drafts to post-game reviews to see analytics."</p>
-                                            }.into_any();
-                                        }
-
-                                        let blue_wr = if data.blue_games > 0 { data.blue_wins as f64 / data.blue_games as f64 * 100.0 } else { 0.0 };
-                                        let red_wr = if data.red_games > 0 { data.red_wins as f64 / data.red_games as f64 * 100.0 } else { 0.0 };
-
-                                        let tag_stats = data.tag_stats.clone();
-                                        let fp_stats = data.first_pick_stats.clone();
-
-                                        view! {
-                                            <div class="flex flex-col gap-4">
-                                                // Side win rates
-                                                {if data.blue_games + data.red_games > 0 {
-                                                    view! {
-                                                        <div class="grid grid-cols-2 gap-3">
-                                                            <div class="bg-side-blue-deep border border-side-blue/60 rounded-ctl p-3 text-center">
-                                                                <p class="text-primary text-caption font-semibold mb-1">"Blue side"</p>
-                                                                <p class="text-primary text-lg font-bold">{format!("{blue_wr:.0}% WR")}</p>
-                                                                <p class="text-muted text-xs">{format!("{}-{}", data.blue_wins, data.blue_games - data.blue_wins)}</p>
-                                                            </div>
-                                                            <div class="bg-side-red-deep border border-side-red/60 rounded-ctl p-3 text-center">
-                                                                <p class="text-primary text-caption font-semibold mb-1">"Red side"</p>
-                                                                <p class="text-primary text-lg font-bold">{format!("{red_wr:.0}% WR")}</p>
-                                                                <p class="text-muted text-xs">{format!("{}-{}", data.red_wins, data.red_games - data.red_wins)}</p>
-                                                            </div>
-                                                        </div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! { <div></div> }.into_any()
-                                                }}
-
-                                                // Tag stats
-                                                {if !tag_stats.is_empty() {
-                                                    view! {
-                                                        <div>
-                                                            <h3 class="text-secondary text-sm font-semibold mb-2">"Composition Tag Win Rates"</h3>
-                                                            <div class="flex flex-col gap-1">
-                                                                {tag_stats.into_iter().map(|(tag, games, wins)| {
-                                                                    let wr = if games > 0 { wins as f64 / games as f64 * 100.0 } else { 0.0 };
-                                                                    view! {
-                                                                        <div class="flex items-center gap-3 bg-surface/30 rounded px-3 py-1.5">
-                                                                            <span class="text-primary text-sm font-medium w-32">{tag}</span>
-                                                                            <span class="text-secondary text-sm w-16 text-right">{format!("{wr:.0}%")}</span>
-                                                                            <span class="text-muted text-xs">{format!("({wins}-{})", games - wins)}</span>
-                                                                        </div>
-                                                                    }
-                                                                }).collect_view()}
-                                                            </div>
-                                                        </div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! { <div></div> }.into_any()
-                                                }}
-
-                                                // First pick stats
-                                                {if !fp_stats.is_empty() {
-                                                    view! {
-                                                        <div>
-                                                            <h3 class="text-secondary text-sm font-semibold mb-2">"First Pick Win Rates"</h3>
-                                                            <div class="flex flex-col gap-1">
-                                                                {fp_stats.into_iter().map(|(champ, games, wins)| {
-                                                                    let wr = if games > 0 { wins as f64 / games as f64 * 100.0 } else { 0.0 };
-                                                                    view! {
-                                                                        <div class="flex items-center gap-3 bg-surface/30 rounded px-3 py-1.5">
-                                                                            <span class="text-primary text-sm font-medium w-32">{champ}</span>
-                                                                            <span class="text-secondary text-sm w-16 text-right">{format!("{wr:.0}%")}</span>
-                                                                            <span class="text-muted text-xs">{format!("({wins}-{})", games - wins)}</span>
-                                                                        </div>
-                                                                    }
-                                                                }).collect_view()}
-                                                            </div>
-                                                        </div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! { <div></div> }.into_any()
-                                                }}
-                                            </div>
-                                        }.into_any()
-                                    },
-                                    Err(e) => view! {
-                                        <ErrorBanner message=format!("Failed to load analytics: {e}") />
-                                    }.into_any(),
-                                })}
-                            </Suspense>
-                        </div>
-                    }
-                })}
-            </div>
-
-            // Ban Priority Panel
-            <div class="bg-elevated border border-divider rounded-lg">
-                <button
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface/50 transition-colors"
-                    on:click=move |_| set_ban_panel_open.update(|v| *v = !*v)
-                >
-                    <h2 class="text-xl font-bold text-primary">"Ban Priorities"</h2>
-                    <span class="text-muted">{move || if ban_panel_open.get() { "\u{25B2}" } else { "\u{25BC}" }}</span>
-                </button>
-                {move || ban_panel_open.get().then(|| {
-                    let is_editing = editing_bans.get();
-                    view! {
-                        <div class="px-4 pb-4 flex flex-col gap-3">
-                            {if is_editing {
-                                view! {
-                                    <div class="flex flex-col gap-2">
-                                        // Existing items
-                                        {move || {
-                                            let items = ban_edit_list.get();
-                                            if items.is_empty() {
-                                                view! { <p class="text-dimmed text-sm">"No ban priorities yet."</p> }.into_any()
-                                            } else {
-                                                view! {
-                                                    <div class="flex flex-col gap-1">
-                                                        {items.into_iter().enumerate().map(|(i, bp)| {
-                                                            let champ = bp.champion.clone();
-                                                            let reason = bp.reason.clone().unwrap_or_default();
-                                                            view! {
-                                                                <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
-                                                                    <span class="text-accent font-bold text-sm w-6">{format!("#{}", i + 1)}</span>
-                                                                    <span class="text-primary font-medium flex-1">{champ}</span>
-                                                                    <span class="text-muted text-sm flex-1 truncate">{reason}</span>
-                                                                    <button
-                                                                        class="text-danger hover:underline text-sm cursor-pointer"
-                                                                        on:click=move |_| {
-                                                                            set_ban_edit_list.update(|list| {
-                                                                                if i < list.len() { list.remove(i); }
-                                                                                // Re-rank
-                                                                                for (j, item) in list.iter_mut().enumerate() {
-                                                                                    item.rank = j as i32;
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    >"Remove"</button>
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                        }}
-                                        // Add new entry
-                                        <div class="flex gap-2 items-end">
-                                            <div class="flex-1">
-                                                <label class="block text-secondary text-xs mb-1">"Champion"</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Champion name..."
-                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || ban_new_champ.get()
-                                                    on:input=move |ev| set_ban_new_champ.set(event_target_value(&ev))
-                                                />
-                                            </div>
-                                            <div class="flex-1">
-                                                <label class="block text-secondary text-xs mb-1">"Reason (optional)"</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Why ban?"
-                                                    class="w-full bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                                    prop:value=move || ban_new_reason.get()
-                                                    on:input=move |ev| set_ban_new_reason.set(event_target_value(&ev))
-                                                />
-                                            </div>
-                                            <button
-                                                class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1 transition-colors cursor-pointer"
-                                                on:click=move |_| {
-                                                    let champ = ban_new_champ.get_untracked();
-                                                    if champ.trim().is_empty() { return; }
-                                                    let reason_val = ban_new_reason.get_untracked();
-                                                    let reason = if reason_val.trim().is_empty() { None } else { Some(reason_val) };
-                                                    set_ban_edit_list.update(|list| {
-                                                        let rank = list.len() as i32;
-                                                        list.push(BanPriority {
-                                                            id: None,
-                                                            team_id: String::new(),
-                                                            champion: champ.trim().to_string(),
-                                                            rank,
-                                                            reason,
-                                                        });
-                                                    });
-                                                    set_ban_new_champ.set(String::new());
-                                                    set_ban_new_reason.set(String::new());
-                                                }
-                                            >"+ Add"</button>
-                                        </div>
-                                        // Save / Cancel
-                                        <div class="flex gap-2 mt-1">
-                                            <button
-                                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
-                                                on:click=move |_| {
-                                                    let list = ban_edit_list.get_untracked();
-                                                    let json = serde_json::to_string(&list).unwrap_or_default();
-                                                    leptos::task::spawn_local(async move {
-                                                        match save_ban_priorities(json).await {
-                                                            Ok(_) => {
-                                                                set_ban_status.set(Some("Saved!".into()));
-                                                                ban_priorities.refetch();
-                                                                set_editing_bans.set(false);
-                                                            }
-                                                            Err(e) => set_ban_status.set(Some(format!("Error: {e}"))),
-                                                        }
-                                                    });
-                                                }
-                                            >"Save"</button>
-                                            <button
-                                                class="bg-overlay hover:bg-overlay-strong text-secondary rounded px-4 py-1.5 text-sm transition-colors cursor-pointer"
-                                                on:click=move |_| set_editing_bans.set(false)
-                                            >"Cancel"</button>
-                                            {move || ban_status.get().map(|msg| view! {
-                                                <span class="text-success text-sm self-center">{msg}</span>
-                                            })}
-                                        </div>
-                                    </div>
-                                }.into_any()
-                            } else {
-                                // View mode
-                                view! {
-                                    <div class="flex flex-col gap-2">
-                                        <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
-                                            {move || ban_priorities.get().map(|result| match result {
-                                                Ok(list) if list.is_empty() => view! {
-                                                    <p class="text-dimmed text-sm">"No ban priorities set."</p>
-                                                }.into_any(),
-                                                Ok(list) => view! {
-                                                    <div class="flex flex-col gap-1">
-                                                        {list.iter().map(|bp| {
-                                                            let champ = bp.champion.clone();
-                                                            let reason = bp.reason.clone().unwrap_or_default();
-                                                            let rank = bp.rank + 1;
-                                                            view! {
-                                                                <div class="flex items-center gap-2 bg-surface rounded px-3 py-2">
-                                                                    <span class="text-accent font-bold text-sm w-6">{format!("#{rank}")}</span>
-                                                                    <span class="text-primary font-medium flex-1">{champ}</span>
-                                                                    <span class="text-muted text-sm flex-1 truncate">{reason}</span>
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any(),
-                                                Err(e) => view! {
-                                                    <ErrorBanner message=format!("Failed to load ban priorities: {e}") />
-                                                }.into_any(),
-                                            })}
-                                        </Suspense>
-                                        <button
-                                            class="bg-overlay-strong hover:bg-overlay text-primary text-sm rounded px-3 py-1.5 transition-colors self-start cursor-pointer"
-                                            on:click=move |_| {
-                                                // Copy current priorities into edit list
-                                                if let Some(Ok(list)) = ban_priorities.get_untracked() {
-                                                    set_ban_edit_list.set(list);
-                                                } else {
-                                                    set_ban_edit_list.set(Vec::new());
-                                                }
-                                                set_ban_status.set(None);
-                                                set_editing_bans.set(true);
-                                            }
-                                        >"Edit"</button>
-                                    </div>
-                                }.into_any()
-                            }}
-                        </div>
-                    }
-                })}
-            </div>
-            </div>
-        </div>
-    }
-}
-
-/// Draft Carousel view — default view for both regions.
-#[component]
-fn DraftCarouselView(
-    champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
-    draft_slots: ReadSignal<Vec<Option<String>>>,
-    active_slot: ReadSignal<Option<usize>>,
-    highlighted_slot: ReadSignal<Option<usize>>,
-    on_slot_click: Callback<usize>,
-    on_slot_drop: Callback<(usize, String)>,
-    on_slot_clear: Callback<usize>,
-    slot_comments: ReadSignal<Vec<Option<String>>>,
-    warning_slots_memo: Memo<Vec<Option<(String, String)>>>,
-    role_assignments: ReadSignal<Vec<Option<String>>>,
-    role_auto_guessed: ReadSignal<Vec<bool>>,
-    on_role_set: Callback<(usize, String)>,
-    our_side: ReadSignal<String>,
-    role_overrides: ReadSignal<HashMap<usize, String>>,
-    set_role_overrides: WriteSignal<HashMap<usize, String>>,
-    slot_comment_input: ReadSignal<String>,
-    set_slot_comment_input: WriteSignal<String>,
-    set_slot_comments: WriteSignal<Vec<Option<String>>>,
-) -> impl IntoView {
-    view! {
-        <div class="flex-1 min-w-0 overflow-x-auto bg-elevated border border-divider rounded-lg p-4">
-            <SectionHead
-                title="Carousel".to_string()
-            />
-
-            <Suspense fallback=move || view! { <PageLoading variant="draft".to_string() /> }>
-                {move || champions_resource.get().map(|result| match result {
-                    Err(e) => view! {
-                        <div class="text-danger">"Failed to load champions: " {e.to_string()}</div>
-                    }.into_any(),
-                    Ok(champs) => {
-                        let champion_map: HashMap<String, Champion> = champs
-                            .into_iter()
-                            .map(|c| (c.name.clone(), c))
-                            .collect();
-                        view! {
-                            <DraftBoard
-                                draft_slots=draft_slots
-                                champion_map=champion_map
-                                active_slot=active_slot
-                                on_slot_click=on_slot_click
-                                on_slot_drop=on_slot_drop
-                                highlighted_slot=highlighted_slot
-                                on_slot_clear=on_slot_clear
-                                slot_comments=slot_comments
-                                warning_slots=Signal::from(warning_slots_memo)
-                                role_assignments=role_assignments
-                                role_auto_guessed=role_auto_guessed
-                                on_role_set=on_role_set
-                                attr:data-feedback-label="Draft → Action ledger"
-                            />
-                        }.into_any()
-                    }
-                })}
-            </Suspense>
-
-            // Role override dropdowns for our-side pick slots
-            {move || {
-                let side = our_side.get();
-                let our_picks: &[usize] = if side == "blue" {
-                    &[6, 9, 10, 17, 18]
-                } else {
-                    &[7, 8, 11, 16, 19]
-                };
-                let default_roles = ["Top", "Jungle", "Mid", "Bot", "Support"];
-                view! {
-                    <div class="mt-2 flex flex-wrap gap-2 items-center">
-                        <span class="text-muted text-xs">"Role assignments:"</span>
-                        {our_picks.iter().zip(default_roles.iter()).map(|(&slot_idx, &default_role)| {
-                            let override_val = role_overrides.get()
-                                .get(&slot_idx)
-                                .map(|r| r.to_string())
-                                .unwrap_or_else(|| default_role.to_lowercase());
-                            let (_, _, slot_label) = slot_meta(slot_idx);
-                            view! {
-                                <div class="flex items-center gap-1">
-                                    <span class="text-dimmed text-xs">{slot_label}</span>
-                                    <select
-                                        class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer"
-                                        prop:value=override_val
-                                        on:change=move |ev| {
-                                            let val = event_target_value(&ev);
-                                            set_role_overrides.update(|m| {
-                                                m.insert(slot_idx, val);
-                                            });
-                                        }
-                                    >
-                                        <option value="top">"Top"</option>
-                                        <option value="jungle">"Jungle"</option>
-                                        <option value="mid">"Mid"</option>
-                                        <option value="bot">"Bot"</option>
-                                        <option value="support">"Support"</option>
-                                    </select>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
+                    }.into_any()
                 }
-            }}
-
-            // Per-slot comment editor (visible when a pick slot is highlighted)
-            {move || {
-                let hl = highlighted_slot.get();
-                hl.and_then(|idx| {
-                    let (_, kind, _) = slot_meta(idx);
-                    if kind != "pick" { return None; }
-                    let slots = draft_slots.get();
-                    let filled = slots.get(idx).and_then(|s| s.as_ref()).is_some();
-                    if !filled { return None; }
-                    let champ = slots[idx].clone().unwrap_or_default();
-                    Some(view! {
-                        <div class="mt-2 flex items-center gap-2">
-                            <span class="text-secondary text-sm flex-shrink-0">{format!("{} comment:", champ)}</span>
-                            <input
-                                type="text"
-                                placeholder="Pick rationale..."
-                                class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                prop:value=move || slot_comment_input.get()
-                                on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
-                                on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                    if ev.key() == "Enter" {
-                                        if let Some(slot_idx) = highlighted_slot.get_untracked() {
-                                            let val = slot_comment_input.get_untracked();
-                                            let comment = if val.trim().is_empty() { None } else { Some(val) };
-                                            set_slot_comments.update(|sc| {
-                                                if slot_idx < sc.len() { sc[slot_idx] = comment; }
-                                            });
-                                        }
-                                    }
-                                }
-                                on:blur=move |_| {
-                                    if let Some(slot_idx) = highlighted_slot.get_untracked() {
-                                        let val = slot_comment_input.get_untracked();
-                                        let comment = if val.trim().is_empty() { None } else { Some(val) };
-                                        set_slot_comments.update(|sc| {
-                                            if slot_idx < sc.len() { sc[slot_idx] = comment; }
-                                        });
-                                    }
-                                }
-                            />
-                        </div>
-                    })
-                })
-            }}
-        </div>
-    }
-}
-
-/// Draft War Table view — alternate view, accessible via mode toggle (wired in 18-08).
-#[component]
-fn DraftWarTableView(
-    champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
-    draft_slots: ReadSignal<Vec<Option<String>>>,
-    active_slot: ReadSignal<Option<usize>>,
-    highlighted_slot: ReadSignal<Option<usize>>,
-    on_slot_click: Callback<usize>,
-    on_slot_drop: Callback<(usize, String)>,
-    on_slot_clear: Callback<usize>,
-    slot_comments: ReadSignal<Vec<Option<String>>>,
-    warning_slots_memo: Memo<Vec<Option<(String, String)>>>,
-    role_assignments: ReadSignal<Vec<Option<String>>>,
-    role_auto_guessed: ReadSignal<Vec<bool>>,
-    on_role_set: Callback<(usize, String)>,
-    our_side: ReadSignal<String>,
-    role_overrides: ReadSignal<HashMap<usize, String>>,
-    set_role_overrides: WriteSignal<HashMap<usize, String>>,
-    slot_comment_input: ReadSignal<String>,
-    set_slot_comment_input: WriteSignal<String>,
-    set_slot_comments: WriteSignal<Vec<Option<String>>>,
-) -> impl IntoView {
-    view! {
-        <div class="flex-1 min-w-0 overflow-x-auto bg-elevated border border-divider rounded-lg p-4">
-            <SectionHead
-                title="Table".to_string()
-            />
-
-            <Suspense fallback=move || view! { <PageLoading variant="draft".to_string() /> }>
-                {move || champions_resource.get().map(|result| match result {
-                    Err(e) => view! {
-                        <div class="text-danger">"Failed to load champions: " {e.to_string()}</div>
-                    }.into_any(),
-                    Ok(champs) => {
-                        let champion_map: HashMap<String, Champion> = champs
-                            .into_iter()
-                            .map(|c| (c.name.clone(), c))
-                            .collect();
-                        view! {
-                            <DraftBoard
-                                draft_slots=draft_slots
-                                champion_map=champion_map
-                                active_slot=active_slot
-                                on_slot_click=on_slot_click
-                                on_slot_drop=on_slot_drop
-                                highlighted_slot=highlighted_slot
-                                on_slot_clear=on_slot_clear
-                                slot_comments=slot_comments
-                                warning_slots=Signal::from(warning_slots_memo)
-                                role_assignments=role_assignments
-                                role_auto_guessed=role_auto_guessed
-                                on_role_set=on_role_set
-                                attr:data-feedback-label="Draft → Action ledger"
-                            />
-                        }.into_any()
-                    }
-                })}
-            </Suspense>
-
-            // Composition pillars: not computed yet. Show an honest empty state
-            // instead of placeholder scores (the Draft Graph milestone fills this).
-            <div class="mt-4">
-                <Card>
-                    <SectionHead
-                        title="Composition".to_string()
-                    />
-                    <EmptyState message="Composition scores are not computed yet. Once the Draft Graph ships, damage, frontline, poke and utility will be scored from the picks on this board, with the reason for each score." />
-                </Card>
-            </div>
-
-            // Role override dropdowns for our-side pick slots
-            {move || {
-                let side = our_side.get();
-                let our_picks: &[usize] = if side == "blue" {
-                    &[6, 9, 10, 17, 18]
-                } else {
-                    &[7, 8, 11, 16, 19]
-                };
-                let default_roles = ["Top", "Jungle", "Mid", "Bot", "Support"];
-                view! {
-                    <div class="mt-2 flex flex-wrap gap-2 items-center">
-                        <span class="text-muted text-xs">"Role assignments:"</span>
-                        {our_picks.iter().zip(default_roles.iter()).map(|(&slot_idx, &default_role)| {
-                            let override_val = role_overrides.get()
-                                .get(&slot_idx)
-                                .map(|r| r.to_string())
-                                .unwrap_or_else(|| default_role.to_lowercase());
-                            let (_, _, slot_label) = slot_meta(slot_idx);
-                            view! {
-                                <div class="flex items-center gap-1">
-                                    <span class="text-dimmed text-xs">{slot_label}</span>
-                                    <select
-                                        class="text-xs text-muted bg-surface border-none rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer"
-                                        prop:value=override_val
-                                        on:change=move |ev| {
-                                            let val = event_target_value(&ev);
-                                            set_role_overrides.update(|m| {
-                                                m.insert(slot_idx, val);
-                                            });
-                                        }
-                                    >
-                                        <option value="top">"Top"</option>
-                                        <option value="jungle">"Jungle"</option>
-                                        <option value="mid">"Mid"</option>
-                                        <option value="bot">"Bot"</option>
-                                        <option value="support">"Support"</option>
-                                    </select>
-                                </div>
-                            }
-                        }).collect_view()}
-                    </div>
-                }
-            }}
-
-            // Per-slot comment editor (visible when a pick slot is highlighted)
-            {move || {
-                let hl = highlighted_slot.get();
-                hl.and_then(|idx| {
-                    let (_, kind, _) = slot_meta(idx);
-                    if kind != "pick" { return None; }
-                    let slots = draft_slots.get();
-                    let filled = slots.get(idx).and_then(|s| s.as_ref()).is_some();
-                    if !filled { return None; }
-                    let champ = slots[idx].clone().unwrap_or_default();
-                    Some(view! {
-                        <div class="mt-2 flex items-center gap-2">
-                            <span class="text-secondary text-sm flex-shrink-0">{format!("{} comment:", champ)}</span>
-                            <input
-                                type="text"
-                                placeholder="Pick rationale..."
-                                class="flex-1 bg-overlay border border-outline rounded px-2 py-1 text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent"
-                                prop:value=move || slot_comment_input.get()
-                                on:input=move |ev| set_slot_comment_input.set(event_target_value(&ev))
-                                on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                    if ev.key() == "Enter" {
-                                        if let Some(slot_idx) = highlighted_slot.get_untracked() {
-                                            let val = slot_comment_input.get_untracked();
-                                            let comment = if val.trim().is_empty() { None } else { Some(val) };
-                                            set_slot_comments.update(|sc| {
-                                                if slot_idx < sc.len() { sc[slot_idx] = comment; }
-                                            });
-                                        }
-                                    }
-                                }
-                                on:blur=move |_| {
-                                    if let Some(slot_idx) = highlighted_slot.get_untracked() {
-                                        let val = slot_comment_input.get_untracked();
-                                        let comment = if val.trim().is_empty() { None } else { Some(val) };
-                                        set_slot_comments.update(|sc| {
-                                            if slot_idx < sc.len() { sc[slot_idx] = comment; }
-                                        });
-                                    }
-                                }
-                            />
-                        </div>
-                    })
-                })
-            }}
-        </div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// DraftLedgerView — 18-07
-// Ledger-style read-only view of the current draft state.
-// Mode dispatch wired in 18-08; for now reachable via mode="ledger" stub.
-// ---------------------------------------------------------------------------
-
-#[component]
-fn DraftLedgerView(
-    draft_slots: ReadSignal<Vec<Option<String>>>,
-    our_side: ReadSignal<String>,
-) -> impl IntoView {
-    // Slot layout per 20-slot draft board convention (see `slot_meta`):
-    //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,13,15
-    //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,12,14
-    // Using canonical pick indices for side columns (5 picks each).
-    let blue_pick_slots: &[usize] = &[6, 9, 10, 17, 18];
-    let red_pick_slots: &[usize] = &[7, 8, 11, 16, 19];
-    let blue_ban_slots: &[usize] = &[0, 2, 4, 13, 15];
-    let red_ban_slots: &[usize] = &[1, 3, 5, 12, 14];
-
-    {
-        view! {
-            <div class="flex-1 p-4">
-                // Ledger header
-                <Card>
-                    <div class="text-center pb-2">
-                        <h2 class="font-display text-title font-semibold text-primary">"Draft ledger"</h2>
-                        <div class="mt-1">
-                            <Eyebrow>"Picks and bans in order"</Eyebrow>
-                        </div>
-                        <div class="mt-2 flex justify-center">
-                            <div class="h-px w-full bg-rule" aria-hidden="true"></div>
-                        </div>
-                        // Our side indicator
-                        {move || {
-                            let side = our_side.get();
-                            let label = if side == "blue" { "Blue Side — Our Forces" } else { "Red Side — Our Forces" };
-                            view! {
-                                <div class="mt-1">
-                                    <Eyebrow>{label}</Eyebrow>
-                                </div>
-                            }
-                        }}
-                    </div>
-                </Card>
-
-                // Two-column ledger
-                <div class="grid grid-cols-2 gap-6 mt-4" data-feedback-label="Draft → Two-column ledger">
-                    // Blue side column
-                    <Card attr:data-feedback-label="Draft → Blue side">
-                        <div>
-                            <Eyebrow>"Blue side"</Eyebrow>
-                            <div class="mt-2 flex justify-center">
-                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
-                            </div>
-                        </div>
-                        // Picks
-                        <div class="mt-3">
-                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"PICKS"</span>
-                            <div class="mt-1 flex flex-col gap-1">
-                                {move || {
-                                    let slots = draft_slots.get();
-                                    blue_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                        let name = slots.get(slot_idx)
-                                            .and_then(|s| s.as_ref())
-                                            .cloned()
-                                            .unwrap_or_else(|| "—".to_string());
-                                        view! {
-                                            <div class="flex items-baseline justify-between py-1 border-b border-rule font-display text-label">
-                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
-                                                <span class="text-primary flex-1 mx-2">{name}</span>
-                                                <span class="text-muted italic text-caption">"role"</span>
-                                            </div>
-                                        }
-                                    }).collect_view()
-                                }}
-                            </div>
-                        </div>
-                        // Bans
-                        <div class="mt-4">
-                            <div class="flex justify-center mb-1">
-                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
-                            </div>
-                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"BANS"</span>
-                            <div class="mt-1 flex flex-col gap-0.5">
-                                {move || {
-                                    let slots = draft_slots.get();
-                                    blue_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                        let name = slots.get(slot_idx)
-                                            .and_then(|s| s.as_ref())
-                                            .cloned()
-                                            .unwrap_or_else(|| "—".to_string());
-                                        view! {
-                                            <div class="flex items-baseline py-0.5 border-b border-rule font-display text-caption opacity-70">
-                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
-                                                <span class="text-secondary line-through flex-1 mx-2">{name}</span>
-                                            </div>
-                                        }
-                                    }).collect_view()
-                                }}
-                            </div>
-                        </div>
-                    </Card>
-
-                    // Red side column
-                    <Card attr:data-feedback-label="Draft → Red side">
-                        <div>
-                            <Eyebrow>"Red side"</Eyebrow>
-                            <div class="mt-2 flex justify-center">
-                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
-                            </div>
-                        </div>
-                        // Picks
-                        <div class="mt-3">
-                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"PICKS"</span>
-                            <div class="mt-1 flex flex-col gap-1">
-                                {move || {
-                                    let slots = draft_slots.get();
-                                    red_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                        let name = slots.get(slot_idx)
-                                            .and_then(|s| s.as_ref())
-                                            .cloned()
-                                            .unwrap_or_else(|| "—".to_string());
-                                        view! {
-                                            <div class="flex items-baseline justify-between py-1 border-b border-rule font-display text-label">
-                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
-                                                <span class="text-primary flex-1 mx-2">{name}</span>
-                                                <span class="text-muted italic text-caption">"role"</span>
-                                            </div>
-                                        }
-                                    }).collect_view()
-                                }}
-                            </div>
-                        </div>
-                        // Bans
-                        <div class="mt-4">
-                            <div class="flex justify-center mb-1">
-                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
-                            </div>
-                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"BANS"</span>
-                            <div class="mt-1 flex flex-col gap-0.5">
-                                {move || {
-                                    let slots = draft_slots.get();
-                                    red_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                        let name = slots.get(slot_idx)
-                                            .and_then(|s| s.as_ref())
-                                            .cloned()
-                                            .unwrap_or_else(|| "—".to_string());
-                                        view! {
-                                            <div class="flex items-baseline py-0.5 border-b border-rule font-display text-caption opacity-70">
-                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
-                                                <span class="text-secondary line-through flex-1 mx-2">{name}</span>
-                                            </div>
-                                        }
-                                    }).collect_view()
-                                }}
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                // Footer journal
-                <div class="mt-4">
-                    <Card>
-                        <Eyebrow>"Notes"</Eyebrow>
-                        <div class="mt-2 flex justify-center">
-                            <div class="h-px w-full bg-rule" aria-hidden="true"></div>
-                        </div>
-                        <p class="font-display text-secondary mt-2 text-body">
-                            // TODO: populate from post-game analysis once /post-game phase lands
-                            "Composite analysis to be recorded post-game. Navigate to /post-game to document."
-                        </p>
-                    </Card>
-                </div>
-            </div>
-        }.into_any()
+            })}
+        </Suspense>
     }
 }
 

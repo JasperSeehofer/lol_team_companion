@@ -8,16 +8,16 @@
 
 use leptos::prelude::*;
 
-use crate::components::ui::draft::{SlotState, TOURNAMENT_ORDER};
+use crate::components::ui::draft::TOURNAMENT_ORDER;
 use crate::components::ui::tokens::{
     contrast_by_name, css_value, TokenGroup, GALLERY_PAIRS, TOKENS,
 };
 use crate::components::ui::{
-    AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, DraftSequence,
-    DraftSlot, Edge, Field, FieldSize, Force, HeadingLevel, InputKind, Keycap, Layer, Pad,
-    PageHeader, PageShell, PageWidth, PrepSequence, PrepState, PrepStep, RowLink, SectionHeader,
-    Select, SelectOption, Surface, TabItem, TabPanel, Table, Tabs, Td, Text, TextField, TextRole,
-    Th, Tone, Tr, UserAvatar,
+    AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, DraftBoard, Edge,
+    Field, FieldSize, Force, HeadingLevel, InputKind, Keycap, Layer, Pad, PageHeader, PageShell,
+    PageWidth, PrepSequence, PrepState, PrepStep, RowLink, SectionHeader, Select, SelectOption,
+    Surface, TabItem, TabPanel, Table, Tabs, Td, Text, TextField, TextRole, Th, Tone, Tr,
+    UserAvatar,
 };
 use crate::error_template::NotFound;
 use crate::pages::design_domain::{
@@ -721,42 +721,61 @@ fn example_draft() -> (Vec<Option<String>>, Vec<Option<String>>) {
 #[component]
 fn DraftSection() -> impl IntoView {
     let (champions, roles) = example_draft();
-    let picked = RwSignal::new(None::<u8>);
-    let on_select = Callback::new(move |order: u8| picked.set(Some(order)));
+    // Mid-draft: step 19 (Blue pick 5) is being decided.
+    let mid: Vec<Option<String>> = champions.iter().take(18).cloned().collect();
+    let mid = RwSignal::new(mid);
+    let current = RwSignal::new(Some(18_usize));
+    let chosen = RwSignal::new(None::<usize>);
+    let roles_mid = roles.clone();
+    // Complete: the same draft with blue pick 5 and red pick 5 locked in.
+    let mut done = champions.clone();
+    done[18] = Some("Rakan".to_string());
+    done[19] = Some("Nautilus".to_string());
+    let mut notes = vec![None; 20];
+    notes[6] = Some("Blind-safe mid, flex".to_string());
+    notes[18] = Some("Engage for Jinx".to_string());
     view! {
-        <GallerySection id="draft" title="Tournament draft" lede="Five bans and five picks per side in the set order: ban phase 1 B R B R B R, pick phase 1 B1 R1 R2 B2 B3 R3, ban phase 2 R B R B, pick phase 2 R4 B4 B5 R5. Worked example: Alpha Wolves on blue, step 19 (Blue pick 5, Support) is being decided.">
-            <div class="flex flex-col gap-10">
-                <DraftSequence champions=champions roles=roles current=19 />
-                <div>
-                    <p class="eyebrow mb-3">"DraftSlot states"</p>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        <Sample label="Empty (not reached)">
-                            <DraftSlot step=TOURNAMENT_ORDER[19] state=SlotState::Empty role=Some("Support".to_string()) />
-                        </Sample>
-                        <Sample label="Selecting (current step)">
-                            <DraftSlot step=TOURNAMENT_ORDER[18] state=SlotState::Selecting role=Some("Support".to_string()) />
-                        </Sample>
-                        <Sample label="Locked pick">
-                            <DraftSlot step=TOURNAMENT_ORDER[6] state=SlotState::Locked champion=Some("Azir".to_string()) role=Some("Mid".to_string()) />
-                        </Sample>
-                        <Sample label="Locked ban">
-                            <DraftSlot step=TOURNAMENT_ORDER[1] state=SlotState::Locked champion=Some("Orianna".to_string()) />
-                        </Sample>
-                    </div>
-                </div>
-                <div>
-                    <p class="eyebrow mb-3">"Interactive (M3 makes slots buttons on the draft page)"</p>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <DraftSlot step=TOURNAMENT_ORDER[0] state=SlotState::Locked champion=Some("Yasuo".to_string()) on_select=Some(on_select) />
-                        <DraftSlot step=TOURNAMENT_ORDER[7] state=SlotState::Locked champion=Some("Lee Sin".to_string()) role=Some("Jungle".to_string()) on_select=Some(on_select) />
-                        <DraftSlot step=TOURNAMENT_ORDER[18] state=SlotState::Selecting role=Some("Support".to_string()) on_select=Some(on_select) />
-                    </div>
-                    <p class="mt-2 text-caption text-muted" aria-live="polite">
-                        {move || match picked.get() {
-                            Some(o) => format!("Step {o} selected"),
-                            None => "Select a slot".to_string(),
+        <GallerySection id="draft" title="Tournament draft" lede="The compact board the draft page uses: blue left, red right, each column is that team's final draft. Five bans per side, grouped by ban rotation (3, then 2), then five picks in pick order, bracketed by pick rotation: B1 · R1 R2 · B2 B3 · R3 · R4 · B4 B5 · R5. The step being decided is the only lit slot. Fixture: Alpha Wolves on blue.">
+            <div class="grid grid-cols-1 gap-10 lg:grid-cols-2">
+                <div class="min-w-0">
+                    <p class="eyebrow mb-3">"Mid-draft (interactive)"</p>
+                    <DraftBoard
+                        id="gallery-draft"
+                        label="Example draft board, mid-draft"
+                        champions=Signal::derive(move || mid.get())
+                        roles=Signal::stored(roles_mid)
+                        current=Signal::derive(move || current.get())
+                        blue_team=Signal::stored(Some("Alpha Wolves".to_string()))
+                        red_team=Signal::stored(Some("Beta Dragons".to_string()))
+                        on_select=Callback::new(move |i: usize| {
+                            current.set(Some(i));
+                            chosen.set(Some(i));
+                        })
+                        on_clear=Callback::new(move |i: usize| mid.update(|v| {
+                            if let Some(s) = v.get_mut(i) {
+                                *s = None;
+                            }
+                        }))
+                        hints=true
+                    />
+                    <p class="mt-3 px-5 text-caption text-muted" aria-live="polite" data-gallery-draft-chosen="">
+                        {move || match chosen.get() {
+                            Some(i) => format!("Chosen: {}", TOURNAMENT_ORDER[i].describe()),
+                            None => "Click a slot or press Enter on one.".to_string(),
                         }}
                     </p>
+                </div>
+                <div class="min-w-0">
+                    <p class="eyebrow mb-3">"Complete (read-only)"</p>
+                    <DraftBoard
+                        id="gallery-draft-done"
+                        label="Example draft board, complete"
+                        champions=Signal::stored(done)
+                        roles=Signal::stored(roles)
+                        notes=Signal::stored(notes)
+                        blue_team=Signal::stored(Some("Alpha Wolves".to_string()))
+                        red_team=Signal::stored(Some("Beta Dragons".to_string()))
+                    />
                 </div>
             </div>
         </GallerySection>

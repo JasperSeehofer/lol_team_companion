@@ -84,7 +84,9 @@ pub fn PageShell(
 /// heading in reading and tab order.
 #[component]
 pub fn PageHeader(
-    #[prop(into)] title: String,
+    /// The page title; a closure keeps it live (an editor's document name).
+    #[prop(into)]
+    title: TextProp,
     #[prop(optional, into)] eyebrow: Option<String>,
     /// One line of facts under the title (date, patch, counts).
     #[prop(optional, into)]
@@ -96,7 +98,7 @@ pub fn PageHeader(
             <div class="min-w-0">
                 {eyebrow.map(|e| view! { <p class="eyebrow">{e}</p> })}
                 <h1 class="mt-2 font-display text-headline font-semibold tracking-[-0.02em] text-primary text-balance">
-                    {title}
+                    {move || title.get().to_string()}
                 </h1>
                 {meta.map(|m| view! {
                     <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-body text-secondary">{m.run()}</div>

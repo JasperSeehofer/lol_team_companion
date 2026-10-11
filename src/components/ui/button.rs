@@ -99,7 +99,7 @@ impl Force {
     }
 }
 
-pub(crate) const BASE: &str = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress";
+pub(crate) const BASE: &str = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary";
 
 /// A button, or a link styled as one when `href` is set.
 ///
@@ -109,6 +109,8 @@ pub(crate) const BASE: &str = "inline-flex items-center justify-center gap-2 whi
 /// and the label stays. `shortcut` draws a keycap and sets
 /// `aria-keyshortcuts`; the keycap itself is hidden from screen readers.
 /// An icon is decorative: icon-only buttons must pass `aria_label`.
+/// `pressed` makes it a toggle button (`aria-pressed`, drawn with a
+/// lighter fill, a brighter edge and bold text, so not by colour alone).
 #[component]
 pub fn Button(
     #[prop(optional)] variant: ButtonVariant,
@@ -133,8 +135,12 @@ pub fn Button(
     /// Stretch to the container width.
     #[prop(optional)]
     full_width: bool,
+    /// Toggle button state (`aria-pressed`). `None`: a plain button.
+    #[prop(optional, into)]
+    pressed: Option<Signal<bool>>,
     children: Children,
 ) -> impl IntoView {
+    let aria_pressed = move || pressed.map(|p| if p.get() { "true" } else { "false" });
     let class = join(&[
         BASE,
         size.class(),
@@ -180,6 +186,7 @@ pub fn Button(
                 aria-keyshortcuts=shortcut
                 disabled=move || disabled.get() || loading.get()
                 aria-busy=move || loading.get().then_some("true")
+                aria-pressed=aria_pressed
                 on:click=move |ev| {
                     if let Some(cb) = on_click {
                         cb.run(ev);

@@ -127,6 +127,17 @@ impl FieldSize {
     }
 }
 
+/// Makes a [`TextField`] the input of a combobox (WAI-ARIA 1.2): the
+/// popup list is `controls`, the highlighted option is `active` (its DOM
+/// id), announced through `aria-activedescendant`.
+#[derive(Clone)]
+pub struct Combobox {
+    /// DOM id of the `role="listbox"` the input controls.
+    pub controls: String,
+    /// DOM id of the active option, if any.
+    pub active: Signal<Option<String>>,
+}
+
 const CONTROL: &str = "w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger";
 
 /// A single-line text input, or a textarea when `rows` is set.
@@ -134,7 +145,10 @@ const CONTROL: &str = "w-full rounded-ctl border border-outline bg-ink-2 px-3 te
 /// A11y: put it inside a [`Field`]; it takes the field's id, description
 /// and invalid state. Without a field, pass `aria_label`. The edge is the
 /// 3:1 outline token, focus is the global chalk outline, and `value` is
-/// bound with `prop:value` so it follows the signal.
+/// bound with `prop:value` so it follows the signal. With `combobox` the
+/// input gets `role="combobox"`, `aria-controls`, `aria-expanded="true"`,
+/// `aria-autocomplete="list"` and `aria-activedescendant`; the caller
+/// handles the arrow keys through `on_keydown`.
 #[component]
 pub fn TextField(
     #[prop(optional)] value: Option<RwSignal<String>>,
@@ -155,12 +169,37 @@ pub fn TextField(
     id: Option<String>,
     #[prop(optional, into)] aria_label: Option<String>,
     #[prop(optional)] force: Option<Force>,
+    /// Key presses (Enter to submit a row, arrows in a combobox, Escape).
+    #[prop(optional)]
+    on_keydown: Option<Callback<leptos::ev::KeyboardEvent>>,
+    /// Focus left the field (commit an inline edit).
+    #[prop(optional)]
+    on_blur: Option<Callback<()>>,
+    /// Combobox wiring (single-line fields only).
+    #[prop(optional)]
+    combobox: Option<Combobox>,
 ) -> impl IntoView {
     let ctx = use_context::<FieldContext>();
     let id = id.or_else(|| ctx.as_ref().map(|c| c.id.clone()));
     let described_by = ctx.as_ref().map(|c| c.described_by);
     let invalid = ctx.as_ref().map(|c| c.invalid);
     let required = required || ctx.as_ref().is_some_and(|c| c.required);
+    let keydown = move |ev: leptos::ev::KeyboardEvent| {
+        if let Some(cb) = on_keydown {
+            cb.run(ev);
+        }
+    };
+    let blur = move |_: leptos::ev::FocusEvent| {
+        if let Some(cb) = on_blur {
+            cb.run(());
+        }
+    };
+    let cb_role = combobox.as_ref().map(|_| "combobox");
+    let cb_controls = combobox.as_ref().map(|c| c.controls.clone());
+    let cb_expanded = combobox.as_ref().map(|_| "true");
+    let cb_auto = combobox.as_ref().map(|_| "list");
+    let cb_active = combobox.as_ref().map(|c| c.active);
+    let aria_active = move || cb_active.and_then(|a| a.get());
     let force = force.map(Force::as_str);
     let on_input = move |ev: leptos::ev::Event| {
         if let Some(v) = value {
@@ -194,6 +233,8 @@ pub fn TextField(
                     data-force=force
                     prop:value=move || v.get()
                     on:input=on_input
+                    on:keydown=keydown
+                    on:blur=blur
                 ></textarea>
             }
             .into_any()
@@ -215,6 +256,8 @@ pub fn TextField(
                     aria-invalid=aria_invalid
                     aria-describedby=aria_described
                     data-force=force
+                    on:keydown=keydown
+                    on:blur=blur
                 ></textarea>
             }
             .into_any()
@@ -237,8 +280,15 @@ pub fn TextField(
                     aria-invalid=aria_invalid
                     aria-describedby=aria_described
                     data-force=force
+                    role=cb_role
+                    aria-controls=cb_controls
+                    aria-expanded=cb_expanded
+                    aria-autocomplete=cb_auto
+                    aria-activedescendant=aria_active
                     prop:value=move || v.get()
                     on:input=on_input
+                    on:keydown=keydown
+                    on:blur=blur
                 />
             }
             .into_any()
@@ -261,6 +311,13 @@ pub fn TextField(
                     aria-invalid=aria_invalid
                     aria-describedby=aria_described
                     data-force=force
+                    role=cb_role
+                    aria-controls=cb_controls
+                    aria-expanded=cb_expanded
+                    aria-autocomplete=cb_auto
+                    aria-activedescendant=aria_active
+                    on:keydown=keydown
+                    on:blur=blur
                 />
             }
             .into_any()

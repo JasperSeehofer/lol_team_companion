@@ -1,5 +1,5 @@
 use crate::components::champion_picker::ChampionPicker;
-use crate::components::draft_board::{slot_meta, DraftBoard};
+use crate::components::draft_board::slot_meta;
 use crate::components::region::*;
 use crate::components::tree_graph::TreeGraph;
 use crate::components::ui::{
@@ -1068,7 +1068,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     set_draft_slots=set_draft_slots
                                                     active_slot=active_slot
                                                     set_active_slot=set_active_slot
-                                                    highlighted_slot=highlighted_slot
+                                                    _highlighted_slot=highlighted_slot
                                                     on_slot_clear=on_slot_clear
                                                     champions_resource=champions_resource
                                                     used_champions=Signal::derive(used_champions)
@@ -1263,7 +1263,7 @@ fn NodeEditor(
     set_draft_slots: WriteSignal<Vec<Option<String>>>,
     active_slot: ReadSignal<Option<usize>>,
     set_active_slot: WriteSignal<Option<usize>>,
-    highlighted_slot: ReadSignal<Option<usize>>,
+    _highlighted_slot: ReadSignal<Option<usize>>,
     on_slot_clear: Callback<usize>,
     champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
     used_champions: Signal<Vec<String>>,
@@ -1323,23 +1323,18 @@ fn NodeEditor(
                         Err(e) => view! {
                             <div class="text-danger text-sm">"Failed to load champions: " {e.to_string()}</div>
                         }.into_any(),
-                        Ok(champs) => {
-                            let champion_map: HashMap<String, Champion> = champs
-                                .into_iter()
-                                .map(|c| (c.id.clone(), c))
-                                .collect();
-                            view! {
-                                <DraftBoard
-                                    draft_slots=draft_slots
-                                    champion_map=champion_map
-                                    active_slot=active_slot
-                                    on_slot_click=on_slot_click
-                                    on_slot_drop=on_slot_drop
-                                    highlighted_slot=highlighted_slot
-                                    on_slot_clear=on_slot_clear
-                                />
-                            }.into_any()
-                        }
+                        Ok(_) => view! {
+                            <crate::components::ui::DraftBoard
+                                id="tree-board"
+                                label="Node draft board"
+                                champions=Signal::derive(move || draft_slots.get())
+                                current=Signal::derive(move || active_slot.get())
+                                on_select=on_slot_click
+                                on_clear=on_slot_clear
+                                on_drop=on_slot_drop
+                                hints=true
+                            />
+                        }.into_any(),
                     })}
                 </Suspense>
             </div>
@@ -1374,9 +1369,11 @@ fn NodeEditor(
                         }.into_any(),
                         Ok(champs) => view! {
                             <ChampionPicker
+                                id="tree-picker"
                                 champions=champs
-                                used_champions=used_champions.get()
+                                unavailable=Signal::derive(move || used_champions.get())
                                 on_select=on_champion_select
+                                label=Signal::stored("Champion for the lit slot".to_string())
                             />
                         }.into_any(),
                     })}
@@ -1532,29 +1529,13 @@ fn LiveNavigator(
                                         <Suspense fallback=|| view! { <SkeletonLine width="w-32" height="h-8" /> }>
                                             {move || champions_resource.get().map(|result| match result {
                                                 Err(_) => view! { <div class="text-dimmed">"Champions unavailable"</div> }.into_any(),
-                                                Ok(champs) => {
-                                                    let champion_map: HashMap<String, Champion> = champs
-                                                        .into_iter()
-                                                        .map(|c| (c.id.clone(), c))
-                                                        .collect();
-                                                    let (ro_slots, _) = signal(slots.clone());
-                                                    let (ro_active, _) = signal(None::<usize>);
-                                                    let (ro_highlighted, _) = signal(None::<usize>);
-                                                    let noop_click = Callback::new(|_: usize| {});
-                                                    let noop_drop = Callback::new(|_: (usize, String)| {});
-                                                    let noop_clear = Callback::new(|_: usize| {});
-                                                    view! {
-                                                        <DraftBoard
-                                                            draft_slots=ro_slots
-                                                            champion_map=champion_map
-                                                            active_slot=ro_active
-                                                            on_slot_click=noop_click
-                                                            on_slot_drop=noop_drop
-                                                            highlighted_slot=ro_highlighted
-                                                            on_slot_clear=noop_clear
-                                                        />
-                                                    }.into_any()
-                                                }
+                                                Ok(_) => view! {
+                                                    <crate::components::ui::DraftBoard
+                                                        id="tree-play-board"
+                                                        label="Draft so far"
+                                                        champions=Signal::stored(slots.clone())
+                                                    />
+                                                }.into_any(),
                                             })}
                                         </Suspense>
                                     </div>
