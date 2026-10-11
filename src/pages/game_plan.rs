@@ -684,6 +684,13 @@ pub fn GamePlanPage() -> impl IntoView {
             prefilled.set_value(true);
         }
     });
+    // What the open plan looked like when it was loaded or last saved, as
+    // the editor builds it (so opening a plan does not count as a change).
+    let loaded_snapshot: StoredValue<Option<GamePlan>> = StoredValue::new(None);
+    // Bumped whenever the editor switches to another plan, so a save that
+    // returns late does not write its id into a different plan.
+    let edit_gen = StoredValue::new(0_u64);
+    let saving = RwSignal::new(false);
     // `?plan_id=` opens that plan, once.
     let opened = StoredValue::new(false);
     Effect::new(move |_| {
@@ -699,6 +706,9 @@ pub fn GamePlanPage() -> impl IntoView {
                 .find(|p| p.id.as_deref() == Some(target.as_str()))
             {
                 ed.load(&p);
+                loaded_snapshot.set_value(Some(ed.build(false)));
+                save_state.set("saved");
+                edit_gen.update_value(|g| *g += 1);
                 opened.set_value(true);
             }
         }
@@ -707,7 +717,6 @@ pub fn GamePlanPage() -> impl IntoView {
     // Auto-save existing plans 2 s after the last change (rule 54).
     #[allow(unused_variables)]
     let timer: RwSignal<Option<i32>> = RwSignal::new(None);
-    let loaded_snapshot: StoredValue<Option<GamePlan>> = StoredValue::new(None);
     Effect::new(move |_| {
         let plan = ed.build(true);
         if plan.id.is_none() || plan.name.trim().is_empty() {
@@ -726,11 +735,16 @@ pub fn GamePlanPage() -> impl IntoView {
                 }
             }
             let json = serde_json::to_string(&plan).unwrap_or_default();
+            let gen = edit_gen.get_value();
             let cb = Closure::once(move || {
                 leptos::task::spawn_local(async move {
                     if update_plan(json).await.is_ok() {
-                        loaded_snapshot.set_value(Some(plan));
-                        save_state.set("saved");
+                        // Only the plan still open takes the new snapshot.
+                        if edit_gen.get_value() == gen {
+                            let unchanged = ed.build(false) == plan;
+                            loaded_snapshot.set_value(Some(plan));
+                            save_state.set(if unchanged { "saved" } else { "unsaved" });
+                        }
                         plans.refetch();
                         win_rates.refetch();
                     }
@@ -750,9 +764,10 @@ pub fn GamePlanPage() -> impl IntoView {
     // The open plan's id goes in the address so a reload or link reopens it.
     let nav = navigator();
     let open_plan = Callback::new(move |p: GamePlan| {
-        loaded_snapshot.set_value(Some(p.clone()));
-        save_state.set("saved");
         ed.load(&p);
+        loaded_snapshot.set_value(Some(ed.build(false)));
+        save_state.set("saved");
+        edit_gen.update_value(|g| *g += 1);
         opened.set_value(true);
         if let Some(id) = p.id.as_deref() {
             replace_url(nav, &format!("/game-plan?plan_id={id}"));
@@ -761,6 +776,9 @@ pub fn GamePlanPage() -> impl IntoView {
 
     let name_error = RwSignal::new(None::<String>);
     let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        if saving.get_untracked() {
+            return;
+        }
         let plan = ed.build(false);
         if plan.name.trim().is_empty() {
             name_error.set(Some("Name the plan so the team can find it.".into()));
@@ -770,23 +788,35 @@ pub fn GamePlanPage() -> impl IntoView {
         name_error.set(None);
         let json = serde_json::to_string(&plan).unwrap_or_default();
         let is_update = plan.id.is_some();
+        let gen = edit_gen.get_value();
+        saving.set(true);
         leptos::task::spawn_local(async move {
             let res = if is_update {
                 update_plan(json).await.map(|_| String::new())
             } else {
                 create_plan(json).await
             };
+            saving.set(false);
             match res {
                 Ok(id) => {
+                    plans.refetch();
+                    toast.push.run(Toast::success("Game plan saved"));
+                    // The editor moved on to another plan meanwhile.
+                    if edit_gen.get_value() != gen {
+                        return;
+                    }
+                    // The snapshot is what was sent: anything typed while
+                    // the request ran is still a change (and auto-saves).
+                    let mut sent = plan;
                     if !is_update {
                         opened.set_value(true);
                         replace_url(nav, &format!("/game-plan?plan_id={id}"));
+                        sent.id = Some(id.clone());
                         ed.id.set(Some(id));
                     }
-                    loaded_snapshot.set_value(Some(ed.build(false)));
-                    save_state.set("saved");
-                    plans.refetch();
-                    toast.push.run(Toast::success("Game plan saved"));
+                    let unchanged = ed.build(false) == sent;
+                    loaded_snapshot.set_value(Some(sent));
+                    save_state.set(if unchanged { "saved" } else { "unsaved" });
                 }
                 Err(e) => toast
                     .push
@@ -798,6 +828,7 @@ pub fn GamePlanPage() -> impl IntoView {
         opened.set_value(true);
         replace_url(nav, "/game-plan");
         ed.clear();
+        edit_gen.update_value(|g| *g += 1);
         loaded_snapshot.set_value(None);
         save_state.set("");
         name_error.set(None);
@@ -812,6 +843,7 @@ pub fn GamePlanPage() -> impl IntoView {
                 Ok(()) => {
                     replace_url(nav, "/game-plan");
                     ed.clear();
+                    edit_gen.update_value(|g| *g += 1);
                     loaded_snapshot.set_value(None);
                     save_state.set("");
                     plans.refetch();
@@ -852,7 +884,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     {move || ed.id.get().map(|_| view! {
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
-                    <Button variant=ButtonVariant::Primary on_click=do_save attr:data-testid="plan-save">"Save plan"</Button>
+                    <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="plan-save">"Save plan"</Button>
                 }
             />
             <ConfirmDialog
