@@ -13,7 +13,11 @@ use lol_team_companion::{
         draft::DraftAction,
         game_plan::{GamePlan, PostGameLearning},
     },
-    server::{auth::hash_password, db},
+    server::{
+        auth::hash_password,
+        db,
+        riot::{self, RiotClient},
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -94,6 +98,8 @@ async fn main() {
         .init();
 
     let dry_run = env::args().any(|a| a == "--dry-run");
+    let link_riot = env::args().any(|a| a == "--link-riot");
+    let riot = RiotClient::from_env();
     let data_dir = env::var("SURREAL_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
 
     println!("Seed: initializing database from {data_dir}...");
@@ -112,6 +118,8 @@ async fn main() {
     // Phase 2: Create Team A (5 users)
     let team_a_id = create_seed_team(
         &db,
+        &riot,
+        link_riot,
         "Alpha Wolves",
         &[
             ("seed-alpha-top", "SeedTop1", "EUW"),
@@ -126,6 +134,8 @@ async fn main() {
     // Phase 3: Create Team B (5 users)
     let team_b_id = create_seed_team(
         &db,
+        &riot,
+        link_riot,
         "Beta Dragons",
         &[
             ("seed-beta-top", "SeedTop2", "EUW"),
@@ -203,6 +213,8 @@ async fn cleanup_seed_data(db: &Surreal<Db>) {
 /// Returns the team ID.
 async fn create_seed_team(
     db: &Surreal<Db>,
+    riot: &RiotClient,
+    link_riot: bool,
     team_name: &str,
     users: &[(&str, &str, &str)], // (username, riot_name, tag)
 ) -> String {
@@ -222,16 +234,13 @@ async fn create_seed_team(
         {
             Ok(id) => {
                 println!("  Created user {email} → {id}");
-                // Optionally try to link Riot account (best-effort, no API key needed)
-                if lol_team_companion::server::riot::has_api_key() {
-                    // Rate-limit: 150ms between calls
+                // Seed accounts are fictional: they are not linked to Riot
+                // accounts (pass --link-riot to try anyway).
+                if link_riot && riot.is_configured() {
                     tokio::time::sleep(Duration::from_millis(150)).await;
-                    match lol_team_companion::server::riot::get_puuid(
-                        riot_name,
-                        "EUW",
-                        lol_team_companion::server::riot::platform_route_from_str("EUW"),
-                    )
-                    .await
+                    match riot
+                        .get_puuid(riot_name, "EUW", riot::platform_for(&[Some("EUW")]))
+                        .await
                     {
                         Ok(puuid) => {
                             if let Err(e) =

@@ -147,7 +147,8 @@ pub async fn fetch_champions(
         .await
         .map_err(authz::server_err)?;
 
-    if !riot::has_api_key() {
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new("No Riot API key configured"));
     }
 
@@ -159,13 +160,23 @@ pub async fn fetch_champions(
         ));
     }
     authz::rate_limit(Bucket::Riot).await?;
+    // Account lookup + match list + 20 matches.
+    riot_client
+        .ensure_headroom(2 + 20)
+        .map_err(authz::server_err)?;
 
-    let platform = riot::platform_route_from_str("EUW");
-    let puuid = riot::get_puuid(parts[0], parts[1], platform)
+    // Opponents are looked up on the team's server.
+    let team_region = db::get_team_region(&ctx.db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let platform = riot::platform_for(&[team_region.as_deref()]);
+    let puuid = riot_client
+        .get_puuid(parts[0], parts[1], platform)
         .await
         .map_err(authz::server_err)?;
 
-    let champions = riot::fetch_player_champions(&puuid, 20, platform)
+    let champions = riot_client
+        .fetch_player_champions(&puuid, 20, platform)
         .await
         .map_err(authz::server_err)?;
 
@@ -228,7 +239,8 @@ pub async fn fetch_player_intel_fn(
         return Ok(());
     }
 
-    if !riot::has_api_key() {
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new("No Riot API key configured"));
     }
 
@@ -240,13 +252,23 @@ pub async fn fetch_player_intel_fn(
         ));
     }
     authz::rate_limit(Bucket::Riot).await?;
+    // Account lookup + match list + 20 matches + masteries.
+    riot_client
+        .ensure_headroom(3 + 20)
+        .map_err(authz::server_err)?;
 
-    let platform = riot::platform_route_from_str("EUW");
-    let puuid = riot::get_puuid(parts[0], parts[1], platform)
+    // Opponents are looked up on the team's server.
+    let team_region = db::get_team_region(&ctx.db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let platform = riot::platform_for(&[team_region.as_deref()]);
+    let puuid = riot_client
+        .get_puuid(parts[0], parts[1], platform)
         .await
         .map_err(authz::server_err)?;
 
-    let intel = riot::fetch_player_intel(&puuid, 20, platform)
+    let intel = riot_client
+        .fetch_player_intel(&puuid, 20, platform)
         .await
         .map_err(authz::server_err)?;
 

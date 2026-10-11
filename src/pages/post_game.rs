@@ -227,14 +227,22 @@ pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, Ser
         return Ok(None);
     }
 
-    if !riot::has_api_key() {
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Ok(None);
     }
     authz::rate_limit(Bucket::Riot).await?;
+    riot_client
+        .ensure_headroom(riot::MATCH_HISTORY_REQUESTS)
+        .map_err(authz::server_err)?;
 
     // Fetch recent match history (up to 20 matches; check first 5 for a match)
-    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
-    let matches = riot::fetch_match_history(&puuid, None, platform)
+    let team_region = db::get_team_region(&surreal, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let platform = riot::platform_for(&[user.riot_region.as_deref(), team_region.as_deref()]);
+    let matches = riot_client
+        .fetch_match_history(&puuid, None, platform)
         .await
         .map_err(authz::server_err)?;
 

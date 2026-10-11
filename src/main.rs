@@ -9,7 +9,8 @@ use std::sync::Arc;
 use lol_team_companion::app::{shell, App};
 use lol_team_companion::server::{
     auth::AuthBackend,
-    config, db,
+    config, db, rate_limit,
+    riot::RiotClient,
     session_store::SurrealSessionStore,
     theme_layer::{theme_injection_middleware, REQUEST_THEME},
 };
@@ -19,6 +20,7 @@ use tower_sessions::ExpiredDeletion;
 struct AppState {
     leptos_options: LeptosOptions,
     db: Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
+    riot: Arc<RiotClient>,
     auth_backend: AuthBackend,
 }
 
@@ -80,9 +82,24 @@ async fn main() {
 
     // SurrealDB
     let data_dir = std::env::var("SURREAL_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
-    let surreal_db = db::init_db(&data_dir)
-        .await
-        .expect("Failed to initialize SurrealDB");
+    // Applies schema.surql and any pending migrations; a failed migration
+    // stops the server here rather than serving a half-migrated database.
+    let surreal_db = match db::init_db(&data_dir).await {
+        Ok(db) => db,
+        Err(e) => {
+            tracing::error!("Database initialisation failed: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    // One Riot client for the whole process (shared rate limiting + budget).
+    let riot = Arc::new(RiotClient::from_env());
+    if !riot.is_configured() {
+        tracing::warn!("RIOT_API_KEY is not set: Riot features will report that they are off");
+    }
+
+    // Drop idle rate-limiter entries off the request path.
+    rate_limit::spawn_purge_task(std::time::Duration::from_secs(60));
 
     // Phase 19 D-04 — auto-export open bug reports to the triage inbox.
     // Runs once, synchronously, after DB init and before axum::serve.
@@ -146,6 +163,7 @@ async fn main() {
     let app_state = AppState {
         leptos_options: leptos_options.clone(),
         db: Arc::clone(&surreal_db),
+        riot: Arc::clone(&riot),
         auth_backend,
     };
 
@@ -159,6 +177,7 @@ async fn main() {
                 move || {
                     let db = Arc::clone(&app_state.db);
                     provide_context(db);
+                    provide_context(Arc::clone(&app_state.riot));
                     // Phase 18.1 plan 01: per-request InitialTheme,
                     // read synchronously from the REQUEST_THEME tokio
                     // task-local that `theme_injection_middleware` set

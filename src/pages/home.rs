@@ -26,7 +26,6 @@ pub struct DashboardData {
 pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
-    use crate::server::riot;
 
     let user = match authz::optional_user().await? {
         Some(u) => u,
@@ -45,7 +44,7 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
                 review_count: 0,
                 recent_games: 0,
                 recent_win_rate: None,
-                has_riot_key: riot::has_api_key(),
+                has_riot_key: authz::riot().is_ok_and(|r| r.is_configured()),
             })
         }
     };
@@ -137,7 +136,7 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
         review_count,
         recent_games,
         recent_win_rate,
-        has_riot_key: riot::has_api_key(),
+        has_riot_key: authz::riot().is_ok_and(|r| r.is_configured()),
     })
 }
 

@@ -64,6 +64,10 @@ pub async fn save_region(region: String) -> Result<(), ServerFnError> {
     use crate::server::db;
 
     let authz::Ctx { db, user } = authz::authed().await?;
+    let region = region.trim().to_string();
+    if !crate::server::riot::is_known_region(&region) {
+        return Err(ServerFnError::new("Choose a region from the list."));
+    }
     db::set_user_region(&db, &user.id, &region)
         .await
         .map_err(authz::server_err)?;

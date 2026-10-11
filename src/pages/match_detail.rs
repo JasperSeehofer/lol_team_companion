@@ -54,14 +54,20 @@ pub async fn fetch_match_detail(
 
     // Cache miss: fetch from Riot API
     authz::rate_limit(Bucket::Riot).await?;
-    if !riot::has_api_key() {
+    let riot_client = authz::riot()?;
+    if !riot_client.is_configured() {
         return Err(ServerFnError::new(
             "Riot API key not configured. Ask an admin to add a RIOT_API_KEY.",
         ));
     }
+    // Match + timeline.
+    riot_client.ensure_headroom(2).map_err(authz::server_err)?;
 
-    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
-    let full = riot::fetch_full_match_detail(&match_id, platform)
+    // The match ID names its platform ("EUW1_..."); fall back to the profile.
+    let platform = riot::platform_from_match_id(&match_id)
+        .unwrap_or_else(|| riot::platform_for(&[user.riot_region.as_deref()]));
+    let full = riot_client
+        .fetch_full_match_detail(&match_id, platform)
         .await
         .map_err(authz::server_err)?;
 

@@ -35,8 +35,9 @@ pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
     authz::rate_limit(Bucket::Riot).await?;
     let (game_name, tag_line) = (parts[0], parts[1]);
 
-    let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
-    let puuid = riot::get_puuid(game_name, tag_line, platform)
+    let platform = riot::platform_for(&[user.riot_region.as_deref()]);
+    let puuid = authz::riot()?
+        .get_puuid(game_name, tag_line, platform)
         .await
         .map_err(authz::server_err)?;
 

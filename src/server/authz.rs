@@ -65,6 +65,13 @@ impl IntoServerError for crate::server::riot::RiotError {
         match self {
             // Our own messages ("Account X#Y not found"), safe to show.
             RiotError::Api(msg) => ServerFnError::new(msg),
+            RiotError::NotConfigured => ServerFnError::new(
+                "Riot features are not set up on this server (no API key). Ask an admin.",
+            ),
+            RiotError::Busy(secs) => {
+                tracing::info!(retry_in = secs, "global Riot budget spent");
+                ServerFnError::new(format!("Riot is busy, try again in {secs} s."))
+            }
             RiotError::Riven(e) => {
                 let status = e.status_code().map(|s| s.as_u16());
                 tracing::warn!(?status, error = %e, "Riot API request failed");
@@ -111,6 +118,12 @@ pub fn server_err<E: IntoServerError>(e: E) -> ServerFnError {
 /// The DB handle provided to every server function.
 pub fn db() -> Result<DbHandle, ServerFnError> {
     use_context::<DbHandle>().ok_or_else(|| internal_error("server fn context", "no DB handle"))
+}
+
+/// The shared Riot API client provided to every server function.
+pub fn riot() -> Result<Arc<crate::server::riot::RiotClient>, ServerFnError> {
+    use_context::<Arc<crate::server::riot::RiotClient>>()
+        .ok_or_else(|| internal_error("server fn context", "no Riot client"))
 }
 
 /// The signed-in user, if any.
@@ -261,6 +274,22 @@ pub async fn rate_limit(bucket: Bucket) -> Result<(), ServerFnError> {
     Limiter::global()
         .hit(bucket, &ip)
         .map_err(|wait| ServerFnError::new(slow_down_message(wait)))
+}
+
+/// Allow `name` for this team at most once per `period`.
+pub fn team_cooldown(
+    name: &'static str,
+    team_id: &str,
+    period: std::time::Duration,
+) -> Result<(), ServerFnError> {
+    Limiter::global()
+        .cooldown(name, team_id, period)
+        .map_err(|remaining| {
+            ServerFnError::new(format!(
+                "Your team synced a moment ago. Please wait {} seconds before syncing again.",
+                remaining.as_secs().max(1)
+            ))
+        })
 }
 
 /// Allow `name` for this user at most once per `period`.

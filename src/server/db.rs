@@ -2083,15 +2083,20 @@ impl From<DbTeamMatchRow> for TeamMatchRow {
     }
 }
 
+/// A team member's Riot link, for team-wide syncs.
+#[derive(Clone, Debug)]
+pub struct RosterAccount {
+    pub user_id: String,
+    pub username: String,
+    pub riot_puuid: Option<String>,
+    pub riot_region: Option<String>,
+}
+
 /// Get roster member puuids for syncing
-pub async fn get_roster_puuids(
-    db: &Surreal<Db>,
-    team_id: &str,
-) -> DbResult<Vec<(String, String, Option<String>)>> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+pub async fn get_roster_puuids(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<RosterAccount>> {
     let mut r = db
-        .query("SELECT user.id as user_id, user.username as username, user.riot_puuid as riot_puuid FROM team_member WHERE team = type::record('team', $team_key)")
-        .bind(("team_key", team_key))
+        .query("SELECT user.id as user_id, user.username as username, user.riot_puuid as riot_puuid, user.riot_region as riot_region FROM team_member WHERE team = type::record('team', $team_key)")
+        .bind(("team_key", record_key(team_id, "team")))
         .await?;
 
     #[derive(Debug, Deserialize, SurrealValue)]
@@ -2099,13 +2104,34 @@ pub async fn get_roster_puuids(
         user_id: RecordId,
         username: String,
         riot_puuid: Option<String>,
+        riot_region: Option<String>,
     }
 
     let members: Vec<MemberPuuid> = r.take(0).unwrap_or_default();
     Ok(members
         .into_iter()
-        .map(|m| (m.user_id.to_sql(), m.username, m.riot_puuid))
+        .map(|m| RosterAccount {
+            user_id: m.user_id.to_sql(),
+            username: m.username,
+            riot_puuid: m.riot_puuid,
+            riot_region: m.riot_region,
+        })
         .collect())
+}
+
+/// The team's region code ("EUW", "NA", ...), used to route Riot calls for
+/// team-wide work and opponent scouting.
+pub async fn get_team_region(db: &Surreal<Db>, team_id: &str) -> DbResult<Option<String>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct RegionRow {
+        region: Option<String>,
+    }
+    let mut r = db
+        .query("SELECT region FROM type::record('team', $team_key)")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let row: Option<RegionRow> = r.take(0)?;
+    Ok(row.and_then(|r| r.region))
 }
 
 // ---------------------------------------------------------------------------

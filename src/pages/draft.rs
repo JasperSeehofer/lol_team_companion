@@ -406,6 +406,12 @@ pub async fn get_opponent_intel_full(
     };
     // Calls the Riot API once per scouted player.
     authz::rate_limit(Bucket::Riot).await?;
+    let riot_client = authz::riot()?;
+    // Opponents are scouted on the team's server.
+    let platform = riot::platform_for(&[db::get_team_region(&db, &team_id)
+        .await
+        .map_err(authz::server_err)?
+        .as_deref()]);
 
     let players = match db::get_opponent(&db, &team_id, &opponent_id)
         .await
@@ -436,11 +442,9 @@ pub async fn get_opponent_intel_full(
         });
 
         // Mastery data — gracefully absent when API key missing or no PUUID.
-        let mastery_data = if riot::has_api_key() {
+        let mastery_data = if riot_client.is_configured() {
             if let Some(ref puuid) = player.riot_puuid {
-                match riot::fetch_champion_masteries(puuid, riot::platform_route_from_str("EUW"))
-                    .await
-                {
+                match riot_client.fetch_champion_masteries(puuid, platform).await {
                     Ok(masteries) => masteries.into_iter().take(10).collect(),
                     Err(_) => Vec::new(),
                 }

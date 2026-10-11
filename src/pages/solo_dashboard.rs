@@ -76,10 +76,15 @@ pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
     authz::rate_limit(crate::server::rate_limit::Bucket::Riot).await?;
     authz::user_cooldown("solo_sync", &user, std::time::Duration::from_secs(60))?;
 
-    let region = user.riot_region.as_deref().unwrap_or("EUW").to_string();
-    let platform = riot::platform_route_from_str(&region);
+    let riot_client = authz::riot()?;
+    // Match history plus the ranked lookup.
+    riot_client
+        .ensure_headroom(riot::MATCH_HISTORY_REQUESTS + 1)
+        .map_err(authz::server_err)?;
+    let platform = riot::platform_for(&[user.riot_region.as_deref()]);
 
-    let matches = riot::fetch_match_history(&puuid, None, platform)
+    let matches = riot_client
+        .fetch_match_history(&puuid, None, platform)
         .await
         .map_err(authz::server_err)?;
 
@@ -90,7 +95,8 @@ pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
         .map_err(authz::server_err)?;
 
     // Fetch and store ranked snapshot
-    let ranked_entries = riot::fetch_ranked_data(&puuid, platform)
+    let ranked_entries = riot_client
+        .fetch_ranked_data(&puuid, platform)
         .await
         .map_err(authz::server_err)?;
 
