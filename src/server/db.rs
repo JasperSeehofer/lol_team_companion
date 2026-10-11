@@ -90,6 +90,18 @@ async fn ensure_owned(
     }
 }
 
+/// Serialises the few writes whose rule spans a read and a write: invite use
+/// counts and "a user belongs to at most one team". Under concurrency,
+/// SurrealKV let two conditional `UPDATE invite SET uses += 1 WHERE uses <
+/// max_uses` both report success for the last use (seen in the review's
+/// concurrency test), and check-then-create across records is open to write
+/// skew. One process owns the embedded database, so an in-process lock is
+/// enough. Hold it for the whole check and write; never nest it.
+async fn invariant_lock() -> tokio::sync::MutexGuard<'static, ()> {
+    static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    LOCK.lock().await
+}
+
 /// `table:id` must exist and belong to `team_id` (via its `team` field).
 pub async fn ensure_team_record(
     db: &Surreal<Db>,
@@ -474,12 +486,14 @@ pub async fn disable_invite(db: &Surreal<Db>, invite_id: &str) -> DbResult<()> {
 
 /// Atomically use one slot of an invite code. Returns `false` when the code is
 /// unknown, disabled, expired or used up. The check and the increment are one
-/// conditional UPDATE, so two registrations cannot both take the last slot.
+/// conditional UPDATE run under `invariant_lock`, so two registrations cannot
+/// both take the last slot.
 pub async fn consume_invite(db: &Surreal<Db>, code: &str) -> DbResult<bool> {
     let code = normalize_invite_code(code);
     if code.is_empty() {
         return Ok(false);
     }
+    let _guard = invariant_lock().await;
     let mut r = db
         .query(
             "UPDATE invite SET uses += 1 \
@@ -495,6 +509,7 @@ pub async fn consume_invite(db: &Surreal<Db>, code: &str) -> DbResult<bool> {
 
 /// Give back a slot taken by `consume_invite` when registration fails after it.
 pub async fn release_invite(db: &Surreal<Db>, code: &str) -> DbResult<()> {
+    let _guard = invariant_lock().await;
     db.query("UPDATE invite SET uses -= 1 WHERE code = $code AND uses > 0")
         .bind(("code", normalize_invite_code(code)))
         .await?
@@ -875,6 +890,9 @@ pub async fn create_team(
 ) -> DbResult<String> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
 
+    // One team per user: the check and the membership insert must not
+    // interleave with another create_team or an accepted join request.
+    let _guard = invariant_lock().await;
     if get_user_team_id(db, user_id).await?.is_some() {
         return Err(DbError::Invalid(
             "You already belong to a team. Leave it before creating a new one.".into(),
@@ -1129,6 +1147,9 @@ pub async fn respond_to_join_request(
 ) -> DbResult<()> {
     let req_key = record_key(request_id, "join_request");
     let team_key = record_key(team_id, "team");
+    // Covers the pending check, the one-team check and the insert (see
+    // `invariant_lock`); the transaction below is a second line of defence.
+    let _guard = invariant_lock().await;
 
     #[derive(Debug, serde::Deserialize, SurrealValue)]
     struct UserRef {
@@ -1156,15 +1177,38 @@ pub async fn respond_to_join_request(
                 "That player already belongs to a team.".into(),
             ));
         }
-        db.query("BEGIN TRANSACTION; \
-                  UPDATE type::record('join_request', $req_key) SET status = 'accepted' WHERE status = 'pending'; \
-                  CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'; \
-                  COMMIT TRANSACTION;")
+        // The status flip, the membership check and the insert are one
+        // transaction that aborts unless the request was still pending, so a
+        // double-clicked or concurrent accept cannot add a second membership
+        // (concurrent writers to the same request also conflict and abort).
+        let result = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $flipped = (UPDATE type::record('join_request', $req_key) SET status = 'accepted' \
+                     WHERE status = 'pending' AND team = type::record('team', $team_key) RETURN AFTER); \
+                 IF array::len($flipped) = 0 { THROW 'JOIN_NOT_PENDING' }; \
+                 IF array::len((SELECT id FROM team_member WHERE user = type::record('user', $user_key))) > 0 \
+                     { THROW 'JOIN_ALREADY_MEMBER' }; \
+                 CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'; \
+                 COMMIT TRANSACTION;",
+            )
             .bind(("req_key", req_key))
             .bind(("team_key", team_key))
             .bind(("user_key", user_key))
-            .await?
-            .check()?;
+            .await?;
+        if let Err(e) = result.check() {
+            let msg = e.to_string();
+            if msg.contains("JOIN_ALREADY_MEMBER") {
+                return Err(DbError::Invalid(
+                    "That player already belongs to a team.".into(),
+                ));
+            }
+            if msg.contains("JOIN_NOT_PENDING") || msg.to_lowercase().contains("conflict") {
+                // Someone else handled the request first.
+                return Err(DbError::NotFound);
+            }
+            return Err(e.into());
+        }
     } else {
         db.query("UPDATE type::record('join_request', $req_key) SET status = 'declined' WHERE status = 'pending'")
             .bind(("req_key", req_key))
@@ -3429,11 +3473,18 @@ pub async fn update_action_item(
     item_id: &str,
     text: String,
     assigned_to: Option<String>,
-    status: String,
+    status: Option<String>,
 ) -> DbResult<()> {
     ensure_team_record(db, "action_item", item_id, team_id).await?;
     let item_key = record_key(item_id, "action_item");
-    db.query("UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, status = $status, resolved_at = IF $status = 'done' { time::now() } ELSE { NONE }")
+    // `None` keeps the current status and resolved_at (editing the text of a
+    // done item must not reopen it).
+    let query = if status.is_some() {
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, status = $status, resolved_at = IF $status = 'done' { time::now() } ELSE { NONE }"
+    } else {
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to"
+    };
+    db.query(query)
         .bind(("item_key", item_key))
         .bind(("text", text))
         .bind(("assigned_to", assigned_to))

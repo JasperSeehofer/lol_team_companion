@@ -386,7 +386,7 @@ async fn action_item_is_isolated_between_teams() {
         "B closes A's item",
     );
     assert_not_found(
-        db::update_action_item(&db, &t.team2, &item, "x".into(), None, "open".into()).await,
+        db::update_action_item(&db, &t.team2, &item, "x".into(), None, None).await,
         "B edits A's item",
     );
     assert_not_found(
@@ -403,13 +403,25 @@ async fn action_item_is_isolated_between_teams() {
         &item,
         "ward even more".into(),
         None,
-        "done".into(),
+        Some("done".into()),
     )
     .await
     .unwrap();
     let items = db::list_action_items(&db, &t.team1).await.unwrap();
     assert_eq!(items[0].status, "done");
     assert!(items[0].resolved_at.is_some(), "done sets resolved_at");
+
+    // Editing the text without a status keeps the item done.
+    db::update_action_item(&db, &t.team1, &item, "ward the most".into(), None, None)
+        .await
+        .unwrap();
+    let items = db::list_action_items(&db, &t.team1).await.unwrap();
+    assert_eq!(items[0].text, "ward the most");
+    assert_eq!(
+        items[0].status, "done",
+        "a text edit must not reopen the item"
+    );
+    assert!(items[0].resolved_at.is_some());
     db::update_action_item_status(&db, &t.team1, &item, "open".into())
         .await
         .unwrap();
@@ -1042,4 +1054,195 @@ async fn expired_sessions_are_not_loaded_and_are_purged() {
         loaded.expiry_date.unix_timestamp(),
         live.expiry_date.unix_timestamp()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Concurrency (review follow-up)
+// ---------------------------------------------------------------------------
+
+/// SurrealKV sometimes hangs while shutting a datastore down at runtime
+/// teardown (a join on its commit thread, seen with gdb), so the SurrealKV
+/// tests run on a runtime that is never dropped and never drop the datastore.
+fn on_kv_runtime<F: std::future::Future>(f: F) -> F::Output {
+    static RT: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    RT.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .unwrap()
+    })
+    .block_on(f)
+}
+
+/// A SurrealKV-backed DB (the production engine) in a fresh temp directory,
+/// plus that directory (remove it when done).
+async fn surrealkv_db() -> (std::sync::Arc<Surreal<Db>>, std::path::PathBuf) {
+    use surrealdb::engine::local::SurrealKv;
+    let dir = std::env::temp_dir().join(format!(
+        "ltc-review-{}-{}",
+        std::process::id(),
+        db::generate_invite_code()
+    ));
+    let db = Surreal::new::<SurrealKv>(dir.to_string_lossy().to_string())
+        .await
+        .unwrap();
+    db.use_ns("test").use_db("test").await.unwrap();
+    db.query(include_str!("../../schema.surql"))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    (std::sync::Arc::new(db), dir)
+}
+
+async fn last_invite_use_is_taken_once(db: std::sync::Arc<Surreal<Db>>) {
+    db::create_invite(&db, None, "LAST-ONE".into(), 1, None, None)
+        .await
+        .unwrap();
+    let mut handles = Vec::new();
+    for _ in 0..16 {
+        let db = db.clone();
+        handles.push(tokio::spawn(async move {
+            db::consume_invite(&db, "LAST-ONE").await
+        }));
+    }
+    let mut ok = 0;
+    for h in handles {
+        // An error (e.g. a write conflict) is acceptable; a second success is not.
+        if let Ok(true) = h.await.unwrap() {
+            ok += 1;
+        }
+    }
+    let invites = db::list_invites(&db).await.unwrap();
+    assert_eq!(
+        (ok, invites[0].uses),
+        (1, 1),
+        "exactly one registration may take the last use"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_registrations_cannot_overuse_an_invite_mem() {
+    last_invite_use_is_taken_once(common::test_db().await).await;
+}
+
+#[test]
+fn concurrent_registrations_cannot_overuse_an_invite_surrealkv() {
+    on_kv_runtime(async {
+        let (db, dir) = surrealkv_db().await;
+        last_invite_use_is_taken_once(db.clone()).await;
+        std::mem::forget(db);
+        let _ = std::fs::remove_dir_all(dir);
+    });
+}
+
+async fn double_accept_adds_one_membership(db: std::sync::Arc<Surreal<Db>>) {
+    let t = tenants(&db).await;
+    let carol = db::create_user(&db, "carol".into(), "carol@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    db::create_join_request(&db, &carol, &t.team1)
+        .await
+        .unwrap();
+    let req = db::list_pending_join_requests(&db, &t.team1).await.unwrap()[0]
+        .id
+        .clone();
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let (db, req, team) = (db.clone(), req.clone(), t.team1.clone());
+        handles.push(tokio::spawn(async move {
+            db::respond_to_join_request(&db, &req, true, &team).await
+        }));
+    }
+    let mut ok = 0;
+    for h in handles {
+        if h.await.unwrap().is_ok() {
+            ok += 1;
+        }
+    }
+    assert_eq!(ok, 1, "only one accept may succeed");
+    let mut r = db
+        .query("SELECT VALUE id FROM team_member WHERE user = type::record('user', $k)")
+        .bind(("k", db::record_key(&carol, "user")))
+        .await
+        .unwrap();
+    let rows: Vec<surrealdb::types::RecordId> = r.take(0).unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "a double-clicked accept must not add two memberships"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_accepts_add_one_membership_mem() {
+    double_accept_adds_one_membership(common::test_db().await).await;
+}
+
+#[test]
+fn concurrent_accepts_add_one_membership_surrealkv() {
+    on_kv_runtime(async {
+        let (db, dir) = surrealkv_db().await;
+        double_accept_adds_one_membership(db.clone()).await;
+        std::mem::forget(db);
+        let _ = std::fs::remove_dir_all(dir);
+    });
+}
+
+async fn cross_team_accepts_add_one_membership(db: std::sync::Arc<Surreal<Db>>) {
+    let t = tenants(&db).await;
+    let carol = db::create_user(&db, "carol".into(), "carol@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    db::create_join_request(&db, &carol, &t.team1)
+        .await
+        .unwrap();
+    db::create_join_request(&db, &carol, &t.team2)
+        .await
+        .unwrap();
+    let r1 = db::list_pending_join_requests(&db, &t.team1).await.unwrap()[0]
+        .id
+        .clone();
+    let r2 = db::list_pending_join_requests(&db, &t.team2).await.unwrap()[0]
+        .id
+        .clone();
+    // Both leaders accept at the same moment, while Carol also creates a team.
+    let (d1, d2, d3) = (db.clone(), db.clone(), db.clone());
+    let (t1, t2, c) = (t.team1.clone(), t.team2.clone(), carol.clone());
+    let a = tokio::spawn(async move { db::respond_to_join_request(&d1, &r1, true, &t1).await });
+    let b = tokio::spawn(async move { db::respond_to_join_request(&d2, &r2, true, &t2).await });
+    let own =
+        tokio::spawn(async move { db::create_team(&d3, &c, "Carol's".into(), "EUW".into()).await });
+    let ok = [a.await.unwrap().is_ok(), b.await.unwrap().is_ok()]
+        .into_iter()
+        .chain([own.await.unwrap().is_ok()])
+        .filter(|ok| *ok)
+        .count();
+    let mut r = db
+        .query("SELECT VALUE id FROM team_member WHERE user = type::record('user', $k)")
+        .bind(("k", db::record_key(&carol, "user")))
+        .await
+        .unwrap();
+    let rows: Vec<surrealdb::types::RecordId> = r.take(0).unwrap();
+    assert_eq!(
+        (ok, rows.len()),
+        (1, 1),
+        "a user ends up in exactly one team"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_cross_team_accepts_keep_one_team_mem() {
+    cross_team_accepts_add_one_membership(common::test_db().await).await;
+}
+
+#[test]
+fn concurrent_cross_team_accepts_keep_one_team_surrealkv() {
+    on_kv_runtime(async {
+        let (db, dir) = surrealkv_db().await;
+        cross_team_accepts_add_one_membership(db.clone()).await;
+        std::mem::forget(db);
+        let _ = std::fs::remove_dir_all(dir);
+    });
 }

@@ -63,9 +63,8 @@ pub async fn update_item(
     let team_id = ctx.require_team().await?;
     let assigned = assigned_to.filter(|s| !s.is_empty());
 
-    // Keep current status (don't change it through this endpoint)
-    // We need to read the current item to preserve status
-    db::update_action_item(&ctx.db, &team_id, &id, text, assigned, "open".into())
+    // The status is left as it is (it changes through update_item_status).
+    db::update_action_item(&ctx.db, &team_id, &id, text, assigned, None)
         .await
         .map_err(authz::server_err)
 }
