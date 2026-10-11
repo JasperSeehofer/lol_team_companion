@@ -151,15 +151,10 @@ pub async fn create_review(review_json: String) -> Result<(String, usize), Serve
     review.created_by = user.id;
     check_review_links(&surreal, &team_id, &review).await?;
 
-    let improvements = review.improvements.clone();
-    let review_id = db::save_post_game_learning(&surreal, review)
+    // The review and its new action items are written in one transaction.
+    db::create_review_with_action_items(&surreal, review)
         .await
-        .map_err(authz::server_err)?;
-    let items_created =
-        db::batch_create_action_items_from_review(&surreal, &team_id, &review_id, &improvements)
-            .await
-            .map_err(authz::server_err)?;
-    Ok((review_id, items_created))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -172,16 +167,9 @@ pub async fn update_review(review_json: String) -> Result<usize, ServerFnError> 
     let team_id = authz::require_team(&surreal, &user).await?;
     let review: PostGameLearning = serde_json::from_str(&review_json).map_err(authz::server_err)?;
     check_review_links(&surreal, &team_id, &review).await?;
-    let review_id = review.id.clone().unwrap_or_default();
-    let improvements = review.improvements.clone();
-    db::update_post_game_learning(&surreal, &team_id, review)
+    db::update_review_with_action_items(&surreal, &team_id, review)
         .await
-        .map_err(authz::server_err)?;
-    let items_created =
-        db::batch_create_action_items_from_review(&surreal, &team_id, &review_id, &improvements)
-            .await
-            .map_err(authz::server_err)?;
-    Ok(items_created)
+        .map_err(authz::server_err)
 }
 
 #[server]
