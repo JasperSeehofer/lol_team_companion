@@ -2375,15 +2375,26 @@ async fn new_action_item_texts(
         .collect())
 }
 
+/// The lines of a review that become action items: its improvements and
+/// its action item lines (blank and already-open ones are skipped later).
+fn review_item_lines(review: &PostGameLearning) -> Vec<String> {
+    review
+        .improvements
+        .iter()
+        .chain(review.action_items.iter())
+        .cloned()
+        .collect()
+}
+
 /// Create a review (with its plan and draft links) and an action item for
-/// each new improvement in one transaction. Returns the review ID and how
+/// each new improvement or action item line in one transaction. Returns the review ID and how
 /// many action items were created. `review.team_id` and `created_by` must
 /// already be the caller's team and user (the server function sets them).
 pub async fn create_review_with_action_items(
     db: &Surreal<Db>,
     review: PostGameLearning,
 ) -> DbResult<(String, usize)> {
-    let items = new_action_item_texts(db, &review.team_id, &review.improvements).await?;
+    let items = new_action_item_texts(db, &review.team_id, &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
@@ -2424,7 +2435,7 @@ pub async fn update_review_with_action_items(
 ) -> DbResult<usize> {
     let id = review.id.clone().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", &id, team_id).await?;
-    let items = new_action_item_texts(db, team_id, &review.improvements).await?;
+    let items = new_action_item_texts(db, team_id, &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(

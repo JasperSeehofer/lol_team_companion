@@ -222,6 +222,18 @@ async fn review_and_its_action_items_are_written_together() {
     );
     assert_eq!(db::list_action_items(&d, &t).await.unwrap().len(), 3);
 
+    // Action item lines become items too (an open duplicate is skipped).
+    let mut edit = review(&t, &u, &["Ward river", "Respect timers"]);
+    edit.id = Some(id.clone());
+    edit.action_items = vec!["Drill Baron setups".into(), "respect timers".into()];
+    assert_eq!(
+        db::update_review_with_action_items(&d, &t, edit)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(db::list_action_items(&d, &t).await.unwrap().len(), 4);
+
     // A failing action item rolls back the review.
     forbid(&d, "action_item", "text", "BOOM").await;
     assert!(
@@ -230,7 +242,7 @@ async fn review_and_its_action_items_are_written_together() {
             .is_err()
     );
     assert_eq!(count(&d, "post_game_learning").await, 1);
-    assert_eq!(count(&d, "action_item").await, 3);
+    assert_eq!(count(&d, "action_item").await, 4);
 }
 
 #[tokio::test]
