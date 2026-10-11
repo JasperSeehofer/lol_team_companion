@@ -937,7 +937,7 @@ fn PlanSteps(ed: PlanEd) -> impl IntoView {
                     ("Link the draft", has_draft || has_picks, if has_draft { "Linked; the picks come from it" } else if has_picks { "Picks entered by hand" } else { "Or enter the picks yourself" }.to_string(), "#plan-basics-heading"),
                     ("Write how you win", has_strategy, if has_strategy { "Win conditions written".to_string() } else { "Win conditions, objectives, fights".to_string() }, "#plan-strategy-heading"),
                     ("Brief each role", has_roles == 5, format!("{has_roles} of 5 roles briefed"), "#plan-roles-heading"),
-                    ("Save and run the checklist", saved, if saved { "Saved; tick the checklist before the game".to_string() } else { "Save the plan to keep a checklist".to_string() }, "#plan-checklist-heading"),
+                    ("Save the plan", saved, if saved { "Saved; the checklist below is for game day".to_string() } else { "Saving keeps it for the team and allows a checklist".to_string() }, "#plan-checklist-heading"),
                     ("Review the game", false, "After the game, start a review linked to this plan".to_string(), "#plan-review-heading"),
                 ];
                 let next = steps.iter().position(|s| !s.1);

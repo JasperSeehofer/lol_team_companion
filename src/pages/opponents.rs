@@ -920,6 +920,10 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
     let stale = surveyed.as_deref().map(is_stale).unwrap_or(false);
     let display = player_name(&player);
     let role = Role::parse(&player.role);
+    let has_riot_id = player
+        .riot_summoner_name
+        .as_deref()
+        .is_some_and(|r| !r.trim().is_empty());
 
     let refresh = Callback::new(move |_: leptos::ev::MouseEvent| {
         let rid = riot_id.get_untracked().trim().to_string();
@@ -979,7 +983,11 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                 <span class="figures text-caption text-muted">{match games { 0 => "no games".to_string(), 1 => "1 game".to_string(), n => format!("{n} games") }}</span>
             </div>
             {if intel.champion_frequencies.is_empty() {
-                view! { <p class="text-label text-secondary">"No champions yet. Add the Riot ID and refresh to read their last 20 games."</p> }.into_any()
+                view! {
+                    <p class="text-label text-secondary">
+                        {if has_riot_id { "No games read yet. Refresh to read their last 20 games." } else { "No champions yet. Add the Riot ID and refresh to read their last 20 games." }}
+                    </p>
+                }.into_any()
             } else {
                 view! {
                     <ul class="flex flex-wrap gap-x-4 gap-y-2" aria-label="Most played in scouted games">

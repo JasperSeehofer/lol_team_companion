@@ -902,7 +902,9 @@ impl Editor {
         }
     }
 
-    fn from_draft(d: &Draft) -> Snapshot {
+    /// The editor state of a saved draft. An opponent stored by name (older
+    /// drafts, the seed data) becomes the id of the dossier with that name.
+    fn from_draft(d: &Draft, opponents: &[Opponent]) -> Snapshot {
         let mut s = Self::blank();
         for a in &d.actions {
             let o = a.order as usize;
@@ -913,7 +915,7 @@ impl Editor {
             }
         }
         s.name = d.name.clone();
-        s.opponent = d.opponent.clone().unwrap_or_default();
+        s.opponent = opponent_ref(d.opponent.as_deref().unwrap_or_default(), opponents);
         s.side = if d.our_side == "red" { "red" } else { "blue" }.to_string();
         s.rating = d.rating.clone();
         s.tags = d.tags.clone();
@@ -1087,6 +1089,22 @@ fn opponent_name(value: &str, list: &[Opponent]) -> Option<String> {
     )
 }
 
+/// A stored opponent reference as an opponent id: an id stays, a name that
+/// matches exactly one dossier (ignoring case) becomes its id, anything
+/// else stays as written (shown as "not in Opponents").
+fn opponent_ref(stored: &str, opponents: &[Opponent]) -> String {
+    if stored.is_empty() || opponents.iter().any(|o| o.id.as_deref() == Some(stored)) {
+        return stored.to_string();
+    }
+    let mut by_name = opponents
+        .iter()
+        .filter(|o| o.name.trim().eq_ignore_ascii_case(stored.trim()));
+    match (by_name.next(), by_name.next()) {
+        (Some(o), None) => o.id.clone().unwrap_or_else(|| stored.to_string()),
+        _ => stored.to_string(),
+    }
+}
+
 /// A scouted player's name: the name, else the Riot ID, else a placeholder.
 fn player_name(p: &crate::models::opponent::OpponentPlayer) -> String {
     if !p.name.trim().is_empty() {
@@ -1178,12 +1196,19 @@ pub fn DraftPage() -> impl IntoView {
         if cx.url_loaded.get_value().as_deref() == Some(target.as_str()) {
             return;
         }
+        // Wait for the opponents too: older drafts store the opponent's
+        // name, which is matched to its dossier.
+        let opps = match opponents_list.get() {
+            Some(Ok(o)) => o,
+            Some(Err(_)) => Vec::new(),
+            None => return,
+        };
         if let Some(Ok(list)) = cx.drafts.get() {
             if let Some(d) = list
                 .iter()
                 .find(|d| d.id.as_deref() == Some(target.as_str()))
             {
-                let snap = Editor::from_draft(d);
+                let snap = Editor::from_draft(d, &opps);
                 cx.last_saved.set_value(Some(snap.clone()));
                 ed.restore(snap);
                 cx.url_loaded.set_value(Some(target));
@@ -2710,6 +2735,27 @@ mod tests {
     use super::*;
     use crate::models::champion::{Champion, ChampionPoolEntry};
     use std::collections::HashMap;
+
+    #[test]
+    fn stored_opponent_names_map_to_their_dossier() {
+        let opp = |id: &str, name: &str| Opponent {
+            id: Some(id.into()),
+            name: name.into(),
+            team_id: "team:t".into(),
+            notes: None,
+        };
+        let list = vec![
+            opp("opponent:a", "Riverside Rooks"),
+            opp("opponent:b", "Twins"),
+            opp("opponent:c", "twins"),
+        ];
+        assert_eq!(opponent_ref("opponent:a", &list), "opponent:a");
+        assert_eq!(opponent_ref("riverside rooks", &list), "opponent:a");
+        // Ambiguous or unknown names stay as written.
+        assert_eq!(opponent_ref("Twins", &list), "Twins");
+        assert_eq!(opponent_ref("Nobody", &list), "Nobody");
+        assert_eq!(opponent_ref("", &list), "");
+    }
 
     fn make_champion(id: &str, tags: Vec<&str>) -> Champion {
         Champion {
