@@ -407,8 +407,11 @@ struct MembershipRow {
 ///
 /// Users created before M1 can have several memberships. For each such user
 /// one membership is kept: the team they lead if there is one, otherwise the
-/// oldest membership (the one `get_user_team_id` already resolved to, so
-/// what the user sees does not change). The others are deleted and logged.
+/// membership with the lowest record ID (the one `get_user_team_id`, which
+/// orders by ID, already resolved to, so such a user's view does not
+/// change; a leader may now see the team they lead instead). Record IDs are
+/// random, so this is not necessarily the oldest. The others are deleted
+/// and logged.
 async fn one_team_per_user_unique(db: &Surreal<Db>) -> DbResult<()> {
     let mut r = db
         .query(

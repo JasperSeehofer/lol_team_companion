@@ -66,7 +66,7 @@ New fields on existing tables are declared `option<T>` in the baseline so old ro
 - A **Rust** migration (`Step::Rust`) is for per-row work (parsing legacy values, resolving duplicates). It spans several queries, so it cannot be one transaction; it must be idempotent so an interrupted run can simply be repeated. Its row is written after it succeeds.
 - A failed migration stops startup (the error names the migration). A database that records a version this build does not know (migrated by a newer build) is refused too.
 
-Applied so far: 1 `lowercase_emails` (case collisions are logged; when none of a group is lowercase, the oldest is lowercased so one account can still sign in), 2 `username_lc_unique` (backfill, numeric suffix for pre-M1 case collisions, unique index), 3 `is_admin_not_null`, 4 `drop_legacy_sessions`, 5 `string_ids_to_record_links`, 6 `one_team_per_user_unique` (keeps the led team, else the oldest membership).
+Applied so far: 1 `lowercase_emails` (case collisions are logged; when none of a group is lowercase, the oldest is lowercased so one account can still sign in), 2 `username_lc_unique` (backfill, numeric suffix for pre-M1 case collisions, unique index), 3 `is_admin_not_null`, 4 `drop_legacy_sessions`, 5 `string_ids_to_record_links`, 6 `one_team_per_user_unique` (keeps the led team, else the membership `get_user_team_id` already resolved to).
 
 **How to add a migration**
 

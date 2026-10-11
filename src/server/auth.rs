@@ -174,8 +174,8 @@ impl axum_login::AuthnBackend for AuthBackend {
     ) -> Result<Option<Self::User>, Self::Error> {
         let email = crate::server::db::normalize_email(&creds.email);
 
-        // Emails are stored lowercase since M1; older rows may not be, hence
-        // the lowercase comparison.
+        // Emails are stored lowercase (migration 1 lowercased older rows), so
+        // the unique email index answers this exact match.
         let mut result = self
             .db
             .query("SELECT * FROM user WHERE email = $email LIMIT 1")
