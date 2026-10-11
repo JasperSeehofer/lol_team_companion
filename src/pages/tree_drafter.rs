@@ -1451,7 +1451,7 @@ fn LiveNavigator(
                     <span class="text-muted text-xs font-semibold uppercase tracking-wider">"Path:"</span>
                     <button
                         type="button"
-                        class="text-success hover:text-success/80 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-success/50 focus-visible:outline-none rounded"
+                        class="text-success hover:text-primary text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-success/50 focus-visible:outline-none rounded"
                         on:click=move |_| set_nav_path.set(Vec::new())
                     >"Root"</button>
                     {move || {

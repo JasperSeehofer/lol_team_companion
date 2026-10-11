@@ -351,3 +351,24 @@ test("champion avatars use the app's image endpoint only", async ({ adminPage })
   await expect(adminPage.locator('[data-gallery="markers"] [data-role="Jungle"]').first()).toContainText("JGL");
   expect(external, external.join("\n")).toEqual([]);
 });
+
+// Outside dev builds the gallery is admin-only: everyone else gets the 404
+// page with HTTP 404. CI runs the server in production mode and sets
+// E2E_EXPECT_PRODUCTION; a local `cargo leptos watch` is a dev build, where
+// the gallery is open to everyone, so the check is skipped there.
+test.describe("gallery access", () => {
+  test.skip(process.env.E2E_EXPECT_PRODUCTION !== "1", "dev server: the gallery is open to everyone");
+
+  test("the gallery is a 404 for visitors and non-admins outside dev", async ({ browser, authedPage }) => {
+    const anonymous = await browser.newContext();
+    const visitor = await anonymous.newPage();
+    const resp = await visitor.goto("/design");
+    expect(resp?.status()).toBe(404);
+    await expect(visitor.locator("h1")).toHaveText(/page not found/i);
+    await anonymous.close();
+
+    const member = await authedPage.goto("/design");
+    expect(member?.status()).toBe(404);
+    await expect(authedPage.locator("h1")).toHaveText(/page not found/i);
+  });
+});

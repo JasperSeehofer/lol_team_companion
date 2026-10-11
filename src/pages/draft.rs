@@ -4097,9 +4097,9 @@ fn DraftLedgerView(
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
                                             <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-label">
-                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-primary flex-1 mx-2">{name}</span>
-                                                <span class="text-muted/50 italic text-caption">"role"</span>
+                                                <span class="text-muted italic text-caption">"role"</span>
                                             </div>
                                         }
                                     }).collect_view()
@@ -4122,7 +4122,7 @@ fn DraftLedgerView(
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
                                             <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-caption opacity-70">
-                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-secondary line-through flex-1 mx-2">{name}</span>
                                             </div>
                                         }
@@ -4153,9 +4153,9 @@ fn DraftLedgerView(
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
                                             <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-label">
-                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-primary flex-1 mx-2">{name}</span>
-                                                <span class="text-muted/50 italic text-caption">"role"</span>
+                                                <span class="text-muted italic text-caption">"role"</span>
                                             </div>
                                         }
                                     }).collect_view()
@@ -4178,7 +4178,7 @@ fn DraftLedgerView(
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
                                             <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-caption opacity-70">
-                                                <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
+                                                <span class="text-muted w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-secondary line-through flex-1 mx-2">{name}</span>
                                             </div>
                                         }

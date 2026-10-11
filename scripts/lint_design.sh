@@ -47,12 +47,32 @@ rule emoji '[\x{1F300}-\x{1FAFF}\x{2B50}\x{2B55}\x{FE0F}]|(?![\x{2605}\x{2606}\x
   'emoji in UI strings; use words or an SVG'
 rule region 'region\s*==|(?<![_\w])region=|InitialTheme|data-theme' '' \
   'theme branching is gone; there is one theme'
+# A text tone with an opacity modifier (`text-muted/60`) is not in the
+# contrast table and falls below 4.5:1; muted is the faintest text tone.
+rule faded-text '(?<![\w-])text-(primary|secondary|muted|dimmed|accent|success|warning|danger|info|win|loss)/\d+' '' \
+  'faded text tone (opacity modifier) falls below AA; use a tone from the contrast table'
 
 declare -A COUNT
 TOTAL=0
+GREP_OUT=$(mktemp)
+GREP_ERR=$(mktemp)
+trap 'rm -f "$GREP_OUT" "$GREP_ERR"' EXIT
+broken=0
+
+# grep exits 0 (hits), 1 (no hits) or 2 (error: bad pattern, no PCRE, bad
+# locale). An error must fail the gate, not read as "zero hits". Runs in
+# this shell (no subshell) so `broken` sticks; hits go to $GREP_OUT.
+run_grep() { # flags pattern
+  grep "$1" -- "$2" "${FILES[@]}" /dev/null >"$GREP_OUT" 2>"$GREP_ERR"
+  if [ "$?" -gt 1 ]; then
+    echo "::error::design lint: grep failed for pattern '$2': $(head -c 300 "$GREP_ERR")"
+    broken=1
+  fi
+}
 
 count_rule() { # name pattern allow
   local name=$1 pattern=$2 allow=$3 line file
+  run_grep -nP "$pattern"
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     file=${line%%:*}
@@ -60,7 +80,7 @@ count_rule() { # name pattern allow
     case "$line" in *"lint:allow($name)"*) continue ;; esac
     COUNT["$name"$'\t'"$file"]=$(( ${COUNT["$name"$'\t'"$file"]:-0} + 1 ))
     TOTAL=$((TOTAL + 1))
-  done < <(grep -nP -- "$pattern" "${FILES[@]}" /dev/null 2>/dev/null)
+  done < "$GREP_OUT"
 }
 
 for i in "${!NAMES[@]}"; do
@@ -68,13 +88,14 @@ for i in "${!NAMES[@]}"; do
 done
 
 # G-12: every outline-none needs a focus-visible replacement on the same line.
+run_grep -nE 'outline-none'
 while IFS= read -r line; do
   [ -z "$line" ] && continue
   file=${line%%:*}
   case "$line" in *focus-visible:*|*"lint:allow(g12)"*) continue ;; esac
   COUNT["g12"$'\t'"$file"]=$(( ${COUNT["g12"$'\t'"$file"]:-0} + 1 ))
   TOTAL=$((TOTAL + 1))
-done < <(grep -nE -- 'outline-none' "${FILES[@]}" /dev/null 2>/dev/null)
+done < "$GREP_OUT"
 
 rule g12 'outline-none' '' 'outline-none without a focus-visible replacement on the same line'
 fail=0
@@ -90,6 +111,9 @@ for i in "${!NAMES[@]}"; do
   done
 done
 
+if [ "$broken" = 1 ]; then
+  fail=1
+fi
 if [ "$fail" = 0 ]; then
   echo "Design lint: OK (every rule at zero)."
 fi

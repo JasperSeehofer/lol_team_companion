@@ -69,6 +69,9 @@ jobs:
       E2E_INVITE_CODE: E2E-INVITE-CODE
       RATE_LIMIT_MULTIPLIER: "100"
       ADMIN_EMAILS: e2e-admin@test.invalid
+      # The server runs in production mode: gallery.spec.ts asserts that
+      # /design is a 404 for visitors and non-admins.
+      E2E_EXPECT_PRODUCTION: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -129,9 +132,8 @@ jobs:
     name: Style guardrails (G-01, design lint)
     runs-on: ubuntu-latest
     # G-01 (no font CDN) is a hard gate. scripts/lint_design.sh enforces the
-    # design-system rules (docs/DESIGN.md section 9) over all of src/: hard
-    # zero for new code, and a ratcheting baseline for what M2 stage B and
-    # M3 still migrate.
+    # design-system rules (docs/DESIGN.md section 9) over all of src/: every
+    # rule is hard zero, and a grep error fails the job too.
     steps:
       - uses: actions/checkout@v4
 

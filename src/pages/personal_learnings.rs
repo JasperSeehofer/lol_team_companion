@@ -601,7 +601,7 @@ fn LearningCard(
                                 "Edit"
                             </a>
                             <button
-                                class="text-danger/70 hover:text-danger text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
+                                class="text-danger hover:text-primary text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
                                 on:click=move |ev| {
                                     ev.stop_propagation();
                                     let id = del_id.clone();

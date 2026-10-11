@@ -889,7 +889,7 @@ pub fn PostGamePage() -> impl IntoView {
                                                 if rating.get().is_some_and(|r| r >= n) {
                                                     "text-accent text-xl hover:text-accent transition-colors"
                                                 } else {
-                                                    "text-dimmed text-xl hover:text-accent/70 transition-colors"
+                                                    "text-dimmed text-xl hover:text-accent transition-colors"
                                                 }
                                             }
                                             on:click=move |_| set_rating.set(Some(n))

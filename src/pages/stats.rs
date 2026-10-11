@@ -399,7 +399,7 @@ pub fn StatsPage() -> impl IntoView {
                                     <span class="text-warning text-lg flex-shrink-0" aria-hidden="true">"!"</span>
                                     <div>
                                         <p class="text-warning font-medium text-sm">"RIOT_API_KEY not configured"</p>
-                                        <p class="text-warning/70 text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
+                                        <p class="text-warning text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
                                     </div>
                                 </div>
                             }.into_any()
