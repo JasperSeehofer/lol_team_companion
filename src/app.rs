@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
-    path,
+    path, SsrMode,
 };
 
 use crate::components::bug_report_widget::BugReportWidget;
@@ -157,7 +157,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />
                         // Phase 17 plan 17-01 stubs (filled by plan 06)
                         <Route path=path!("/closed-beta") view=ClosedBetaPage />
-                        <Route path=path!("/admin/invites") view=AdminInvitesPage />
+                        <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
                         <Route path=path!("/legal/impressum") view=ImpressumPage />
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
                     </Routes>

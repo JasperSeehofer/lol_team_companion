@@ -16,37 +16,90 @@ use crate::app::InitialTheme;
 use crate::components::region::CompanionSigil;
 use crate::components::ui::ErrorBanner;
 
+/// Minimum password length enforced by `register_action`.
+pub const MIN_PASSWORD_LEN: usize = 10;
+
 #[server]
 pub async fn register_action(
     username: String,
     email: String,
     password: String,
-    #[allow(unused_variables)] invite_code: String,
+    invite_code: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::{hash_password, AuthSession, Credentials};
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::auth::{hash_password_async, AuthSession};
+    use crate::server::rate_limit::Bucket;
+    use crate::server::{authz, config, db};
+    use axum_login::AuthnBackend;
 
-    // Phase 19.1 will validate `invite_code` against the
-    // `invite_code` table and 404/error for invalid/consumed codes.
-    // Phase 17: the value travels through (visual stub only).
-    let _ = invite_code;
+    authz::rate_limit(Bucket::Register).await?;
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let username = username.trim().to_string();
+    let email = db::normalize_email(&email);
+    let username_len = username.chars().count();
+    if !(2..=32).contains(&username_len) {
+        return Err(ServerFnError::new(
+            "Username must be between 2 and 32 characters.",
+        ));
+    }
+    if email.len() > 254 || !email.contains('@') || email.starts_with('@') || email.ends_with('@') {
+        return Err(ServerFnError::new("Enter a valid email address."));
+    }
+    if password.chars().count() < MIN_PASSWORD_LEN {
+        return Err(ServerFnError::new(format!(
+            "Password must be at least {MIN_PASSWORD_LEN} characters."
+        )));
+    }
+    if password.len() > 1024 {
+        return Err(ServerFnError::new("Password is too long."));
+    }
 
-    let password_hash = hash_password(&password).map_err(ServerFnError::new)?;
+    let db = authz::db()?;
 
-    db::create_user(&db, username, email.clone(), password_hash)
+    // Closed beta: one use of a valid invite code per account. The check and
+    // the use are one atomic update; the use is given back if the account
+    // cannot be created.
+    let gate = config::get().closed_beta;
+    let code = db::normalize_invite_code(&invite_code);
+    if gate
+        && !db::consume_invite(&db, &code)
+            .await
+            .map_err(authz::server_err)?
+    {
+        return Err(ServerFnError::new(db::GENERIC_REGISTRATION_ERROR));
+    }
+
+    let created = match hash_password_async(password).await {
+        Ok(password_hash) => db::create_user(&db, username, email, password_hash)
+            .await
+            .map_err(authz::server_err),
+        Err(e) => Err(authz::internal_error("hash password", e)),
+    };
+    let user_id = match created {
+        Ok(id) => id,
+        Err(e) => {
+            if gate {
+                if let Err(re) = db::release_invite(&db, &code).await {
+                    tracing::warn!("could not release invite use: {re}");
+                }
+            }
+            return Err(e);
+        }
+    };
+
+    // Auto-login after registration (leptos rule 51), without a second
+    // Argon2 verification.
+    let mut auth: AuthSession = leptos_axum::extract()
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    // Auto-login after registration (leptos rule 51).
-    let mut auth: AuthSession = leptos_axum::extract().await?;
-    let creds = Credentials { email, password };
-    if let Ok(Some(user)) = auth.authenticate(creds).await {
-        let _ = auth.login(&user).await;
+        .map_err(|e| authz::internal_error("extract auth session", e))?;
+    match auth.backend.get_user(&user_id).await {
+        Ok(Some(user)) => {
+            authz::sync_admin_flag(&db, &user).await;
+            if let Err(e) = auth.login(&user).await {
+                tracing::warn!("auto-login after registration failed: {e}");
+            }
+        }
+        Ok(None) => tracing::warn!("new user {user_id} not found for auto-login"),
+        Err(e) => tracing::warn!("auto-login lookup failed: {e}"),
     }
 
     // New users default to solo mode (D-03)
@@ -93,12 +146,13 @@ pub fn RegisterPage() -> impl IntoView {
         }
     });
 
+    // The server sends user-safe messages only (generic for invite and
+    // duplicate-account failures, specific for password rules).
     let error = move || {
-        register.value().get().and_then(|r| r.err()).map(|_| {
-            // UI-SPEC line 689 copywriting: invite-specific error
-            // message regardless of the underlying ServerFnError.
-            "This invite link is invalid or has already been used. \
-                 Contact your captain for a new one."
+        register.value().get().and_then(|r| r.err()).map(|e| {
+            let msg = e.to_string();
+            msg.strip_prefix("error running server function: ")
+                .unwrap_or(&msg)
                 .to_string()
         })
     };
@@ -175,7 +229,7 @@ pub fn RegisterPage() -> impl IntoView {
                                 type="password"
                                 name="password"
                                 required
-                                minlength="8"
+                                minlength="10"
                                 autocomplete="new-password"
                                 class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             />

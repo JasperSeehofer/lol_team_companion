@@ -24,14 +24,11 @@ pub struct DashboardData {
 
 #[server]
 pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
     use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = match auth.user {
+    let user = match authz::optional_user().await? {
         Some(u) => u,
         None => {
             return Ok(DashboardData {
@@ -53,12 +50,11 @@ pub async fn get_dashboard() -> Result<DashboardData, ServerFnError> {
         }
     };
 
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let surreal = authz::db()?;
 
     let team_data = db::get_user_team_with_members(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let (team_name, roster_count, is_leader, team_id_opt) = match &team_data {
         Some((team, members)) => (

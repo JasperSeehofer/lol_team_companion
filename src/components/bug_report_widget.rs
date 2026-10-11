@@ -80,17 +80,10 @@ pub async fn submit_bug_report(
     viewport_w: Option<i32>,
     viewport_h: Option<i32>,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     // T-19-02 server-fn guard (description hygiene).
     let description = description.trim().to_string();
@@ -116,7 +109,7 @@ pub async fn submit_bug_report(
         viewport_h,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 /// List bug reports. v1 returns Forbidden for ALL callers — no admin role

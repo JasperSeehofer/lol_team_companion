@@ -3,6 +3,7 @@ pub mod bug_report;
 pub mod champion;
 pub mod draft;
 pub mod game_plan;
+pub mod invite;
 pub mod match_data;
 pub mod opponent;
 pub mod personal_learning;

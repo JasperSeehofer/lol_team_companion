@@ -17,32 +17,47 @@ use crate::components::ui::ErrorBanner;
 #[server]
 pub async fn login_action(email: String, password: String) -> Result<String, ServerFnError> {
     use crate::server::auth::{AuthSession, Credentials};
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::rate_limit::{slow_down_message, Bucket, Limiter};
+    use crate::server::{authz, db};
 
-    let mut auth: AuthSession = leptos_axum::extract().await?;
-    let creds = Credentials { email, password };
-    match auth.authenticate(creds).await {
-        Ok(Some(user)) => {
-            auth.login(&user)
-                .await
-                .map_err(|e| ServerFnError::new(e.to_string()))?;
-            let db = use_context::<Arc<Surreal<Db>>>()
-                .ok_or_else(|| ServerFnError::new("No DB context"))?;
-            let mode = db::get_user_mode(&db, &user.id)
-                .await
-                .unwrap_or_else(|_| "solo".to_string());
-            let dest = if mode == "team" {
-                "/team/dashboard".to_string()
-            } else {
-                "/solo".to_string()
-            };
-            Ok(dest)
-        }
-        Ok(None) => Err(ServerFnError::new("Invalid email or password")),
-        Err(e) => Err(ServerFnError::new(e.to_string())),
+    const INVALID: &str = "Invalid email or password";
+
+    // Per-IP limit on attempts, plus a per-account limit on failures.
+    authz::rate_limit(Bucket::Login).await?;
+    let email = db::normalize_email(&email);
+    if let Err(wait) = Limiter::global().check(Bucket::LoginFailuresPerEmail, &email) {
+        return Err(ServerFnError::new(slow_down_message(wait)));
     }
+
+    let mut auth: AuthSession = leptos_axum::extract()
+        .await
+        .map_err(|e| authz::internal_error("extract auth session", e))?;
+    let creds = Credentials {
+        email: email.clone(),
+        password,
+    };
+    let user = match auth.authenticate(creds).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            let _ = Limiter::global().hit(Bucket::LoginFailuresPerEmail, &email);
+            return Err(ServerFnError::new(INVALID));
+        }
+        Err(e) => return Err(authz::internal_error("authenticate", e)),
+    };
+
+    let db = authz::db()?;
+    authz::sync_admin_flag(&db, &user).await;
+    auth.login(&user).await.map_err(authz::server_err)?;
+
+    let mode = db::get_user_mode(&db, &user.id)
+        .await
+        .unwrap_or_else(|_| "solo".to_string());
+    let dest = if mode == "team" {
+        "/team/dashboard".to_string()
+    } else {
+        "/solo".to_string()
+    };
+    Ok(dest)
 }
 
 #[component]
@@ -66,11 +81,12 @@ pub fn LoginPage() -> impl IntoView {
     });
 
     let error = move || {
-        login
-            .value()
-            .get()
-            .and_then(|r| r.err())
-            .map(|e| e.to_string())
+        login.value().get().and_then(|r| r.err()).map(|e| {
+            let msg = e.to_string();
+            msg.strip_prefix("error running server function: ")
+                .unwrap_or(&msg)
+                .to_string()
+        })
     };
 
     view! {

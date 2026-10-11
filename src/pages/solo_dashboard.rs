@@ -26,17 +26,10 @@ pub struct SoloDashboardData {
 pub async fn get_solo_dashboard(
     queue_filter: Option<i32>,
 ) -> Result<SoloDashboardData, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let has_puuid = user
         .riot_puuid
@@ -47,15 +40,15 @@ pub async fn get_solo_dashboard(
     // Read last_solo_sync from DB
     let should_auto_sync = db::get_should_auto_sync(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let ranked = db::get_latest_ranked_snapshot(&surreal, &user.id, "RANKED_SOLO_5x5")
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let matches = db::get_solo_matches(&surreal, &user.id, queue_filter, 20)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(SoloDashboardData {
         ranked,
@@ -67,18 +60,11 @@ pub async fn get_solo_dashboard(
 
 #[server]
 pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
     use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let puuid = user
         .riot_puuid
@@ -87,23 +73,26 @@ pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
         .ok_or_else(|| ServerFnError::new("Link your Riot account on your profile first"))?
         .to_string();
 
+    authz::rate_limit(crate::server::rate_limit::Bucket::Riot).await?;
+    authz::user_cooldown("solo_sync", &user, std::time::Duration::from_secs(60))?;
+
     let region = user.riot_region.as_deref().unwrap_or("EUW").to_string();
     let platform = riot::platform_route_from_str(&region);
 
     let matches = riot::fetch_match_history(&puuid, None, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let new_count = matches.len();
 
     db::store_matches_with_synced_by(&surreal, &user.id, matches, Some(&user.id))
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Fetch and store ranked snapshot
     let ranked_entries = riot::fetch_ranked_data(&puuid, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     for entry in ranked_entries {
         if entry.queue_type.contains("RANKED_SOLO") || entry.queue_type.contains("RANKED_FLEX") {
@@ -118,50 +107,36 @@ pub async fn sync_solo_matches() -> Result<i32, ServerFnError> {
                 entry.losses,
             )
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+            .map_err(authz::server_err)?;
         }
     }
 
     db::update_last_solo_sync(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     Ok(new_count as i32)
 }
 
 #[server]
 pub async fn get_lp_history(window: String) -> Result<Vec<RankedSnapshot>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
     let cutoff = window_to_cutoff(&window);
     db::get_lp_history(&surreal, &user.id, cutoff)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn compute_goal_progress() -> Result<GoalProgressPayload, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
     db::compute_goal_progress(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -169,16 +144,9 @@ pub async fn upsert_personal_goal(
     goal_type: String,
     target_value: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
     if !matches!(
         goal_type.as_str(),
         "rank_target" | "cs_per_min" | "deaths_per_game"
@@ -222,7 +190,7 @@ pub async fn upsert_personal_goal(
     }
     db::upsert_personal_goal(&surreal, &user.id, &goal_type, &target_value)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[cfg(feature = "ssr")]
@@ -249,10 +217,8 @@ fn window_to_cutoff(window: &str) -> Option<String> {
 /// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
 #[server]
 pub async fn set_solo_mode_pref(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
     // App-layer validation — DB has no ASSERT per Research Pitfall 4
     const VALID: &[&str] = &["auto", "constellation", "forge", "journal"];
@@ -260,15 +226,10 @@ pub async fn set_solo_mode_pref(mode: String) -> Result<(), ServerFnError> {
         return Err(ServerFnError::new("Invalid solo mode"));
     }
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
     db::set_user_solo_mode(&db, &user.id, &mode)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(())
 }
 

@@ -9,20 +9,13 @@ use crate::pages::team::dashboard::handle_join_request;
 
 #[server]
 pub async fn set_user_mode(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
     db::set_user_mode(&db, &user.id, &mode)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(())
 }
 
@@ -98,22 +91,18 @@ pub struct Notifications {
 
 #[server]
 pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = match auth.user {
+    let user = match authz::optional_user().await? {
         Some(u) => u,
         None => return Ok(Notifications::default()),
     };
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db = authz::db()?;
 
     let result = db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let (team, _) = match result {
         Some(t) => t,
@@ -467,6 +456,17 @@ pub fn Nav() -> impl IntoView {
                                                 >
                                                     "Champion Pool"
                                                 </A>
+                                                // Admin link only for admins; the page itself
+                                                // also checks on the server.
+                                                {u.is_admin.then(|| view! {
+                                                    <A
+                                                        href="/admin/invites"
+                                                        attr:class="block px-4 py-2.5 text-secondary hover:bg-elevated hover:text-primary transition-colors text-sm"
+                                                        on:click=move |_| menu_open.set(false)
+                                                    >
+                                                        "Invites"
+                                                    </A>
+                                                })}
                                                 <div class="border-t border-divider"></div>
                                                 <ActionForm action=logout_action>
                                                     <button

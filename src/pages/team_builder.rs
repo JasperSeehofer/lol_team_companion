@@ -11,21 +11,14 @@ use leptos::prelude::*;
 #[server]
 pub async fn get_team_roster_with_pools(
 ) -> Result<Vec<(String, String, String, Vec<ChampionPoolEntry>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (_, members) = match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(t) => t,
         None => return Ok(Vec::new()),
@@ -51,21 +44,14 @@ pub async fn get_team_roster_with_pools(
 #[server]
 pub async fn get_team_stats_for_builder(
 ) -> Result<Vec<(String, Vec<ChampionStatSummary>)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let (_, members) = match db::get_user_team_with_members(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(t) => t,
         None => return Ok(Vec::new()),
@@ -85,21 +71,14 @@ pub async fn get_team_stats_for_builder(
 /// List team's opponents
 #[server]
 pub async fn get_opponents_for_builder() -> Result<Vec<Opponent>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -107,7 +86,7 @@ pub async fn get_opponents_for_builder() -> Result<Vec<Opponent>, ServerFnError>
 
     db::list_opponents(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 /// Get opponent's players with recent champions
@@ -115,16 +94,17 @@ pub async fn get_opponents_for_builder() -> Result<Vec<Opponent>, ServerFnError>
 pub async fn get_opponent_players_for_builder(
     opponent_id: String,
 ) -> Result<Vec<OpponentPlayer>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
+        return Ok(Vec::new());
+    };
 
-    match db::get_opponent(&db, &opponent_id)
+    match db::get_opponent(&db, &team_id, &opponent_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some((_, players)) => Ok(players),
         None => Ok(Vec::new()),
@@ -134,10 +114,11 @@ pub async fn get_opponent_players_for_builder(
 /// Get champion data from Data Dragon
 #[server]
 pub async fn get_champions_for_builder() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
     data_dragon::fetch_champions()
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 /// Creates a new draft from the composition (5 picks, no bans)
@@ -150,17 +131,10 @@ pub async fn save_comp_as_draft(
     tags_json: String,
 ) -> Result<String, ServerFnError> {
     use crate::models::draft::DraftAction;
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db_ctx =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: db_ctx, user } = authz::authed().await?;
 
     let champions: Vec<(String, String)> = serde_json::from_str(&champions_json)
         .map_err(|e| ServerFnError::new(format!("Invalid champions JSON: {e}")))?;
@@ -169,7 +143,7 @@ pub async fn save_comp_as_draft(
 
     let team_id = db::get_user_team_id(&db_ctx, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new("You must be in a team to save a draft"))?;
 
     // Build pick actions for our side (blue by default)
@@ -197,7 +171,7 @@ pub async fn save_comp_as_draft(
         None, None, None, None,
     )
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
+    .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------

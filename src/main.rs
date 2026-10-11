@@ -1,6 +1,6 @@
 #![recursion_limit = "512"]
 
-use axum::{extract::State, routing::get, Router};
+use axum::{extract::State, http::StatusCode, routing::get, Router};
 use axum_login::{tower_sessions::SessionManagerLayer, AuthManagerLayerBuilder};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -9,10 +9,11 @@ use std::sync::Arc;
 use lol_team_companion::app::{shell, App};
 use lol_team_companion::server::{
     auth::AuthBackend,
-    db,
+    config, db,
     session_store::SurrealSessionStore,
     theme_layer::{theme_injection_middleware, REQUEST_THEME},
 };
+use tower_sessions::ExpiredDeletion;
 
 #[derive(Clone, axum::extract::FromRef)]
 struct AppState {
@@ -21,12 +22,25 @@ struct AppState {
     auth_backend: AuthBackend,
 }
 
-async fn health_handler(State(state): State<AppState>) -> axum::Json<serde_json::Value> {
-    let db_ok = state.db.query("RETURN true").await.is_ok();
-    axum::Json(serde_json::json!({
-        "status": "ok",
-        "db": if db_ok { "ok" } else { "error" }
-    }))
+/// 200 when a trivial DB query succeeds, 503 otherwise.
+async fn health_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, axum::Json<serde_json::Value>) {
+    let db_ok = match state.db.query("RETURN true").await {
+        Ok(r) => r.check().is_ok(),
+        Err(_) => false,
+    };
+    if db_ok {
+        (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({ "status": "ok", "db": "ok" })),
+        )
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(serde_json::json!({ "status": "error", "db": "error" })),
+        )
+    }
 }
 
 #[tokio::main]
@@ -41,6 +55,28 @@ async fn main() {
                 .unwrap_or_else(|_| "info,lol_team_companion=debug".parse().unwrap()),
         )
         .init();
+
+    // Security configuration (fails fast outside dev without SESSION_SECRET)
+    let security = match config::SecurityConfig::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("Configuration error: {e}");
+            std::process::exit(1);
+        }
+    };
+    tracing::info!(
+        dev = security.is_dev,
+        closed_beta = security.closed_beta,
+        cookie_secure = security.cookie_secure,
+        admin_emails = security.admin_emails.len(),
+        "security configuration"
+    );
+    if !security.closed_beta {
+        tracing::warn!("Invite gate is OFF (CLOSED_BETA=false in dev): anyone can register");
+    }
+    let bootstrap_invite = security.bootstrap_invite.clone();
+    let cookie_secure = security.cookie_secure;
+    config::init(security);
 
     // SurrealDB
     let data_dir = std::env::var("SURREAL_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
@@ -65,6 +101,13 @@ async fn main() {
         tracing::warn!("Bug-report inbox export failed: {e}");
     }
 
+    if let Some((code, max_uses)) = bootstrap_invite {
+        match db::ensure_invite(&surreal_db, &code, max_uses).await {
+            Ok(()) => tracing::info!("Bootstrap invite code is available"),
+            Err(e) => tracing::warn!("Could not create the bootstrap invite code: {e}"),
+        }
+    }
+
     // Leptos config
     let conf = get_configuration(None).unwrap();
     let leptos_options = conf.leptos_options.clone();
@@ -73,8 +116,25 @@ async fn main() {
 
     // Sessions
     let session_store = SurrealSessionStore::new(Arc::clone(&surreal_db), "sessions".to_string());
+
+    // Purge expired sessions now and every hour.
+    {
+        let store = session_store.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                if let Err(e) = store.delete_expired().await {
+                    tracing::warn!("Session purge failed: {e}");
+                }
+            }
+        });
+    }
+
+    // SameSite=Strict and HttpOnly are the tower-sessions defaults; Secure
+    // comes from config (on unless dev).
     let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(false)
+        .with_secure(cookie_secure)
         .with_expiry(tower_sessions::Expiry::OnInactivity(
             tower_sessions::cookie::time::Duration::days(30),
         ));
@@ -131,7 +191,11 @@ async fn main() {
 
     tracing::info!("Listening on http://{}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
+    // Connect info gives server functions the peer IP for rate limiting.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }

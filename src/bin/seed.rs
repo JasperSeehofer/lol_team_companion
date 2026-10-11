@@ -144,8 +144,27 @@ async fn main() {
     // Phase 5: Create opponent scouting profiles
     create_opponent_profiles(&db, &team_a_id).await;
 
+    // Phase 6: One open invite code so new accounts can register locally.
+    let invite_code = db::generate_invite_code();
+    let invite_expiry = chrono::Utc::now() + chrono::Duration::days(30);
+    let invite = db::create_invite(
+        &db,
+        None,
+        invite_code.clone(),
+        25,
+        Some(invite_expiry),
+        Some("seed".to_string()),
+    )
+    .await;
+
     println!("\nSeed complete! Created 2 teams with full demo data.");
     println!("Login with any seed account: seed-alpha-top@example.com / seedpass123");
+    match invite {
+        Ok(_) => println!(
+            "Invite code (25 uses, 30 days): {invite_code}\n  Register at /auth/register?invite={invite_code}"
+        ),
+        Err(e) => eprintln!("Warning: could not create the seed invite code: {e}"),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +185,7 @@ async fn cleanup_seed_data(db: &Surreal<Db>) {
         "DELETE opponent WHERE team IN (SELECT VALUE id FROM team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta'))",
         "DELETE team WHERE string::starts_with(name, 'Alpha') OR string::starts_with(name, 'Beta')",
         "DELETE user WHERE string::starts_with(email, 'seed-')",
+        "DELETE invite WHERE note = 'seed'",
     ];
     for q in queries {
         if let Err(e) = db.query(q).await {

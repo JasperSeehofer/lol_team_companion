@@ -19,6 +19,10 @@ DEFINE FIELD IF NOT EXISTS draft_mode ON user TYPE string DEFAULT 'auto';
 DEFINE FIELD IF NOT EXISTS team_dashboard_mode ON user TYPE string DEFAULT 'auto';
 DEFINE FIELD IF NOT EXISTS solo_mode ON user TYPE string DEFAULT 'auto';
 
+-- M1: admin flag. option<bool> (NONE = not admin) so users created before
+-- this field existed stay valid on UPDATE; ADMIN_EMAILS promotes at login.
+DEFINE FIELD IF NOT EXISTS is_admin ON user TYPE option<bool>;
+
 -- Teams
 DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name ON team TYPE string;
@@ -250,8 +254,23 @@ DEFINE FIELD IF NOT EXISTS items ON checklist_instance TYPE array<string> DEFAUL
 DEFINE FIELD IF NOT EXISTS checked ON checklist_instance TYPE array<bool> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS created_at ON checklist_instance TYPE datetime DEFAULT time::now();
 
--- Sessions (for tower-sessions-surrealdb-store)
+-- Sessions (tower-sessions via SurrealSessionStore). `data` is the
+-- MessagePack record; `expires_at` (unix seconds) is written on every save
+-- so expired rows can be purged without decoding them.
 DEFINE TABLE IF NOT EXISTS sessions SCHEMALESS;
+DEFINE INDEX IF NOT EXISTS sessions_expires_at ON sessions FIELDS expires_at;
+
+-- Closed-beta invite codes (M1). Registration consumes one use atomically.
+DEFINE TABLE IF NOT EXISTS invite SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS code ON invite TYPE string;
+DEFINE FIELD IF NOT EXISTS created_by ON invite TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS created_at ON invite TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS max_uses ON invite TYPE int DEFAULT 1 ASSERT $value >= 1;
+DEFINE FIELD IF NOT EXISTS uses ON invite TYPE int DEFAULT 0 ASSERT $value >= 0;
+DEFINE FIELD IF NOT EXISTS expires_at ON invite TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS disabled ON invite TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS note ON invite TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS invite_code_unique ON invite FIELDS code UNIQUE;
 
 -- Ranked snapshots
 DEFINE TABLE IF NOT EXISTS ranked_snapshot SCHEMAFULL;

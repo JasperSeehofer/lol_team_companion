@@ -1,7 +1,10 @@
 pub mod auth;
+pub mod authz;
 pub mod bug_report_export;
+pub mod config;
 pub mod data_dragon;
 pub mod db;
+pub mod rate_limit;
 pub mod riot;
 pub mod session_store;
 pub mod theme_layer;

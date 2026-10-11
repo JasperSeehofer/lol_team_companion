@@ -9,27 +9,29 @@ use leptos::prelude::*;
 pub async fn fetch_match_detail(
     match_id: String,
 ) -> Result<crate::models::match_data::MatchDetail, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::{db, riot};
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db, rate_limit::Bucket, riot};
+
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     if match_id.is_empty() {
         return Err(ServerFnError::new("No match ID provided"));
     }
-
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    // Riot match IDs look like "EUW1_7123456789".
+    let valid_id = match_id.split_once('_').is_some_and(|(platform, num)| {
+        !platform.is_empty()
+            && platform.chars().all(|c| c.is_ascii_alphanumeric())
+            && !num.is_empty()
+            && num.chars().all(|c| c.is_ascii_digit())
+    });
+    if !valid_id || match_id.len() > 32 {
+        return Err(ServerFnError::new(authz::NOT_FOUND));
+    }
 
     // Cache hit path
     if let Some((participants, timeline_events, game_duration, game_mode)) =
         db::get_cached_match_detail(&surreal, &match_id)
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?
+            .map_err(authz::server_err)?
     {
         let user_pid = participants
             .iter()
@@ -51,6 +53,7 @@ pub async fn fetch_match_detail(
     }
 
     // Cache miss: fetch from Riot API
+    authz::rate_limit(Bucket::Riot).await?;
     if !riot::has_api_key() {
         return Err(ServerFnError::new(
             "Riot API key not configured. Ask an admin to add a RIOT_API_KEY.",
@@ -60,7 +63,7 @@ pub async fn fetch_match_detail(
     let platform = riot::platform_route_from_str(user.riot_region.as_deref().unwrap_or("EUW"));
     let full = riot::fetch_full_match_detail(&match_id, platform)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let user_pid = full
         .participants

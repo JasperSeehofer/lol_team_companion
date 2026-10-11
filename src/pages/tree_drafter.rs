@@ -17,10 +17,11 @@ use std::collections::HashMap;
 
 #[server]
 pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
     data_dragon::fetch_champions()
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 /// Whether the current user belongs to a team. Drives the empty state of the
@@ -28,40 +29,28 @@ pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
 /// the create form).
 #[server]
 pub async fn user_has_team() -> Result<bool, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let Some(user) = auth.user else {
+    let Some(user) = authz::optional_user().await? else {
         return Ok(false);
     };
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db = authz::db()?;
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(team_id.is_some())
 }
 
 #[server]
 pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -69,50 +58,37 @@ pub async fn list_trees() -> Result<Vec<DraftTree>, ServerFnError> {
 
     db::list_draft_trees(&db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn create_tree(name: String, opponent: Option<String>) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     let team_id = db::get_user_team_id(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+        .map_err(authz::server_err)?
+        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
     db::create_draft_tree(&db, &team_id, &user.id, name, opponent)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_tree(tree_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::delete_draft_tree(&db, &tree_id)
+    db::delete_draft_tree(&db, &team_id, &tree_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -121,40 +97,28 @@ pub async fn update_tree_meta(
     name: String,
     opponent: Option<String>,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::update_draft_tree(&db, &tree_id, name, opponent)
+    db::update_draft_tree(&db, &team_id, &tree_id, name, opponent)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_tree_nodes(tree_id: String) -> Result<Vec<DraftTreeNode>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::get_tree_nodes(&db, &tree_id)
+    db::get_tree_nodes(&db, &team_id, &tree_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -163,21 +127,15 @@ pub async fn add_branch(
     parent_id: Option<String>,
     label: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::create_tree_node(&db, &tree_id, parent_id, label)
+    db::create_tree_node(&db, &team_id, &tree_id, parent_id, label)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -188,43 +146,39 @@ pub async fn save_node(
     is_improvised: bool,
     actions_json: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
     let actions: Vec<DraftAction> = serde_json::from_str(&actions_json)
         .map_err(|e| ServerFnError::new(format!("Invalid actions JSON: {e}")))?;
 
-    db::update_tree_node(&db, &node_id, label, notes, is_improvised, actions)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    db::update_tree_node(
+        &db,
+        &team_id,
+        &node_id,
+        label,
+        notes,
+        is_improvised,
+        actions,
+    )
+    .await
+    .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn remove_node(node_id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
+    let team_id = authz::require_team(&db, &user).await?;
 
-    db::delete_tree_node(&db, &node_id)
+    db::delete_tree_node(&db, &team_id, &node_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------

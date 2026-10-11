@@ -19,86 +19,53 @@ pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
         draft_mode: u.draft_mode,
         team_dashboard_mode: u.team_dashboard_mode,
         solo_mode: u.solo_mode,
+        is_admin: u.is_admin,
     }))
 }
 
 #[server]
 pub async fn logout() -> Result<(), ServerFnError> {
     use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use leptos_axum::redirect;
 
     let mut auth: AuthSession = leptos_axum::extract().await?;
-    auth.logout()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    auth.logout().await.map_err(authz::server_err)?;
     redirect("/");
     Ok(())
 }
 
 #[server]
 pub async fn update_profile(username: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::authz;
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let user_key = user
-        .id
-        .strip_prefix("user:")
-        .unwrap_or(&user.id)
-        .to_string();
-    db.query("UPDATE type::record('user', $user_key) SET username = $username")
-        .bind(("user_key", user_key))
-        .bind(("username", username))
+    let authz::Ctx { db, user } = authz::authed().await?;
+    crate::server::db::update_username(&db, &user.id, username)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .check()
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    Ok(())
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_champion_pool() -> Result<Vec<ChampionPoolEntry>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
     db::get_champion_pool(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn save_region(region: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
     db::set_user_region(&db, &user.id, &region)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
     Ok(())
 }
 

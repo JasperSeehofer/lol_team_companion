@@ -32,21 +32,14 @@ pub async fn check_api_key() -> Result<bool, ServerFnError> {
 
 #[server]
 pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => return Ok(Vec::new()),
@@ -54,7 +47,7 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
 
     let rows = db::get_team_match_stats(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     // Convert db type to page type
     Ok(rows
@@ -81,28 +74,25 @@ pub async fn get_team_stats() -> Result<Vec<TeamMatchRow>, ServerFnError> {
 
 #[server]
 pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
+    use crate::server::rate_limit::Bucket;
     use crate::server::riot;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     if !riot::has_api_key() {
         return Err(ServerFnError::new(
             "RIOT_API_KEY not configured. Set it in .env to enable match syncing.",
         ));
     }
-
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    authz::rate_limit(Bucket::Riot).await?;
+    // A team sync makes ~21 Riot calls per linked player.
+    authz::user_cooldown("team_sync", &user, std::time::Duration::from_secs(60))?;
 
     let team_id = match db::get_user_team_id(&surreal, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(id) => id,
         None => {
@@ -114,7 +104,7 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
 
     let members = db::get_roster_puuids(&surreal, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(authz::server_err)?;
 
     let queue_label = match queue_id {
         Some(420) => "Solo/Duo",
@@ -137,14 +127,16 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
             Ok(matches) => {
                 let count = matches.len();
                 if let Err(e) = db::store_matches(&surreal, uid, matches).await {
-                    errors.push(format!("{username}: store error: {e}"));
+                    tracing::error!(user = %uid, error = %e, "storing synced matches failed");
+                    errors.push(format!("{username}: could not save matches"));
                 } else {
                     total_synced += count;
                     synced_players += 1;
                 }
             }
             Err(e) => {
-                errors.push(format!("{username}: API error: {e}"));
+                tracing::warn!(user = %uid, error = %e, "Riot match history fetch failed");
+                errors.push(format!("{username}: Riot API request failed"));
             }
         }
     }
@@ -162,22 +154,15 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
 
 #[server]
 pub async fn get_champion_trends(window: String) -> Result<Vec<ChampionTrend>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let cutoff = trends_window_to_cutoff(&window);
     db::get_champion_trends(&surreal, &user.id, cutoff)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[allow(dead_code)]

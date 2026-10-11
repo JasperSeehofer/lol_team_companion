@@ -17,41 +17,28 @@ use std::collections::BTreeMap;
 
 #[server]
 pub async fn list_learnings() -> Result<Vec<PersonalLearning>, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = match auth.user {
-        Some(u) => u,
-        None => return Ok(Vec::new()),
+    let Some(user) = authz::optional_user().await? else {
+        return Ok(Vec::new());
     };
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let db = authz::db()?;
 
     db::list_personal_learnings(&db, &user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_learning(id: String) -> Result<Option<PersonalLearning>, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
-    db::get_personal_learning(&db, &id)
+    db::get_personal_learning(&db, &user.id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -69,17 +56,10 @@ pub async fn save_learning(
     game_timestamp_ms: String,
     event_name: String,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let tags: Vec<String> = serde_json::from_str(&tags_json)
         .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
@@ -124,7 +104,7 @@ pub async fn save_learning(
 
     db::create_personal_learning(&surreal, learning)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -143,24 +123,17 @@ pub async fn update_learning(
     game_timestamp_ms: String,
     event_name: String,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
     let tags: Vec<String> = serde_json::from_str(&tags_json)
         .map_err(|e| ServerFnError::new(format!("Invalid tags JSON: {e}")))?;
 
     let learning = PersonalLearning {
         id: Some(id),
-        user_id: user.id,
+        user_id: user.id.clone(),
         title,
         learning_type,
         champion: if champion.is_empty() {
@@ -196,36 +169,30 @@ pub async fn update_learning(
         created_at: None,
     };
 
-    db::update_personal_learning(&surreal, learning)
+    db::update_personal_learning(&surreal, &user.id, learning)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_learning(id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
+    use crate::server::authz;
     use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let db =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
+    let authz::Ctx { db, user } = authz::authed().await?;
 
-    db::delete_personal_learning(&db, &id)
+    db::delete_personal_learning(&db, &user.id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_champions_for_learnings() -> Result<Vec<Champion>, ServerFnError> {
+    use crate::server::authz;
     use crate::server::data_dragon;
     data_dragon::fetch_champions()
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------

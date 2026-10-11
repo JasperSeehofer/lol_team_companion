@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axum_login::AuthUser;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use surrealdb::{
     engine::local::Db,
@@ -27,15 +27,17 @@ struct DbUser {
     draft_mode: Option<String>,
     team_dashboard_mode: Option<String>,
     solo_mode: Option<String>,
+    #[serde(default)]
+    is_admin: Option<bool>,
 }
 
 impl From<DbUser> for AppUser {
     fn from(u: DbUser) -> Self {
         AppUser {
+            auth_hash: session_auth_hash_for(&u.password_hash),
             id: u.id.to_sql(),
             username: u.username,
             email: u.email,
-            password_hash: u.password_hash,
             riot_puuid: u.riot_puuid,
             riot_summoner_name: u.riot_summoner_name,
             mode: u.mode.unwrap_or_else(|| "solo".to_string()),
@@ -44,16 +46,18 @@ impl From<DbUser> for AppUser {
             draft_mode: u.draft_mode.unwrap_or_else(|| "auto".to_string()),
             team_dashboard_mode: u.team_dashboard_mode.unwrap_or_else(|| "auto".to_string()),
             solo_mode: u.solo_mode.unwrap_or_else(|| "auto".to_string()),
+            is_admin: u.is_admin.unwrap_or(false),
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// The signed-in user, loaded from the DB on every request. It carries no
+/// password hash; `auth_hash` is an HMAC of it (see `session_auth_hash_for`).
+#[derive(Clone)]
 pub struct AppUser {
     pub id: String,
     pub username: String,
     pub email: String,
-    pub password_hash: String,
     pub riot_puuid: Option<String>,
     pub riot_summoner_name: Option<String>,
     pub mode: String,
@@ -62,6 +66,18 @@ pub struct AppUser {
     pub draft_mode: String,
     pub team_dashboard_mode: String,
     pub solo_mode: String,
+    pub is_admin: bool,
+    auth_hash: Vec<u8>,
+}
+
+impl std::fmt::Debug for AppUser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppUser")
+            .field("id", &self.id)
+            .field("username", &self.username)
+            .field("is_admin", &self.is_admin)
+            .finish_non_exhaustive()
+    }
 }
 
 impl AuthUser for AppUser {
@@ -71,9 +87,24 @@ impl AuthUser for AppUser {
         self.id.clone()
     }
 
+    /// axum-login stores this in the session and compares it on every
+    /// request, so a password change ends existing sessions. It is an HMAC of
+    /// the password hash keyed with `SESSION_SECRET`, never the hash itself,
+    /// so session rows do not contain password material.
     fn session_auth_hash(&self) -> &[u8] {
-        self.password_hash.as_bytes()
+        &self.auth_hash
     }
+}
+
+/// HMAC-SHA256(SESSION_SECRET, password_hash).
+pub fn session_auth_hash_for(password_hash: &str) -> Vec<u8> {
+    use hmac::{Hmac, Mac};
+    let secret = &crate::server::config::get().session_secret;
+    let mut mac = <Hmac<sha2::Sha256> as Mac>::new_from_slice(secret)
+        .expect("HMAC accepts keys of any length");
+    mac.update(b"companion-session-v1:");
+    mac.update(password_hash.as_bytes());
+    mac.finalize().into_bytes().to_vec()
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +132,30 @@ impl AuthBackend {
     }
 }
 
+/// A valid Argon2 hash of a random password. Unknown emails are verified
+/// against it so a login attempt costs the same time whether or not the
+/// account exists.
+fn dummy_hash() -> &'static str {
+    static DUMMY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DUMMY.get_or_init(|| hash_password("companion-dummy-password").unwrap_or_default())
+}
+
+/// Verify a password on the blocking pool (Argon2 is CPU- and memory-heavy and
+/// must not run on a Tokio worker).
+pub async fn verify_password_async(password: String, hash: String) -> bool {
+    tokio::task::spawn_blocking(move || {
+        use argon2::{Argon2, PasswordHash, PasswordVerifier};
+        match PasswordHash::new(&hash) {
+            Ok(parsed) => Argon2::default()
+                .verify_password(password.as_bytes(), &parsed)
+                .is_ok(),
+            Err(_) => false,
+        }
+    })
+    .await
+    .unwrap_or(false)
+}
+
 #[async_trait]
 impl axum_login::AuthnBackend for AuthBackend {
     type User = AppUser;
@@ -111,32 +166,26 @@ impl axum_login::AuthnBackend for AuthBackend {
         &self,
         creds: Self::Credentials,
     ) -> Result<Option<Self::User>, Self::Error> {
-        use argon2::{Argon2, PasswordHash, PasswordVerifier};
+        let email = crate::server::db::normalize_email(&creds.email);
 
+        // Emails are stored lowercase since M1; older rows may not be, hence
+        // the lowercase comparison.
         let mut result = self
             .db
-            .query("SELECT * FROM user WHERE email = $email LIMIT 1")
-            .bind(("email", creds.email))
+            .query("SELECT * FROM user WHERE string::lowercase(email) = $email LIMIT 1")
+            .bind(("email", email))
             .await
             .map_err(AuthError::Db)?;
 
         let db_user: Option<DbUser> = result.take(0).map_err(AuthError::Db)?;
 
         let Some(db_user) = db_user else {
+            let _ = verify_password_async(creds.password, dummy_hash().to_string()).await;
             return Ok(None);
         };
 
-        let user: AppUser = db_user.into();
-
-        let hash =
-            PasswordHash::new(&user.password_hash).map_err(|e| AuthError::Hash(e.to_string()))?;
-        let argon2 = Argon2::default();
-
-        if argon2
-            .verify_password(creds.password.as_bytes(), &hash)
-            .is_ok()
-        {
-            Ok(Some(user))
+        if verify_password_async(creds.password, db_user.password_hash.clone()).await {
+            Ok(Some(db_user.into()))
         } else {
             Ok(None)
         }
@@ -178,6 +227,14 @@ pub enum AuthError {
 // Password hashing helper
 // ---------------------------------------------------------------------------
 
+/// Hash a password on the blocking pool.
+pub async fn hash_password_async(password: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || hash_password(&password))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Synchronous Argon2 hash. Call `hash_password_async` from async code.
 pub fn hash_password(password: &str) -> Result<String, String> {
     use argon2::{
         password_hash::{rand_core::OsRng, SaltString},
@@ -214,6 +271,25 @@ mod tests {
         assert!(Argon2::default()
             .verify_password(b"wrong_password", &parsed)
             .is_err());
+    }
+
+    #[test]
+    fn session_auth_hash_is_an_hmac_not_the_hash() {
+        let hash = hash_password("secret123").unwrap();
+        let a = session_auth_hash_for(&hash);
+        assert_eq!(a.len(), 32);
+        assert_ne!(a, hash.as_bytes());
+        assert_eq!(a, session_auth_hash_for(&hash), "deterministic");
+        let other = hash_password("secret123").unwrap();
+        assert_ne!(a, session_auth_hash_for(&other), "changes with the hash");
+    }
+
+    #[tokio::test]
+    async fn async_verify_matches_sync() {
+        let hash = hash_password_async("correct horse".into()).await.unwrap();
+        assert!(verify_password_async("correct horse".into(), hash.clone()).await);
+        assert!(!verify_password_async("wrong horse".into(), hash).await);
+        assert!(!verify_password_async("x".into(), "not-a-hash".into()).await);
     }
 
     #[test]

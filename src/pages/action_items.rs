@@ -11,29 +11,15 @@ use leptos_router::components::A;
 
 #[server]
 pub async fn get_action_items() -> Result<Vec<ActionItem>, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let team_id = match db::get_user_team_id(&surreal, &user.id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-    {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
     };
-
-    db::list_action_items(&surreal, &team_id)
+    db::list_action_items(&ctx.db, &team_id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -41,48 +27,28 @@ pub async fn create_action_item_fn(
     text: String,
     assigned_to: Option<String>,
 ) -> Result<String, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let team_id = db::get_user_team_id(&surreal, &user.id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
-        .ok_or_else(|| ServerFnError::new("No team"))?;
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
 
     // Treat empty string as None for assigned_to
     let assigned = assigned_to.filter(|s| !s.is_empty());
 
-    db::create_action_item(&surreal, &team_id, text, None, assigned)
+    db::create_action_item(&ctx.db, &team_id, text, None, assigned)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn update_item_status(id: String, status: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::update_action_item_status(&surreal, &id, status)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::update_action_item_status(&ctx.db, &team_id, &id, status)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
@@ -91,63 +57,38 @@ pub async fn update_item(
     text: String,
     assigned_to: Option<String>,
 ) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
     let assigned = assigned_to.filter(|s| !s.is_empty());
 
     // Keep current status (don't change it through this endpoint)
     // We need to read the current item to preserve status
-    db::update_action_item(&surreal, &id, text, assigned, "open".into())
+    db::update_action_item(&ctx.db, &team_id, &id, text, assigned, "open".into())
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn delete_item(id: String) -> Result<(), ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let _user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    db::delete_action_item(&surreal, &id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::delete_action_item(&ctx.db, &team_id, &id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(authz::server_err)
 }
 
 #[server]
 pub async fn get_team_members_list() -> Result<Vec<(String, String)>, ServerFnError> {
-    use crate::server::auth::AuthSession;
-    use crate::server::db;
-    use std::sync::Arc;
-    use surrealdb::{engine::local::Db, Surreal};
+    use crate::server::{authz, db};
 
-    let auth: AuthSession = leptos_axum::extract().await?;
-    let user = auth
-        .user
-        .ok_or_else(|| ServerFnError::new("Not logged in"))?;
-    let surreal =
-        use_context::<Arc<Surreal<Db>>>().ok_or_else(|| ServerFnError::new("No DB context"))?;
-
-    let (_, members) = match db::get_user_team_with_members(&surreal, &user.id)
+    let ctx = authz::authed().await?;
+    let (_, members) = match db::get_user_team_with_members(&ctx.db, &ctx.user.id)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map_err(authz::server_err)?
     {
         Some(tm) => tm,
         None => return Ok(Vec::new()),
