@@ -5689,6 +5689,297 @@ pub async fn store_match_detail(
 }
 
 // ---------------------------------------------------------------------------
+// Sand Table storage (M6; no UI yet)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbReplay {
+    id: RecordId,
+    team: RecordId,
+    match_id: String,
+    patch: Option<String>,
+    imported_at: Option<Datetime>,
+    source: String,
+    frame_interval_ms: i64,
+    participants: Vec<crate::models::sand_table::ReplayParticipant>,
+}
+
+impl From<DbReplay> for crate::models::sand_table::Replay {
+    fn from(r: DbReplay) -> Self {
+        crate::models::sand_table::Replay {
+            id: Some(r.id.to_sql()),
+            team_id: r.team.to_sql(),
+            match_id: r.match_id,
+            patch: r.patch,
+            imported_at: opt_dt(r.imported_at),
+            source: r.source,
+            frame_interval_ms: r.frame_interval_ms,
+            participants: r.participants,
+        }
+    }
+}
+
+/// Store an imported timeline as `team_id`'s replay of that match, with all
+/// frames and events, in one transaction. Importing the same match again
+/// replaces the team's earlier copy. Returns the replay ID.
+pub async fn store_replay(
+    db: &Surreal<Db>,
+    team_id: &str,
+    imported: &crate::server::sand_table::ImportedTimeline,
+    patch: Option<String>,
+) -> DbResult<String> {
+    let response = db
+        .query(
+            "BEGIN TRANSACTION; \
+             LET $old = (SELECT VALUE id FROM replay WHERE team = type::record('team', $team_key) AND match_id = $match_id); \
+             DELETE replay_frame WHERE replay IN $old; \
+             DELETE replay_event WHERE replay IN $old; \
+             DELETE replay WHERE id IN $old; \
+             LET $r = (CREATE ONLY replay SET team = type::record('team', $team_key), match_id = $match_id, patch = $patch, \
+                 source = 'riot_timeline', frame_interval_ms = $interval, participants = $participants); \
+             FOR $f IN $frames { CREATE replay_frame SET replay = $r.id, t_ms = $f.t_ms, participants = $f.participants; }; \
+             FOR $e IN $events { CREATE replay_event SET replay = $r.id, seq = $e.seq, t_ms = $e.t_ms, kind = $e.kind, x = $e.x, y = $e.y, \
+                 participants = $e.participants, team_id = $e.team_id, meta = $e.meta; }; \
+             RETURN { id: $r.id }; \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("match_id", imported.match_id.clone()))
+        .bind(("patch", patch))
+        .bind(("interval", imported.frame_interval_ms))
+        .bind(("participants", imported.participants.clone()))
+        .bind(("frames", imported.frames.clone()))
+        .bind(("events", imported.events.clone()))
+        .await?;
+    let mut response = check_tx(response)?;
+    let row: Option<IdRecord> = response.take(8)?;
+    row.map(|r| r.id.to_sql())
+        .ok_or_else(|| DbError::Other("Failed to store replay".into()))
+}
+
+pub async fn list_replays(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<crate::models::sand_table::Replay>> {
+    let mut r = db
+        .query("SELECT * FROM replay WHERE team = type::record('team', $team_key) ORDER BY imported_at DESC")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbReplay> = r.take(0)?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// A replay of `team_id`, or `None` (also when it belongs to another team).
+pub async fn get_replay(
+    db: &Surreal<Db>,
+    team_id: &str,
+    replay_id: &str,
+) -> DbResult<Option<crate::models::sand_table::Replay>> {
+    let mut r = db
+        .query("SELECT * FROM type::record('replay', $key) WHERE team = type::record('team', $team_key)")
+        .bind(("key", record_key(replay_id, "replay")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let row: Option<DbReplay> = r.take(0)?;
+    Ok(row.map(Into::into))
+}
+
+/// Frames of a replay of `team_id`, in time order. `NotFound` for a replay
+/// outside the team.
+pub async fn get_replay_frames(
+    db: &Surreal<Db>,
+    team_id: &str,
+    replay_id: &str,
+) -> DbResult<Vec<crate::models::sand_table::ReplayFrame>> {
+    ensure_team_record(db, "replay", replay_id, team_id).await?;
+    let mut r = db
+        .query("SELECT t_ms, participants FROM replay_frame WHERE replay = type::record('replay', $key) ORDER BY t_ms ASC")
+        .bind(("key", record_key(replay_id, "replay")))
+        .await?;
+    Ok(r.take(0)?)
+}
+
+/// Events of a replay of `team_id`, in time order. `NotFound` for a replay
+/// outside the team.
+pub async fn get_replay_events(
+    db: &Surreal<Db>,
+    team_id: &str,
+    replay_id: &str,
+) -> DbResult<Vec<crate::models::sand_table::ReplayEvent>> {
+    ensure_team_record(db, "replay", replay_id, team_id).await?;
+    let mut r = db
+        .query("SELECT seq, t_ms, kind, x, y, participants, team_id, meta FROM replay_event WHERE replay = type::record('replay', $key) ORDER BY seq ASC")
+        .bind(("key", record_key(replay_id, "replay")))
+        .await?;
+    Ok(r.take(0)?)
+}
+
+pub async fn delete_replay(db: &Surreal<Db>, team_id: &str, replay_id: &str) -> DbResult<()> {
+    ensure_team_record(db, "replay", replay_id, team_id).await?;
+    let response = db
+        .query(
+            "BEGIN TRANSACTION; \
+             DELETE replay_frame WHERE replay = type::record('replay', $key); \
+             DELETE replay_event WHERE replay = type::record('replay', $key); \
+             DELETE type::record('replay', $key); \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("key", record_key(replay_id, "replay")))
+        .await?;
+    check_tx(response)?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbBoard {
+    id: RecordId,
+    team: RecordId,
+    name: String,
+    created_by: RecordId,
+    updated_at: Option<Datetime>,
+}
+
+impl From<DbBoard> for crate::models::sand_table::Board {
+    fn from(b: DbBoard) -> Self {
+        crate::models::sand_table::Board {
+            id: Some(b.id.to_sql()),
+            team_id: b.team.to_sql(),
+            name: b.name,
+            created_by: b.created_by.to_sql(),
+            updated_at: opt_dt(b.updated_at),
+        }
+    }
+}
+
+pub async fn create_board(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    name: String,
+) -> DbResult<String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(DbError::Invalid("Give the board a name.".into()));
+    }
+    let mut r = db
+        .query("CREATE board SET team = type::record('team', $team_key), name = $name, created_by = type::record('user', $user_key)")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("name", name))
+        .await?
+        .check()?;
+    let row: Option<IdRecord> = r.take(0)?;
+    row.map(|r| r.id.to_sql())
+        .ok_or_else(|| DbError::Other("Failed to create board".into()))
+}
+
+pub async fn list_boards(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<crate::models::sand_table::Board>> {
+    let mut r = db
+        .query("SELECT * FROM board WHERE team = type::record('team', $team_key) ORDER BY updated_at DESC")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbBoard> = r.take(0)?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// Save `scene` as the next version of a board of `team_id` and return its
+/// number (1, 2, ...). Two saves at the same moment cannot get the same
+/// number: the unique (board, version) index rejects the second one.
+pub async fn save_board_version(
+    db: &Surreal<Db>,
+    team_id: &str,
+    board_id: &str,
+    user_id: &str,
+    scene: serde_json::Value,
+) -> DbResult<i64> {
+    ensure_team_record(db, "board", board_id, team_id).await?;
+    if !scene.is_object() {
+        return Err(DbError::Invalid("A board scene must be an object.".into()));
+    }
+    let response = db
+        .query(
+            "BEGIN TRANSACTION; \
+             LET $prev = (SELECT VALUE version FROM board_version WHERE board = type::record('board', $key)); \
+             LET $v = IF array::len($prev) = 0 { 1 } ELSE { math::max($prev) + 1 }; \
+             CREATE board_version SET board = type::record('board', $key), version = $v, scene = $scene, author = type::record('user', $user_key); \
+             UPDATE type::record('board', $key) SET updated_at = time::now(); \
+             RETURN $v; \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("key", record_key(board_id, "board")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("scene", scene))
+        .await?;
+    let mut response = check_tx(response).map_err(|e| {
+        if e.to_string().contains("board_version_unique") {
+            DbError::Invalid(
+                "Someone saved this board at the same moment. Reload it and save again.".into(),
+            )
+        } else {
+            e
+        }
+    })?;
+    // 0 BEGIN, 1-2 LET, 3 CREATE, 4 UPDATE, 5 RETURN
+    let v: Option<i64> = response.take(5)?;
+    v.ok_or_else(|| DbError::Other("Failed to save board version".into()))
+}
+
+/// A version of a board of `team_id`: the given number, or the latest when
+/// `version` is `None`. `NotFound` for a board outside the team.
+pub async fn get_board_version(
+    db: &Surreal<Db>,
+    team_id: &str,
+    board_id: &str,
+    version: Option<i64>,
+) -> DbResult<Option<crate::models::sand_table::BoardVersion>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        board: RecordId,
+        version: i64,
+        scene: serde_json::Value,
+        author: RecordId,
+        created_at: Option<Datetime>,
+    }
+    ensure_team_record(db, "board", board_id, team_id).await?;
+    let query = if version.is_some() {
+        "SELECT * FROM board_version WHERE board = type::record('board', $key) AND version = $version LIMIT 1"
+    } else {
+        "SELECT * FROM board_version WHERE board = type::record('board', $key) ORDER BY version DESC LIMIT 1"
+    };
+    let mut r = db
+        .query(query)
+        .bind(("key", record_key(board_id, "board")))
+        .bind(("version", version))
+        .await?;
+    let row: Option<Row> = r.take(0)?;
+    Ok(row.map(|r| crate::models::sand_table::BoardVersion {
+        board_id: r.board.to_sql(),
+        version: r.version,
+        scene: r.scene,
+        author: r.author.to_sql(),
+        created_at: opt_dt(r.created_at),
+    }))
+}
+
+pub async fn delete_board(db: &Surreal<Db>, team_id: &str, board_id: &str) -> DbResult<()> {
+    ensure_team_record(db, "board", board_id, team_id).await?;
+    let response = db
+        .query(
+            "BEGIN TRANSACTION; \
+             DELETE board_version WHERE board = type::record('board', $key); \
+             DELETE type::record('board', $key); \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("key", record_key(board_id, "board")))
+        .await?;
+    check_tx(response)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Data Dragon cache and patch changes (M6)
 // ---------------------------------------------------------------------------
 

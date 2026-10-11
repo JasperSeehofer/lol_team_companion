@@ -735,6 +735,75 @@ async fn membership_and_leadership_checks() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+async fn sand_table_replays_and_boards_are_isolated_between_teams() {
+    use lol_team_companion::server::sand_table::import_timeline_str;
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let imported =
+        import_timeline_str(include_str!("../fixtures/riot_match_v5_timeline.json")).unwrap();
+
+    let replay = db::store_replay(&db, &t.team1, &imported, None)
+        .await
+        .unwrap();
+    let board = db::create_board(&db, &t.team1, &t.a, "A board".into())
+        .await
+        .unwrap();
+    db::save_board_version(&db, &t.team1, &board, &t.a, serde_json::json!({"v": 1}))
+        .await
+        .unwrap();
+
+    // B sees none of A's Sand Table data.
+    assert!(db::get_replay(&db, &t.team2, &replay)
+        .await
+        .unwrap()
+        .is_none());
+    assert!(db::list_replays(&db, &t.team2).await.unwrap().is_empty());
+    assert_not_found(
+        db::get_replay_frames(&db, &t.team2, &replay).await,
+        "replay frames",
+    );
+    assert_not_found(
+        db::get_replay_events(&db, &t.team2, &replay).await,
+        "replay events",
+    );
+    assert_not_found(
+        db::delete_replay(&db, &t.team2, &replay).await,
+        "delete replay",
+    );
+    assert!(db::list_boards(&db, &t.team2).await.unwrap().is_empty());
+    assert_not_found(
+        db::get_board_version(&db, &t.team2, &board, None).await,
+        "board version",
+    );
+    assert_not_found(
+        db::save_board_version(&db, &t.team2, &board, &t.b, serde_json::json!({"v": 2})).await,
+        "save board version",
+    );
+    assert_not_found(
+        db::delete_board(&db, &t.team2, &board).await,
+        "delete board",
+    );
+
+    // B importing the same match gets its own copy; A's is untouched.
+    let b_replay = db::store_replay(&db, &t.team2, &imported, None)
+        .await
+        .unwrap();
+    assert_ne!(b_replay, replay);
+    assert_eq!(
+        db::get_replay_frames(&db, &t.team1, &replay)
+            .await
+            .unwrap()
+            .len(),
+        4
+    );
+    let a_board = db::get_board_version(&db, &t.team1, &board, None)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(a_board.version, 1);
+}
+
+#[tokio::test]
 async fn series_is_isolated_between_teams() {
     let db = common::test_db().await;
     let t = tenants(&db).await;

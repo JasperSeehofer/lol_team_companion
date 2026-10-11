@@ -8,6 +8,7 @@ pub mod invite;
 pub mod match_data;
 pub mod opponent;
 pub mod personal_learning;
+pub mod sand_table;
 pub mod series;
 pub mod team;
 pub mod team_note;

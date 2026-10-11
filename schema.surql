@@ -387,6 +387,66 @@ DEFINE FIELD IF NOT EXISTS new_version ON patch_change TYPE string;
 DEFINE FIELD IF NOT EXISTS detected_at ON patch_change TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS patch_change_detected_at ON patch_change FIELDS detected_at;
 
+-- Sand Table (M6): storage only, no UI yet. A replay is a team's imported
+-- copy of one match timeline (src/server/sand_table.rs); frames hold every
+-- participant per minute, events the positioned moments. Boards are saved as
+-- numbered versions of a scene document.
+DEFINE TABLE IF NOT EXISTS replay SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON replay TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS match_id ON replay TYPE string;
+DEFINE FIELD IF NOT EXISTS patch ON replay TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS imported_at ON replay TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS source ON replay TYPE string ASSERT $value IN ['riot_timeline'];
+DEFINE FIELD IF NOT EXISTS frame_interval_ms ON replay TYPE int;
+DEFINE FIELD IF NOT EXISTS participants ON replay TYPE array<object> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS participants[*].participant_id ON replay TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].puuid ON replay TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS participants[*].team_id ON replay TYPE int;
+DEFINE INDEX IF NOT EXISTS replay_team_match ON replay FIELDS team, match_id UNIQUE;
+
+DEFINE TABLE IF NOT EXISTS replay_frame SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS replay ON replay_frame TYPE record<replay>;
+DEFINE FIELD IF NOT EXISTS t_ms ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants ON replay_frame TYPE array<object> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS participants[*].participant_id ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].x ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].y ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].gold ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].current_gold ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].xp ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].cs ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].level ON replay_frame TYPE int;
+DEFINE FIELD IF NOT EXISTS participants[*].alive ON replay_frame TYPE bool;
+DEFINE INDEX IF NOT EXISTS replay_frame_replay ON replay_frame FIELDS replay, t_ms;
+
+DEFINE TABLE IF NOT EXISTS replay_event SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS replay ON replay_event TYPE record<replay>;
+DEFINE FIELD IF NOT EXISTS seq ON replay_event TYPE int;
+DEFINE FIELD IF NOT EXISTS t_ms ON replay_event TYPE int;
+DEFINE FIELD IF NOT EXISTS kind ON replay_event TYPE string;
+DEFINE FIELD IF NOT EXISTS x ON replay_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS y ON replay_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS participants ON replay_event TYPE array<int> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS team_id ON replay_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS meta ON replay_event TYPE object FLEXIBLE DEFAULT {};
+DEFINE INDEX IF NOT EXISTS replay_event_replay ON replay_event FIELDS replay, seq;
+
+DEFINE TABLE IF NOT EXISTS board SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON board TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS name ON board TYPE string;
+DEFINE FIELD IF NOT EXISTS created_by ON board TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON board TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON board TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS board_team ON board FIELDS team;
+
+DEFINE TABLE IF NOT EXISTS board_version SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS board ON board_version TYPE record<board>;
+DEFINE FIELD IF NOT EXISTS version ON board_version TYPE int;
+DEFINE FIELD IF NOT EXISTS scene ON board_version TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS author ON board_version TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON board_version TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS board_version_unique ON board_version FIELDS board, version UNIQUE;
+
 -- Record links (M6). These fields held record IDs as strings before M6;
 -- migration 5 converted existing values and tightened the types above.
 -- action_item.assigned_to stays a string: it holds the assignee's username as

@@ -18,5 +18,6 @@ mod db_teams;
 mod db_tree;
 mod db_users;
 mod migrations;
+mod sand_table;
 mod security;
 mod transactions;

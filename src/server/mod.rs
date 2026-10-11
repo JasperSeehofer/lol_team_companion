@@ -7,6 +7,7 @@ pub mod db;
 pub mod migrations;
 pub mod rate_limit;
 pub mod riot;
+pub mod sand_table;
 pub mod session_store;
 pub mod theme_layer;
 

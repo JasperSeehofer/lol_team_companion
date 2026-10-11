@@ -64,6 +64,11 @@ async fn scope_fields_are_indexed() {
         ("match", &["match_id_unique", "match_team"]),
         ("sessions", &["sessions_expires_at"]),
         ("invite", &["invite_code_unique"]),
+        ("replay", &["replay_team_match"]),
+        ("replay_frame", &["replay_frame_replay"]),
+        ("replay_event", &["replay_event_replay"]),
+        ("board", &["board_team"]),
+        ("board_version", &["board_version_unique"]),
     ];
     for (table, indexes) in expected {
         let info = info_for_table(&db, table).await;
