@@ -24,6 +24,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - The 7/30/90-day windows for LP history and champion trends did not filter by date.
 - Several lists could come back empty when a stored date failed to load (the same cause as the personal learnings bug); dates now load the same way everywhere.
 - Invite codes could show the wrong status within the second they expired.
+- Two people registering the same username (or email) at the same moment could both be told it worked while only one account was created; a tactics board saved twice at once could lose one version.
+- Linking a Riot account or scouting an opponent failed for the OCE, SG, TW, VN and ME regions.
+- When Riot was busy, a match sync also started the one-minute pause, so the suggested retry was refused.
+- Accounts from before M1 whose email addresses differed only by case could no longer sign in when none of them was stored in lowercase; the oldest of them can sign in again.
 
 ### Milestone M1: Security hardening
 
