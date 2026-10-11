@@ -23,6 +23,9 @@ pub enum Bucket {
     Register,
     /// Requests that call the Riot API, per client IP.
     Riot,
+    /// Image requests that miss the server cache and go to Data Dragon,
+    /// per client IP (`/img/...` is public).
+    ImageFetch,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -54,6 +57,12 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::Riot => Limit {
             capacity: 30.0,
             refill_per_sec: 0.5,
+        },
+        // A cold cache on the draft page needs about 170 icons at once;
+        // after that a client may start 5 upstream fetches a second.
+        Bucket::ImageFetch => Limit {
+            capacity: 400.0,
+            refill_per_sec: 5.0,
         },
     }
 }
