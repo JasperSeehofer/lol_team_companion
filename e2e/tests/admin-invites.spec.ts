@@ -5,33 +5,10 @@
  * (CI and CLAUDE.md set `ADMIN_EMAILS=e2e-admin@test.invalid`). The admin
  * account is registered on the first run and signed into afterwards.
  */
-import { test, expect, type Page } from "@playwright/test";
-import { authenticatePage, INVITE_CODE, TEST_PASSWORD } from "./fixtures";
+import { test, expect } from "@playwright/test";
+import { authenticatePage, INVITE_CODE, TEST_PASSWORD, signInAsAdmin, ADMIN_EMAIL } from "./fixtures";
 
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "e2e-admin@test.invalid";
 const TIMESTAMP = Date.now();
-
-async function signInAsAdmin(page: Page): Promise<void> {
-  await page.goto("/auth/login");
-  await page.fill("input[name=email]", ADMIN_EMAIL);
-  await page.fill("input[name=password]", TEST_PASSWORD);
-  await page.click("main button[type=submit]");
-  const landed = await page
-    .waitForURL(/\/(solo|team\/dashboard)/, { timeout: 8000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!landed) {
-    // First run against this database: register the admin account.
-    await page.goto(`/auth/register?invite=${INVITE_CODE}`);
-    await page.fill("input[name=username]", `e2eadmin_${TIMESTAMP}`);
-    await page.fill("input[name=email]", ADMIN_EMAIL);
-    await page.fill("input[name=password]", TEST_PASSWORD);
-    await page.click("button[type=submit]");
-    await page.waitForURL("**/solo", { timeout: 20000 });
-  }
-  await page.waitForLoadState("load");
-  await page.waitForTimeout(500);
-}
 
 test("non-admin users get a 404 and no admin link", async ({ page }) => {
   await authenticatePage(page);

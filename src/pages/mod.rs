@@ -4,6 +4,7 @@ pub mod analytics;
 pub mod auth;
 pub mod champion_pool;
 pub mod closed_beta;
+pub mod design;
 pub mod draft;
 pub mod game_plan;
 pub mod home;
