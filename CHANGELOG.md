@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M3: Strategy pages onto the system
+
+#### Added
+- Action items have an optional due day; overdue items are flagged, and the header counts what is open, in progress, done and overdue.
+- Action items can be edited in place, deleted with Undo, and worked from the keyboard: arrow keys move between items, Space completes, E edits, Delete removes.
+- Opponent dossiers show how much evidence each holds (players and scouted games) and when they were last surveyed, flagged after a week; empty role slots can be filled with a Riot ID or a name.
+- Champion pool tiers can be rearranged from the keyboard: Space picks a champion up, the arrow keys choose a tier, Space drops it there.
+- Drafts can be deleted (with a confirmation).
+
+#### Changed
+- The draft page is one compact tournament board: blue left, red right, five bans per side grouped by ban rotation, then the picks in pick order grouped by rotation, with only the current step lit and a counter such as "Pick 7 of 10 · Red to pick". It fits beside the champion search on a laptop screen and works entirely from the keyboard (arrows, Enter, Escape, Backspace). The earlier draft board showed three bans per side instead of five.
+- The draft page shows the opponent's brief beside the board, and saving, comments and "next steps" (prep a game plan, review the game) sit around it; saved drafts open from their address.
+- The tree drafter, champion pool, game plan, post-game review, opponents and action items pages were rebuilt on the design system, each with one page title, clear save states and empty states that say what will appear.
+- The game plan checklist uses real checkboxes and shows its progress; a saved plan can start a review that is already linked to it.
+- Faint control borders across the app now meet the 3:1 contrast minimum.
+- Tooltips stay open while you move the pointer onto them; the command bar's search shows a focus ring; the Solo / Team switch in the navigation moves with the arrow keys and only switches on Enter, Space or a click.
+- On phones the bug-report button sits in the footer area instead of covering the page.
+- Simultaneous requests for the same champion picture share one download.
+
+#### Removed
+- The draft page's carousel, table and ledger views and its first-pick toggle (blue picks first in a tournament draft).
+- The privacy page no longer lists a theme preference among the stored data.
+
 ### M2 review fixes
 
 #### Fixed
