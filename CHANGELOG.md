@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M2: Design system foundation (stage B)
+
+#### Added
+- A command bar: press Ctrl+K (Cmd+K on a Mac), or use "Go to" in the navigation, type a few letters and press Enter to jump to any page. Commands for drafting and Match Day arrive with those pages.
+- The account menu, dialogs, menus, notifications, tooltips, switches and segmented controls are now one consistent, fully keyboard-operable set. Notifications appear bottom left, can carry an action such as "Undo", and pause while you point at them.
+- New gallery sections for every interaction and domain component, including the coordinate frame, legend, surveyor's notes and replay timeline reserved for the Sand Table and the Draft Graph.
+
+#### Changed
+- Roles are shown as short labels (TOP, JGL, MID, BOT, SUP) instead of icons loaded from a third-party site; your browser now loads nothing from outside Companion.
+- Champion pictures show a two-letter monogram while they load or when an image is missing.
+- Section headings say what the section is ("Starting roster", "Coaches", "Bench", "Recent games", "Team notes", "Open action items", "Recent reviews", "Pool gaps") instead of fantasy labels such as "Order of battle" or "Battle log".
+- Every page uses the design tokens: side colours only for sides (match timeline events now use the blue and red side colours instead of status colours), results in their own colours, statuses with words, one rounded shape only for avatars and switches, and loading placeholders that stop moving when you ask your system for reduced motion.
+- The destructive button turns dark crimson on hover instead of a pale pink.
+- The first-pick choice on the draft board and the Improvised flag in the tree drafter are now a segmented control and a switch.
+
+#### Removed
+- The per-user theme setting stored in the database (there is one theme); a migration removes the stored values.
+- The "resource read outside Suspense" warning from the bug-report button on every page load.
+
 ### Milestone M2: Design system foundation (stage A)
 
 #### Added

@@ -126,13 +126,13 @@ src/
 ├── models/              # Shared types (SSR + WASM)
 ├── pages/               # Route components (+ their #[server] fns)
 │   ├── auth/{login,register}.rs, team/{dashboard,roster}.rs
-│   ├── admin/invites.rs, design.rs (gallery), legal/{impressum,datenschutz}.rs, closed_beta.rs
+│   ├── admin/invites.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
 │   └── draft.rs, tree_drafter.rs, champion_pool.rs, game_plan.rs, post_game.rs,
 │       opponents.rs, action_items.rs, stats.rs, match_detail.rs, analytics.rs,
 │       solo_dashboard.rs, personal_learnings.rs, profile.rs, team_builder.rs, home.rs
-└── components/          # ui/ (design-system primitives, tokens, contrast test), nav, footer,
-                         # skeleton, draft_board, champion_picker/autocomplete, tree_graph,
-                         # bug_report_widget, region/* (compatibility shims until M3)
+└── components/          # ui/ (design-system primitives, see below), nav (command bar, account
+                         # menu), footer, skeleton, draft_board, champion_picker/autocomplete,
+                         # tree_graph, bug_report_widget, region/* (compatibility shims until M3)
 schema.surql             # Baseline DB schema (idempotent), applied on every start; migrations follow
 input.css                # Tailwind entry + Survey tokens (@theme, OKLCH) + @font-face
 public/fonts/            # Self-hosted woff2 (Familjen Grotesk, Public Sans, JetBrains Mono, Source Serif 4) + licences
@@ -207,9 +207,15 @@ New page: `src/pages/my_page.rs` with `#[component] pub fn MyPage()` and its `#[
 
 New DB table: `DEFINE TABLE` / `DEFINE FIELD` in `schema.surql` (with `IF NOT EXISTS`); query functions in `src/server/db.rs` with a `Db*` struct converted to the shared model; model in `src/models/` deriving `Serialize, Deserialize, Clone`. Index the scope field (`team`/`user`). Changing existing data or types, or adding a unique index, needs a migration: see "How to add a migration" in `docs/ARCHITECTURE.md`.
 
-Honesty rule (MISSION section 6): never render invented data or controls that do nothing. When a feature has no data yet, show an empty state that says what will appear and how (`EmptyState` in `components/ui/feedback.rs`, `PageEmpty` in `components/skeleton.rs`).
+Honesty rule (MISSION section 6): never render invented data or controls that do nothing. When a feature has no data yet, show an empty state that says what will appear and how (`EmptyState` in `components/ui/empty.rs`; `PageEmpty` in `components/skeleton.rs` is legacy).
 
-New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 and `/design`). A new primitive gets typed enum variants, a doc comment with an `A11y:` line (a test enforces it), and a gallery section.
+New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 and `/design`). A new primitive gets typed enum variants, a doc comment with an `A11y:` line (a test enforces it), and a gallery section (`SECTIONS` in `design.rs` and in `gallery.spec.ts`).
+
+`components::ui` primitives:
+- Batch 1 (layout and controls): `PageShell`, `PageHeader`, `SectionHeader`, `Surface`, `Text`, `Button` (+ `Keycap`), `Field`, `TextField`, `Select`, `Badge`, `Table` (`Th`, `Tr`, `Td`, `RowLink`), `Tabs` (+ `TabPanel`); domain `DraftSlot`, `DraftSequence`, `PrepSequence`.
+- Batch 2 (interaction): `Dialog`, `ConfirmDialog`, `Menu`, `CommandBar`, `Toast` (`ToastContext.show`/`.push` with an "Undo" action), `Callout`, `EmptyState`, `Skeleton` (+ `SkeletonGroup`; the only `animate-pulse`), `Tooltip`, `SegmentedControl`, `Switch`.
+- Batch 3 (domain and canvas): `ChampionAvatar` (only `/img/champion/...`, monogram fallback), `UserAvatar`, `RoleLabel` (TOP JGL MID BOT SUP; no role icons), `SideMarker`, `ResultGlyph`, `StatReadout`, `LegendBlock`, `CanvasFrame` + `ScaleBar`, `Annotation`, `TimelineScrub` (the last four reserved for the Sand Table and Draft Graph, M4).
+- Compatibility names that render them until M3/M5: `ErrorBanner`, `StatusMessage` (Callout), `SkeletonLine/Card/Grid` (Skeleton), `region::ModeToggle` (SegmentedControl).
 
 ## Testing
 
@@ -223,7 +229,7 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 1. Start the server detached with the e2e env: `APP_ENV=dev BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid setsid nohup cargo leptos watch > /tmp/server.log 2>&1 < /dev/null & disown` (a cold build takes about 10 minutes).
 2. Wait: `./scripts/wait_for_server.sh 600`.
 3. Screenshot: `AGENT_BROWSER_EXECUTABLE_PATH=/opt/pw-browsers/chromium npx -y agent-browser@0.27.0 open http://127.0.0.1:3020/<route>` then `screenshot <path>`.
-4. CommunityDragon (role icons) may be unreachable in the sandbox; broken role icons there are environmental.
+4. The browser loads nothing from third parties (role marks are typographic, champion art comes from `/img/...`); if Data Dragon is unreachable from the sandbox, avatars show their monograms.
 5. Stop the server when done.
 
 When diagnosing reactive bugs without a browser, trace which signals an Effect tracks (`.get()`) versus reads untracked, look for values read lazily inside timers, and check both targets compile (some warnings only appear in one).
@@ -235,7 +241,7 @@ Closed-beta users file bug reports through the in-app widget. On every server st
 ## Code style
 
 - **Errors:** `thiserror` for custom error types; in server functions map them with `.map_err(authz::server_err)` (implement `authz::IntoServerError` for a new error type). User-facing rule violations from the DB layer are `DbError::Invalid("...")`.
-- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M3. Type: `text-caption` (12px, the floor) to `text-display` (32px page titles are `text-headline`), plus `eyebrow` (mono caps overline), `figures`, `note` (serif italic, annotations only). Never raw palette classes, `text-[Npx]` under 12px, gradients, blur or emoji: `scripts/lint_design.sh` fails on them.
+- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M3. Type: `text-caption` (12px, the floor) to `text-display` (32px page titles are `text-headline`), plus `eyebrow` (mono caps overline), `figures`, `note` (serif italic, annotations only). Never raw palette classes, `text-[Npx]` under 12px, `rounded-full` outside primitives, `animate-pulse` outside `Skeleton`, gradients, blur or emoji: `scripts/lint_design.sh` fails on any hit (hard zero, no baseline). Map old colours by meaning, never "red means red side". The danger button hovers to `danger-deep` with primary text. Headings are plain product language (no lore eyebrows).
 - **Forms:** `Field` + `TextField`/`Select` from `components::ui` for new forms; older pages still use inline inputs (`bg-surface/50 border-outline/50`) until M3.
 - **Naming:** snake_case files and functions, PascalCase components.
 - **Commits:** conventional prefixes (`feat`, `fix`, `chore`, `docs`, `ci`, `test`, `refactor`).
