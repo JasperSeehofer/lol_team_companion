@@ -103,6 +103,15 @@ lib-features = ["hydrate"]
 lib-default-features = false
 lib-profile-release = "wasm-release"
 
+# Debug builds keep line tables for our crate only. Full debug info made the
+# SSR rlib ~4 GB and each test/binary link ~2 GB, which ran the session
+# container out of disk and memory (the old "integration tests OOM" note).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.wasm-release]
 inherits = "release"
 opt-level = 'z'
