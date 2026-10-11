@@ -556,7 +556,7 @@ fn LearningCard(
                     l.tags.iter().map(|tag| {
                         let tag = tag.clone();
                         view! {
-                            <span class="rounded-full px-2.5 py-0.5 text-caption font-medium bg-surface text-muted border border-outline/40">
+                            <span class="rounded-ctl px-2.5 py-0.5 text-caption font-medium bg-surface text-muted border border-outline/40">
                                 {tag}
                             </span>
                         }
@@ -1044,9 +1044,9 @@ pub fn NewLearningPage() -> impl IntoView {
                                         <button
                                             class=move || {
                                                 if selected_tags.get().contains(&tag_str) {
-                                                    "rounded-full px-3 py-1 text-xs font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    "rounded-ctl px-3 py-1 text-xs font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 } else {
-                                                    "rounded-full px-3 py-1 text-xs font-medium bg-surface border border-outline/40 text-muted hover:text-secondary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    "rounded-ctl px-3 py-1 text-xs font-medium bg-surface border border-outline/40 text-muted hover:text-secondary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 }
                                             }
                                             on:click=move |_| {

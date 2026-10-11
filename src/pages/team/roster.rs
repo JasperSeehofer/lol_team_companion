@@ -278,7 +278,6 @@ pub fn RosterPage() -> impl IntoView {
 
                 // Link Riot Account — Card.plain
                 <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Linked seal"</div>
                     <h2 class="font-display text-2xl text-primary mb-4">"Link Riot Account"</h2>
                     <ActionForm action=link_riot>
                         <div class="flex flex-col gap-4">

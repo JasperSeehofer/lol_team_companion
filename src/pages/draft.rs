@@ -10,6 +10,7 @@ use crate::components::skeleton::PageLoading;
 use crate::components::ui::{
     EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
 };
+use crate::components::ui::{Skeleton, SkeletonShape};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionStatSummary, NOTE_TYPES,
 };
@@ -663,13 +664,13 @@ const COMPOSITION_TAGS: &[&str] = &[
 
 fn tier_badge_class(tier: &str) -> &'static str {
     match tier {
-        "S+" => "bg-purple-500 text-white",
-        "S" => "bg-accent text-accent-contrast",
-        "A" => "bg-green-500 text-primary",
-        "B" => "bg-blue-500 text-white",
-        "C" => "bg-orange-500 text-primary",
-        "D" => "bg-red-600 text-white",
-        _ => "bg-overlay-strong text-secondary",
+        "S+" => "bg-accent text-accent-ink",
+        "S" => "border border-accent text-accent",
+        "A" => "bg-ink-3 text-primary",
+        "B" => "border border-outline text-primary",
+        "C" => "border border-outline/60 text-secondary",
+        "D" => "border border-rule text-muted",
+        _ => "border border-rule text-muted",
     }
 }
 
@@ -1564,7 +1565,7 @@ pub fn DraftPage() -> impl IntoView {
         <div class="bg-base min-h-screen" data-feedback-label="Draft">
             <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
             // War Table header strip — sigil, phase badge, opponent name, intel toggle
-            <div class="bg-surface/80 border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → War Table header">
+            <div class="bg-surface/80 border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → Header">
                 <span class="bg-accent text-accent-contrast font-mono uppercase tracking-[0.18em] text-caption px-3 py-1 rounded">
                     {phase_label}
                 </span>
@@ -1592,7 +1593,7 @@ pub fn DraftPage() -> impl IntoView {
                     current=mode_current
                     options=vec![
                         ("carousel".to_string(), "Carousel".to_string()),
-                        ("war-table".to_string(), "War table".to_string()),
+                        ("war-table".to_string(), "Table".to_string()),
                         ("ledger".to_string(), "Ledger".to_string()),
                     ]
                     on_select=on_mode_select
@@ -1633,7 +1634,7 @@ pub fn DraftPage() -> impl IntoView {
                     // Team selection
                     <div>
                         <label class="block text-secondary text-sm mb-1">"Team"</label>
-                        <Suspense fallback=|| view! { <div class="h-9 bg-overlay rounded animate-pulse"></div> }>
+                        <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9" /> }>
                             {move || teams_resource.get().map(|result| match result {
                                 Ok(teams) if teams.is_empty() => view! {
                                     <p class="text-dimmed text-sm py-2">"Not part of a team yet."</p>
@@ -1652,7 +1653,7 @@ pub fn DraftPage() -> impl IntoView {
                                     </select>
                                 }.into_any(),
                                 Err(_) => view! {
-                                    <p class="text-red-400 text-sm py-2">"Failed to load teams."</p>
+                                    <p class="text-danger text-sm py-2">"Failed to load teams."</p>
                                 }.into_any(),
                             })}
                         </Suspense>
@@ -1811,7 +1812,7 @@ pub fn DraftPage() -> impl IntoView {
                     <div class="flex gap-1">
                         <button
                             class=move || if our_side.get() == "blue" {
-                                "px-3 py-1 rounded text-sm font-medium bg-blue-500 text-white cursor-pointer"
+                                "px-3 py-1 rounded text-sm font-medium bg-side-blue-deep border border-side-blue text-primary cursor-pointer"
                             } else {
                                 "px-3 py-1 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
                             }
@@ -1819,7 +1820,7 @@ pub fn DraftPage() -> impl IntoView {
                         >"Blue"</button>
                         <button
                             class=move || if our_side.get() == "red" {
-                                "px-3 py-1 rounded text-sm font-medium bg-red-500 text-white cursor-pointer"
+                                "px-3 py-1 rounded text-sm font-medium bg-side-red-deep border border-side-red text-primary cursor-pointer"
                             } else {
                                 "px-3 py-1 rounded text-sm font-medium bg-overlay text-muted hover:bg-overlay-strong transition-colors cursor-pointer"
                             }
@@ -1901,7 +1902,7 @@ pub fn DraftPage() -> impl IntoView {
                         <textarea
                             rows="3"
                             placeholder="Win condition notes..."
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
                             prop:value=move || win_conditions.get()
                             on:input=move |ev| set_win_conditions.set(event_target_value(&ev))
                         />
@@ -1911,7 +1912,7 @@ pub fn DraftPage() -> impl IntoView {
                         <textarea
                             rows="3"
                             placeholder="Threats to be aware of..."
-                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
+                            class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
                             prop:value=move || watch_out.get()
                             on:input=move |ev| set_watch_out.set(event_target_value(&ev))
                         />
@@ -1927,9 +1928,9 @@ pub fn DraftPage() -> impl IntoView {
                 >
                     <span class="flex items-center gap-2">
                         {move || if active_series.get().is_some() {
-                            view! { <span class="w-2 h-2 rounded-full bg-green-400"></span> }.into_any()
+                            view! { <span class="size-2 rotate-45 bg-success" aria-hidden="true"></span> }.into_any()
                         } else {
-                            view! { <span class="w-2 h-2 rounded-full bg-overlay-strong"></span> }.into_any()
+                            view! { <span class="w-2 h-2 rounded-ctl bg-overlay-strong"></span> }.into_any()
                         }}
                         "Series Mode"
                         {move || active_series.get().map(|s| {
@@ -1961,7 +1962,7 @@ pub fn DraftPage() -> impl IntoView {
                                             <div class="flex items-center gap-3">
                                                 <span class="text-primary font-medium">{series.name.clone()}</span>
                                                 {if is_fearless {
-                                                    view! { <span class="px-2 py-0.5 rounded text-xs font-bold bg-purple-500 text-white">"FEARLESS"</span> }.into_any()
+                                                    view! { <span class="px-2 py-0.5 rounded-ctl border border-accent/60 text-caption font-semibold text-accent">"Fearless"</span> }.into_any()
                                                 } else {
                                                     view! { <span></span> }.into_any()
                                                 }}
@@ -1970,7 +1971,7 @@ pub fn DraftPage() -> impl IntoView {
                                                 })}
                                             </div>
                                             <button
-                                                class="text-xs text-muted hover:text-red-400 transition-colors"
+                                                class="text-xs text-muted hover:text-danger transition-colors"
                                                 on:click=move |_| {
                                                     set_active_series.set(None);
                                                     set_fearless_used.set(Vec::new());
@@ -2025,7 +2026,7 @@ pub fn DraftPage() -> impl IntoView {
                                         {move || if is_fearless && !fearless_used.get().is_empty() {
                                             view! {
                                                 <div class="text-xs text-muted">
-                                                    <span class="font-medium text-purple-400">"Fearless bans: "</span>
+                                                    <span class="font-medium text-secondary">"Fearless bans: "</span>
                                                     {fearless_used.get().join(", ")}
                                                 </div>
                                             }.into_any()
@@ -2069,7 +2070,7 @@ pub fn DraftPage() -> impl IntoView {
                                                     <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer">
                                                         <input
                                                             type="checkbox"
-                                                            class="accent-purple-500"
+                                                            class="accent-accent"
                                                             prop:checked=move || series_fearless_input.get()
                                                             on:change=move |ev| {
                                                                 let checked = event_target_checked(&ev);
@@ -2171,7 +2172,7 @@ pub fn DraftPage() -> impl IntoView {
                                                     </div>
                                                 }.into_any(),
                                                 Err(e) => view! {
-                                                    <p class="text-red-400 text-sm">"Failed to load series: " {e.to_string()}</p>
+                                                    <p class="text-danger text-sm">"Failed to load series: " {e.to_string()}</p>
                                                 }.into_any(),
                                             })}
                                         </Suspense>
@@ -2256,7 +2257,7 @@ pub fn DraftPage() -> impl IntoView {
                                 view! {
                                     <div class="flex flex-col gap-1">
                                         {list.into_iter().map(|c| view! {
-                                            <div class="bg-surface rounded p-2 text-sm text-gray-200">{c}</div>
+                                            <div class="bg-surface rounded p-2 text-sm text-secondary">{c}</div>
                                         }).collect_view()}
                                     </div>
                                 }.into_any()
@@ -2266,7 +2267,7 @@ pub fn DraftPage() -> impl IntoView {
                     <textarea
                         rows="3"
                         placeholder="Add a comment..."
-                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
+                        class="w-full bg-overlay border border-outline rounded px-3 py-2 text-primary text-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus:border-accent resize-none"
                         on:input=move |ev| set_comment_input.set(event_target_value(&ev))
                         prop:value=move || comment_input.get()
                     />
@@ -2380,10 +2381,10 @@ pub fn DraftPage() -> impl IntoView {
                                                                                             return None;
                                                                                         }
                                                                                         let tier_cls = match tier {
-                                                                                            "comfort" => "text-green-400",
-                                                                                            "match_ready" => "text-blue-400",
-                                                                                            "scrim_ready" => "text-yellow-400",
-                                                                                            "practicing" => "text-orange-400",
+                                                                                            "comfort" => "text-success",
+                                                                                            "match_ready" => "text-info",
+                                                                                            "scrim_ready" => "text-warning",
+                                                                                            "practicing" => "text-muted",
                                                                                             "to_practice" => "text-muted",
                                                                                             _ => "text-muted",
                                                                                         };
@@ -2408,9 +2409,9 @@ pub fn DraftPage() -> impl IntoView {
                                                                                                         };
                                                                                                         let comfort_dots = (0..5).map(|i| {
                                                                                                             if i < comfort {
-                                                                                                                view! { <span class="w-1 h-1 rounded-full bg-accent inline-block"></span> }
+                                                                                                                view! { <span class="w-1 h-1 rounded-ctl bg-accent inline-block"></span> }
                                                                                                             } else {
-                                                                                                                view! { <span class="w-1 h-1 rounded-full bg-overlay-strong inline-block"></span> }
+                                                                                                                view! { <span class="w-1 h-1 rounded-ctl bg-overlay-strong inline-block"></span> }
                                                                                                             }
                                                                                                         }).collect_view();
                                                                                                         let stat_badge = stat.map(|s| {
@@ -2449,7 +2450,7 @@ pub fn DraftPage() -> impl IntoView {
                                                     }.into_any()
                                                 },
                                                 Err(e) => view! {
-                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                    <p class="text-danger text-sm">{format!("Error: {e}")}</p>
                                                 }.into_any(),
                                             })}
                                         </Suspense>
@@ -2504,10 +2505,10 @@ pub fn DraftPage() -> impl IntoView {
                                                                         <div class="bg-surface rounded p-2">
                                                                             // Player header with role, name, and OTP badge
                                                                             <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                                                                <span class="text-xs font-bold text-red-400 uppercase">{role_label.to_string()}</span>
+                                                                                <span class="font-mono text-caption font-medium uppercase text-muted">{role_label.to_string()}</span>
                                                                                 <span class="text-xs text-secondary">{player.name.clone()}</span>
                                                                                 {otp.map(|otp_name| view! {
-                                                                                    <span class="bg-red-700 text-white text-xs px-1.5 py-0.5 rounded-full">
+                                                                                    <span class="rounded-ctl border border-warning/50 px-1.5 py-0.5 text-caption text-warning">
                                                                                         "OTP: " {otp_name}
                                                                                     </span>
                                                                                 })}
@@ -2569,7 +2570,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }.into_any()
                                                     },
                                                     Err(e) => view! {
-                                                        <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                        <p class="text-danger text-sm">{format!("Error: {e}")}</p>
                                                     }.into_any(),
                                                 })
                                             }}
@@ -2614,9 +2615,9 @@ pub fn DraftPage() -> impl IntoView {
                                                                                         <span class="text-xs text-muted">{note.champion.clone()}" "{note.role.clone()}</span>
                                                                                         {note.difficulty.map(|d| {
                                                                                             let diff_cls = match d {
-                                                                                                1..=2 => "text-green-400",
-                                                                                                3 => "text-yellow-400",
-                                                                                                4..=5 => "text-red-400",
+                                                                                                1..=2 => "text-success",
+                                                                                                3 => "text-warning",
+                                                                                                4..=5 => "text-danger",
                                                                                                 _ => "text-muted",
                                                                                             };
                                                                                             view! {
@@ -2632,7 +2633,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     </div>
                                                                 }.into_any(),
                                                                 Err(e) => view! {
-                                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                                    <p class="text-danger text-sm">{format!("Error: {e}")}</p>
                                                                 }.into_any(),
                                                             })}
                                                         </Suspense>
@@ -2731,7 +2732,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     </div>
                                                                 }.into_any(),
                                                                 Some(Err(e)) => view! {
-                                                                    <p class="text-red-400 text-sm">{format!("Error: {e}")}</p>
+                                                                    <p class="text-danger text-sm">{format!("Error: {e}")}</p>
                                                                 }.into_any(),
                                                                 Some(Ok(notes_data)) => {
                                                                     let champ_notes = notes_data
@@ -2913,7 +2914,7 @@ pub fn DraftPage() -> impl IntoView {
                                         let dr2 = draft_id_for_review2.clone();
                                         view! {
                                             <button
-                                                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                                                class="bg-accent hover:bg-accent-hover text-accent-ink font-semibold rounded-ctl px-4 py-2 text-sm transition-colors"
                                                 on:click=move |_| {
                                                     #[allow(unused_variables)]
                                                     let did3 = dr2.clone();
@@ -2929,7 +2930,7 @@ pub fn DraftPage() -> impl IntoView {
                                     }
                                 }}
                                 {move || cta_status.get().map(|msg| view! {
-                                    <span class="text-red-400 text-sm">{msg}</span>
+                                    <span class="text-danger text-sm">{msg}</span>
                                 })}
                             </div>
                         }.into_any()
@@ -3096,7 +3097,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-red-500 rotate-45"></div>
+                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
                                                                 </div>
                                                             </div>
                                                         }).collect_view()}
@@ -3112,7 +3113,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-red-500 rotate-45"></div>
+                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
                                                                 </div>
                                                             </div>
                                                         }).collect_view()}
@@ -3124,7 +3125,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }}
                                                         // Blue picks
                                                         {blue_pick_icons.into_iter().map(|(name, url)| view! {
-                                                            <div class="w-6 h-6 rounded overflow-hidden border border-blue-700 flex-shrink-0" title=name.clone()>
+                                                            <div class="w-6 h-6 rounded overflow-hidden border border-side-blue flex-shrink-0" title=name.clone()>
                                                                 <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                             </div>
                                                         }).collect_view()}
@@ -3136,7 +3137,7 @@ pub fn DraftPage() -> impl IntoView {
                                                         }}
                                                         // Red picks
                                                         {red_pick_icons.into_iter().map(|(name, url)| view! {
-                                                            <div class="w-6 h-6 rounded overflow-hidden border border-red-700 flex-shrink-0" title=name.clone()>
+                                                            <div class="w-6 h-6 rounded overflow-hidden border border-side-red flex-shrink-0" title=name.clone()>
                                                                 <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                             </div>
                                                         }).collect_view()}
@@ -3153,7 +3154,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-red-500 rotate-45"></div>
+                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
                                                                 </div>
                                                             </div>
                                                         }).collect_view()}
@@ -3169,7 +3170,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     <img src=url alt=name.clone() class="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                                    <div class="w-4 h-px bg-red-500 rotate-45"></div>
+                                                                    <div class="w-4 h-px bg-primary rotate-45"></div>
                                                                 </div>
                                                             </div>
                                                         }).collect_view()}
@@ -3354,10 +3355,10 @@ pub fn DraftPage() -> impl IntoView {
                                                 // Warnings
                                                 {if !warnings_clone.is_empty() {
                                                     view! {
-                                                        <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                                                            <p class="text-yellow-400 text-xs font-semibold mb-1">"Predictable Patterns Detected"</p>
+                                                        <div class="bg-warning/8 border border-warning/40 rounded-ctl p-3">
+                                                            <p class="text-warning text-caption font-semibold mb-1">"! Predictable patterns"</p>
                                                             {warnings_clone.into_iter().map(|w| view! {
-                                                                <p class="text-yellow-300/80 text-xs">{w}</p>
+                                                                <p class="text-secondary text-caption">{w}</p>
                                                             }).collect_view()}
                                                         </div>
                                                     }.into_any()
@@ -3461,13 +3462,13 @@ pub fn DraftPage() -> impl IntoView {
                                                 {if data.blue_games + data.red_games > 0 {
                                                     view! {
                                                         <div class="grid grid-cols-2 gap-3">
-                                                            <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-center">
-                                                                <p class="text-blue-400 text-xs font-semibold uppercase mb-1">"Blue Side"</p>
+                                                            <div class="bg-side-blue-deep border border-side-blue/60 rounded-ctl p-3 text-center">
+                                                                <p class="text-primary text-caption font-semibold mb-1">"Blue side"</p>
                                                                 <p class="text-primary text-lg font-bold">{format!("{blue_wr:.0}% WR")}</p>
                                                                 <p class="text-muted text-xs">{format!("{}-{}", data.blue_wins, data.blue_games - data.blue_wins)}</p>
                                                             </div>
-                                                            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-center">
-                                                                <p class="text-red-400 text-xs font-semibold uppercase mb-1">"Red Side"</p>
+                                                            <div class="bg-side-red-deep border border-side-red/60 rounded-ctl p-3 text-center">
+                                                                <p class="text-primary text-caption font-semibold mb-1">"Red side"</p>
                                                                 <p class="text-primary text-lg font-bold">{format!("{red_wr:.0}% WR")}</p>
                                                                 <p class="text-muted text-xs">{format!("{}-{}", data.red_wins, data.red_games - data.red_wins)}</p>
                                                             </div>
@@ -3568,7 +3569,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                     <span class="text-primary font-medium flex-1">{champ}</span>
                                                                     <span class="text-muted text-sm flex-1 truncate">{reason}</span>
                                                                     <button
-                                                                        class="text-red-400 hover:text-red-300 text-sm cursor-pointer"
+                                                                        class="text-danger hover:underline text-sm cursor-pointer"
                                                                         on:click=move |_| {
                                                                             set_ban_edit_list.update(|list| {
                                                                                 if i < list.len() { list.remove(i); }
@@ -3654,7 +3655,7 @@ pub fn DraftPage() -> impl IntoView {
                                                 on:click=move |_| set_editing_bans.set(false)
                                             >"Cancel"</button>
                                             {move || ban_status.get().map(|msg| view! {
-                                                <span class="text-green-300 text-sm self-center">{msg}</span>
+                                                <span class="text-success text-sm self-center">{msg}</span>
                                             })}
                                         </div>
                                     </div>
@@ -3739,14 +3740,13 @@ fn DraftCarouselView(
     view! {
         <div class="flex-1 min-w-0 overflow-x-auto bg-elevated border border-divider rounded-lg p-4">
             <SectionHead
-                eyebrow="STRATEGY".to_string()
-                title="Draft Carousel".to_string()
+                title="Carousel".to_string()
             />
 
             <Suspense fallback=move || view! { <PageLoading variant="draft".to_string() /> }>
                 {move || champions_resource.get().map(|result| match result {
                     Err(e) => view! {
-                        <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
+                        <div class="text-danger">"Failed to load champions: " {e.to_string()}</div>
                     }.into_any(),
                     Ok(champs) => {
                         let champion_map: HashMap<String, Champion> = champs
@@ -3891,14 +3891,13 @@ fn DraftWarTableView(
     view! {
         <div class="flex-1 min-w-0 overflow-x-auto bg-elevated border border-divider rounded-lg p-4">
             <SectionHead
-                eyebrow="WAR TABLE".to_string()
-                title="War Table".to_string()
+                title="Table".to_string()
             />
 
             <Suspense fallback=move || view! { <PageLoading variant="draft".to_string() /> }>
                 {move || champions_resource.get().map(|result| match result {
                     Err(e) => view! {
-                        <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
+                        <div class="text-danger">"Failed to load champions: " {e.to_string()}</div>
                     }.into_any(),
                     Ok(champs) => {
                         let champion_map: HashMap<String, Champion> = champs
@@ -3931,8 +3930,7 @@ fn DraftWarTableView(
             <div class="mt-4">
                 <Card>
                     <SectionHead
-                        eyebrow="COMPOSITION".to_string()
-                        title="Pillars".to_string()
+                        title="Composition".to_string()
                     />
                     <EmptyState message="Composition scores are not computed yet. Once the Draft Graph ships, damage, frontline, poke and utility will be scored from the picks on this board, with the reason for each score." />
                 </Card>
@@ -4056,9 +4054,9 @@ fn DraftLedgerView(
                 // Ledger header
                 <Card>
                     <div class="text-center pb-2">
-                        <h1 class="font-display text-[28px] tracking-[0.08em] text-accent uppercase">"DRAFT LEDGER"</h1>
+                        <h2 class="font-display text-title font-semibold text-primary">"Draft ledger"</h2>
                         <div class="mt-1">
-                            <Eyebrow>"Chronicled in this campaign"</Eyebrow>
+                            <Eyebrow>"Picks and bans in order"</Eyebrow>
                         </div>
                         <div class="mt-2 flex justify-center">
                             <div class="h-px w-full bg-rule" aria-hidden="true"></div>
@@ -4081,7 +4079,7 @@ fn DraftLedgerView(
                     // Blue side column
                     <Card attr:data-feedback-label="Draft → Blue side">
                         <div>
-                            <Eyebrow>"BLUE SIDE"</Eyebrow>
+                            <Eyebrow>"Blue side"</Eyebrow>
                             <div class="mt-2 flex justify-center">
                                 <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                             </div>
@@ -4137,7 +4135,7 @@ fn DraftLedgerView(
                     // Red side column
                     <Card attr:data-feedback-label="Draft → Red side">
                         <div>
-                            <Eyebrow>"RED SIDE"</Eyebrow>
+                            <Eyebrow>"Red side"</Eyebrow>
                             <div class="mt-2 flex justify-center">
                                 <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                             </div>
@@ -4194,7 +4192,7 @@ fn DraftLedgerView(
                 // Footer journal
                 <div class="mt-4">
                     <Card>
-                        <Eyebrow>"JOURNAL"</Eyebrow>
+                        <Eyebrow>"Notes"</Eyebrow>
                         <div class="mt-2 flex justify-center">
                             <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                         </div>

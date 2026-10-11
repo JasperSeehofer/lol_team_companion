@@ -188,17 +188,6 @@ fn role_display(role: &str) -> &'static str {
     }
 }
 
-fn role_icon_url(role: &str) -> &'static str {
-    match role.to_lowercase().as_str() {
-        "top" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
-        "jungle" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-jungle.svg",
-        "mid" | "middle" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-middle.svg",
-        "bot" | "adc" | "bottom" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-bottom.svg",
-        "support" | "sup" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-utility.svg",
-        _ => "",
-    }
-}
-
 fn champion_image_url(champion_name: &str) -> String {
     crate::models::ddragon::champion_icon_url(champion_name)
 }
@@ -499,7 +488,6 @@ pub fn TeamBuilderPage() -> impl IntoView {
                             {role_map.into_iter().enumerate().map(|(idx, (role, _user_id, username, pool))| {
                                 let signal = selected_signals[idx];
                                 let role_display_name = role_display(&role);
-                                let icon_url = role_icon_url(&role);
                                 let username_for_stats = username.clone();
                                 let stats_for_role = stats_map.get(&username_for_stats).cloned().unwrap_or_default();
 
@@ -512,17 +500,6 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                     <div class="bg-elevated rounded-xl border border-outline/50 p-4 flex flex-col gap-3">
                                         // Role header
                                         <div class="flex items-center gap-2">
-                                            {if !icon_url.is_empty() {
-                                                view! {
-                                                    <img
-                                                        src=icon_url
-                                                        alt=role_display_name
-                                                        class="w-5 h-5 brightness-75"
-                                                    />
-                                                }.into_any()
-                                            } else {
-                                                view! { <span></span> }.into_any()
-                                            }}
                                             <span class="font-mono uppercase tracking-[0.18em] text-caption text-accent">{role_display_name}</span>
                                         </div>
 
@@ -619,12 +596,12 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                         <img
                                                             src=img_url
                                                             alt=champ.clone()
-                                                            class="w-14 h-14 rounded-full border-2 border-accent/50"
+                                                            class="w-14 h-14 rounded-ctl border-2 border-accent/50"
                                                         />
                                                         <span class="text-sm font-semibold text-primary">{champ.clone()}</span>
                                                         {if !tier.is_empty() {
                                                             view! {
-                                                                <span class=format!("text-xs px-2 py-0.5 rounded-full border {tier_cls}")>
+                                                                <span class=format!("text-xs px-2 py-0.5 rounded-ctl border {tier_cls}")>
                                                                     {tier_lbl}
                                                                 </span>
                                                             }.into_any()
@@ -650,7 +627,6 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                         // Composition tags
                         <div class="mb-8">
-                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Read"</div>
                             <h2 class="font-display text-2xl text-primary mb-3">"Composition Identity"</h2>
                             {move || {
                                 let selected: Vec<(String, String)> = ROLES.iter().enumerate().map(|(i, &role)| {
@@ -674,7 +650,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                 let cls = comp_tag_class(tag);
                                                 let tag_display = tag.clone();
                                                 view! {
-                                                    <span class=format!("px-3 py-1 rounded-full text-sm font-medium border {cls}")>
+                                                    <span class=format!("px-3 py-1 rounded-ctl text-sm font-medium border {cls}")>
                                                         {tag_display}
                                                     </span>
                                                 }
@@ -693,14 +669,13 @@ pub fn TeamBuilderPage() -> impl IntoView {
                             >
                                 <div class="flex items-center gap-2">
                                     <div>
-                                        <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Reconnaissance"</div>
-                                        <span class="font-display text-2xl text-primary">"Opponent Intel"</span>
+                                        <span class="font-display text-2xl text-primary">"Opponent"</span>
                                     </div>
                                     {move || {
                                         let id = selected_opponent_id.get();
                                         if id.is_some() {
                                             view! {
-                                                <span class="font-mono uppercase tracking-[0.18em] text-caption px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">"Selected"</span>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption px-2 py-0.5 rounded-ctl bg-accent/20 text-accent border border-accent/30">"Selected"</span>
                                             }.into_any()
                                         } else {
                                             view! { <span></span> }.into_any()
@@ -759,24 +734,13 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                             view! {
                                                 <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                                                     {opp_players_list.iter().map(|player| {
-                                                        let role_icon = role_icon_url(&player.role);
+                                                        let role_mark = crate::components::ui::Role::parse(&player.role);
                                                         let player_name = player.name.clone();
                                                         let recent = player.recent_champions.clone();
                                                         view! {
                                                             <div class="bg-surface border border-outline/50 rounded-lg p-3">
                                                                 <div class="flex items-center gap-2 mb-2">
-                                                                    {if !role_icon.is_empty() {
-                                                                        view! {
-                                                                            <img
-                                                                                src=role_icon
-                                                                                alt=player.role.clone()
-                                                                                class="w-4 h-4 brightness-75"
-                                                                                aria-hidden="true"
-                                                                            />
-                                                                        }.into_any()
-                                                                    } else {
-                                                                        view! { <span></span> }.into_any()
-                                                                    }}
+                                                                    {role_mark.map(|r| view! { <crate::components::ui::RoleLabel role=r /> })}
                                                                     <span class="text-sm font-medium text-primary">{player_name}</span>
                                                                 </div>
                                                                 {if !recent.is_empty() {
@@ -789,7 +753,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                                                                     <img
                                                                                         src=img
                                                                                         alt=name
-                                                                                        class="w-7 h-7 rounded-full border border-outline/30"
+                                                                                        class="w-7 h-7 rounded-ctl border border-outline/30"
                                                                                         title=c.clone()
                                                                                     />
                                                                                 }

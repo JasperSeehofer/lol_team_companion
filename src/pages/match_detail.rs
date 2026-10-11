@@ -249,7 +249,7 @@ fn ParticipantRow(p: MatchParticipant, is_user: bool) -> impl IntoView {
 
             // Cell 2: champion tile + summoner (120px)
             <div class="flex items-center gap-2 min-w-0">
-                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-full border border-outline/50 shrink-0" />
+                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-ctl border border-outline/50 shrink-0" />
                 <div class="min-w-0">
                     <span class="text-primary text-xs font-medium truncate block">{summoner}</span>
                     <span class="font-mono text-caption text-dimmed truncate block">{champ_name}</span>
@@ -387,10 +387,10 @@ fn PerformanceBar(
             // Label (140px) — imperial eyebrow
             <span class="font-mono uppercase tracking-wider text-caption text-muted w-[140px] shrink-0">{label}</span>
             // Bar track (flex-1)
-            <div class="bg-surface border border-outline/30 h-3.5 rounded-full relative flex-1 overflow-hidden">
+            <div class="bg-surface border border-outline/30 h-3.5 relative flex-1 overflow-hidden">
                 // Bar fill
                 <div
-                    class="bg-accent/70 h-full rounded-full transition-all duration-200"
+                    class="bg-accent/70 h-full transition-all duration-200"
                     style=format!("width: {}%", fill_pct)
                 />
                 // Average marker
@@ -439,9 +439,9 @@ fn PerformanceSection(
                 <div class="flex gap-2">
                     <button
                         class=move || if comparison_mode.get() == ComparisonMode::GameAverage {
-                            "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         } else {
-                            "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         }
                         on:click=move |_| set_comparison_mode.set(ComparisonMode::GameAverage)
                     >
@@ -450,9 +450,9 @@ fn PerformanceSection(
                     <button
                         class=move || {
                             let base = if comparison_mode.get() == ComparisonMode::LaneOpponent {
-                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             } else {
-                                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             };
                             if !has_lane_opponent {
                                 format!("{base} opacity-40 cursor-not-allowed")
@@ -714,7 +714,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                 {champ_label}
                                                             </h1>
                                                             <div class="flex items-center gap-3">
-                                                                <img src=icon alt=champ class="w-10 h-10 rounded-full border border-outline/50" />
+                                                                <img src=icon alt=champ class="w-10 h-10 rounded-ctl border border-outline/50" />
                                                                 <span class="font-mono text-sm text-secondary tabular-nums">{user_kda}</span>
                                                             </div>
                                                         }
@@ -807,21 +807,21 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                         EventCategory::Objective => {
                                                                             match event.monster_type.as_deref() {
                                                                                 Some(m) if m.contains("BARON") || m.contains("HORDE") =>
-                                                                                    ("w-4 h-4", "rounded-full border-2"),
-                                                                                _ => ("w-3 h-3", "rounded-full"),
+                                                                                    ("w-4 h-4", "rounded-full border-2"), // lint:allow(rounded-full): timeline tokens, M4 TimelineScrub
+                                                                                _ => ("w-3 h-3", "rounded-full"), // lint:allow(rounded-full)
                                                                             }
                                                                         }
                                                                         EventCategory::Tower => ("w-2.5 h-2.5", "rounded-sm"),
-                                                                        EventCategory::Kill => ("w-2.5 h-2.5", "rounded-full"),
-                                                                        EventCategory::Ward => ("w-2 h-2", "rounded-full"),
-                                                                        EventCategory::Recall => ("w-2 h-2", "rounded-full"),
-                                                                        EventCategory::Teamfight => ("w-4 h-4", "rounded-full"),
+                                                                        EventCategory::Kill => ("w-2.5 h-2.5", "rounded-full"), // lint:allow(rounded-full)
+                                                                        EventCategory::Ward => ("w-2 h-2", "rounded-full"), // lint:allow(rounded-full)
+                                                                        EventCategory::Recall => ("w-2 h-2", "rounded-full"), // lint:allow(rounded-full)
+                                                                        EventCategory::Teamfight => ("w-4 h-4", "rounded-full"), // lint:allow(rounded-full)
                                                                     };
 
-                                                                    // Friendly side -> info; enemy side -> danger.
+                                                                    // Team 100 is the blue side, 200 the red side.
                                                                     let team_color = match event.team_id {
-                                                                        Some(100) => "bg-info border-info",
-                                                                        Some(200) => "bg-danger border-danger",
+                                                                        Some(100) => "bg-side-blue border-side-blue",
+                                                                        Some(200) => "bg-side-red border-side-red",
                                                                         _ => "bg-muted border-muted",
                                                                     };
 
@@ -958,9 +958,9 @@ fn FilterPill(
     view! {
         <button
             class=move || if active.get() {
-                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
             } else {
-                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
             }
             on:click=move |_| setter.set(!active.get_untracked())
         >

@@ -1,6 +1,7 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::region::*;
 use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
+use crate::components::ui::{Skeleton, SkeletonShape};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
@@ -432,7 +433,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 // Page header — region-aware SectionHead
                 <SectionHead
                     title="Your champions, by station.".to_string()
-                    eyebrow="Strategy hub \u{00B7} Champion Pool"
+                    eyebrow="Strategy"
                 />
 
                 // Role tabs and content — wrapped in region-aware Card
@@ -464,7 +465,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     // Add champion form
                     <div class="flex gap-2 items-end" data-feedback-label="Champion pool → Add controls">
                         <div class="flex-1">
-                            <Suspense fallback=|| view! { <div class="h-10 bg-overlay rounded animate-pulse"></div> }>
+                            <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-10" /> }>
                                 {move || champions_resource.get().map(|result| {
                                     let champs = result.unwrap_or_default();
                                     view! {
@@ -674,7 +675,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                             }}
                                                                             // Remove button — top-right corner, hover reveal
                                                                             <button
-                                                                                class="absolute top-1 right-1 w-5 h-5 bg-danger text-white text-xs rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                                                                class="absolute top-1 right-1 w-5 h-5 bg-danger-deep text-primary text-xs rounded-ctl flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                                                                 title="Remove"
                                                                                 on:click=move |ev| {
                                                                                     ev.stop_propagation();
@@ -1041,11 +1042,11 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                     <div class="min-w-0 flex-1">
                                                                                                         <div class="flex items-center gap-2">
                                                                                                             {opponent_icon.map(|icon_url| view! {
-                                                                                                                <img src=icon_url class="w-6 h-6 rounded-full object-cover" />
+                                                                                                                <img src=icon_url class="w-6 h-6 rounded-ctl object-cover" />
                                                                                                             })}
                                                                                                             <span class="text-primary text-sm font-medium">{note_clone.title.clone()}</span>
                                                                                                             {(!difficulty_stars.is_empty()).then(|| view! {
-                                                                                                                <span class="text-red-400 text-caption" title="Difficulty">{difficulty_stars}</span>
+                                                                                                                <span class="text-secondary text-caption" title="Difficulty">{difficulty_stars}</span>
                                                                                                             })}
                                                                                                         </div>
                                                                                                         {(!note_clone.content.is_empty()).then(|| view! {
@@ -1058,7 +1059,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                             on:click=move |_| edit_note.run(note_for_edit.clone())
                                                                                                         >"Edit"</button>
                                                                                                         <button
-                                                                                                            class="text-muted hover:text-red-400 text-xs cursor-pointer"
+                                                                                                            class="text-muted hover:text-danger text-xs cursor-pointer"
                                                                                                             on:click=move |_| do_delete_note.run(note_id.clone())
                                                                                                         >"Del"</button>
                                                                                                     </div>
@@ -1124,7 +1125,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                                         on:click=move |_| edit_note.run(note_for_edit.clone())
                                                                                                                     >"Edit"</button>
                                                                                                                     <button
-                                                                                                                        class="text-muted hover:text-red-400 text-xs cursor-pointer"
+                                                                                                                        class="text-muted hover:text-danger text-xs cursor-pointer"
                                                                                                                         on:click=move |_| do_delete_note.run(note_id.clone())
                                                                                                                     >"Del"</button>
                                                                                                                 </div>
@@ -1193,7 +1194,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                             on:click=move |_| edit_note.run(note_for_edit.clone())
                                                                                                         >"Edit"</button>
                                                                                                         <button
-                                                                                                            class="text-muted hover:text-red-400 text-xs cursor-pointer"
+                                                                                                            class="text-muted hover:text-danger text-xs cursor-pointer"
                                                                                                             on:click=move |_| do_delete_note.run(note_id.clone())
                                                                                                         >"Del"</button>
                                                                                                     </div>

@@ -214,15 +214,15 @@ pub fn ActionItemsPage() -> impl IntoView {
                             view! {
                                 <div class="flex gap-4 mb-6 flex-wrap">
                                     <div class="bg-surface border border-outline/50 rounded-lg px-4 py-2 flex items-center gap-2">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-success"></span>
+                                        <span class="w-2.5 h-2.5 rounded-ctl bg-success"></span>
                                         <span class="text-secondary text-sm">{open_count}" open"</span>
                                     </div>
                                     <div class="bg-surface border border-outline/50 rounded-lg px-4 py-2 flex items-center gap-2">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-warning"></span>
+                                        <span class="w-2.5 h-2.5 rounded-ctl bg-warning"></span>
                                         <span class="text-secondary text-sm">{in_progress_count}" in progress"</span>
                                     </div>
                                     <div class="bg-surface border border-outline/50 rounded-lg px-4 py-2 flex items-center gap-2">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-muted"></span>
+                                        <span class="w-2.5 h-2.5 rounded-ctl bg-muted"></span>
                                         <span class="text-secondary text-sm">{done_count}" done"</span>
                                     </div>
                                 </div>
@@ -373,9 +373,9 @@ pub fn ActionItemsPage() -> impl IntoView {
                                             let source = item.source_review.clone();
 
                                             let status_dot_class = match status_for_badge.as_str() {
-                                                "open" => "w-2.5 h-2.5 rounded-full bg-success shrink-0",
-                                                "in_progress" => "w-2.5 h-2.5 rounded-full bg-warning shrink-0",
-                                                _ => "w-2.5 h-2.5 rounded-full bg-muted shrink-0",
+                                                "open" => "w-2.5 h-2.5 rounded-ctl bg-success shrink-0",
+                                                "in_progress" => "w-2.5 h-2.5 rounded-ctl bg-warning shrink-0",
+                                                _ => "w-2.5 h-2.5 rounded-ctl bg-muted shrink-0",
                                             };
 
                                             let text_class = if status == "done" {

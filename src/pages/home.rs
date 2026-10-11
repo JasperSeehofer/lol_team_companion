@@ -1,3 +1,4 @@
+use crate::components::ui::{Skeleton, SkeletonGroup, SkeletonShape};
 use leptos::prelude::*;
 use leptos_router::components::A;
 
@@ -166,15 +167,15 @@ pub fn HomePage() -> impl IntoView {
         <div class="bg-base min-h-screen px-8 py-6">
             <Suspense fallback=|| view! {
                 <div class="max-w-5xl mx-auto py-12">
-                    <div class="animate-pulse flex flex-col gap-6">
-                        <div class="h-12 bg-elevated rounded w-72"></div>
-                        <div class="h-6 bg-elevated rounded w-96"></div>
-                        <div class="grid grid-cols-3 gap-4">
-                            <div class="h-32 bg-elevated rounded-xl"></div>
-                            <div class="h-32 bg-elevated rounded-xl"></div>
-                            <div class="h-32 bg-elevated rounded-xl"></div>
+                    <SkeletonGroup label="Loading your overview">
+                        <Skeleton width="w-72 max-w-full" size="h-10" />
+                        <Skeleton width="w-96 max-w-full" size="h-5" />
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            <Skeleton shape=SkeletonShape::Block size="h-32" />
+                            <Skeleton shape=SkeletonShape::Block size="h-32" />
+                            <Skeleton shape=SkeletonShape::Block size="h-32" />
                         </div>
-                    </div>
+                    </SkeletonGroup>
                 </div>
             }>
                 {move || dashboard.get().map(|result| match result {
@@ -253,7 +254,7 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
             {(data.pending_requests > 0).then(|| view! {
                 <A href="/team/dashboard" attr:class="block focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-xl">
                     <div class="bg-warning/10 border border-warning/30 rounded-xl p-4 flex items-center gap-3 hover:bg-warning/15 transition-colors cursor-pointer">
-                        <span class="bg-warning text-base text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center tabular-nums" aria-hidden="true">
+                        <span class="bg-warning text-base text-xs font-bold rounded-ctl w-6 h-6 flex items-center justify-center tabular-nums" aria-hidden="true">
                             {data.pending_requests}
                         </span>
                         <span class="text-warning text-sm font-medium">
@@ -285,7 +286,7 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
 
             // Quick nav (one panel per hub)
             <section>
-                <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-3">"The folio"</div>
+                <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-3">"Pages"</div>
                 <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
                     <NavCard
                         href="/team/dashboard"
@@ -324,7 +325,6 @@ fn Dashboard(data: DashboardData) -> impl IntoView {
             <PanelCard>
                 <div class="flex items-baseline justify-between mb-4">
                     <h2 class="font-display text-[22px] text-primary">"Recent activity"</h2>
-                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Folio"</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <ActivityTile label="Drafts saved" value=format!("{}", data.draft_count) />

@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 # Design-system lint gates (docs/DESIGN.md section 9). Bash + GNU grep, no Node.
 #
-#   scripts/lint_design.sh                    check against the baseline
-#   scripts/lint_design.sh --update-baseline  rewrite the baseline from the tree
+#   scripts/lint_design.sh    fail on any hit
 #
-# Each rule counts matching lines per file in src/**/*.rs (server, models and
-# bin excluded). A file may not have more hits for a rule than the baseline
-# (scripts/design-lint-baseline.txt, "rule<TAB>file<TAB>count") allows; files
-# not in the baseline allow zero. The baseline only ratchets down during M2
-# and is deleted at the end of stage B, when every rule is hard zero.
+# Each rule matches lines in src/**/*.rs (server, models and bin excluded).
+# Every rule is hard zero: the ratcheting baseline used during M2 is gone.
 #
 # Escape hatch for a legitimate exception: put `lint:allow(<rule>)` in a
 # comment on the same line.
@@ -16,10 +12,6 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 # grep -P needs a UTF-8 locale for the emoji code points.
 export LC_ALL=C.UTF-8
-
-BASELINE="scripts/design-lint-baseline.txt"
-UPDATE=0
-[ "${1:-}" = "--update-baseline" ] && UPDATE=1
 
 mapfile -t FILES < <(find src -name '*.rs' \
   ! -path 'src/server/*' ! -path 'src/models/*' ! -path 'src/bin/*' | sort)
@@ -46,7 +38,7 @@ rule gradient 'bg-gradient|linear-gradient|radial-gradient|conic-gradient' '' \
   'gradients only where they encode data (none yet)'
 rule drop-shadow 'drop-shadow|text-shadow' '' \
   'no drop or text shadows; one overlay shadow token exists'
-rule pulse 'animate-pulse' '^src/components/(ui/feedback|skeleton)\.rs$' \
+rule pulse 'animate-pulse' '^src/components/ui/skeleton\.rs$' \
   'animate-pulse outside the skeleton components'
 rule ornament 'Cinzel|font-imperial|font-glitch|VT323|canvas-grain|FleurDeLis|GiltCorner|HeraldicDivider|RiotTape|CompanionSigil|[Pp]andemonium' '' \
   'retired ornament or theme'
@@ -84,26 +76,6 @@ while IFS= read -r line; do
   TOTAL=$((TOTAL + 1))
 done < <(grep -nE -- 'outline-none' "${FILES[@]}" /dev/null 2>/dev/null)
 
-if [ "$UPDATE" = 1 ]; then
-  {
-    echo "# Design lint baseline (scripts/lint_design.sh). rule<TAB>file<TAB>count."
-    echo "# Counts may only go down. Deleted at the end of M2 stage B."
-    for key in "${!COUNT[@]}"; do
-      printf '%s\t%s\n' "$key" "${COUNT[$key]}"
-    done | sort
-  } >"$BASELINE"
-  echo "Baseline written: $TOTAL hits in $(grep -vc '^#' "$BASELINE") rule/file pairs."
-  exit 0
-fi
-
-declare -A ALLOWED
-if [ -f "$BASELINE" ]; then
-  while IFS=$'\t' read -r rule file n; do
-    case "$rule" in '#'*|'') continue ;; esac
-    ALLOWED["$rule"$'\t'"$file"]=$n
-  done <"$BASELINE"
-fi
-
 rule g12 'outline-none' '' 'outline-none without a focus-visible replacement on the same line'
 fail=0
 for i in "${!NAMES[@]}"; do
@@ -112,22 +84,13 @@ for i in "${!NAMES[@]}"; do
   for key in "${!COUNT[@]}"; do
     [ "${key%%$'\t'*}" = "$name" ] || continue
     file=${key#*$'\t'}
-    have=${COUNT[$key]}
-    allowed=${ALLOWED[$key]:-0}
-    if [ "$have" -gt "$allowed" ]; then
-      echo "::error file=$file::[$name] $have hit(s), baseline allows $allowed: $msg"
-      grep -nP -- "${PATTERNS[$i]}" "$file" 2>/dev/null | head -5 | sed 's/^/    /'
-      fail=1
-    fi
+    echo "::error file=$file::[$name] ${COUNT[$key]} hit(s): $msg"
+    grep -nP -- "${PATTERNS[$i]}" "$file" 2>/dev/null | grep -v "lint:allow($name)" | head -5 | sed 's/^/    /'
+    fail=1
   done
 done
 
-base_total=0
-for n in "${ALLOWED[@]}"; do base_total=$((base_total + n)); done
 if [ "$fail" = 0 ]; then
-  echo "Design lint: OK ($TOTAL baseline hits remaining of $base_total; new code adds none)."
-  if [ "$TOTAL" -lt "$base_total" ]; then
-    echo "  The tree is below the baseline: run scripts/lint_design.sh --update-baseline to ratchet it down."
-  fi
+  echo "Design lint: OK (every rule at zero)."
 fi
 exit $fail

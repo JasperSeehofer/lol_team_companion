@@ -374,7 +374,7 @@ fn BugReportWidgetInner(
         // multi-step nags).
         <button
             type="button"
-            class="fixed bottom-6 right-6 z-50 w-11 h-11 rounded-full bg-elevated border border-divider shadow-lg hover:bg-surface hover:border-outline transition-all flex items-center justify-center focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+            class="fixed bottom-6 right-6 z-50 w-11 h-11 rounded-ctl bg-elevated border border-divider shadow-lg hover:bg-surface hover:border-outline transition-all flex items-center justify-center focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
             title="Report a bug or wishlist item"
             aria-label="Report a bug or wishlist item"
             on:click=move |_| start_select_mode()
@@ -444,10 +444,8 @@ fn BugReportWidgetInner(
                     />
 
                     // Inline submit error (only rendered on server-fn failure).
-                    // Uses text-red-400 per CLAUDE.md "Exceptions to semantic
-                    // tokens" — error literals are explicitly allowed.
                     <Show when=move || submit_error.get().is_some() fallback=|| ()>
-                        <p class="text-sm text-red-400 mt-2">
+                        <p class="text-sm text-danger mt-2" role="alert">
                             {move || submit_error.get().unwrap_or_default()}
                         </p>
                     </Show>

@@ -335,11 +335,11 @@ pub fn StatsPage() -> impl IntoView {
     view! {
         <div class="bg-base min-h-screen" data-feedback-label="Stats">
             <div class="max-w-7xl mx-auto px-8 lg:px-16 py-11 flex flex-col gap-6">
-                // Imperial header
+                // Page header
                 <div class="flex items-end justify-between gap-6 flex-wrap">
                     <div class="flex flex-col gap-2">
                         <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                            "Chapter VII · Battle log"
+                            "Match history"
                         </span>
                         <BattleLogHeadline stats=stats />
                         <p class="font-display text-secondary text-base mt-1 max-w-[640px]">
@@ -533,7 +533,7 @@ fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) 
     view! {
         <Suspense fallback=move || view! {
             <h1 class="font-display text-primary text-[40px] sm:text-[56px] leading-tight">
-                "Battle log"
+                "Stats"
             </h1>
         }>
             {move || {
@@ -750,8 +750,8 @@ fn StatsContent(
                 // Battle log column
                 <div class="bg-elevated border border-divider rounded-xl p-6" data-feedback-label="Stats → Match list">
                     <div class="flex items-baseline justify-between mb-4">
-                        <span class="font-mono uppercase tracking-wider text-xs text-muted">
-                            "Battle log"
+                        <span class="eyebrow">
+                            "Recent games"
                         </span>
                         <span class="font-mono text-xs text-dimmed tabular-nums">
                             {move || {
@@ -915,7 +915,7 @@ fn StatsContent(
                         match active_match {
                             None => view! {
                                 <div class="bg-elevated border border-divider rounded-xl p-6 text-center">
-                                    <span class="font-mono uppercase tracking-wider text-caption text-muted">"Folio recap"</span>
+                                    <span class="font-mono uppercase tracking-wider text-caption text-muted">"Game recap"</span>
                                     <p class="text-dimmed text-sm mt-3">"Select a match to read the recap."</p>
                                 </div>
                             }.into_any(),
@@ -938,7 +938,7 @@ fn StatsContent(
                                     <div class="bg-elevated border border-divider rounded-xl p-6 transition-all duration-200">
                                         <div class="flex items-baseline justify-between mb-4">
                                             <span class=format!("font-mono uppercase tracking-wider text-caption {result_color}")>
-                                                {format!("{result_word} · folio")}
+                                                {format!("{result_word} \u{00b7} recap")}
                                             </span>
                                             <span class="font-mono text-caption text-dimmed truncate max-w-[140px]">
                                                 {format!("match {}", m.riot_match_id)}
@@ -1161,9 +1161,9 @@ fn ChampionTrendsSection() -> impl IntoView {
         view! {
             <button
                 class=move || if active() {
-                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 } else {
-                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 }
                 on:click=move |_| trends_window.set(w)
             >{w}</button>

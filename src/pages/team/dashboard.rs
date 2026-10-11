@@ -440,17 +440,6 @@ pub async fn get_pool_gap_panel(
     Ok(summary.pool_gap_warnings)
 }
 
-fn role_icon_url(role: &str) -> &'static str {
-    match role {
-        "top" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
-        "jungle" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-jungle.svg",
-        "mid" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-middle.svg",
-        "bot" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-bottom.svg",
-        "support" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-utility.svg",
-        _ => "",
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Phase 18-08: Mode toggle persistence
 // ---------------------------------------------------------------------------
@@ -716,7 +705,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             <div class="bg-elevated border border-accent/30 rounded-xl p-5">
                                                                 <h3 class="font-display text-accent text-xl mb-3 flex items-center gap-2">
                                                                     "Join Requests"
-                                                                    <span class="bg-accent text-accent-contrast text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center tabular-nums">
+                                                                    <span class="bg-accent text-accent-contrast text-xs font-bold rounded-ctl w-5 h-5 flex items-center justify-center tabular-nums">
                                                                         {reqs.len()}
                                                                     </span>
                                                                 </h3>
@@ -783,8 +772,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Starting roster — 5 role slots
                                 <div data-feedback-label="Team dashboard → Roster">
-                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Order of battle"</div>
-                                    <h3 class="font-display text-2xl text-primary mb-3">"Starting Roster"</h3>
+                                    <h2 class="font-display text-title font-semibold text-primary mb-3">"Starting roster"</h2>
                                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                                         {STARTER_ROLES.iter().map(|&role| {
                                             let assigned = starters.iter().find(|m| m.role == role).cloned();
@@ -818,27 +806,12 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         }
                                                     }
                                                 >
-                                                    // Watermark role icon
-                                                    {if !role_icon_url(role).is_empty() {
-                                                        view! {
-                                                            <img
-                                                                src=role_icon_url(role)
-                                                                alt=""
-                                                                aria-hidden="true"
-                                                                class="absolute bottom-0 right-0 w-14 h-14 opacity-10 invert pointer-events-none select-none translate-x-2 translate-y-2"
-                                                            />
-                                                        }.into_any()
-                                                    } else {
-                                                        view! { <span></span> }.into_any()
-                                                    }}
-
-                                                    // Role icon
-                                                    {if !role_icon_url(role).is_empty() {
-                                                        view! {
-                                                            <img src=role_icon_url(role) alt=role_label2.clone() title=role_label2 class="w-6 h-6 invert opacity-70" />
-                                                        }.into_any()
-                                                    } else {
-                                                        view! { <span class="text-muted text-xs capitalize">{role_label2}</span> }.into_any()
+                                                    // Role mark (typographic; no third-party icons)
+                                                    {match crate::components::ui::Role::parse(role) {
+                                                        Some(r) => view! {
+                                                            <crate::components::ui::RoleLabel role=r style=crate::components::ui::RoleLabelStyle::Boxed />
+                                                        }.into_any(),
+                                                        None => view! { <span class="text-muted text-xs capitalize">{role_label2}</span> }.into_any(),
                                                     }}
 
                                                     // Assigned player or empty slot
@@ -893,8 +866,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Coaches section
                                 <div data-feedback-label="Team dashboard → Coaches">
-                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Council"</div>
-                                    <h3 class="font-display text-2xl text-primary mb-3">"Coaches"</h3>
+                                    <h2 class="font-display text-title font-semibold text-primary mb-3">"Coaches"</h2>
                                     {if coaches.is_empty() {
                                         view! { <p class="text-dimmed text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
                                     } else {
@@ -912,7 +884,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
                                                                 </svg>
                                                             </div>
-                                                            <span class="bg-info/20 text-info rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
+                                                            <span class="bg-info/20 text-info rounded-ctl w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
                                                                 {m.username.chars().next().unwrap_or('?').to_string()}
                                                             </span>
                                                             <div>
@@ -934,8 +906,7 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Substitute bench
                                 <div>
-                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Reserves"</div>
-                                    <h3 class="font-display text-2xl text-primary mb-3">"Bench / Substitutes"</h3>
+                                    <h2 class="font-display text-title font-semibold text-primary mb-3">"Bench"</h2>
                                     {if subs.is_empty() {
                                         view! { <p class="text-dimmed text-sm">"No players on the bench."</p> }.into_any()
                                     } else {
@@ -947,7 +918,6 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     let is_self = m.user_id == current_user_id;
                                                     let is_member_leader = m.user_id == created_by_for_subs;
                                                     let current_role = m.role.clone();
-                                                    let role_for_wm = m.role.clone();
                                                     let display_name = m.username.clone();
                                                     let (role_msg, set_role_msg) = signal(Option::<String>::None);
 
@@ -961,21 +931,6 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 }
                                                             }
                                                         >
-                                                            // Watermark role icon (clipped to card)
-                                                            <div class="absolute inset-0 overflow-hidden pointer-events-none">
-                                                                {if !role_icon_url(&role_for_wm).is_empty() {
-                                                                    view! {
-                                                                        <img
-                                                                            src=role_icon_url(&role_for_wm)
-                                                                            alt=""
-                                                                            aria-hidden="true"
-                                                                            class="absolute bottom-0 right-0 w-14 h-14 opacity-10 invert pointer-events-none select-none translate-x-2 translate-y-2"
-                                                                        />
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! { <span></span> }.into_any()
-                                                                }}
-                                                            </div>
                                                             <div class="flex items-center gap-2 min-w-0">
                                                                 <span class="text-muted text-xs select-none" title="Drag to assign to a role slot">"⠿"</span>
                                                                 <span class="text-primary font-medium truncate">{display_name}</span>
@@ -1056,8 +1011,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Battle log"</div>
-                                            <h3 class="font-display text-2xl text-primary">"Recent Games"</h3>
+                                            <h2 class="font-display text-title font-semibold text-primary">"Recent games"</h2>
                                         </div>
                                         <A href="/stats" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all stats \u{2192}"</A>
                                     </div>
@@ -1081,7 +1035,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                 } else {
                                                                     "flex items-center gap-3 bg-danger/10 border border-danger/30 rounded-xl px-4 py-2.5"
                                                                 }>
-                                                                    <img src=champ_img alt=m.champion.clone() class="w-8 h-8 rounded-full" />
+                                                                    <img src=champ_img alt=m.champion.clone() class="w-8 h-8 rounded-ctl" />
                                                                     <div class="flex-1 min-w-0">
                                                                         <div class="flex items-center gap-2">
                                                                             <span class="text-primary text-sm font-medium">{m.champion}</span>
@@ -1115,8 +1069,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Tasking"</div>
-                                            <h3 class="font-display text-2xl text-primary">"Open Action Items"</h3>
+                                            <h2 class="font-display text-title font-semibold text-primary">"Open action items"</h2>
                                         </div>
                                         <A href="/action-items" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all \u{2192}"</A>
                                     </div>
@@ -1133,8 +1086,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                                             <p class="text-secondary text-sm mb-2">{total}" open item(s)"</p>
                                                             {top_items.into_iter().map(|item| {
                                                                 let status_dot = match item.status.as_str() {
-                                                                    "in_progress" => "w-2.5 h-2.5 rounded-full bg-warning shrink-0",
-                                                                    _ => "w-2.5 h-2.5 rounded-full bg-success shrink-0",
+                                                                    "in_progress" => "w-2.5 h-2.5 rounded-ctl bg-warning shrink-0",
+                                                                    _ => "w-2.5 h-2.5 rounded-ctl bg-success shrink-0",
                                                                 };
                                                                 view! {
                                                                     <div class="flex items-center gap-2 bg-elevated border border-outline/50 rounded-lg px-3 py-2">
@@ -1159,8 +1112,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Debrief"</div>
-                                            <h3 class="font-display text-2xl text-primary">"Recent Reviews"</h3>
+                                            <h2 class="font-display text-title font-semibold text-primary">"Recent reviews"</h2>
                                         </div>
                                         <A href="/post-game" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all reviews"</A>
                                     </div>
@@ -1208,8 +1160,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Reconnaissance"</div>
-                                            <h3 class="font-display text-2xl text-primary">"Pool Gap Warnings"</h3>
+                                            <h2 class="font-display text-title font-semibold text-primary">"Pool gaps"</h2>
                                         </div>
                                         <A href="/champion-pool" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"Manage pools"</A>
                                     </div>
@@ -1323,8 +1274,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
         <div>
             <div class="flex items-center justify-between mb-3">
                 <div>
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Folio"</div>
-                    <h3 class="font-display text-2xl text-primary">"Team Notebook"</h3>
+                    <h2 class="font-display text-title font-semibold text-primary">"Team notes"</h2>
                 </div>
                 <button
                     class="text-muted hover:text-accent text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1"
@@ -1408,7 +1358,7 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
                                                 }>
                                                     <div class="flex items-start gap-3">
                                                         // Author avatar
-                                                        <span class="bg-accent/20 text-accent rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                        <span class="bg-accent/20 text-accent rounded-ctl w-8 h-8 flex items-center justify-center text-xs font-bold flex-shrink-0">
                                                             {initial}
                                                         </span>
                                                         <div class="flex-1 min-w-0">

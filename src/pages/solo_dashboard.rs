@@ -447,8 +447,7 @@ fn MatchListSection(
         <div class="flex flex-col gap-3">
             // Section header
             <div class="flex items-center justify-between">
-                <SectionHead                              eyebrow="BATTLE LOG"
-                             title="Recent Matches".to_string() />
+                <SectionHead title="Recent games".to_string() />
                 <select
                     class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-secondary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                     on:change=move |ev| {
@@ -522,9 +521,9 @@ fn LpHistoryGraph(
         view! {
             <button
                 class=move || if active() {
-                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 } else {
-                    "bg-surface border border-outline/50 text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-surface border border-outline/50 text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 }
                 on:click=move |_| lp_window.set(w)
             >{w}</button>
@@ -533,8 +532,7 @@ fn LpHistoryGraph(
     view! {
         <Card >
             <div class="flex items-center justify-between">
-                <SectionHead                              eyebrow="FORM CURVE"
-                             title="LP History".to_string() />
+                <SectionHead title="LP history".to_string() />
                 <div class="flex items-center gap-2">
                     {render_pill("7d")}
                     {render_pill("30d")}
@@ -880,16 +878,14 @@ fn SoloConstellationContent(
                 if last10_empty {
                     view! {
                         <Card>
-                            <SectionHead                                          eyebrow="RECENT"
-                                         title="Last 10".to_string() />
+                            <SectionHead title="Last 10 games".to_string() />
                             <PageEmpty kind="matches".to_string() />
                         </Card>
                     }.into_any()
                 } else {
                     view! {
                         <Card>
-                            <SectionHead                                          eyebrow="RECENT"
-                                         title="Last 10".to_string() />
+                            <SectionHead title="Last 10 games".to_string() />
                             <div class="mt-2 flex flex-wrap items-center gap-1">
                                 <span class="mr-1 text-caption text-muted">"newest"</span>
                                 {last10.iter().copied().map(|won| {
@@ -916,7 +912,7 @@ fn SoloConstellationContent(
             // Honest empty state: pool-gap detection does not exist yet, so we
             // explain what will appear instead of showing invented advice.
             <Card>
-                <SectionHead eyebrow="Review" title="Pool gaps".to_string() />
+                <SectionHead title="Pool gaps".to_string() />
                 <EmptyState message="Pool-gap analysis is not available yet. When it ships, roles and champion types missing from your pool will be detected from your synced match history and listed here." />
             </Card>
 
@@ -936,8 +932,7 @@ fn GoalCards(
 ) -> impl IntoView {
     view! {
         <div class="flex flex-col gap-3">
-            <SectionHead                          eyebrow="CAPTAIN\u{2019}S OATH"
-                         title="Goals".to_string() />
+            <SectionHead title="Goals".to_string() />
             <Suspense fallback={
                 move || view! { <PageLoading variant="solo".to_string() /> }
             }>
@@ -1082,13 +1077,13 @@ fn RankTargetCard(
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
                             <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target"</div>
-                            {achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-full px-2 py-0.5">"Achieved"</span> })}
+                            {achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-ctl px-2 py-0.5">"Achieved"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{target_display}</div>
                         <div class="font-display text-primary text-2xl mt-1">{current_label}</div>
                         <div class="text-xs text-muted">{format!("{} LP to go", to_go)}</div>
-                        <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
-                            <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
+                        <div class="w-full bg-surface border border-outline/30 h-2 mt-2 overflow-hidden">
+                            <div class=move || if achieved { "h-2 bg-success/70 transition-all" } else { "h-2 bg-accent/60 transition-all" }
                                  style=format!("width: {:.0}%", pct) />
                         </div>
                         <button class="text-accent hover:text-accent-hover text-xs transition-colors self-end mt-2 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1" on:click=on_edit>"Edit Goal"</button>
@@ -1174,7 +1169,7 @@ fn CsGoalCard(
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
                             <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target"</div>
-                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-full px-2 py-0.5">"On track"</span> })}
+                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-ctl px-2 py-0.5">"On track"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{format!("{:.1} CS/min", target)}</div>
                         {match p.current_value {
@@ -1187,8 +1182,8 @@ fn CsGoalCard(
                                 view! {
                                     <div class="font-display text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
                                     <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
-                                    <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
-                                        <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
+                                    <div class="w-full bg-surface border border-outline/30 h-2 mt-2 overflow-hidden">
+                                        <div class=move || if achieved { "h-2 bg-success/70 transition-all" } else { "h-2 bg-accent/60 transition-all" }
                                              style=format!("width: {:.0}%", pct) />
                                     </div>
                                 }.into_any()
@@ -1279,7 +1274,7 @@ fn DeathsGoalCard(
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
                             <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target"</div>
-                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-full px-2 py-0.5">"On track"</span> })}
+                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-ctl px-2 py-0.5">"On track"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{format!("{:.0} deaths or fewer", target)}</div>
                         {match p.current_value {
@@ -1292,8 +1287,8 @@ fn DeathsGoalCard(
                                 view! {
                                     <div class="font-display text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
                                     <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
-                                    <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
-                                        <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
+                                    <div class="w-full bg-surface border border-outline/30 h-2 mt-2 overflow-hidden">
+                                        <div class=move || if achieved { "h-2 bg-success/70 transition-all" } else { "h-2 bg-accent/60 transition-all" }
                                              style=format!("width: {:.0}%", pct) />
                                     </div>
                                 }.into_any()
@@ -1352,7 +1347,6 @@ fn SoloJournalView(
             <div class="flex flex-col gap-4">
                 <Card>
                     <SectionHead
-                        eyebrow="CHRONICLES"
                         title="Journal".to_string()
                     />
                     <div class="mt-2 flex justify-center">
@@ -1395,7 +1389,7 @@ fn SoloJournalView(
                 }}
                 // TODO: wire personal_learnings resource when /personal-learnings phase connects
                 <Card>
-                    <Eyebrow>"EXTENDED CHRONICLES"</Eyebrow>
+                    <Eyebrow>"Personal learnings"</Eyebrow>
                     <p class="font-display text-secondary mt-2 text-label">
                         "Navigate to /personal-learnings to document deeper match reflections."
                     </p>
@@ -1431,8 +1425,7 @@ fn SoloForgeView(ranked: Option<RankedInfo>) -> impl IntoView {
             <Card>
                 <div class="text-center pb-2">
                     <SectionHead
-                        eyebrow="CHAMPION MASTERY"
-                        title="Workbench".to_string()
+                        title="Champion mastery".to_string()
                     />
                     <div class="mt-2 flex justify-center">
                         <div class="h-px w-full bg-rule" aria-hidden="true"></div>
@@ -1442,7 +1435,6 @@ fn SoloForgeView(ranked: Option<RankedInfo>) -> impl IntoView {
             // Rank display
             <Card>
                 <SectionHead
-                    eyebrow="CURRENT STANDING"
                     title="Rank".to_string()
                 />
                 <div class="flex items-center gap-6 mt-3">
@@ -1453,16 +1445,14 @@ fn SoloForgeView(ranked: Option<RankedInfo>) -> impl IntoView {
             // Improvement targets (not built yet)
             <Card>
                 <SectionHead
-                    eyebrow="FORGE"
-                    title="Improvement Targets".to_string()
+                    title="Improvement targets".to_string()
                 />
                 <EmptyState message="Improvement targets are not available yet. They will be derived from your synced matches and personal learnings once that analysis ships." />
             </Card>
             // Champion pool pointer
             <Card>
                 <SectionHead
-                    eyebrow="TOOL RACK"
-                    title="Champion Pool".to_string()
+                    title="Champion pool".to_string()
                 />
                 <EmptyState
                     message="Your champion pool lives on the Champion Pool page. Per-champion games and win rates will appear here once pool statistics are aggregated from your match history."

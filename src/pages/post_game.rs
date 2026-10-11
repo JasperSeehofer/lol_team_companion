@@ -1,5 +1,6 @@
 use crate::components::region::{Card, SectionHead};
 use crate::components::ui::{ErrorBanner, SkeletonCard, ToastContext, ToastKind};
+use crate::components::ui::{Skeleton, SkeletonShape};
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
 use leptos::prelude::*;
@@ -521,7 +522,7 @@ pub fn PostGamePage() -> impl IntoView {
                 // Page header — region-aware SectionHead
                 <SectionHead
                     title="What we learned in the field.".to_string()
-                    eyebrow="Strategy hub \u{00B7} Post-Game"
+                    eyebrow="Strategy"
                 />
 
                 // Main content — wrapped in region-aware Card
@@ -588,7 +589,7 @@ pub fn PostGamePage() -> impl IntoView {
                                                         <div class="text-dimmed text-xs mt-0.5">{format!("{item_count} points")}</div>
                                                     </button>
                                                     <button
-                                                        class="text-red-400/50 hover:text-red-400 text-xs mt-1 transition-colors"
+                                                        class="text-muted hover:text-danger text-xs mt-1 transition-colors"
                                                         on:click=move |_| do_delete(rid_for_delete.clone())
                                                     >"Delete"</button>
                                                 </div>
@@ -604,7 +605,7 @@ pub fn PostGamePage() -> impl IntoView {
                                                 let patterns = good_patterns.clone();
                                                 view! {
                                                     <div>
-                                                        <span class="text-emerald-400 text-xs font-medium">"Strengths"</span>
+                                                        <span class="text-success text-xs font-medium">"Strengths"</span>
                                                         {patterns.into_iter().map(|(item, count)| view! {
                                                             <div class="flex items-center gap-2 mt-1">
                                                                 <span class="text-secondary text-xs truncate flex-1">{item}</span>
@@ -618,7 +619,7 @@ pub fn PostGamePage() -> impl IntoView {
                                                 let patterns = bad_patterns.clone();
                                                 view! {
                                                     <div>
-                                                        <span class="text-red-400 text-xs font-medium">"Recurring Issues"</span>
+                                                        <span class="text-warning text-xs font-medium">"Recurring issues"</span>
                                                         {patterns.into_iter().map(|(item, count)| view! {
                                                             <div class="flex items-center gap-2 mt-1">
                                                                 <span class="text-secondary text-xs truncate flex-1">{item}</span>
@@ -687,7 +688,7 @@ pub fn PostGamePage() -> impl IntoView {
                             // Match
                             <div>
                                 <label class="block text-muted text-xs font-medium mb-1">"Match"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
+                                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9" /> }>
                                     {move || match_ids.get().map(|result| match result {
                                         Ok(ids) => view! {
                                             <select class=input_class()
@@ -712,7 +713,7 @@ pub fn PostGamePage() -> impl IntoView {
                             // Game Plan
                             <div>
                                 <label class="block text-muted text-xs font-medium mb-1">"Game Plan"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
+                                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9" /> }>
                                     {move || plans.get().map(|result| match result {
                                         Ok(list) => view! {
                                             <select class=input_class()
@@ -734,7 +735,7 @@ pub fn PostGamePage() -> impl IntoView {
                             // Draft
                             <div>
                                 <label class="block text-muted text-xs font-medium mb-1">"Draft"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
+                                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9" /> }>
                                     {move || drafts.get().map(|result| match result {
                                         Ok(list) => view! {
                                             <select class=input_class()
@@ -791,7 +792,7 @@ pub fn PostGamePage() -> impl IntoView {
                                     class=move || {
                                         let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
                                         if win_loss.get().as_deref() == Some("win") {
-                                            format!("{base} bg-emerald-500/20 text-emerald-400 border border-emerald-500/30")
+                                            format!("{base} bg-win text-win-ink border border-win")
                                         } else {
                                             format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
                                         }
@@ -804,7 +805,7 @@ pub fn PostGamePage() -> impl IntoView {
                                     class=move || {
                                         let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
                                         if win_loss.get().as_deref() == Some("loss") {
-                                            format!("{base} bg-red-500/20 text-red-400 border border-red-500/30")
+                                            format!("{base} text-secondary border border-loss")
                                         } else {
                                             format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
                                         }
@@ -854,9 +855,9 @@ pub fn PostGamePage() -> impl IntoView {
                                                 if let Some(s) = status {
                                                     if s == "detected" {
                                                         let cls = if wl.as_deref() == Some("win") {
-                                                            "text-emerald-400 text-xs"
+                                                            "text-success text-xs"
                                                         } else {
-                                                            "text-red-400 text-xs"
+                                                            "text-warning text-xs"
                                                         };
                                                         let label = if wl.as_deref() == Some("win") { "Win detected" } else { "Loss detected" };
                                                         view! { <span class=cls>{label}</span> }.into_any()
@@ -905,8 +906,8 @@ pub fn PostGamePage() -> impl IntoView {
                     // Structured feedback
                     <div class="grid grid-cols-3 gap-4" data-feedback-label="Post game → Patterns">
                         // What went well
-                        <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col gap-2">
-                            <label class="text-emerald-400 text-xs font-semibold uppercase tracking-wider">"What Went Well"</label>
+                        <div class="border-t border-rule pt-4 flex flex-col gap-2">
+                            <label class="eyebrow">"What went well"</label>
                             <textarea rows="8" class=textarea_class()
                                 placeholder="Good dragon control\nSupport roaming paid off\nStrong level 1 invade"
                                 prop:value=move || went_well.get()
@@ -915,8 +916,8 @@ pub fn PostGamePage() -> impl IntoView {
                         </div>
 
                         // Improvements
-                        <div class="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex flex-col gap-2">
-                            <label class="text-amber-400 text-xs font-semibold uppercase tracking-wider">"Improvements Needed"</label>
+                        <div class="border-t border-rule pt-4 flex flex-col gap-2">
+                            <label class="eyebrow">"Improvements needed"</label>
                             <textarea rows="8" class=textarea_class()
                                 placeholder="Ward coverage around Baron\nBetter grouping after towers\nMid-game macro decisions"
                                 prop:value=move || improvements.get()
@@ -925,8 +926,8 @@ pub fn PostGamePage() -> impl IntoView {
                         </div>
 
                         // Action items
-                        <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex flex-col gap-2">
-                            <label class="text-blue-400 text-xs font-semibold uppercase tracking-wider">"Action Items"</label>
+                        <div class="border-t border-rule pt-4 flex flex-col gap-2">
+                            <label class="eyebrow">"Action items"</label>
                             <textarea rows="8" class=textarea_class()
                                 placeholder="Review VOD of teamfights\nPractice 2v2 bot lane\nDrill baron timings"
                                 prop:value=move || action_items.get()
@@ -991,9 +992,9 @@ fn LinkedPlanCard(plan_id: String) -> impl IntoView {
                     let sup = plan.support_strategy.clone();
 
                     view! {
-                        <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex flex-col gap-3">
+                        <div class="border-t border-rule pt-4 flex flex-col gap-3">
                             <div class="flex items-center gap-2">
-                                <span class="text-blue-400 text-xs font-semibold uppercase tracking-wider">"Game Plan Summary"</span>
+                                <span class="eyebrow">"Game plan summary"</span>
                                 <span class="text-primary text-sm font-medium">{name}</span>
                             </div>
 
@@ -1004,12 +1005,12 @@ fn LinkedPlanCard(plan_id: String) -> impl IntoView {
                                 view! {
                                     <div class="grid grid-cols-[1fr_auto_1fr] gap-2 text-xs">
                                         <div>
-                                            <span class="text-blue-400 font-medium">"Our Team: "</span>
+                                            <span class="text-muted font-medium">"Our team: "</span>
                                             <span class="text-secondary">{ours}</span>
                                         </div>
                                         <span class="text-dimmed">"vs"</span>
                                         <div>
-                                            <span class="text-red-400 font-medium">"Enemy: "</span>
+                                            <span class="text-muted font-medium">"Enemy: "</span>
                                             <span class="text-secondary">{theirs}</span>
                                         </div>
                                     </div>
@@ -1068,7 +1069,7 @@ fn LinkedPlanCard(plan_id: String) -> impl IntoView {
                     <div class="text-dimmed text-xs py-1">"Linked plan not found."</div>
                 }.into_any(),
                 Err(e) => view! {
-                    <div class="text-red-400 text-xs py-1">{format!("Error loading plan: {e}")}</div>
+                    <div class="text-danger text-xs py-1">{format!("Error loading plan: {e}")}</div>
                 }.into_any(),
             })}
         </Suspense>

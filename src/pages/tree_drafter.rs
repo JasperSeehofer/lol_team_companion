@@ -1275,6 +1275,14 @@ fn NodeEditor(
     on_branch_from: Callback<usize>,
     node_save_status: ReadSignal<&'static str>,
 ) -> impl IntoView {
+    // The Switch owns an RwSignal; keep it in step with the node's value.
+    let improvised_switch = RwSignal::new(false);
+    Effect::new(move |_| {
+        let v = node_improvised.get();
+        if improvised_switch.get_untracked() != v {
+            improvised_switch.set(v);
+        }
+    });
     view! {
         <div class="flex flex-col gap-4">
             // Node metadata
@@ -1290,19 +1298,11 @@ fn NodeEditor(
                         />
                     </div>
                     <div class="flex items-center gap-2 pt-5">
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                class="sr-only peer"
-                                prop:checked=move || node_improvised.get()
-                                on:change=move |ev| {
-                                    let checked = event_target_checked(&ev);
-                                    set_node_improvised.set(checked);
-                                }
-                            />
-                            <div class="w-9 h-5 bg-overlay peer-focus-visible:ring-2 peer-focus-visible:ring-warning/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-secondary after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-warning peer-checked:after:bg-base"></div>
-                        </label>
-                        <span class="text-secondary text-xs">"Improvised"</span>
+                        <crate::components::ui::Switch
+                            label="Improvised"
+                            checked=improvised_switch
+                            on_change=Callback::new(move |v: bool| set_node_improvised.set(v))
+                        />
                     </div>
                 </div>
                 <div>
@@ -1322,7 +1322,7 @@ fn NodeEditor(
                 <Suspense fallback=|| view! { <SkeletonCard height="h-48" /> }>
                     {move || champions_resource.get().map(|result| match result {
                         Err(e) => view! {
-                            <div class="text-red-400 text-sm">"Failed to load champions: " {e.to_string()}</div>
+                            <div class="text-danger text-sm">"Failed to load champions: " {e.to_string()}</div>
                         }.into_any(),
                         Ok(champs) => {
                             let champion_map: HashMap<String, Champion> = champs
@@ -1518,7 +1518,7 @@ fn LiveNavigator(
                                         <div class="flex items-center gap-3">
                                             <h2 class="text-primary text-xl font-bold">{node_label}</h2>
                                             {node_improvised.then(|| view! {
-                                                <span class="bg-warning/20 text-warning text-xs font-semibold px-2 py-0.5 rounded-full">
+                                                <span class="bg-warning/20 text-warning text-xs font-semibold px-2 py-0.5 rounded-ctl">
                                                     "Improvised"
                                                 </span>
                                             })}

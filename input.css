@@ -255,6 +255,10 @@
   kbd {
     font-family: var(--font-mono);
   }
+  /* A modal dialog (Dialog, CommandBar) locks page scroll behind the scrim. */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
 }
 
 /* Type roles that are more than a size. */

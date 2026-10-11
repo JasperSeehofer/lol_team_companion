@@ -987,7 +987,7 @@ pub fn GamePlanPage() -> impl IntoView {
             <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header per UI-SPEC §"Game Plan Page Layout"
                 <div>
-                    <p class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Strategy hub - game plan"</p>
+                    <p class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Strategy"</p>
                     <h1 class="font-display text-4xl text-primary mt-1">"Strategy plans for the field."</h1>
                     <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups."</p>
                 </div>
@@ -1045,7 +1045,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                                     })}
                                                 </button>
                                                 <button
-                                                    class="text-red-400/50 hover:text-red-400 text-xs mt-1 transition-colors"
+                                                    class="text-muted hover:text-danger text-xs mt-1 transition-colors"
                                                     on:click=move |_| do_delete.run(plan_id_for_delete.clone())
                                                 >"Delete"</button>
                                             </div>
@@ -1178,7 +1178,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                             // Our team
                                             <div class="flex flex-col gap-2">
                                                 <div class="flex items-center justify-between">
-                                                    <span class="text-blue-400 text-xs font-semibold uppercase">"Your Team"</span>
+                                                    <span class="eyebrow">"Your team"</span>
                                                     {move || if champs_locked.get() {
                                                         view! {
                                                             <button
@@ -1231,7 +1231,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                             <div class="flex items-center justify-center self-center text-dimmed font-bold text-sm pt-6">"VS"</div>
                                             // Enemy team
                                             <div class="flex flex-col gap-2">
-                                                <span class="text-red-400 text-xs font-semibold uppercase">"Enemy Team"</span>
+                                                <span class="eyebrow">"Enemy team"</span>
                                                 {enemy_sigs.iter().enumerate().map(|(i, sig)| {
                                                     let role = ROLES[i];
                                                     let champs = champ_list2.clone();
@@ -1413,11 +1413,11 @@ pub fn GamePlanPage() -> impl IntoView {
                                                                 let bar_pct = if max_games > 0 { (total * 100) / max_games } else { 0 };
                                                                 let is_current = tag == current_tag_inner;
                                                                 let bar_color = if win_pct > 60 {
-                                                                    "bg-emerald-600"
+                                                                    "bg-win"
                                                                 } else if win_pct >= 40 {
-                                                                    "bg-amber-500"
+                                                                    "bg-warning"
                                                                 } else {
-                                                                    "bg-red-600"
+                                                                    "bg-loss"
                                                                 };
                                                                 let row_class = if is_current {
                                                                     "py-2 px-2 rounded bg-accent/10 border-l-2 border-accent flex items-center gap-3"
@@ -1427,9 +1427,9 @@ pub fn GamePlanPage() -> impl IntoView {
                                                                 view! {
                                                                     <div class=row_class>
                                                                         <span class="text-primary text-xs font-medium w-36 shrink-0 truncate">{tag}</span>
-                                                                        <div class="flex-1 bg-overlay/50 rounded-full h-2 overflow-hidden">
+                                                                        <div class="flex-1 bg-overlay/50 h-2 overflow-hidden">
                                                                             <div
-                                                                                class=format!("{bar_color} h-2 rounded-full transition-all")
+                                                                                class=format!("{bar_color} h-2 transition-all")
                                                                                 style=format!("width: {bar_pct}%")
                                                                             ></div>
                                                                         </div>
@@ -1579,7 +1579,7 @@ pub fn GamePlanPage() -> impl IntoView {
                                         <p class="text-muted text-xs mt-0.5">"Start a post-game review with this plan pre-linked"</p>
                                     </div>
                                     <button
-                                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-5 py-2 text-sm transition-colors"
+                                        class="bg-accent hover:bg-accent-hover text-accent-ink font-semibold rounded-ctl px-5 py-2 text-sm transition-colors"
                                         on:click=move |_| {
                                             let pid = plan_id_clone.clone();
                                             let did = draft_for_review.clone();
@@ -1622,7 +1622,7 @@ pub fn GamePlanPage() -> impl IntoView {
                             let status = auto_save_status.get();
                             match status {
                                 "saved" => view! {
-                                    <span class="text-green-400 text-xs font-medium">"\u{2713} Saved"</span>
+                                    <span class="text-success text-xs font-medium">"\u{2713} Saved"</span>
                                 }.into_any(),
                                 "unsaved" => view! {
                                     <span class="text-accent text-xs font-medium">"\u{25cf} Unsaved changes"</span>
@@ -1811,9 +1811,9 @@ fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext)
                         {(total > 0).then(|| {
                             let pct = (done * 100).checked_div(total).unwrap_or(0);
                             view! {
-                                <div class="w-full bg-overlay rounded-full h-2">
+                                <div class="w-full bg-overlay h-2">
                                     <div
-                                        class="bg-accent rounded-full h-2 transition-all"
+                                        class="bg-accent h-2 transition-all"
                                         style=format!("width: {}%", pct)
                                     />
                                 </div>
@@ -1856,7 +1856,7 @@ fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext)
                                             }
                                         }>{item_text}</span>
                                         <button
-                                            class="ml-auto text-red-400/50 hover:text-red-400 text-xs transition-colors"
+                                            class="ml-auto text-muted hover:text-danger text-xs transition-colors"
                                             on:click=move |_| {
                                                 set_checklist_items.update(|items| { if i < items.len() { items.remove(i); } });
                                                 set_checklist_checked.update(|c| { if i < c.len() { c.remove(i); } });
@@ -1910,7 +1910,7 @@ fn ChecklistSection(editing_id: ReadSignal<Option<String>>, toast: ToastContext)
                                                         on:click=move |_| do_use_template.run(t_for_use.clone())
                                                     >{t_name}</button>
                                                     <button
-                                                        class="text-red-400/50 hover:text-red-400 text-xs transition-colors"
+                                                        class="text-muted hover:text-danger text-xs transition-colors"
                                                         on:click=move |_| {
                                                             let id = t_id.clone();
                                                             leptos::task::spawn_local(async move {
