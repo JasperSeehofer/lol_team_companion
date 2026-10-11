@@ -58,6 +58,17 @@ jobs:
       LEPTOS_SITE_ADDR: 127.0.0.1:3020
       LEPTOS_RELOAD_PORT: "3021"
       BASE_URL: http://127.0.0.1:3020
+      # M1 security config: production mode (no APP_ENV), so the invite gate
+      # is on and SESSION_SECRET is required. Plain http on 127.0.0.1, hence
+      # COOKIE_SECURE=false. The e2e fixture registers with the bootstrap
+      # invite code; ADMIN_EMAILS lets the admin smoke test sign in as admin.
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef
+      COOKIE_SECURE: "false"
+      BOOTSTRAP_INVITE_CODE: E2E-INVITE-CODE
+      BOOTSTRAP_INVITE_MAX_USES: "100000"
+      E2E_INVITE_CODE: E2E-INVITE-CODE
+      RATE_LIMIT_MULTIPLIER: "100"
+      ADMIN_EMAILS: e2e-admin@test.invalid
     steps:
       - uses: actions/checkout@v4
 
@@ -96,9 +107,9 @@ jobs:
           nohup ./target/debug/lol_team_companion > "$RUNNER_TEMP/server.log" 2>&1 &
           ./scripts/wait_for_server.sh 120 "$BASE_URL"
 
-      - name: Playwright smoke + hydration gate
+      - name: Playwright smoke, hydration gate, auth and admin
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts --retries=1
 
       - name: Server log
         if: always()
