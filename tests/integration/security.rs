@@ -1040,15 +1040,18 @@ async fn team_games_and_pools_are_isolated_between_teams() {
     db::add_to_champion_pool(&db, &t.a, "Ahri".into(), "mid".into())
         .await
         .unwrap();
-    let pools = db::team_pool_entries(&db, &t.team1).await.unwrap();
+    let pools = db::team_pool_members(&db, &t.team1).await.unwrap();
+    assert_eq!(pools.len(), 1);
+    assert_eq!(pools[0].user_id, t.a);
+    assert_eq!(pools[0].username, "alice");
     assert_eq!(
-        pools,
-        vec![(t.a.clone(), "Ahri".to_string(), "comfort".to_string())]
+        pools[0].entries,
+        vec![("Ahri".to_string(), "comfort".to_string())]
     );
-    assert!(db::team_pool_entries(&db, &t.team2)
-        .await
-        .unwrap()
-        .is_empty());
+    let theirs = db::team_pool_members(&db, &t.team2).await.unwrap();
+    assert_eq!(theirs.len(), 1, "only bob");
+    assert_eq!(theirs[0].user_id, t.b);
+    assert!(theirs[0].entries.is_empty());
     let mine = db::team_game_rows(&db, &t.team1).await.unwrap();
     assert_eq!(mine.len(), 2);
     assert!(mine.iter().all(|r| r.user_id == t.a));

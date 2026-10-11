@@ -6576,12 +6576,27 @@ pub async fn delete_team_relation(
     Ok(())
 }
 
-/// Every current member's champion-pool entries in one read:
-/// (user id, champion as stored, tier).
-pub async fn team_pool_entries(
-    db: &Surreal<Db>,
-    team_id: &str,
-) -> DbResult<Vec<(String, String, String)>> {
+/// A team member with their champion pool, for the Draft Graph.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PoolMember {
+    pub user_id: String,
+    pub username: String,
+    /// Roster role as stored ("top", "sub", "unassigned", ...).
+    pub role: String,
+    pub roster_type: String,
+    /// (champion as stored, tier).
+    pub entries: Vec<(String, String)>,
+}
+
+/// The team's members and every member's pool entries, in one round trip.
+pub async fn team_pool_members(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<PoolMember>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Member {
+        user: RecordId,
+        username: Option<String>,
+        role: String,
+        roster_type: String,
+    }
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Row {
         user: RecordId,
@@ -6589,13 +6604,30 @@ pub async fn team_pool_entries(
         tier: String,
     }
     let mut r = db
-        .query("SELECT user, champion, tier FROM champion_pool WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key))")
+        .query("LET $m = (SELECT user, user.username AS username, role, roster_type FROM team_member WHERE team = type::record('team', $team_key)); \
+                RETURN $m; \
+                SELECT user, champion, tier FROM champion_pool WHERE user IN $m.user")
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
-    let rows: Vec<Row> = r.take(0)?;
-    Ok(rows
+    let members: Vec<Member> = r.take(1)?;
+    let rows: Vec<Row> = r.take(2)?;
+    Ok(members
         .into_iter()
-        .map(|r| (r.user.to_sql(), r.champion, r.tier))
+        .map(|m| {
+            let id = m.user.to_sql();
+            let entries = rows
+                .iter()
+                .filter(|r| r.user.to_sql() == id)
+                .map(|r| (r.champion.clone(), r.tier.clone()))
+                .collect();
+            PoolMember {
+                user_id: id,
+                username: m.username.unwrap_or_default(),
+                role: m.role,
+                roster_type: m.roster_type,
+                entries,
+            }
+        })
         .collect())
 }
 
@@ -6627,10 +6659,11 @@ pub async fn team_game_rows(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Tea
     // `match` is aliased: the SurrealValue derive reads field names as
     // written, not serde renames.
     let mut r = db
-        .query("SELECT match AS match_ref, match.match_id AS riot_match_id, user, champion, win, match.game_end AS game_end FROM player_match WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)) ORDER BY game_end DESC LIMIT 2000")
+        .query("LET $users = (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)); \
+                SELECT match AS match_ref, match.match_id AS riot_match_id, user, champion, win, match.game_end AS game_end FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT 2000")
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
-    let rows: Vec<Row> = r.take(0)?;
+    let rows: Vec<Row> = r.take(1)?;
     Ok(rows
         .into_iter()
         .filter_map(|row| {

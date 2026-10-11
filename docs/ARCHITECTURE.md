@@ -127,7 +127,7 @@ Stage A is the model: the trait table, relations, fit and its explanations, the 
 
 **Client.** `DraftGraphPanel` asks again 250 ms after the draft stops changing (a generation counter drops stale answers) and only while the graph view is mounted. Picks go through the draft page's own `fill` (the same path as the picker), then take the graph's role, marked guessed unless the user chose the role. `draft_action.role_guessed` stores whether a pick's role was guessed (older rows read as confirmed).
 
-**Budget.** Ranking the whole table is a pure in-memory pass: in a debug build 2.5 ms per ranking for 173 champions with 7 locked picks and 40 team notes (`fit::tests::ranking_the_whole_table_is_fast`, asserted under 50 ms); the pair precompute takes 20 ms in debug once per table load. The server function's cost is otherwise its DB reads (team notes, members' pools, the cached evidence, the dossier).
+**Budget.** Ranking the whole table is a pure in-memory pass: in a debug build 2.5 ms per ranking for 173 champions with 7 locked picks and 40 team notes (`fit::tests::ranking_the_whole_table_is_fast`, asserted under 50 ms); the pair precompute takes 20 ms in debug once per table load. The whole `graph_candidates` call on the dev server (debug build, e2e database with a few thousand rows) took a median of 39 ms (n=6, max 49 ms), almost all of it DB reads: the session's team, the team notes, the members with their pools in one round trip (`db::team_pool_members`), the cached evidence and the dossier. Queries over a team's members bind the member list once (`LET $users = ...; ... WHERE user IN $users`): the same filter written as `user IN (SELECT ...)` re-ran the subquery per row and took 630 ms on that database.
 
 ## Design system, theming and CSS
 

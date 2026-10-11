@@ -64,32 +64,26 @@ pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerF
         relations = db::list_team_relations(&ctx.db, team_id)
             .await
             .map_err(authz::server_err)?;
-        if let Some((_, members)) = db::get_user_team_with_members(&ctx.db, &ctx.user.id)
+        let mut members = db::team_pool_members(&ctx.db, team_id)
             .await
-            .map_err(authz::server_err)?
-        {
-            let entries = db::team_pool_entries(&ctx.db, team_id)
-                .await
-                .map_err(authz::server_err)?;
-            // Starters first, so a substitute never shadows the starter.
-            let mut members = members;
-            members.sort_by_key(|m| m.roster_type != "starter");
-            for m in members {
-                let mine = entries
-                    .iter()
-                    .filter(|(user, _, _)| *user == m.user_id)
-                    .filter_map(|(_, champion, tier)| {
-                        table
-                            .get(champion)
-                            .map(|r| (r.traits.champion.clone(), tier.clone()))
-                    })
-                    .collect();
-                pools.push(fit::PoolPlayer {
-                    username: m.username,
-                    role: Role::parse(&m.role),
-                    entries: mine,
-                });
-            }
+            .map_err(authz::server_err)?;
+        // Starters first, so a substitute never shadows the starter.
+        members.sort_by_key(|m| m.roster_type != "starter");
+        for m in members {
+            let entries = m
+                .entries
+                .iter()
+                .filter_map(|(champion, tier)| {
+                    table
+                        .get(champion)
+                        .map(|r| (r.traits.champion.clone(), tier.clone()))
+                })
+                .collect();
+            pools.push(fit::PoolPlayer {
+                username: m.username,
+                role: Role::parse(&m.role),
+                entries,
+            });
         }
         ev = evidence::for_team(&ctx.db, team_id)
             .await
