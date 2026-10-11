@@ -5,7 +5,7 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::slot_meta;
 use crate::components::tree_graph::TreeGraph;
-use crate::components::ui::a11y::focus_id;
+use crate::components::ui::a11y::{focus_id, focus_id_later};
 use crate::components::ui::{
     slot_dom_id, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ConfirmDialog, ConfirmTone, Density, DraftBoard, EmptySize, EmptyState, Field, HeadingLevel,
@@ -553,7 +553,7 @@ fn TreeEditor(
     let add_branch_cb = Callback::new(move |parent: String| {
         adding_to.set(Some(Some(parent)));
         branch_label.set(String::new());
-        focus_id("branch-label");
+        focus_id_later("branch-label");
     });
     let do_add = Callback::new(move |_: leptos::ev::MouseEvent| {
         let Some(tree_id) = selected_tree.get_untracked() else {

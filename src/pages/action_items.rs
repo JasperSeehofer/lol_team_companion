@@ -3,6 +3,7 @@
 //! (a username) and an optional due day. Rows edit in place, delete with
 //! Undo, and work from the keyboard (see `KEYS` in the page legend).
 
+use crate::components::ui::a11y::focus_id_later;
 use crate::components::ui::{
     Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Checkbox, Density, EmptySize,
     EmptyState, Field, InputKind, Keycap, NoTeamState, PageHeader, PageShell, SectionHeader,
@@ -204,27 +205,6 @@ fn neighbour(order: &[String], from: &str, step: i32) -> Option<String> {
         .cloned()
 }
 
-/// Focus an element by id once the DOM has caught up.
-#[cfg(feature = "hydrate")]
-fn focus_later(id: String) {
-    use wasm_bindgen::prelude::*;
-    let cb = Closure::once(move || {
-        if let Some(el) = web_sys::window()
-            .and_then(|w| w.document())
-            .and_then(|d| d.get_element_by_id(&id))
-        {
-            if let Ok(el) = el.dyn_into::<web_sys::HtmlElement>() {
-                let _ = el.focus();
-            }
-        }
-    });
-    if let Some(win) = web_sys::window() {
-        let _ = win
-            .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 50);
-    }
-    cb.forget();
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -268,10 +248,7 @@ pub fn ActionItemsPage() -> impl IntoView {
         if let Some(Ok(_)) = data.get() {
             if let Some(id) = page.focus_after.get_untracked() {
                 page.focus_after.set(None);
-                #[cfg(feature = "hydrate")]
-                focus_later(id);
-                #[cfg(not(feature = "hydrate"))]
-                let _ = id;
+                focus_id_later(&id);
             }
         }
     });
@@ -571,8 +548,7 @@ fn ItemRow(item: ActionItem, members: Vec<String>, today: String) -> impl IntoVi
             if ev.key() == "Escape" {
                 ev.prevent_default();
                 page.editing.set(None);
-                #[cfg(feature = "hydrate")]
-                focus_later(dom_sv.get_value());
+                focus_id_later(&dom_sv.get_value());
             }
             return;
         }
@@ -584,10 +560,7 @@ fn ItemRow(item: ActionItem, members: Vec<String>, today: String) -> impl IntoVi
                     .order
                     .with_untracked(|o| neighbour(o, &dom_sv.get_value(), step))
                 {
-                    #[cfg(feature = "hydrate")]
-                    focus_later(next);
-                    #[cfg(not(feature = "hydrate"))]
-                    let _ = next;
+                    focus_id_later(&next);
                 }
             }
             "e" | "E" if !ev.ctrl_key() && !ev.meta_key() && !ev.alt_key() => {
@@ -719,8 +692,7 @@ fn ItemEditor(item: ActionItem, members: Vec<String>) -> impl IntoView {
         }
     });
 
-    #[cfg(feature = "hydrate")]
-    focus_later(text_id.clone());
+    focus_id_later(&text_id);
 
     let mut owner_options = vec![SelectOption::new("", "Unassigned")];
     owner_options.extend(members.into_iter().map(|m| SelectOption::new(m.clone(), m)));

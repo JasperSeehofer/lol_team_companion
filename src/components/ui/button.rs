@@ -140,7 +140,13 @@ pub fn Button(
     pressed: Option<Signal<bool>>,
     children: Children,
 ) -> impl IntoView {
-    let aria_pressed = move || pressed.map(|p| if p.get() { "true" } else { "false" });
+    // `try_get`: a derived `pressed` can be disposed with its row a tick
+    // before this attribute stops updating (a list re-rendering under it).
+    let aria_pressed = move || {
+        pressed
+            .and_then(|p| p.try_get())
+            .map(|p| if p { "true" } else { "false" })
+    };
     let class = join(&[
         BASE,
         size.class(),

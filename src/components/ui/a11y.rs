@@ -63,6 +63,27 @@ pub fn focus_id(id: &str) {
     let _ = id;
 }
 
+/// Focus the element with this DOM id once the DOM has caught up with a
+/// signal change (the element may only render after it): a short timer,
+/// browser only.
+pub fn focus_id_later(id: &str) {
+    #[cfg(feature = "hydrate")]
+    {
+        use wasm_bindgen::prelude::*;
+        let id = id.to_string();
+        let cb = Closure::once(move || focus_id(&id));
+        if let Some(win) = web_sys::window() {
+            let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.as_ref().unchecked_ref(),
+                30,
+            );
+        }
+        cb.forget();
+    }
+    #[cfg(not(feature = "hydrate"))]
+    let _ = id;
+}
+
 /// Click the element with this DOM id (browser only).
 pub fn click_id(id: &str) {
     #[cfg(feature = "hydrate")]
