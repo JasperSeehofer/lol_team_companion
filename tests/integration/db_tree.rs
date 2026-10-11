@@ -23,7 +23,7 @@ async fn test_create_tree_creates_root_node() {
 
     assert!(tree_id.starts_with("draft_tree:"));
 
-    let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let nodes = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     assert_eq!(nodes.len(), 1, "should have auto-created root node");
     assert_eq!(nodes[0].label, "My Tree");
     assert!(nodes[0].parent_id.is_none());
@@ -38,16 +38,22 @@ async fn test_add_child_node() {
         .await
         .unwrap();
 
-    let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let nodes = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     let root_id = nodes[0].id.clone().unwrap();
 
-    let child_id = db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Child A".into())
-        .await
-        .unwrap();
+    let child_id = db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "Child A".into(),
+    )
+    .await
+    .unwrap();
 
     assert!(child_id.starts_with("draft_tree_node:"));
 
-    let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let nodes = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     assert_eq!(nodes.len(), 1, "root-level should have 1 root");
     assert_eq!(nodes[0].children.len(), 1, "root should have 1 child");
     assert_eq!(nodes[0].children[0].label, "Child A");
@@ -62,20 +68,38 @@ async fn test_get_tree_nodes_reconstructs_hierarchy() {
         .await
         .unwrap();
 
-    let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let nodes = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     let root_id = nodes[0].id.clone().unwrap();
 
-    let child1 = db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Child 1".into())
-        .await
-        .unwrap();
-    db::create_tree_node(&db, &tree_id, Some(child1.clone()), "Grandchild".into())
-        .await
-        .unwrap();
-    db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Child 2".into())
-        .await
-        .unwrap();
+    let child1 = db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "Child 1".into(),
+    )
+    .await
+    .unwrap();
+    db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(child1.clone()),
+        "Grandchild".into(),
+    )
+    .await
+    .unwrap();
+    db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "Child 2".into(),
+    )
+    .await
+    .unwrap();
 
-    let tree = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let tree = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     assert_eq!(tree.len(), 1);
     let root = &tree[0];
     assert_eq!(root.children.len(), 2);
@@ -93,20 +117,32 @@ async fn test_delete_node_cascades_to_children() {
         .await
         .unwrap();
 
-    let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let nodes = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     let root_id = nodes[0].id.clone().unwrap();
 
-    let child = db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Child".into())
-        .await
-        .unwrap();
-    db::create_tree_node(&db, &tree_id, Some(child.clone()), "Grandchild".into())
-        .await
-        .unwrap();
+    let child = db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "Child".into(),
+    )
+    .await
+    .unwrap();
+    db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(child.clone()),
+        "Grandchild".into(),
+    )
+    .await
+    .unwrap();
 
     // Delete child — grandchild should also be gone
-    db::delete_tree_node(&db, &child).await.unwrap();
+    db::delete_tree_node(&db, &team_id, &child).await.unwrap();
 
-    let tree = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let tree = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     assert_eq!(tree.len(), 1, "only root should remain");
     assert!(
         tree[0].children.is_empty(),
@@ -122,20 +158,38 @@ async fn test_tree_sort_order_is_maintained() {
     let tree_id = db::create_draft_tree(&db, &team_id, &user_id, "Sorted".into(), None)
         .await
         .unwrap();
-    let nodes = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let nodes = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     let root_id = nodes[0].id.clone().unwrap();
 
-    db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "First".into())
-        .await
-        .unwrap();
-    db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Second".into())
-        .await
-        .unwrap();
-    db::create_tree_node(&db, &tree_id, Some(root_id.clone()), "Third".into())
-        .await
-        .unwrap();
+    db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "First".into(),
+    )
+    .await
+    .unwrap();
+    db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "Second".into(),
+    )
+    .await
+    .unwrap();
+    db::create_tree_node(
+        &db,
+        &team_id,
+        &tree_id,
+        Some(root_id.clone()),
+        "Third".into(),
+    )
+    .await
+    .unwrap();
 
-    let tree = db::get_tree_nodes(&db, &tree_id).await.unwrap();
+    let tree = db::get_tree_nodes(&db, &team_id, &tree_id).await.unwrap();
     let children = &tree[0].children;
     assert_eq!(children.len(), 3);
     // sort_order should be 0, 1, 2 — verify they are sorted ascending

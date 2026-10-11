@@ -10,6 +10,7 @@ async fn make_user(d: &surrealdb::Surreal<surrealdb::engine::local::Db>, name: &
 
 /// Insert a match and a corresponding player_match row for the given user.
 /// Uses `(SELECT VALUE id FROM match WHERE match_id = $mid)[0]` to get the record ID.
+#[allow(clippy::too_many_arguments)]
 async fn insert_match_with_player(
     d: &surrealdb::Surreal<surrealdb::engine::local::Db>,
     match_id: &str,

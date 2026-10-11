@@ -54,7 +54,7 @@ async fn test_create_opponent_with_players() {
     }
 
     // Verify opponent + 5 players exist in the DB
-    let detail = db::get_opponent(&db, &opponent_id).await.unwrap();
+    let detail = db::get_opponent(&db, &team_id, &opponent_id).await.unwrap();
     assert!(detail.is_some(), "opponent should exist");
     let (opp, players_out) = detail.unwrap();
     assert_eq!(opp.name, "TestOpponent");
@@ -111,6 +111,7 @@ async fn test_update_opponent_player_intel() {
 
     db::update_opponent_player_intel(
         &db,
+        &team_id,
         target_player_id,
         Some("test-puuid-abc123".into()),
         vec!["Ahri".into(), "Ahri".into(), "Syndra".into()],
@@ -121,7 +122,10 @@ async fn test_update_opponent_player_intel() {
     .unwrap();
 
     // Retrieve and verify
-    let detail = db::get_opponent(&db, &opponent_id).await.unwrap().unwrap();
+    let detail = db::get_opponent(&db, &team_id, &opponent_id)
+        .await
+        .unwrap()
+        .unwrap();
     let updated_player = detail
         .1
         .into_iter()
@@ -164,7 +168,10 @@ async fn test_create_opponent_with_empty_summoner_names() {
 
     assert_eq!(player_ids.len(), 5);
 
-    let detail = db::get_opponent(&db, &opponent_id).await.unwrap().unwrap();
+    let detail = db::get_opponent(&db, &team_id, &opponent_id)
+        .await
+        .unwrap()
+        .unwrap();
     let players_out = detail.1;
     assert_eq!(players_out.len(), 5);
 

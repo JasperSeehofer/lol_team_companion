@@ -39,7 +39,7 @@ const PANIC_REGEX = /panicked at|Option::unwrap.*None|tachys/i;
 
 /**
  * The 7 routes that still use region-branching primitives. All require auth — the `authedPage` fixture registers via
- * /auth/register?invite=E2E-TEST and lands the user on /solo.
+ * /auth/register?invite=$INVITE_CODE and lands the user on /solo.
  */
 const SCOPED_ROUTES = [
   "/solo",

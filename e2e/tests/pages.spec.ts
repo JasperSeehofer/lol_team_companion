@@ -20,8 +20,7 @@ const AUTHED_PAGES = [
   { path: "/solo", content: /dashboard|matches|ranked|solo/i },
   { path: "/personal-learnings", content: /learnings|personal|reflections/i },
   { path: "/personal-learnings/new", content: /learning|new|happened|learned/i },
-  // Phase 17 plan 17-01 stubs (auth — filled by plan 06)
-  { path: "/admin/invites", content: /admin|invites|placeholder/i },
+  // /admin/invites is admin-only (404 for others): see admin-invites.spec.ts
 ];
 
 for (const { path, content } of AUTHED_PAGES) {

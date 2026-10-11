@@ -3,25 +3,22 @@
  * Uses a unique email per test run to avoid conflicts.
  */
 import { test, expect } from "@playwright/test";
+import { INVITE_CODE, TEST_PASSWORD } from "./fixtures";
 
 const TIMESTAMP = Date.now();
 const TEST_EMAIL = `e2e_${TIMESTAMP}@test.invalid`;
-const TEST_PASSWORD = "Test1234!";
 const TEST_USERNAME = `e2euser_${TIMESTAMP}`;
+const REGISTER_URL = `/auth/register?invite=${INVITE_CODE}`;
 
 test.describe("Registration", () => {
   test("shows register form", async ({ page }) => {
-    // Phase 17 D-16: registration is gated behind an invite token.
-    // Without ?invite=... the page Effect-redirects to /closed-beta.
-    await page.goto("/auth/register?invite=E2E-TEST");
+    await page.goto(REGISTER_URL);
     await expect(page.locator("input[type=email], input[name=email]")).toBeVisible();
     await expect(page.locator("input[type=password], input[name=password]")).toBeVisible();
   });
 
   test("can register a new account", async ({ page }) => {
-    // Phase 17 D-16: registration is gated behind an invite token.
-    // Without ?invite=... the page Effect-redirects to /closed-beta.
-    await page.goto("/auth/register?invite=E2E-TEST");
+    await page.goto(REGISTER_URL);
 
     await page.fill("input[name=username]", TEST_USERNAME);
     await page.fill("input[name=email]", TEST_EMAIL);
@@ -33,6 +30,51 @@ test.describe("Registration", () => {
     await page.waitForLoadState("networkidle");
     const url = page.url();
     expect(url).not.toContain("/auth/register");
+  });
+
+  test("register without an invite redirects to the closed-beta page", async ({ page }) => {
+    await page.goto("/auth/register");
+    await page.waitForURL("**/closed-beta", { timeout: 15000 });
+  });
+
+  test("an unknown invite code is rejected on the server", async ({ page }) => {
+    await page.goto("/auth/register?invite=NOT-A-REAL-CODE");
+    await page.fill("input[name=username]", `badinvite_${TIMESTAMP}`);
+    await page.fill("input[name=email]", `badinvite_${TIMESTAMP}@test.invalid`);
+    await page.fill("input[name=password]", TEST_PASSWORD);
+    await page.click("button[type=submit]");
+
+    await expect(page.locator("text=/Registration failed/i")).toBeVisible({ timeout: 10000 });
+    expect(page.url()).toContain("/auth/register");
+
+    // The account was not created: signing in fails.
+    await page.goto("/auth/login");
+    await page.fill("input[name=email]", `badinvite_${TIMESTAMP}@test.invalid`);
+    await page.fill("input[name=password]", TEST_PASSWORD);
+    await page.click("main button[type=submit]");
+    await expect(page.locator("text=/Invalid email or password/i")).toBeVisible({
+      timeout: 10000,
+    });
+  });
+
+  test("a duplicate email gets the same generic message", async ({ page }) => {
+    await page.goto(REGISTER_URL);
+    await page.fill("input[name=username]", `dupe_${TIMESTAMP}`);
+    await page.fill("input[name=email]", TEST_EMAIL.toUpperCase());
+    await page.fill("input[name=password]", TEST_PASSWORD);
+    await page.click("button[type=submit]");
+    await expect(page.locator("text=/Registration failed/i")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("a short password is rejected with a clear message", async ({ page }) => {
+    await page.goto(REGISTER_URL);
+    await page.fill("input[name=username]", `shortpw_${TIMESTAMP}`);
+    await page.fill("input[name=email]", `shortpw_${TIMESTAMP}@test.invalid`);
+    // Bypass the browser's minlength check to exercise the server rule.
+    await page.locator("input[name=password]").evaluate((el) => el.removeAttribute("minlength"));
+    await page.fill("input[name=password]", "short1!");
+    await page.click("button[type=submit]");
+    await expect(page.locator("text=/at least 10 characters/i")).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -64,10 +106,7 @@ test.describe("Full auth flow", () => {
   const flowUsername = `flowuser_${TIMESTAMP}`;
 
   test("register → auto-login → profile accessible", async ({ page }) => {
-    // Register
-    // Phase 17 D-16: registration is gated behind an invite token.
-    // Without ?invite=... the page Effect-redirects to /closed-beta.
-    await page.goto("/auth/register?invite=E2E-TEST");
+    await page.goto(REGISTER_URL);
     await page.fill("input[name=username]", flowUsername);
     await page.fill("input[name=email]", flowEmail);
     await page.fill("input[name=password]", TEST_PASSWORD);

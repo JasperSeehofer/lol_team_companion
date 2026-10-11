@@ -70,7 +70,9 @@ async fn test_get_draft_for_prefill_found() {
     .await
     .unwrap();
 
-    let result = db::get_draft_for_prefill(&db, &draft_id).await.unwrap();
+    let result = db::get_draft_for_prefill(&db, &team_id, &draft_id)
+        .await
+        .unwrap();
     assert!(result.is_some(), "Expected Some(draft) for valid draft_id");
     let draft = result.unwrap();
     assert_eq!(draft.name, "PrefillDraft");
@@ -82,7 +84,7 @@ async fn test_get_draft_for_prefill_found() {
 async fn test_get_draft_for_prefill_not_found() {
     let db = common::test_db().await;
 
-    let result = db::get_draft_for_prefill(&db, "draft:nonexistent")
+    let result = db::get_draft_for_prefill(&db, "team:nonexistent", "draft:nonexistent")
         .await
         .unwrap();
     assert!(result.is_none(), "Expected None for nonexistent draft_id");
@@ -136,7 +138,9 @@ async fn test_get_game_plans_for_draft_found() {
     };
     db::save_game_plan(&db, plan, &user_id).await.unwrap();
 
-    let plans = db::get_game_plans_for_draft(&db, &draft_id).await.unwrap();
+    let plans = db::get_game_plans_for_draft(&db, &team_id, &draft_id)
+        .await
+        .unwrap();
     assert_eq!(plans.len(), 1, "Expected 1 game plan linked to draft");
     assert_eq!(plans[0].draft_id, Some(draft_id));
 }
@@ -167,7 +171,9 @@ async fn test_get_game_plans_for_draft_empty() {
     .await
     .unwrap();
 
-    let plans = db::get_game_plans_for_draft(&db, &draft_id).await.unwrap();
+    let plans = db::get_game_plans_for_draft(&db, &team_id, &draft_id)
+        .await
+        .unwrap();
     assert!(
         plans.is_empty(),
         "Expected empty vec for draft with no game plans"

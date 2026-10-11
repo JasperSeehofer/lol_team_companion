@@ -22,6 +22,8 @@ TIMESTAMP="$(date +%s)"
 EMAIL="flow_${TIMESTAMP}@test.invalid"
 PASSWORD="FlowTest1234!"
 USERNAME="flowuser_${TIMESTAMP}"
+# Invite code the server accepts (start it with BOOTSTRAP_INVITE_CODE).
+INVITE_CODE="${E2E_INVITE_CODE:-E2E-INVITE-CODE}"
 
 # --- Discover hashed server fn URLs from WASM binary ---
 resolve_fn() {
@@ -86,7 +88,7 @@ echo ""
 
 # --- 1. Register ---
 echo "[ Register & Login ]"
-status=$(api_post "$URL_REGISTER" "username=${USERNAME}&email=${EMAIL}&password=${PASSWORD}")
+status=$(api_post "$URL_REGISTER" "username=${USERNAME}&email=${EMAIL}&password=${PASSWORD}&invite_code=${INVITE_CODE}")
 body=$(cat /tmp/lol_flow_resp)
 check "Register new user" "$([[ "$status" -eq 200 && "$body" != *'"Err"'* ]] && echo 1 || echo 0)"
 

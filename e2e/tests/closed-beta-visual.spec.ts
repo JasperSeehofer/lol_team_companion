@@ -22,9 +22,10 @@ test("unauthenticated visit to / does not 5xx", async ({ page }) => {
   expect(resp?.status()).toBeLessThan(500);
 });
 
-test("/admin/invites placeholder returns 200", async ({ page }) => {
+test("/admin/invites is a 404 for signed-out visitors", async ({ page }) => {
   const resp = await page.goto("/admin/invites");
-  expect(resp?.status()).toBeLessThan(500);
+  expect(resp?.status()).toBe(404);
+  await expect(page.locator("text=Page not found")).toBeVisible();
 });
 
 test("/legal/impressum and /legal/datenschutz return 200", async ({ page }) => {

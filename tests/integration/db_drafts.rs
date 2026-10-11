@@ -118,6 +118,7 @@ async fn test_update_draft_replaces_actions() {
 
     db::update_draft(
         &db,
+        &team_id,
         &draft_id,
         "Updated".into(),
         None,
@@ -224,7 +225,7 @@ async fn test_delete_draft() {
     .await
     .unwrap();
 
-    db::delete_draft(&db, &draft_id).await.unwrap();
+    db::delete_draft(&db, &team_id, &draft_id).await.unwrap();
 
     let drafts = db::list_drafts(&db, &team_id).await.unwrap();
     assert!(drafts.is_empty(), "draft should be deleted");

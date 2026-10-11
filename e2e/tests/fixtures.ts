@@ -9,29 +9,33 @@
 import { test as base, expect, type Page } from "@playwright/test";
 
 const TIMESTAMP = Date.now();
-const TEST_PASSWORD = "Test1234!";
+/** At least 10 characters (the server's minimum since M1). */
+export const TEST_PASSWORD = "Test1234!long";
+/**
+ * Invite code the server accepts. Start the server with
+ * `BOOTSTRAP_INVITE_CODE=<code>` and `BOOTSTRAP_INVITE_MAX_USES=100000` (see
+ * CLAUDE.md); the same value goes in `E2E_INVITE_CODE` here.
+ */
+export const INVITE_CODE = process.env.E2E_INVITE_CODE ?? "E2E-INVITE-CODE";
 let userCounter = 0;
 
 /** Register a new user — registration auto-logs in and redirects to /solo.
  *
- * Phase 17 plan 17-06 introduced the closed-beta gate (D-16): `/auth/register`
- * without `?invite=...` redirects to `/closed-beta` via a WASM Effect. The
- * fixture must therefore always pass an invite query param. Phase 19.1 will
- * wire real server-side validation against the `invite_code` table; for now
- * any non-empty string is echoed into the hidden input and the registration
- * server fn accepts it.
+ * Registration is gated by invite codes, checked on the server since M1:
+ * `/auth/register` without `?invite=...` redirects to `/closed-beta`, and an
+ * unknown or used-up code is rejected. The fixture uses `INVITE_CODE`.
  *
  * Phase 17 plan 17-06 also introduced D-03: new users default to solo mode and
  * `register_action()` now returns `/solo` (not `/team/dashboard`). The fixture
  * waits for `/solo`; tests that need a team explicitly use the `teamPage`
  * fixture which navigates from `/solo` → `/team/roster` → creates a team.
  */
-async function authenticatePage(page: Page): Promise<void> {
+export async function authenticatePage(page: Page): Promise<void> {
   const id = ++userCounter;
   const email = `pages_${TIMESTAMP}_${id}@test.invalid`;
   const username = `pagesuser_${TIMESTAMP}_${id}`;
 
-  await page.goto("/auth/register?invite=E2E-TEST");
+  await page.goto(`/auth/register?invite=${INVITE_CODE}`);
   await page.fill("input[name=username]", username);
   await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", TEST_PASSWORD);
