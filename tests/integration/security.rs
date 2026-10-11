@@ -377,7 +377,7 @@ async fn review_is_isolated_between_teams() {
 async fn action_item_is_isolated_between_teams() {
     let db = common::test_db().await;
     let t = tenants(&db).await;
-    let item = db::create_action_item(&db, &t.team1, "ward more".into(), None, None)
+    let item = db::create_action_item(&db, &t.team1, "ward more".into(), None, None, None)
         .await
         .unwrap();
 
@@ -386,7 +386,7 @@ async fn action_item_is_isolated_between_teams() {
         "B closes A's item",
     );
     assert_not_found(
-        db::update_action_item(&db, &t.team2, &item, "x".into(), None, None).await,
+        db::update_action_item(&db, &t.team2, &item, "x".into(), None, None, None).await,
         "B edits A's item",
     );
     assert_not_found(
@@ -403,6 +403,7 @@ async fn action_item_is_isolated_between_teams() {
         &item,
         "ward even more".into(),
         None,
+        Some("2026-10-31".into()),
         Some("done".into()),
     )
     .await
@@ -412,9 +413,17 @@ async fn action_item_is_isolated_between_teams() {
     assert!(items[0].resolved_at.is_some(), "done sets resolved_at");
 
     // Editing the text without a status keeps the item done.
-    db::update_action_item(&db, &t.team1, &item, "ward the most".into(), None, None)
-        .await
-        .unwrap();
+    db::update_action_item(
+        &db,
+        &t.team1,
+        &item,
+        "ward the most".into(),
+        None,
+        Some("2026-10-31".into()),
+        None,
+    )
+    .await
+    .unwrap();
     let items = db::list_action_items(&db, &t.team1).await.unwrap();
     assert_eq!(items[0].text, "ward the most");
     assert_eq!(
@@ -422,10 +431,86 @@ async fn action_item_is_isolated_between_teams() {
         "a text edit must not reopen the item"
     );
     assert!(items[0].resolved_at.is_some());
+    assert_eq!(items[0].due.as_deref(), Some("2026-10-31"));
     db::update_action_item_status(&db, &t.team1, &item, "open".into())
         .await
         .unwrap();
     db::delete_action_item(&db, &t.team1, &item).await.unwrap();
+}
+
+#[tokio::test]
+async fn action_item_source_review_must_belong_to_the_team() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let review = PostGameLearning {
+        id: None,
+        team_id: t.team2.clone(),
+        match_riot_id: None,
+        game_plan_id: None,
+        draft_id: None,
+        what_went_well: vec![],
+        improvements: vec![],
+        action_items: vec![],
+        open_notes: None,
+        created_by: t.b.clone(),
+        win_loss: None,
+        rating: None,
+    };
+    let theirs = db::save_post_game_learning(&db, review).await.unwrap();
+    assert_not_found(
+        db::create_action_item(&db, &t.team1, "x".into(), Some(theirs.clone()), None, None).await,
+        "A links an item to B's review",
+    );
+    assert!(db::list_action_items(&db, &t.team1)
+        .await
+        .unwrap()
+        .is_empty());
+    // Their own review links fine.
+    db::create_action_item(&db, &t.team2, "x".into(), Some(theirs), None, None)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn action_item_due_dates_are_checked() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let bad = db::create_action_item(
+        &db,
+        &t.team1,
+        "x".into(),
+        None,
+        None,
+        Some("next friday".into()),
+    )
+    .await;
+    assert!(matches!(bad, Err(db::DbError::Invalid(_))), "{bad:?}");
+    let item = db::create_action_item(
+        &db,
+        &t.team1,
+        "x".into(),
+        None,
+        None,
+        Some("2026-11-02".into()),
+    )
+    .await
+    .unwrap();
+    let items = db::list_action_items(&db, &t.team1).await.unwrap();
+    assert_eq!(items[0].due.as_deref(), Some("2026-11-02"));
+    // An empty date clears it.
+    db::update_action_item(
+        &db,
+        &t.team1,
+        &item,
+        "x".into(),
+        None,
+        Some(String::new()),
+        None,
+    )
+    .await
+    .unwrap();
+    let items = db::list_action_items(&db, &t.team1).await.unwrap();
+    assert_eq!(items[0].due, None);
 }
 
 #[tokio::test]

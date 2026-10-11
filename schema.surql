@@ -247,6 +247,8 @@ DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<record<post_
 DEFINE FIELD IF NOT EXISTS text ON action_item TYPE string;
 DEFINE FIELD IF NOT EXISTS status ON action_item TYPE string DEFAULT 'open';
 DEFINE FIELD IF NOT EXISTS assigned_to ON action_item TYPE option<string>;
+-- Due date as a calendar day, YYYY-MM-DD (no time zone; checked in db.rs).
+DEFINE FIELD IF NOT EXISTS due ON action_item TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON action_item TYPE datetime DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS resolved_at ON action_item TYPE option<datetime>;
 

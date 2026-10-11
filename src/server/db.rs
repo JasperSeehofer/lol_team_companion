@@ -3523,6 +3523,7 @@ struct DbActionItem {
     text: String,
     status: String,
     assigned_to: Option<String>,
+    due: Option<String>,
     created_at: Option<Datetime>,
     resolved_at: Option<Datetime>,
 }
@@ -3536,10 +3537,17 @@ impl From<DbActionItem> for ActionItem {
             text: a.text,
             status: a.status,
             assigned_to: a.assigned_to,
+            due: a.due,
             created_at: opt_dt(a.created_at),
             resolved_at: opt_dt(a.resolved_at),
         }
     }
+}
+
+/// A due date as stored: `None` for empty input, `Invalid` unless it is a
+/// calendar date written `YYYY-MM-DD`.
+fn checked_due(due: Option<String>) -> DbResult<Option<String>> {
+    ActionItem::parse_due(due.as_deref().unwrap_or("")).map_err(|e| DbError::Invalid(e.to_string()))
 }
 
 pub async fn create_action_item(
@@ -3548,16 +3556,22 @@ pub async fn create_action_item(
     text: String,
     source_review: Option<String>,
     assigned_to: Option<String>,
+    due: Option<String>,
 ) -> DbResult<String> {
+    let due = checked_due(due)?;
+    if let Some(review) = source_review.as_deref() {
+        ensure_team_record(db, "post_game_learning", review, team_id).await?;
+    }
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut response = db
         .query(
-            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = IF $review_key = NONE { NONE } ELSE { type::record('post_game_learning', $review_key) }, assigned_to = $assigned_to",
+            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = IF $review_key = NONE { NONE } ELSE { type::record('post_game_learning', $review_key) }, assigned_to = $assigned_to, due = $due",
         )
         .bind(("team_key", team_key))
         .bind(("text", text))
         .bind(("review_key", opt_key(source_review, "post_game_learning")))
         .bind(("assigned_to", assigned_to))
+        .bind(("due", due))
         .await?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
@@ -3653,21 +3667,24 @@ pub async fn update_action_item(
     item_id: &str,
     text: String,
     assigned_to: Option<String>,
+    due: Option<String>,
     status: Option<String>,
 ) -> DbResult<()> {
+    let due = checked_due(due)?;
     ensure_team_record(db, "action_item", item_id, team_id).await?;
     let item_key = record_key(item_id, "action_item");
     // `None` keeps the current status and resolved_at (editing the text of a
     // done item must not reopen it).
     let query = if status.is_some() {
-        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, status = $status, resolved_at = IF $status = 'done' { time::now() } ELSE { NONE }"
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, due = $due, status = $status, resolved_at = IF $status = 'done' { time::now() } ELSE { NONE }"
     } else {
-        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to"
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, due = $due"
     };
     db.query(query)
         .bind(("item_key", item_key))
         .bind(("text", text))
         .bind(("assigned_to", assigned_to))
+        .bind(("due", due))
         .bind(("status", status))
         .await?
         .check()?;
