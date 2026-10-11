@@ -34,15 +34,21 @@ pub fn normalize_champion_name(input: &str, champions: &[Champion]) -> Option<St
     if input_stripped.is_empty() {
         return None;
     }
+    let stripped = |s: &str| -> String {
+        s.chars()
+            .filter(|ch| ch.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase()
+    };
+    // Ids first, then display names ("NunuWillump" -> "Nunu & Willump",
+    // whose id is "Nunu").
     champions
         .iter()
-        .find(|c| {
-            let id_stripped: String =
-                c.id.chars()
-                    .filter(|ch| ch.is_alphanumeric())
-                    .collect::<String>()
-                    .to_lowercase();
-            id_stripped == input_stripped
+        .find(|c| stripped(&c.id) == input_stripped)
+        .or_else(|| {
+            champions
+                .iter()
+                .find(|c| stripped(&c.name) == input_stripped)
         })
         .map(|c| c.id.clone())
 }
@@ -81,7 +87,25 @@ mod tests {
                 tags: vec!["Fighter".into()],
                 image_full: "Belveth.png".into(),
             },
+            Champion {
+                id: "Nunu".into(),
+                name: "Nunu & Willump".into(),
+                title: "The Boy and His Yeti".into(),
+                tags: vec!["Tank".into()],
+                image_full: "Nunu.png".into(),
+            },
         ]
+    }
+
+    #[test]
+    fn stripped_display_names_resolve() {
+        // What the legacy ChampPortrait shim sends (spaces and "&" removed).
+        let champs = sample_champions();
+        assert_eq!(
+            normalize_champion_name("NunuWillump", &champs),
+            Some("Nunu".into())
+        );
+        assert_eq!(normalize_champion_name("NotAChampion", &champs), None);
     }
 
     #[test]
