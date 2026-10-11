@@ -23,7 +23,15 @@ description: SurrealDB 3.x patterns and gotchas for lol_team_companion
 
 8. **Tenant scope** — Team-scoped functions take `team_id` and call `ensure_team_record` (or filter `WHERE team = type::record('team', $team_key)`); zero rows means `DbError::NotFound`. See CLAUDE.md "Security model".
 
-9. **New fields on existing tables** — `IF NOT EXISTS` never changes existing records, and a non-optional field with a `DEFAULT` can make later `UPDATE`s of old rows fail. Prefer `option<T>` and treat `NONE` as the default in Rust (example: `user.is_admin`).
+9. **New fields on existing tables** — `IF NOT EXISTS` never changes existing records, and a non-optional field with a `DEFAULT` can make later `UPDATE`s of old rows fail. Declare it `option<T>` in `schema.surql`; if it must become required, backfill and tighten it in a migration (example: `user.is_admin`, migration 3).
+
+10. **Schema changes beyond the baseline go in a migration** — `schema.surql` is idempotent and runs on every start. Backfills, type changes, renames and UNIQUE indexes on existing data go in `src/server/migrations.rs` (append a new version; never edit a shipped one). SurrealQL steps run in one transaction; Rust steps must be idempotent. See "How to add a migration" in `docs/ARCHITECTURE.md`.
+
+11. **Datetimes load as `Datetime`, never `String`** — A datetime field read into a `String` fails to deserialize, and `take(0).unwrap_or_default()` then silently returns an empty list. Use `surrealdb::types::Datetime` (or `Option<Datetime>`) in `Db*` structs and convert with `db::dt_to_string` / `db::opt_dt`. No `<string>created_at` casts. Compare datetimes with datetimes: bind a cutoff as a string and cast it, `snapshotted_at >= <datetime>$cutoff`.
+
+12. **Links are `record<...>`, not ID strings** — A record never equals a string (`draft = 'draft:abc'` matches nothing). Store links as `record<table>`; write them with `IF $k = NONE { NONE } ELSE { type::record('table', $k) }` and `db::opt_key(id, "table")`; read them as `Option<RecordId>` and `.to_sql()` for the model. External IDs (Riot match IDs, PUUIDs) stay strings.
+
+13. **Unique indexes decide uniqueness** — Do not check-then-insert for uniqueness (it races). Let the UNIQUE index reject the write and map its error by index name (`username_lc_unique`, `email_unique`, `team_member_user_unique`, `board_version_unique`) to a friendly `DbError::Invalid`. NONE values do not collide in a unique index.
 
 ## Query Patterns
 
@@ -48,10 +56,17 @@ description: SurrealDB 3.x patterns and gotchas for lol_team_companion
 
 30. **`DEFINE FIELD IF NOT EXISTS` for all schema fields** — Schema is re-applied on every startup. `IF NOT EXISTS` makes it idempotent so existing records are never affected by schema re-runs. Never omit it.
 
-31. **Use `BEGIN`/`COMMIT` for multi-step writes** — When multiple `CREATE`/`UPDATE` statements must succeed or fail together, wrap in a transaction:
+31. **Use `BEGIN`/`COMMIT` for multi-step writes, checked with `check_tx`** — When multiple writes must succeed or fail together, run them in one transaction. Check it with `db::check_tx(response)?`, not `.check()`: on failure every statement reports "not executed due to a failed transaction" and `.check()` returns that, while `check_tx` returns the real cause (`db::thrown_tag(&e)` reads a `THROW 'TAG'`). Write child rows with a bound array and `FOR` so the query text stays constant; capture a created parent with `LET`:
     ```rust
-    db.query("BEGIN TRANSACTION; CREATE ...; CREATE ...; COMMIT TRANSACTION;")
-        .bind(...).await?.check()?;
+    let r = db.query("BEGIN TRANSACTION; \
+            LET $d = (CREATE ONLY draft SET ...); \
+            FOR $a IN $actions { CREATE draft_action SET draft = $d.id, phase = $a.phase; }; \
+            RETURN { id: $d.id }; \
+            COMMIT TRANSACTION;")
+        .bind(("actions", rows)).await?;   // rows: Vec<T> where T: SurrealValue
+    let mut r = db::check_tx(r)?;
+    let row: Option<IdRecord> = r.take(3)?;  // statement index: BEGIN is 0
     ```
+    Avoid SurrealQL keywords as field names in bound structs (`draft_action.order` is bound as `ord` and written with `` `order` = $a.ord ``).
 
 40. **`ORDER BY` only on selected fields in partial SELECTs** — SurrealDB 3.x rejects `ORDER BY <field>` if the field is not included in a partial `SELECT` clause. Either add the field to the `SELECT` or use `SELECT *`.

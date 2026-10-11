@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M6: Data layer and integrations
+
+#### Added
+- Riot routing follows each player's region from their profile (and the team's region for team syncs and opponent scouting) instead of always using EUW. The profile only accepts the listed regions.
+- When the app's Riot API budget is used up, Riot features answer "Riot is busy, try again in N s." instead of stalling.
+- Champion images and data follow the current patch automatically (checked every 6 hours), and champion lists still work after a restart without internet access. New patches are recorded for later display.
+- Storage for the upcoming Sand Table: imported match timelines (per-minute positions and economy, positioned events) and versioned tactics boards. No screens yet.
+- The seed tool creates fuller demo data (two complete teams with drafts, plans, reviews, action items, notes and scouting) and can be run repeatedly.
+
+#### Changed
+- Usernames are unique regardless of case at the database level; a few accounts from before M1 whose names differed only by case get a numeric suffix (for example `bob-2`).
+- A player can only ever be in one team, now also enforced by the database; extra memberships from before M1 are removed (the team the player leads, or else their first team, is kept).
+- Saving a draft, a review, an opponent with players, a draft tree, a team or a deletion with its children either completes fully or not at all.
+- The team match sync can run once a minute per team (it was per member).
+
+#### Fixed
+- The team dashboard's "drafts without a game plan" and "game plans without a review" counts counted everything.
+- The 7/30/90-day windows for LP history and champion trends did not filter by date.
+- Several lists could come back empty when a stored date failed to load (the same cause as the personal learnings bug); dates now load the same way everywhere.
+- Invite codes could show the wrong status within the second they expired.
+
 ### Milestone M1: Security hardening
 
 #### Added

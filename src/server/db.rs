@@ -1346,8 +1346,8 @@ pub async fn remove_from_slot(db: &Surreal<Db>, team_id: &str, user_id: &str) ->
 // Drafts
 // ---------------------------------------------------------------------------
 
-/// A pick or ban bound into a transaction's `FOR` loop. (`order` is a
-/// SurrealQL keyword, hence `ord`.)
+/// A pick or ban bound into a transaction's `FOR` loop. (Named `ord` to keep
+/// the SurrealQL keyword `order` out of `$a.<field>` paths.)
 #[derive(Debug, Clone, serde::Serialize, SurrealValue)]
 struct ActionRow {
     phase: String,

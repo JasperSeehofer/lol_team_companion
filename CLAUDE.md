@@ -48,7 +48,7 @@ cargo test --features ssr
 cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts
 
 # Seed demo data (STOP THE SERVER FIRST, see "One process per database").
-# Prints a 25-use invite code for local registrations.
+# Idempotent; prints every login and a 25-use invite code. --dry-run shows the plan.
 cargo run --features ssr --bin seed
 ```
 
@@ -70,7 +70,8 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 
 | Variable | Used by | Default |
 |----------|---------|---------|
-| `RIOT_API_KEY` | Riot API client (`src/server/riot.rs`) | none; Riot calls error without it |
+| `RIOT_API_KEY` | The shared Riot API client (`src/server/riot.rs`) | none; Riot features report that they are off |
+| `RIOT_GLOBAL_BUDGET_PER_SEC` / `RIOT_GLOBAL_BUDGET_PER_MIN` | Process-wide Riot request budget on top of the per-IP limit (development key: 20/s and 100 per 2 min). Raise both for a production key | `20` / `50` |
 | `SURREAL_DATA_DIR` | DB location | `./data` |
 | `BUG_REPORT_INBOX_PATH` | Bug-report export on server start | `./docs/inbox/bug-reports.md` (git-ignored) |
 | `RUST_LOG` | tracing filter | `info,lol_team_companion=debug` |
@@ -78,7 +79,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes. **Required outside dev** (the server refuses to start); in dev a random key is used per run | none |
 | `CLOSED_BETA` | `false` disables the invite gate. **Honoured only in dev**; production always requires an invite | gate on |
 | `COOKIE_SECURE` | `Secure` flag on the session cookie | `true` outside dev, `false` in dev |
-| `ADMIN_EMAILS` | Comma-separated emails promoted to admin (`user.is_admin`) when they sign in or register. There is no email verification, so register the admin account first (with the bootstrap invite), then list it | empty |
+| `ADMIN_EMAILS` | Comma-separated emails that are admins (`user.is_admin`). Listed addresses are promoted when they sign in or register; **removing an address revokes admin** (immediately for access checks, and the stored flag is cleared at that user's next sign-in). There is no email verification, so register the admin account first (with the bootstrap invite), then list it | empty |
 | `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs) | unset / `1` |
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities (e2e uses `100`) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy) | `false` |
@@ -89,7 +90,11 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 
 ### One process per database
 
-SurrealKV takes an exclusive lock on `./data`. Only one process can open it: never run the `seed` binary (or a second server) while `cargo leptos watch` is running. Stop the server, wait for it to exit, seed, then start the server again. Seeded logins: `seed-alpha-top@example.com` / `seedpass123`.
+SurrealKV takes an exclusive lock on `./data`. Only one process can open it: never run the `seed` binary (or a second server) while `cargo leptos watch` is running. Stop the server, wait for it to exit, seed, then start the server again (the seed tool says so if the directory is locked).
+
+### Seed tool
+
+`cargo run --features ssr --bin seed` (data dir from `SURREAL_DATA_DIR`, default `./data`) runs the migrations, removes what an earlier run created (accounts `seed-*@example.com`, the teams they created and everything those teams own, invites noted `seed`; nothing else) and creates it again, so it is safe to repeat. It creates two teams of five ("Northgate Academy" led by `seed-alpha-top@example.com`, "Riverside Rooks" led by `seed-beta-top@example.com`; members `seed-{alpha,beta}-{top,jg,mid,bot,sup}`), all with password `seedpass123`, starting roles, two drafts with linked game plans, three reviews with action items, a team note, champion pools and notes and a scouting profile of the other team, plus a 25-use invite code. It prints every login and the code. Players are fictional and are not looked up on Riot unless you pass `--link-riot`. To try it on a copy first: `SURREAL_DATA_DIR=/tmp/data-copy cargo run --features ssr --bin seed`.
 
 ## Architecture in one paragraph
 
@@ -97,21 +102,23 @@ Single crate, two compile targets. `--features ssr` builds the Axum server (Surr
 
 ```
 src/
-├── main.rs              # Axum setup: DB init, bug-report export, sessions, auth, theme middleware, /healthz
+├── main.rs              # Axum setup: DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth, theme middleware, /healthz
 ├── app.rs               # Shell, <Routes>, footer
 ├── lib.rs               # Crate root, hydrate() entry
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
 ├── bin/seed.rs          # Demo data seeder (server must be stopped)
 ├── server/              # SSR only
 │   ├── db.rs            # All SurrealDB queries (Db* structs -> models), tenant-scoped
+│   ├── migrations.rs    # Versioned migrations run after schema.surql (schema_migration table)
 │   ├── authz.rs         # authed()/require_team()/require_admin(), server_err, rate_limit()
 │   ├── config.rs        # Security config from env (dev detection, invite gate, secrets)
 │   ├── rate_limit.rs    # In-memory token buckets + per-user cooldowns
 │   ├── auth.rs          # axum-login backend, argon2 (spawn_blocking), HMAC session hash
 │   ├── session_store.rs # tower-sessions store on SurrealDB (expiry + purge)
 │   ├── theme_layer.rs   # Per-request theme middleware (clamped to "demacia")
-│   ├── riot.rs          # Riot API via riven
-│   ├── data_dragon.rs   # Champion data from Data Dragon
+│   ├── riot.rs          # Shared RiotClient (riven): region routing, global request budget
+│   ├── data_dragon.rs   # Live patch version + champion cache (DB copy, 6 h refresh, patch changes)
+│   ├── sand_table.rs    # Riot Match-V5 timeline importer (replay frames and events)
 │   └── bug_report_export.rs # Exports open bug reports to markdown on start
 ├── models/              # Shared types (SSR + WASM)
 ├── pages/               # Route components (+ their #[server] fns)
@@ -123,7 +130,7 @@ src/
 └── components/          # nav, footer, ui (ErrorBanner, EmptyState, Toast...), skeleton,
                          # draft_board, champion_picker/autocomplete, tree_graph,
                          # bug_report_widget, region/* (legacy themed primitives)
-schema.surql             # DB schema, applied on every start via include_str!
+schema.surql             # Baseline DB schema (idempotent), applied on every start; migrations follow
 input.css                # Tailwind entry + tokens (@theme) + fonts
 e2e/                     # Playwright suite
 tests/integration/       # DB integration tests (one binary)
@@ -191,7 +198,7 @@ Toolchain and external APIs:
 
 New page: `src/pages/my_page.rs` with `#[component] pub fn MyPage()` and its `#[server]` fns; `pub mod` in `src/pages/mod.rs`; `<Route>` in `src/app.rs`; nav entry in `src/components/nav.rs` (`HUB_ROUTES` + `hub_for_path`) if needed; smoke entry in `e2e/tests/pages.spec.ts` (`AUTHED_PAGES`) or `smoke.spec.ts` (`PUBLIC_PAGES`); verify in a browser.
 
-New DB table: `DEFINE TABLE` / `DEFINE FIELD` in `schema.surql`; query functions in `src/server/db.rs` with a `Db*` struct converted to the shared model; model in `src/models/` deriving `Serialize, Deserialize, Clone`.
+New DB table: `DEFINE TABLE` / `DEFINE FIELD` in `schema.surql` (with `IF NOT EXISTS`); query functions in `src/server/db.rs` with a `Db*` struct converted to the shared model; model in `src/models/` deriving `Serialize, Deserialize, Clone`. Index the scope field (`team`/`user`). Changing existing data or types, or adding a unique index, needs a migration: see "How to add a migration" in `docs/ARCHITECTURE.md`.
 
 Honesty rule (MISSION section 6): never render invented data or controls that do nothing. When a feature has no data yet, show an empty state that says what will appear and how (`EmptyState` in `components/ui.rs`, `PageEmpty` in `components/skeleton.rs`).
 
