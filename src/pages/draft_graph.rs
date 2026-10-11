@@ -2,14 +2,18 @@
 //! candidates for the current pick (the graph's accessible twin), the "Why
 //! this pick" panel, the comp profile, and the team's notes on pairs.
 //!
-//! Stage B adds the force-directed canvas inside [`DraftGraphPanel`]: it
-//! reads the same [`GraphResult`] (`locked` as pinned nodes, the first
-//! `CANVAS_CANDIDATES` candidates as free nodes, `edges`) and shares the
-//! panel's `focused` signal (a champion id), so the list, the Why panel and
-//! the canvas follow one focus.
+//! Stage B adds the force-directed canvas
+//! ([`DraftGraphCanvas`](crate::components::graph_canvas::DraftGraphCanvas))
+//! at the top of [`DraftGraphPanel`]: it draws the same [`GraphResult`]
+//! (`locked` as pinned nodes, the first `CANVAS_CANDIDATES` candidates as
+//! free nodes, `edges`) and shares the panel's `focused` signal (a champion
+//! id), so the canvas, the list and the Why panel follow one focus.
+
+use std::collections::HashMap;
 
 use leptos::prelude::*;
 
+use crate::components::graph_canvas::DraftGraphCanvas;
 use crate::components::ui::a11y::{focus_id, roving_index};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar, Delta,
@@ -498,6 +502,8 @@ pub fn DraftGraphPanel(
     let focused: RwSignal<Option<String>> = RwSignal::new(None);
     let role_choice = RwSignal::new("open".to_string());
     let show_all = RwSignal::new(false);
+    // Where each champion sat on the canvas last time (warm start).
+    let memory: StoredValue<HashMap<String, (f32, f32)>> = StoredValue::new(HashMap::new());
     let refresh = RwSignal::new(0u32);
     let generation = StoredValue::new(0u32);
     #[allow(unused_variables)]
@@ -565,6 +571,19 @@ pub fn DraftGraphPanel(
             .filter(|f| list.iter().any(|c| &c.champion == f));
         if keep.is_none() {
             focused.set(list.first().map(|c| c.champion.clone()));
+        }
+    });
+    // A candidate focused on the canvas below the top 10: show the whole list
+    // so its row (the text twin) is there too.
+    Effect::new(move |_| {
+        let Some(f) = focused.get() else { return };
+        let beyond = candidates.with(|l| {
+            l.iter()
+                .position(|c| c.champion == f)
+                .is_some_and(|i| i >= 10)
+        });
+        if beyond && !show_all.get_untracked() {
+            show_all.set(true);
         }
     });
     let focused_candidate = Memo::new(move |_| {
@@ -794,6 +813,14 @@ pub fn DraftGraphPanel(
                                 "This is their pick: ranked for their side (synergy with their picks, counters to yours). Pools apply to your picks only."
                             </Callout>
                         })}
+                        <DraftGraphCanvas
+                            result=g.clone()
+                            focused=focused
+                            on_pick=pick
+                            on_escape=on_escape
+                            memory=memory
+                            slot_label=slot_text(target.slot)
+                        />
                         <div class="grid grid-cols-1 gap-x-8 gap-y-6 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]">
                             <div class="flex min-w-0 flex-col gap-3">
                                 <p class="eyebrow">"Ranked by fit \u{b7} the graph as a list"</p>
