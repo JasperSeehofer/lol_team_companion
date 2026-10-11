@@ -368,6 +368,21 @@ fn RoleLedger(
                 .run(Toast::error("Choose a champion from the list."));
             return;
         };
+        // Older entries keep their old role spelling ("ADC"), which the
+        // server's duplicate check does not match, so check here too.
+        let already = pool.with_untracked(|r| {
+            r.as_ref().and_then(|r| r.as_ref().ok()).is_some_and(|l| {
+                l.iter()
+                    .any(|e| (e.champion == id || e.champion == name) && same_role(&e.role, role))
+            })
+        });
+        if already {
+            toast.push.run(Toast::info(format!(
+                "{name} is already in your {} pool",
+                role_word.to_lowercase()
+            )));
+            return;
+        }
         leptos::task::spawn_local(async move {
             match add_to_pool(id, stored_role(role).to_string()).await {
                 Ok(()) => {
