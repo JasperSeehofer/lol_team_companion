@@ -333,7 +333,7 @@ pub fn import_timeline(doc: &Value) -> Result<ImportedTimeline, ImportError> {
     let level_at = |pid: i64, t: i64| -> i64 {
         levels
             .get(&pid)
-            .and_then(|ls| ls.iter().filter(|(ft, _)| *ft <= t).next_back())
+            .and_then(|ls| ls.iter().rfind(|(ft, _)| *ft <= t))
             .map_or(1, |(_, level)| *level)
     };
     // Victim -> [(died at, respawns at)] from the raw kill events.
