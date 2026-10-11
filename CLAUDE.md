@@ -44,10 +44,11 @@ cargo test --features ssr --lib
 # Unit + DB integration tests (tests/integration/, one binary)
 cargo test --features ssr
 
-# e2e (needs a running server, see "e2e" below)
-cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts
+# e2e (needs a running server started with the e2e env, see "Testing" below)
+cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts
 
-# Seed demo data (STOP THE SERVER FIRST, see "One process per database")
+# Seed demo data (STOP THE SERVER FIRST, see "One process per database").
+# Prints a 25-use invite code for local registrations.
 cargo run --features ssr --bin seed
 ```
 
@@ -73,6 +74,15 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `SURREAL_DATA_DIR` | DB location | `./data` |
 | `BUG_REPORT_INBOX_PATH` | Bug-report export on server start | `./docs/inbox/bug-reports.md` (git-ignored) |
 | `RUST_LOG` | tracing filter | `info,lol_team_companion=debug` |
+| `APP_ENV` | `dev`/`development`/`local` marks a dev run (so does `LEPTOS_ENV=DEV`, set by `cargo leptos watch`) | unset = production |
+| `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes. **Required outside dev** (the server refuses to start); in dev a random key is used per run | none |
+| `CLOSED_BETA` | `false` disables the invite gate. **Honoured only in dev**; production always requires an invite | gate on |
+| `COOKIE_SECURE` | `Secure` flag on the session cookie | `true` outside dev, `false` in dev |
+| `ADMIN_EMAILS` | Comma-separated emails promoted to admin (`user.is_admin`) when they sign in or register | empty |
+| `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs) | unset / `1` |
+| `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities (e2e uses `100`) | `1` |
+| `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy) | `false` |
+| `E2E_INVITE_CODE` | e2e: invite code the fixtures register with (match `BOOTSTRAP_INVITE_CODE`) | `E2E-INVITE-CODE` |
 | `BASE_URL` | e2e: server under test | `http://127.0.0.1:3020` |
 | `PLAYWRIGHT_BROWSERS_PATH` | e2e: browser location. In cloud sessions use `/root/.cache/pw-browsers-compat` (Playwright 1.58 expects chromium rev 1208; the hook symlinks the preinstalled 1194 build) | Playwright default |
 | `AGENT_BROWSER_EXECUTABLE_PATH` | agent-browser screenshots (`/opt/pw-browsers/chromium` in cloud sessions) | none |
@@ -93,13 +103,15 @@ src/
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
 ├── bin/seed.rs          # Demo data seeder (server must be stopped)
 ├── server/              # SSR only
-│   ├── db.rs            # All SurrealDB queries (Db* structs -> models)
-│   ├── auth.rs          # axum-login backend, argon2 hashing
-│   ├── session_store.rs # tower-sessions store on SurrealDB
+│   ├── db.rs            # All SurrealDB queries (Db* structs -> models), tenant-scoped
+│   ├── authz.rs         # authed()/require_team()/require_admin(), server_err, rate_limit()
+│   ├── config.rs        # Security config from env (dev detection, invite gate, secrets)
+│   ├── rate_limit.rs    # In-memory token buckets + per-user cooldowns
+│   ├── auth.rs          # axum-login backend, argon2 (spawn_blocking), HMAC session hash
+│   ├── session_store.rs # tower-sessions store on SurrealDB (expiry + purge)
 │   ├── theme_layer.rs   # Per-request theme middleware (clamped to "demacia")
 │   ├── riot.rs          # Riot API via riven
 │   ├── data_dragon.rs   # Champion data from Data Dragon
-│   ├── leaguepedia.rs   # Pro-play data
 │   └── bug_report_export.rs # Exports open bug reports to markdown on start
 ├── models/              # Shared types (SSR + WASM)
 ├── pages/               # Route components (+ their #[server] fns)
@@ -142,10 +154,22 @@ tests/integration/       # DB integration tests (one binary)
 | `/match/:id` | MatchDetailPage | Yes |
 | `/analytics` | AnalyticsPage (parked) | Yes |
 | `/personal-learnings`, `/personal-learnings/new` | PersonalLearningsPage, NewLearningPage | Yes |
-| `/admin/invites` | AdminInvitesPage (stub; no admin check yet, M1/M7) | Yes |
+| `/admin/invites` | AdminInvitesPage: list, mint, disable invite codes | Admin (404 for everyone else) |
 | anything else | NotFound (HTTP 404) | No |
 
-Auth is enforced per page client-side (redirect to `/auth/login`) and per server function (`AuthSession`). Registration and login hard-navigate to `/solo` (or `/team/dashboard` when the user's mode is `team`).
+Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Registration and login hard-navigate to `/solo` (or `/team/dashboard` when the user's mode is `team`).
+
+## Security model (M1)
+
+- **Server functions** start with `let ctx = authz::authed().await?;` (or `authz::Ctx { db, user }`) and get the team with `ctx.require_team()` / `ctx.team()` (empty-state lists) / `ctx.require_leader()`. **Never accept a team ID from the client.** Admin-only functions use `authz::require_admin()`, which answers non-admins with "Not found".
+- **DB functions** for team data take `team_id` and verify ownership (`ensure_team_record`, or a `WHERE team = ...` filter); user data takes `user_id` (`ensure_user_record`). A record outside the scope is `DbError::NotFound`, the same as a missing one. Child records check through their parent (`tree.team`, `opponent.team`). IDs that link records (a review's `game_plan_id`, a plan's `draft_id`, a draft's `series_id`) are checked against the team too.
+- **Queries bind every value.** Never `format!` a client value into SurrealQL; `record_key(id, table)` strips the prefix and the key is bound into `type::record('table', $key)`. `format!` is only acceptable for compile-time constants (table/field names in this module).
+- **Errors:** return `.map_err(authz::server_err)` (logs the real error, sends a generic message; `DbError::Invalid` messages are shown as written). Never `ServerFnError::new(e.to_string())`.
+- **Riot-backed endpoints** call `authz::rate_limit(Bucket::Riot)` after the ownership check; syncs also take `authz::user_cooldown`. Login and register are limited per IP (login also per account).
+- **Invite gate:** `register_action` consumes one use of an `invite` code atomically (generic error for unknown/used/expired/disabled codes and for duplicate emails). Mint codes on `/admin/invites`, via `BOOTSTRAP_INVITE_CODE`, or with the seed tool.
+- **Sessions:** expired rows load as absent and are purged hourly; the cookie is `HttpOnly`, `SameSite=Strict` and `Secure` outside dev; the session auth hash is an HMAC of the password hash keyed with `SESSION_SECRET`.
+- **Users belong to at most one team**; `create_team` and join requests enforce it.
+- Cross-tenant tests live in `tests/integration/security.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
 
 ## Critical patterns and gotchas
 
@@ -175,12 +199,12 @@ Honesty rule (MISSION section 6): never render invented data or controls that do
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=E2E-TEST` and waits for `/solo`; `teamPage` also creates a team. CI runs unit and integration tests, then `smoke.spec.ts` and `hydration-no-panic.spec.ts` against a debug build. The visual-regression baselines predate the M0 footer and are re-captured in M2.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for `/solo`; `teamPage` also creates a team. CI runs unit and integration tests, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites` and `cross-tenant` specs against a debug build. The visual-regression baselines predate the M0 footer and are re-captured in M2.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container
 
-1. Start the server detached: `setsid nohup cargo leptos watch > /tmp/server.log 2>&1 < /dev/null & disown` (a cold build takes about 10 minutes).
+1. Start the server detached with the e2e env: `APP_ENV=dev BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid setsid nohup cargo leptos watch > /tmp/server.log 2>&1 < /dev/null & disown` (a cold build takes about 10 minutes).
 2. Wait: `./scripts/wait_for_server.sh 600`.
 3. Screenshot: `AGENT_BROWSER_EXECUTABLE_PATH=/opt/pw-browsers/chromium npx -y agent-browser@0.27.0 open http://127.0.0.1:3020/<route>` then `screenshot <path>`.
 4. CommunityDragon (role icons) may be unreachable in the sandbox; broken role icons there are environmental.
@@ -194,7 +218,7 @@ Closed-beta users file bug reports through the in-app widget. On every server st
 
 ## Code style
 
-- **Errors:** `thiserror` for custom error types, mapped to `ServerFnError` via `.map_err(|e| ServerFnError::new(e.to_string()))`.
+- **Errors:** `thiserror` for custom error types; in server functions map them with `.map_err(authz::server_err)` (implement `authz::IntoServerError` for a new error type). User-facing rule violations from the DB layer are `DbError::Invalid("...")`.
 - **Theming:** one dark theme (`data-theme="demacia"`), CSS custom properties in `input.css` `@theme`. Use semantic tokens (`bg-base`, `bg-surface`, `bg-elevated`, `text-primary`, `text-secondary`, `text-muted`, `text-dimmed`, `border-divider`, `border-outline`, `bg-accent`, `text-accent-contrast`, `text-success|warning|danger|info`), not raw palette colors. Coloured buttons with white text (`bg-red-700 text-white`) keep `text-white`. The full token and component system is specified in `docs/DESIGN.md` (M2).
 - **Forms:** Tailwind utilities inline, `bg-surface/50` inputs with `border-outline/50`.
 - **Naming:** snake_case files and functions, PascalCase components.

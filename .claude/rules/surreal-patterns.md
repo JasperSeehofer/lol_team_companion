@@ -19,6 +19,12 @@ description: SurrealDB 3.x patterns and gotchas for lol_team_companion
 
 6. **`SurrealValue` derive** — Use `#[derive(SurrealValue)]` from `surrealdb-types-derive` on DB result structs.
 
+7. **Bind, never format** — Client-supplied values (IDs included) are always `.bind()`-ed. `format!` into query text is only for compile-time constants. Use `record_key(id, "table")` to strip a prefix.
+
+8. **Tenant scope** — Team-scoped functions take `team_id` and call `ensure_team_record` (or filter `WHERE team = type::record('team', $team_key)`); zero rows means `DbError::NotFound`. See CLAUDE.md "Security model".
+
+9. **New fields on existing tables** — `IF NOT EXISTS` never changes existing records, and a non-optional field with a `DEFAULT` can make later `UPDATE`s of old rows fail. Prefer `option<T>` and treat `NONE` as the default in Rust (example: `user.is_admin`).
+
 ## Query Patterns
 
 27. **`.check()` on write queries** — After `CREATE`/`UPDATE`/`DELETE`, call `.check()` to surface constraint violations and query errors. Without it, a failed write silently returns `Ok`:

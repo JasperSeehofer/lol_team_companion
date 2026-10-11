@@ -1,6 +1,6 @@
 # Architecture
 
-How Companion is built today (state after milestone M0). For goals and scope see `MISSION.md`; for the design system see `docs/DESIGN.md`.
+How Companion is built today (state after milestone M1). For goals and scope see `MISSION.md`; for the design system see `docs/DESIGN.md`.
 
 ## One crate, two targets
 
@@ -32,10 +32,10 @@ For each page request the context closure provides two values to Leptos: the dat
 
 Each route component lives in `src/pages/` (one file per page, sub-folders for `auth`, `team`, `admin`, `legal`). Pages define their own `#[server]` functions next to the component that calls them; there are about 140. A server function:
 
-- extracts `AuthSession` via `leptos_axum::extract()` and rejects anonymous callers,
-- gets the DB from context with `use_context::<Arc<Surreal<Db>>>()`,
-- calls a query in `src/server/db.rs`,
-- maps errors with `ServerFnError::new(e.to_string())`.
+- calls `authz::authed()` (signed-in user + DB handle from context) or, for the few deliberately public functions (champion lists, `get_current_user`, login, register), `authz::db()`,
+- derives the user's team on the server (`require_team` / `current_team_for` / `require_leader`); it never trusts a team ID from the client,
+- calls a query in `src/server/db.rs`, passing the team or user as the scope,
+- maps errors with `authz::server_err`, which logs the real error and returns a short generic message (`DbError::Invalid` messages pass through, `NotFound` becomes "Not found").
 
 Team-scoped lists return `Ok(Vec::new())` when the user has no team so the page can show an empty state instead of an error banner. Some server functions are imported across pages (for example `pages::profile::get_current_user`); moving them into a dedicated API layer is planned.
 
@@ -49,13 +49,20 @@ SurrealDB 3 runs embedded with the SurrealKV engine, namespace `lol_companion`, 
 - `src/server/db.rs` holds every query. DB-facing structs (`Db*`, with `RecordId`) are SSR-only and convert into the shared models in `src/models/`, which compile for both targets and derive `Serialize, Deserialize, Clone`.
 - On start, `migrate_champion_names` normalises stored champion names against Data Dragon; it is skipped when Data Dragon is unreachable.
 
-There is no migration framework, no unique indexes beyond what the schema defines and no transactions yet (planned for M6).
+Team-scoped DB functions take the team and verify that the record belongs to it (`ensure_team_record`, `ensure_team_opponent_player`, or a `WHERE team = ...` filter); user-scoped ones take the user. A record outside the scope is reported as `DbError::NotFound`, exactly like a missing one. All client values are bound; `record_key(id, table)` strips the table prefix for `type::record('table', $key)`.
 
-## Authentication and sessions
+There is no migration framework, no unique indexes beyond what the schema defines and few transactions yet (planned for M6). New fields on existing tables are declared `option<T>` so old rows stay valid (for example `user.is_admin`).
 
-`src/server/auth.rs` implements `axum_login::AuthnBackend` over the `user` table. Passwords are hashed with Argon2 (`argon2` + `password-hash`). Sessions are stored in SurrealDB by `src/server/session_store.rs` (MessagePack via `rmp-serde`). The session cookie is not yet marked `Secure`.
+## Authentication, authorization and sessions
 
-Registration is gated in the UI: `/auth/register` without `?invite=...` redirects to `/closed-beta`. The invite code is not validated server-side yet, and `/admin/invites` is a stub reachable by any signed-in user. Both are M1 work.
+- `src/server/config.rs` reads the security configuration once at startup (`APP_ENV`/`LEPTOS_ENV` dev detection, `CLOSED_BETA`, `SESSION_SECRET`, `COOKIE_SECURE`, `ADMIN_EMAILS`, `BOOTSTRAP_INVITE_CODE`, `RATE_LIMIT_MULTIPLIER`, `TRUST_FORWARDED_FOR`). Outside dev a missing `SESSION_SECRET` stops the server.
+- `src/server/auth.rs` implements `axum_login::AuthnBackend` over the `user` table. Argon2 hashing and verification run on `spawn_blocking`; unknown emails are verified against a dummy hash so timing does not reveal accounts. Emails are compared lowercase. `session_auth_hash` is HMAC-SHA256(`SESSION_SECRET`, password hash), so session rows hold no password material and a password change ends sessions.
+- `src/server/authz.rs` holds the authorization helpers (`authed`, `require_user`, `require_admin`, `current_team_for`, `require_team`, `require_team_member`, `require_team_leader`), the error mapping (`server_err`, `internal_error`) and the rate-limit helpers. `src/server/rate_limit.rs` is an in-memory token-bucket limiter (login per IP and per account, register per IP, Riot-backed endpoints per IP) plus per-user cooldowns (team and solo sync, 60 s). The peer IP comes from `ConnectInfo` (`into_make_service_with_connect_info`).
+- Sessions are stored in SurrealDB by `src/server/session_store.rs` (MessagePack via `rmp-serde`, plus `expires_at` in unix seconds). Expired rows load as absent and are deleted; `delete_expired` runs at startup and hourly from `main.rs`. The cookie is `HttpOnly`, `SameSite=Strict` and `Secure` unless dev (or `COOKIE_SECURE=false`).
+- Registration is invite-only: `register_action` validates username, email and a 10-character password minimum, atomically consumes one use of an `invite` code (unknown, used-up, expired and disabled codes, and duplicate emails, all get the same generic message), creates the user and logs them in. `CLOSED_BETA=false` lifts the gate in dev only. The UI still redirects `/auth/register` without `?invite=` to `/closed-beta`.
+- Admins (`user.is_admin`, promoted from `ADMIN_EMAILS` at login/registration) manage codes on `/admin/invites`; everyone else gets the 404 page (rendered with `SsrMode::Async` so the status is set), and the nav shows the link to admins only.
+- A user belongs to at most one team: `create_team` and join requests refuse a second membership; join requests are answered only by the leader of the requested team and only while pending.
+- `/healthz` returns 200 with `{"status":"ok","db":"ok"}`, or 503 when a trivial DB query fails.
 
 Users have a `mode` (`solo` or `team`). New users start in solo mode and land on `/solo`; login sends team-mode users to `/team/dashboard`.
 
@@ -63,7 +70,6 @@ Users have a `mode` (`solo` or `team`). New users start in solo mode and land on
 
 - `src/server/riot.rs` wraps the `riven` crate. Each call builds a client from `RIOT_API_KEY`; there is no shared client and the platform route is passed per call. It covers account lookup (`get_puuid`), match history, full match detail and timeline, champion masteries, ranked entries and opponent intel. Pages call it from server functions (stats, solo dashboard, roster, opponents, post-game, draft).
 - `src/server/data_dragon.rs` fetches the latest Data Dragon version and `champion.json`, and normalises free-text champion names. Several components still hardcode older Data Dragon versions for images (M6).
-- `src/server/leaguepedia.rs` queries the Leaguepedia Cargo API for recent pro games. Whether this stays is an open question under the "no scraping" rule.
 
 ## Theming and CSS
 
@@ -80,10 +86,10 @@ The theme value travels: cookie `lol_companion_theme`, then the user's DB `theme
 | Layer | Where | Command |
 |-------|-------|---------|
 | Unit | `#[cfg(test)]` modules in models and server files | `cargo test --features ssr --lib` |
-| DB integration | `tests/integration/main.rs` plus one module per area, each on an in-memory SurrealDB (`kv-mem`) | `cargo test --features ssr` |
+| DB integration | `tests/integration/main.rs` plus one module per area, each on an in-memory SurrealDB (`kv-mem`); `security.rs` holds the cross-tenant, invite, session-expiry and injection suites | `cargo test --features ssr` |
 | e2e | `e2e/tests/*.spec.ts`, Playwright 1.58, Chromium | `cd e2e && npx playwright test` |
 
-The e2e fixtures register a fresh user per test (`authedPage`) and optionally create a team (`teamPage`). `hydration-no-panic.spec.ts` is the gate against SSR/hydrate divergence. CI (`.github/workflows/ci.yml`) checks both targets, runs clippy for both targets with `-D warnings`, `cargo fmt --check`, the unit and DB integration tests and the style guardrails, then builds the app, starts the binary, waits for `/healthz` and runs the smoke and hydration specs.
+The e2e fixtures register a fresh user per test (`authedPage`, with the invite code from `E2E_INVITE_CODE`, which the server provides through `BOOTSTRAP_INVITE_CODE`) and optionally create a team (`teamPage`). `hydration-no-panic.spec.ts` is the gate against SSR/hydrate divergence; `cross-tenant.spec.ts` drives two accounts and checks that one team cannot read or change the other's draft and game plan. CI (`.github/workflows/ci.yml`) checks both targets, runs clippy for both targets with `-D warnings`, `cargo fmt --check`, the unit and DB integration tests and the style guardrails, then builds the app, starts the binary in production mode (with `SESSION_SECRET`, a bootstrap invite and `ADMIN_EMAILS`), waits for `/healthz` and runs the smoke, hydration, auth, admin-invites and cross-tenant specs.
 
 ## Tooling
 

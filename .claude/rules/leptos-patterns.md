@@ -17,9 +17,9 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 ## Server Functions
 
-11. **DB access via context** — Use `use_context::<Arc<Surreal<Db>>>()` inside `#[server]` functions. Do NOT use `axum::extract::State` (it requires `FromRef<()>` which fails).
+11. **DB access and auth via `authz`** — Start protected server fns with `let authz::Ctx { db, user } = authz::authed().await?;` (DB handle from context + signed-in user) and derive the team with `authz::require_team(&db, &user)` / `current_team_for`. `authz::db()` alone is for deliberately public fns. Do NOT use `axum::extract::State` (it requires `FromRef<()>` which fails). Map errors with `.map_err(authz::server_err)`.
 
-12. **Auth extraction** — `let mut auth: AuthSession = leptos_axum::extract().await?;` — must be `mut` for `auth.login()`.
+12. **Auth extraction for login/logout** — only login, register and logout touch `AuthSession` directly: `let mut auth: AuthSession = leptos_axum::extract().await?;` — must be `mut` for `auth.login()`.
 
 32. **Server fn args and return types must be `Serialize + Deserialize`** — All parameters and the `Ok` type cross the wire as JSON (or msgpack). Avoid types like `HashMap` with non-string keys; flatten to `Vec<(K,V)>` or a newtype if needed.
 
@@ -29,9 +29,8 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 44. **Return `Ok(Vec::new())` not `Err` when an optional resource is absent** — Server functions that list data scoped to a team should return an empty list when the user has no team, not an error. Returning `Err` propagates to the Suspense and replaces the UI with an error banner instead of an empty state:
     ```rust
-    let team_id = match db::get_user_team_id(...).await? {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
+    let Some(team_id) = authz::current_team_for(&db, &user).await? else {
+        return Ok(Vec::new());
     };
     ```
 
