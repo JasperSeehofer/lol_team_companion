@@ -1093,8 +1093,12 @@ fn opponent_name(value: &str, list: &[Opponent]) -> Option<String> {
 #[derive(Clone, Copy)]
 struct Nav {
     #[cfg(feature = "hydrate")]
-    f: StoredValue<std::rc::Rc<dyn Fn(&str)>, LocalStorage>,
+    f: StoredValue<NavFn, LocalStorage>,
 }
+
+/// The router's navigate function, shareable.
+#[cfg(feature = "hydrate")]
+type NavFn = std::rc::Rc<dyn Fn(&str)>;
 
 /// A scouted player's name: the name, else the Riot ID, else a placeholder.
 fn player_name(p: &crate::models::opponent::OpponentPlayer) -> String {
@@ -1238,11 +1242,9 @@ pub fn DraftPage() -> impl IntoView {
             return;
         }
         cx.save_state.set(SaveState::Dirty);
-        if snap.name.trim().is_empty() {
-            return;
-        }
+        // An unnamed draft is not saved automatically.
         #[cfg(feature = "hydrate")]
-        {
+        if !snap.name.trim().is_empty() {
             use wasm_bindgen::prelude::*;
             if let Some(id) = auto_save_timer.get_untracked() {
                 if let Some(win) = web_sys::window() {

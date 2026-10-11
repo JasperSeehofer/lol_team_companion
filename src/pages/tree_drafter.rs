@@ -793,9 +793,10 @@ fn TreeNodeRow(
             </div>
             {move || (has_children && expanded.with(|e| !e.contains(&id_kids))).then(|| view! {
                 <ul role="group" class="flex flex-col">
+                    // Erased: a row's type cannot contain itself.
                     {children.get_value().into_iter().map(|c| view! {
                         <TreeNodeRow node=c depth=depth + 1 selected=selected expanded=expanded on_select=on_select on_add=on_add on_delete=on_delete />
-                    }).collect_view()}
+                    }.into_any()).collect_view()}
                 </ul>
             })}
         </li>

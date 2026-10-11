@@ -1063,11 +1063,11 @@ fn MatchupSection(
     }
 }
 
+/// Win rates per strategy tag: (tag, games, wins).
+type WinRates = Resource<Result<Vec<(String, i32, i32)>, ServerFnError>>;
+
 #[component]
-fn StrategySection(
-    ed: PlanEd,
-    win_rates: Resource<Result<Vec<(String, i32, i32)>, ServerFnError>>,
-) -> impl IntoView {
+fn StrategySection(ed: PlanEd, win_rates: WinRates) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let outline = Callback::new(move |_: leptos::ev::MouseEvent| {
         let ours: Vec<String> = ed.ours.iter().map(|s| s.get_untracked()).collect();
@@ -1367,7 +1367,7 @@ fn ChecklistSection(ed: PlanEd) -> impl IntoView {
 fn HistorySection(
     ed: PlanEd,
     drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
-    win_rates: Resource<Result<Vec<(String, i32, i32)>, ServerFnError>>,
+    win_rates: WinRates,
 ) -> impl IntoView {
     let scope = RwSignal::new("all".to_string());
     let opponent = Memo::new(move |_| {

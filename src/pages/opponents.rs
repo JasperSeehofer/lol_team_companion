@@ -640,7 +640,7 @@ fn NewOpponentDialog(open: RwSignal<bool>, on_created: Callback<String>) -> impl
                     on_created.run(oid.clone());
                     let mut fetched = 0;
                     let mut failed = 0;
-                    for (pid, rid) in player_ids.into_iter().zip(riot.into_iter()) {
+                    for (pid, rid) in player_ids.into_iter().zip(riot) {
                         if rid.is_empty() {
                             continue;
                         }
@@ -1000,8 +1000,8 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
             {(intel.otp_champion.is_some() || !roles.is_empty()).then(|| {
                 let total: u32 = roles.iter().map(|(_, c)| c).sum();
                 let mut mix: Vec<(String, u32)> = roles.clone();
-                mix.sort_by(|a, b| b.1.cmp(&a.1));
-                let mix_text = mix.iter().map(|(r, c)| format!("{} {}%", position_label(r), if total > 0 { c * 100 / total } else { 0 })).collect::<Vec<_>>().join(", ");
+                mix.sort_by_key(|a| std::cmp::Reverse(a.1));
+                let mix_text = mix.iter().map(|(r, c)| format!("{} {}%", position_label(r), (c * 100).checked_div(total).unwrap_or(0))).collect::<Vec<_>>().join(", ");
                 view! {
                     <p class="flex flex-wrap gap-x-4 text-caption text-secondary">
                         {intel.otp_champion.clone().map(|c| view! { <span class="text-warning">{format!("One-trick: {c}")}</span> })}
