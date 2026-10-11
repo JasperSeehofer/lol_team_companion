@@ -785,7 +785,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div data-feedback-label="Team dashboard → Roster">
                                     <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Order of battle"</div>
                                     <h3 class="font-display text-2xl text-primary mb-3">"Starting Roster"</h3>
-                                    <div class="grid grid-cols-5 gap-3">
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                                         {STARTER_ROLES.iter().map(|&role| {
                                             let assigned = starters.iter().find(|m| m.role == role).cloned();
                                             let role_label = role.to_string();

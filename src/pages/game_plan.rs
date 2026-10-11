@@ -993,9 +993,9 @@ pub fn GamePlanPage() -> impl IntoView {
                 </div>
                 <div class="flex justify-center"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
 
-                <div class="flex gap-6 min-h-[36rem]">
+                <div class="flex flex-col lg:flex-row gap-6 lg:min-h-[36rem]">
                 // Left: plan list
-                <div class="w-72 flex-shrink-0 flex flex-col gap-3">
+                <div class="w-full lg:w-72 flex-shrink-0 flex flex-col gap-3">
                     <button
                         class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
                         on:click=move |_| clear_editor.run(())

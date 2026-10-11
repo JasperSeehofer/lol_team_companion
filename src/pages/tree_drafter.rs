@@ -720,9 +720,9 @@ pub fn TreeDrafterPage() -> impl IntoView {
 
             // Main layout: sidebar + content (Card wraps the interactive area per region grammar)
             <Card >
-            <div class="flex gap-6 min-h-[36rem]">
+            <div class="flex flex-col lg:flex-row gap-6 lg:min-h-[36rem]">
                 // Left sidebar: tree list
-                <div class="w-72 flex-shrink-0 flex flex-col gap-4">
+                <div class="w-full lg:w-72 flex-shrink-0 flex flex-col gap-4">
                     // New tree form
                     <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex flex-col gap-3">
                         <h3 class="text-primary font-semibold text-sm">"New Tree"</h3>

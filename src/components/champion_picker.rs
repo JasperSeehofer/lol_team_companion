@@ -62,7 +62,7 @@ pub fn ChampionPicker(
                     "Champion roster"
                 </span>
                 // Role filter pills
-                <div class="bg-elevated rounded-lg p-0.5 flex gap-0.5">
+                <div class="bg-elevated rounded-lg p-0.5 flex flex-wrap gap-0.5">
                     {roles.iter().map(|&role| {
                         let role_str = role.to_string();
                         let role_val = if role == "All" { None } else { Some(role.to_string()) };

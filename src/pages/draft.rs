@@ -1619,7 +1619,7 @@ pub fn DraftPage() -> impl IntoView {
 
             // Header form
             <div class="bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-4">
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     // Draft Name
                     <div>
                         <label class="block text-secondary text-sm mb-1">"Draft Name"</label>
@@ -1660,8 +1660,8 @@ pub fn DraftPage() -> impl IntoView {
                     // Opponent — searchable dropdown + Add New button (D-01, D-02, D-03)
                     <div>
                         <label class="block text-secondary text-sm mb-1">"Opponent (optional)"</label>
-                        <div class="flex gap-2 items-start">
-                            <div class="relative flex-1">
+                        <div class="flex flex-wrap gap-2 items-start">
+                            <div class="relative min-w-[12rem] flex-1">
                                 <input
                                     type="text"
                                     prop:value=move || opp_filter_text.get()
@@ -2190,7 +2190,7 @@ pub fn DraftPage() -> impl IntoView {
             </div>
 
             // Board + Comments — mode-dispatched (18-04: carousel/war-table; 18-07: ledger; 18-08: signal-driven)
-            <div class="flex gap-4">
+            <div class="flex flex-col xl:flex-row gap-4">
                 {move || match mode_current.get().as_str() {
                     "war-table" => view! {
                         <DraftWarTableView
@@ -2245,7 +2245,7 @@ pub fn DraftPage() -> impl IntoView {
                 }}
 
                 // Comments sidebar
-                <div class="w-72 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3">
+                <div class="w-full xl:w-72 shrink-0 bg-elevated border border-divider rounded-lg p-4 flex flex-col gap-3">
                     <h3 class="text-primary font-bold">"Comments"</h3>
                     <div class="flex flex-col gap-1 max-h-64 overflow-y-auto flex-1">
                         {move || {
@@ -3737,7 +3737,7 @@ fn DraftCarouselView(
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
     view! {
-        <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
+        <div class="flex-1 min-w-0 overflow-x-auto bg-elevated border border-divider rounded-lg p-4">
             <SectionHead
                 eyebrow="STRATEGY".to_string()
                 title="Draft Carousel".to_string()
@@ -3889,7 +3889,7 @@ fn DraftWarTableView(
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
     view! {
-        <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
+        <div class="flex-1 min-w-0 overflow-x-auto bg-elevated border border-divider rounded-lg p-4">
             <SectionHead
                 eyebrow="WAR TABLE".to_string()
                 title="War Table".to_string()

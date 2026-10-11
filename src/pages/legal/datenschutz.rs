@@ -16,7 +16,7 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
                         "Legal"
                     </div>
-                    <h1 class="font-display text-display leading-tight text-primary mt-2">
+                    <h1 lang="de" class="font-display text-headline sm:text-display leading-tight text-primary mt-2 break-words hyphens-auto">
                         "Datenschutzerkl\u{00e4}rung"
                     </h1>
                     <div class="mt-3"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
