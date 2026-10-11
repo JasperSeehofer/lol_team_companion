@@ -66,6 +66,15 @@ export async function createTeam(page: Page, name: string): Promise<void> {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
 
+  // New users start in solo mode, where /team/roster shows a "Switch to Team
+  // Mode" gate instead of the create form. Switch first (the page reloads).
+  const switchBtn = page.locator('button:has-text("Switch to Team Mode")');
+  if (await switchBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await switchBtn.click();
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+  }
+
   const teamNameInput = page.locator('input[name="name"]');
   if (await teamNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
     await teamNameInput.fill(name);

@@ -37,7 +37,8 @@ for (const { path, title } of PUBLIC_PAGES) {
     // environments; the stylesheet itself is checked in a dedicated test below.
     expect(errors.filter((e) =>
       !e.includes("favicon") &&
-      !e.includes("404 (Not Found)")
+      !e.includes("404 (Not Found)") &&
+      !e.includes("ERR_TUNNEL_CONNECTION_FAILED")
     )).toHaveLength(0);
   });
 }

@@ -110,6 +110,10 @@ test.describe("Full auth flow", () => {
 
     // Hard navigation to "/" should happen after logout
     await page.waitForURL("**/", { timeout: 10000 });
+    // wasm-patterns rule 56: let the hard-nav Effect settle (it can fire a
+    // second set_href("/")) before navigating again.
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500);
 
     // After logout, visiting profile should redirect to login
     await page.goto("/profile", { waitUntil: "networkidle" });

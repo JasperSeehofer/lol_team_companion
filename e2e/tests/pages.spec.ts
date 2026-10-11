@@ -45,11 +45,12 @@ for (const { path, content } of AUTHED_PAGES) {
     // Nav should be present
     await expect(authedPage.locator('nav[aria-label="Primary"]')).toBeVisible();
 
-    // No JS errors (ignore 404s — the Tailwind v4 @import "tailwindcss" causes a
-    // harmless 404 in dev mode on every page)
+    // No JS errors (asset 404s and sandbox proxy tunnel failures for
+    // third-party hosts are environment noise)
     const realErrors = errors.filter((e) =>
       !e.includes("favicon") &&
-      !e.includes("404 (Not Found)")
+      !e.includes("404 (Not Found)") &&
+      !e.includes("ERR_TUNNEL_CONNECTION_FAILED")
     );
     expect(realErrors).toHaveLength(0);
   });

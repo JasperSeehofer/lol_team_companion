@@ -31,8 +31,19 @@ export function captureErrors(page: Page): string[] {
  * Extracted from audit-tree-drafter.spec.ts (lines 46-50) to centralize.
  */
 export function filterRealErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) => !e.includes("favicon") && !e.includes("404 (Not Found)")
+  return errors.filter((e) => !isEnvironmentNoise(e));
+}
+
+/**
+ * Console errors that say nothing about the app: favicon/asset 404s and
+ * ERR_TUNNEL_CONNECTION_FAILED, which a sandbox proxy reports for blocked
+ * third-party hosts (e.g. CommunityDragon role icons). Never seen in CI.
+ */
+export function isEnvironmentNoise(e: string): boolean {
+  return (
+    e.includes("favicon") ||
+    e.includes("404 (Not Found)") ||
+    e.includes("ERR_TUNNEL_CONNECTION_FAILED")
   );
 }
 

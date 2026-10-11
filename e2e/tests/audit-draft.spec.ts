@@ -108,7 +108,10 @@ test("draft: load draft from saved list", async ({ teamPage }) => {
   });
 });
 
-test("draft: delete a draft", async ({ teamPage }) => {
+// Known gap: the draft page has no delete control and there is no delete
+// server function yet (planned with the M3 draft rebuild). Marked fixme so the
+// gap is visible in every run instead of the old conditional self-skip.
+test.fixme("draft: delete a draft", async ({ teamPage }) => {
   const page = teamPage;
   const draftName = `AuditDelete_${Date.now()}`;
 
