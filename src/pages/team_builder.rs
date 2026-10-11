@@ -444,12 +444,12 @@ pub fn TeamBuilderPage() -> impl IntoView {
     let comp_name: RwSignal<String> = RwSignal::new(String::new());
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="bg-base min-h-screen px-8 py-6">
             <div class="max-w-6xl mx-auto">
                 // Header
                 <header class="mb-8">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"The drafting tower"</div>
-                    <h1 class="font-display italic text-[40px] leading-tight text-primary mt-1">"Team Builder"</h1>
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">"The drafting tower"</div>
+                    <h1 class="font-display text-[40px] leading-tight text-primary mt-1">"Team Builder"</h1>
                     <p class="text-muted text-sm mt-2">"Explore team compositions from your champion pools"</p>
                 </header>
 
@@ -523,7 +523,7 @@ pub fn TeamBuilderPage() -> impl IntoView {
                                             } else {
                                                 view! { <span></span> }.into_any()
                                             }}
-                                            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-accent">{role_display_name}</span>
+                                            <span class="font-mono uppercase tracking-[0.18em] text-caption text-accent">{role_display_name}</span>
                                         </div>
 
                                         // Player name
@@ -650,8 +650,8 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                         // Composition tags
                         <div class="mb-8">
-                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Read"</div>
-                            <h2 class="font-display italic text-2xl text-primary mb-3">"Composition Identity"</h2>
+                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Read"</div>
+                            <h2 class="font-display text-2xl text-primary mb-3">"Composition Identity"</h2>
                             {move || {
                                 let selected: Vec<(String, String)> = ROLES.iter().enumerate().map(|(i, &role)| {
                                     (role.to_string(), selected_signals[i].get())
@@ -693,14 +693,14 @@ pub fn TeamBuilderPage() -> impl IntoView {
                             >
                                 <div class="flex items-center gap-2">
                                     <div>
-                                        <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Reconnaissance"</div>
-                                        <span class="font-display italic text-2xl text-primary">"Opponent Intel"</span>
+                                        <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Reconnaissance"</div>
+                                        <span class="font-display text-2xl text-primary">"Opponent Intel"</span>
                                     </div>
                                     {move || {
                                         let id = selected_opponent_id.get();
                                         if id.is_some() {
                                             view! {
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">"Selected"</span>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">"Selected"</span>
                                             }.into_any()
                                         } else {
                                             view! { <span></span> }.into_any()
@@ -814,11 +814,11 @@ pub fn TeamBuilderPage() -> impl IntoView {
 
                         // Save as Draft section
                         <div class="bg-elevated rounded-xl border border-outline/50 p-6">
-                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Inscribe"</div>
-                            <h2 class="font-display italic text-2xl text-primary mb-4">"Save as Draft"</h2>
+                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Inscribe"</div>
+                            <h2 class="font-display text-2xl text-primary mb-4">"Save as Draft"</h2>
                             <div class="flex flex-col md:flex-row gap-4 items-end">
                                 <div class="flex-1">
-                                    <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Composition Name"</label>
+                                    <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Composition Name"</label>
                                     <input
                                         type="text"
                                         placeholder="e.g. Teamfight Comp v1"

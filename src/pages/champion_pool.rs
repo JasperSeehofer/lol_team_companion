@@ -1,4 +1,3 @@
-use crate::app::InitialTheme;
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::region::*;
 use crate::components::ui::{EmptyState, NoTeamState, SkeletonCard, ToastContext, ToastKind};
@@ -196,7 +195,7 @@ fn tier_sigil(tier: &str) -> &'static str {
     }
 }
 
-/// Cinzel italic subtitle per UI-SPEC Champion Pool §"Tier list layout".
+/// Subtitle under each tier label.
 fn tier_subtitle(tier: &str) -> &'static str {
     match tier {
         "comfort" => "Sword arm",
@@ -209,10 +208,10 @@ fn tier_subtitle(tier: &str) -> &'static str {
 }
 
 /// CSS variable name (without `var()` wrapper) for the tier-color rail.
-/// Used both for left-border and the tier-band 135deg gradient.
+/// Used for the left border and a faint tier-band tint.
 fn tier_token(tier: &str) -> &'static str {
     match tier {
-        "comfort" => "--gold-2",
+        "comfort" => "--color-success",
         "match_ready" => "--color-accent",
         "scrim_ready" => "--color-warning",
         "practicing" => "--color-danger",
@@ -224,7 +223,7 @@ fn tier_token(tier: &str) -> &'static str {
 /// Tailwind class for the tier-letter color (also used on the subtitle).
 fn tier_label_color(tier: &str) -> &'static str {
     match tier {
-        "comfort" => "text-[color:var(--gold-2)]",
+        "comfort" => "text-success",
         "match_ready" => "text-accent",
         "scrim_ready" => "text-warning",
         "practicing" => "text-danger",
@@ -282,8 +281,6 @@ pub fn ChampionPoolPage() -> impl IntoView {
     });
 
     // Region — read ONCE at page entry, passed as String prop to sub-views
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
 
     let has_team = Resource::new(
         || (),
@@ -430,17 +427,16 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let (notes_input, set_notes_input) = signal(String::new());
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Champion pool">
+        <div class="bg-base min-h-screen" data-feedback-label="Champion pool">
             <div class="max-w-7xl mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header — region-aware SectionHead
                 <SectionHead
-                    region=region.clone()
                     title="Your champions, by station.".to_string()
                     eyebrow="Strategy hub \u{00B7} Champion Pool"
                 />
 
                 // Role tabs and content — wrapped in region-aware Card
-                <Card region=region.clone()>
+                <Card >
                 <div class="flex gap-1 overflow-x-auto pb-1" data-feedback-label="Champion pool → Role tabs">
                     {POOL_ROLES.iter().map(|&role| {
                         view! {
@@ -533,7 +529,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                         }
                                                     }
                                                     style=format!(
-                                                        "background: linear-gradient(135deg, color-mix(in oklab, var({band}) 30%, var(--color-surface)), var(--color-surface));",
+                                                        "background: color-mix(in oklab, var({band}) 8%, var(--color-surface));",
                                                         band = band_token
                                                     )
                                                     on:dragover=move |ev: web_sys::DragEvent| {
@@ -568,14 +564,14 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                         class="flex flex-col items-center justify-center px-2 py-4 border-r-2"
                                                         style=format!("border-right-color: var({band})", band = band_token)
                                                     >
-                                                        <span class=format!("font-imperial font-bold leading-none text-[56px] {}", tier_label_color(tier))>
+                                                        <span class=format!("font-mono font-bold leading-none text-[56px] {}", tier_label_color(tier))>
                                                             {tier_sigil(tier)}
                                                         </span>
-                                                        <span class="font-display italic text-[13px] text-secondary mt-2 text-center">
+                                                        <span class="font-display text-label text-secondary mt-2 text-center">
                                                             {tier_subtitle(tier)}
                                                         </span>
                                                         <span class=format!(
-                                                            "mt-1 font-imperial uppercase tracking-[0.18em] text-[9px] {}",
+                                                            "mt-1 font-mono uppercase tracking-[0.18em] text-caption {}",
                                                             tier_label_color(tier)
                                                         )>
                                                             {tier_label(tier)}
@@ -705,10 +701,10 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                         let label = match t.as_str() {
                                                                                             "strong" => "S", "neutral" => "~", "weak" => "W", _ => "?",
                                                                                         };
-                                                                                        view! { <span class=format!("text-[9px] px-1 rounded border font-bold {cls}")>{label}</span> }
+                                                                                        view! { <span class=format!("text-caption px-1 rounded border font-bold {cls}")>{label}</span> }
                                                                                     })}
                                                                                 </div>
-                                                                                // Stats line (text-[10px] text-dimmed)
+                                                                                // Stats line (text-caption text-dimmed)
                                                                                 {move || {
                                                                                     let champ_name = champ_for_stats.clone();
                                                                                     stats_resource.get().and_then(|r| r.ok()).and_then(|stats| {
@@ -716,7 +712,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                     }).map(|s| {
                                                                                         let wr = if s.games > 0 { (s.wins as f64 / s.games as f64 * 100.0).round() as i32 } else { 0 };
                                                                                         view! {
-                                                                                            <span class="text-[10px] text-dimmed" title="Games / Win% / KDA">
+                                                                                            <span class="text-caption text-dimmed" title="Games / Win% / KDA">
                                                                                                 {format!("{}G {}%W {:.1}", s.games, wr, s.avg_kda)}
                                                                                             </span>
                                                                                         }
@@ -802,7 +798,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                             _ => "Unknown",
                                                         };
                                                         view! {
-                                                            <span class=format!("text-[10px] px-1.5 py-0.5 rounded border font-medium {cls}")>{label}</span>
+                                                            <span class=format!("text-caption px-1.5 py-0.5 rounded border font-medium {cls}")>{label}</span>
                                                         }
                                                     })}
                                                 </div>
@@ -1049,7 +1045,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                             })}
                                                                                                             <span class="text-primary text-sm font-medium">{note_clone.title.clone()}</span>
                                                                                                             {(!difficulty_stars.is_empty()).then(|| view! {
-                                                                                                                <span class="text-red-400 text-[10px]" title="Difficulty">{difficulty_stars}</span>
+                                                                                                                <span class="text-red-400 text-caption" title="Difficulty">{difficulty_stars}</span>
                                                                                                             })}
                                                                                                         </div>
                                                                                                         {(!note_clone.content.is_empty()).then(|| view! {
@@ -1185,7 +1181,7 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                                                                                     <div class="min-w-0 flex-1">
                                                                                                         <div class="flex items-center gap-2">
                                                                                                             <span class="text-primary text-sm font-medium">{note.title.clone()}</span>
-                                                                                                            <span class="text-dimmed text-[10px]">{date}</span>
+                                                                                                            <span class="text-dimmed text-caption">{date}</span>
                                                                                                         </div>
                                                                                                         {(!note.content.is_empty()).then(|| view! {
                                                                                                             <p class="text-secondary text-xs mt-1 whitespace-pre-wrap">{note.content.clone()}</p>

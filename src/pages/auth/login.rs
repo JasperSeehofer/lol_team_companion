@@ -7,12 +7,12 @@
 //! (leptos rule 8: hard-nav after login refreshes auth state). Only
 //! the visual layer is restyled.
 
+use crate::components::ui::{
+    Button, ButtonSize, ButtonType, ButtonVariant, ErrorBanner, Field, InputKind, PageShell,
+    PageWidth, TextField,
+};
 use leptos::prelude::*;
 use leptos_router::components::A;
-
-use crate::app::InitialTheme;
-use crate::components::region::CompanionSigil;
-use crate::components::ui::ErrorBanner;
 
 #[server]
 pub async fn login_action(email: String, password: String) -> Result<String, ServerFnError> {
@@ -68,10 +68,6 @@ pub async fn login_action(email: String, password: String) -> Result<String, Ser
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-    // Phase 18.2-03 — read region ONCE at page entry; pass as a prop
-    // to CompanionSigil so SSR and WASM hydrate see the same value.
-    let region = use_context::<InitialTheme>().unwrap_or_default().0;
-
     let login = ServerAction::<LoginAction>::new();
 
     // Hard navigate after successful login so the nav refetches auth state
@@ -96,82 +92,39 @@ pub fn LoginPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
-            // Optional FLUX-style background — Demacia auth bg only.
-            // CSS in input.css hides this for Pandemonium (which falls
-            // back to solid bg-base + canvas-grain).
-            <img
-                src="/img/auth-bg-demacia.jpg"
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-                class="auth-bg-demacia fixed inset-0 -z-10 w-full h-full object-cover"
-            />
+        <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
+            <p class="overline">"Closed beta"</p>
+            <h1 class="mt-3 font-display text-page font-semibold tracking-[-0.02em] text-primary">
+                "Sign in"
+            </h1>
+            <p class="mt-2 text-body text-secondary">
+                "Your team's drafts, plans and reviews are where you left them."
+            </p>
 
-            <div class="relative z-10 bg-surface border border-divider rounded-xl p-8 max-w-sm w-full shadow-xl">
-                <div class="flex justify-center mb-6">
-                    <CompanionSigil region=region.clone() />
+            // ActionForm has no `class` prop (leptos rule 7).
+            <ActionForm action=login>
+                <div class="mt-8 flex flex-col gap-5">
+                    {move || error().map(|e| view! { <ErrorBanner message=e /> })}
+
+                    <Field id="login-email" label="Email">
+                        <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
+                    </Field>
+                    <Field id="login-password" label="Password">
+                        <TextField kind=InputKind::Password name="password" required=true autocomplete="current-password" />
+                    </Field>
+
+                    <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Lg full_width=true>
+                        "Sign in"
+                    </Button>
+
+                    <p class="border-t border-rule pt-5 text-body text-secondary">
+                        "No account yet? Registration needs an invite link from your team. "
+                        <A href="/closed-beta" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                            "About the closed beta"
+                        </A>
+                    </p>
                 </div>
-
-                <h1 class="font-display italic text-[24px] text-primary text-center">
-                    "Welcome back"
-                </h1>
-                <p class="text-sm text-muted mt-1 text-center">
-                    "Sign in to continue"
-                </p>
-
-                // ActionForm has no `class` prop (leptos rule 7) — wrap
-                // form contents in a styled <div> for spacing.
-                <ActionForm action=login>
-                    <div class="flex flex-col gap-4 mt-6">
-                        {move || error().map(|e| view! {
-                            <ErrorBanner message=e />
-                        })}
-
-                        <div>
-                            <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                "Email"
-                            </label>
-                            <input
-                                type="email"
-                                name="email"
-                                required
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                "Password"
-                            </label>
-                            <input
-                                type="password"
-                                name="password"
-                                required
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            class="bg-accent text-accent-contrast font-semibold w-full py-3 rounded-lg hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors mt-2"
-                        >
-                            "Sign in"
-                        </button>
-
-                        <p class="text-sm text-muted text-center mt-2">
-                            "No account? "
-                            // Register requires an invite link from
-                            // captain — link points to closed-beta
-                            // landing (D-14). Direct register without
-                            // an invite redirects to /closed-beta.
-                            <A href="/closed-beta" attr:class="text-accent hover:text-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
-                                "Register with an invite link"
-                            </A>
-                        </p>
-                    </div>
-                </ActionForm>
-            </div>
-        </div>
+            </ActionForm>
+        </PageShell>
     }
 }

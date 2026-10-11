@@ -109,7 +109,11 @@ pub fn Th(
             Density::Comfortable => "py-3",
         },
         align.class(),
-        if c.sticky { "sticky top-0 z-10 bg-page" } else { "" },
+        if c.sticky {
+            "sticky top-0 z-10 bg-page"
+        } else {
+            ""
+        },
     ]);
     let aria_sort = sort.map(|s| match s {
         SortDir::Ascending => "ascending",

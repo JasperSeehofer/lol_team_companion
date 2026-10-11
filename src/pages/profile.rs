@@ -1,4 +1,3 @@
-use crate::components::region::{GiltCorner, HeraldicDivider};
 use crate::components::ui::{EmptyState, SkeletonCard, SkeletonGrid, ToastContext, ToastKind};
 use crate::models::champion::ChampionPoolEntry;
 use crate::models::user::PublicUser;
@@ -94,15 +93,11 @@ const REGIONS: &[(&str, &str)] = &[
 
 const POOL_ROLES: &[&str] = &["Top", "Jungle", "Mid", "ADC", "Support"];
 
-/// Card.gilt panel — Demacia-tier folio panel with 4 corner ornaments.
+/// A ruled panel (legacy; M5 replaces it with plain sections).
 #[component]
-fn GiltCard(children: Children) -> impl IntoView {
+fn PanelCard(children: Children) -> impl IntoView {
     view! {
-        <section class="bg-elevated border border-outline rounded-xl p-6 relative">
-            <div class="absolute top-2 left-2 pointer-events-none"><GiltCorner corner="tl" size=20 /></div>
-            <div class="absolute top-2 right-2 pointer-events-none"><GiltCorner corner="tr" size=20 /></div>
-            <div class="absolute bottom-2 left-2 pointer-events-none"><GiltCorner corner="bl" size=20 /></div>
-            <div class="absolute bottom-2 right-2 pointer-events-none"><GiltCorner corner="br" size=20 /></div>
+        <section class="bg-ink-1 border border-rule p-6 relative">
             <div class="relative">
                 {children()}
             </div>
@@ -165,7 +160,7 @@ pub fn ProfilePage() -> impl IntoView {
     });
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="bg-base min-h-screen px-8 py-6">
             <div class="max-w-4xl mx-auto">
                 <Suspense fallback=move || view! {
                     <div class="flex flex-col gap-6">
@@ -180,7 +175,6 @@ pub fn ProfilePage() -> impl IntoView {
                                 let username = u.username.clone();
                                 let riot_name = u.riot_summoner_name.clone();
                                 let initial_region = u.riot_region.clone().unwrap_or_default();
-                                let theme_active = u.theme.clone();
                                 let (editing_username, set_editing_username) = signal(false);
                                 let username_for_edit = username.clone();
                                 let username_for_header = username.clone();
@@ -188,25 +182,25 @@ pub fn ProfilePage() -> impl IntoView {
                                     <div class="flex flex-col gap-7">
                                         // Captain's Folio header
                                         <header class="pt-2 pb-1">
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
+                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">
                                                 "Captain\u{2019}s Folio"
                                             </div>
-                                            <h1 class="font-display italic text-[44px] leading-tight text-primary mt-1">
+                                            <h1 class="font-display text-display leading-tight text-primary mt-1">
                                                 {username_for_header}
                                             </h1>
-                                            <div class="mt-3"><HeraldicDivider width=320 /></div>
+                                            <div class="mt-3"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
                                         </header>
 
-                                        // Account info (gilt card)
-                                        <GiltCard>
+                                        // Account info
+                                        <PanelCard>
                                             <div class="flex items-baseline justify-between mb-4">
-                                                <h2 class="font-display italic text-[22px] text-primary">"Account"</h2>
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Identity"</span>
+                                                <h2 class="font-display text-[22px] text-primary">"Account"</h2>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Identity"</span>
                                             </div>
 
 
                                             <div>
-                                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Username"</label>
+                                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Username"</label>
                                                 {move || {
                                                     if editing_username.get() {
                                                         let username_val = username_for_edit.clone();
@@ -241,7 +235,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                         let username_display = username_for_edit.clone();
                                                         view! {
                                                             <div class="flex items-center gap-2">
-                                                                <span class="font-display italic text-primary text-2xl">{username_display}</span>
+                                                                <span class="font-display text-primary text-2xl">{username_display}</span>
                                                                 <button
                                                                     class="text-muted hover:text-accent transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md p-1"
                                                                     title="Edit username"
@@ -257,20 +251,20 @@ pub fn ProfilePage() -> impl IntoView {
                                                     }
                                                 }}
                                             </div>
-                                        </GiltCard>
+                                        </PanelCard>
 
-                                        // Riot account (gilt card)
-                                        <GiltCard>
+                                        // Riot account
+                                        <PanelCard>
                                             <div class="flex items-baseline justify-between mb-4">
-                                                <h2 class="font-display italic text-[22px] text-primary">"Riot Account"</h2>
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Linked seal"</span>
+                                                <h2 class="font-display text-[22px] text-primary">"Riot Account"</h2>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Linked seal"</span>
                                             </div>
 
                                             {match riot_name {
                                                 Some(name) => view! {
                                                     <p class="text-success text-sm mb-4">
-                                                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-success mr-2">"Linked"</span>
-                                                        <span class="font-display italic text-primary text-base">{name}</span>
+                                                        <span class="font-mono uppercase tracking-[0.18em] text-caption text-success mr-2">"Linked"</span>
+                                                        <span class="font-display text-primary text-base">{name}</span>
                                                     </p>
                                                 }.into_any(),
                                                 None => view! {
@@ -282,7 +276,7 @@ pub fn ProfilePage() -> impl IntoView {
 
                                             // Region dropdown
                                             <div class="mb-4">
-                                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Region"</label>
+                                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
                                                 <select
                                                     class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-primary w-full max-w-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                     on:change=move |ev| {
@@ -312,7 +306,7 @@ pub fn ProfilePage() -> impl IntoView {
                                             <ActionForm action=link_riot>
                                                 <div class="flex flex-col gap-4">
                                                     <div>
-                                                        <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">
+                                                        <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
                                                             "Riot ID (e.g. PlayerName#EUW)"
                                                         </label>
                                                         <input
@@ -331,13 +325,13 @@ pub fn ProfilePage() -> impl IntoView {
                                                     </button>
                                                 </div>
                                             </ActionForm>
-                                        </GiltCard>
+                                        </PanelCard>
 
-                                        // Champion Pool summary (gilt card)
-                                        <GiltCard>
+                                        // Champion Pool summary
+                                        <PanelCard>
                                             <div class="flex items-center justify-between mb-3">
                                                 <div>
-                                                    <h2 class="font-display italic text-[22px] text-primary">"Champion Pool"</h2>
+                                                    <h2 class="font-display text-[22px] text-primary">"Champion Pool"</h2>
                                                     <p class="text-muted text-sm">"Champions you play, organized by role and tier."</p>
                                                 </div>
                                                 <a
@@ -361,8 +355,8 @@ pub fn ProfilePage() -> impl IntoView {
                                                                 <div class="flex gap-3 flex-wrap">
                                                                     {counts.into_iter().map(|(role, count)| view! {
                                                                         <div class="bg-surface border border-outline/50 rounded-lg px-3 py-2 flex items-baseline gap-2">
-                                                                            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">{role}</span>
-                                                                            <span class="font-display italic text-primary text-lg tabular-nums">{count}</span>
+                                                                            <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">{role}</span>
+                                                                            <span class="font-display text-primary text-lg tabular-nums">{count}</span>
                                                                         </div>
                                                                     }).collect_view()}
                                                                 </div>
@@ -372,27 +366,13 @@ pub fn ProfilePage() -> impl IntoView {
                                                     Err(e) => view! { <p class="text-danger text-sm" role="alert">{e.to_string()}</p> }.into_any(),
                                                 })}
                                             </Suspense>
-                                        </GiltCard>
+                                        </PanelCard>
 
-                                        // Theme preference (gilt card)
-                                        <GiltCard>
-                                            <div class="flex items-center justify-between">
-                                                <div>
-                                                    <h2 class="font-display italic text-[22px] text-primary">"Theme"</h2>
-                                                    <p class="text-muted text-sm mt-1">
-                                                        "Active theme: "
-                                                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-accent">{theme_active}</span>
-                                                        ". Switch in the top nav."
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </GiltCard>
-
-                                        // Logout (gilt card with destructive button)
-                                        <GiltCard>
+                                        // Logout
+                                        <PanelCard>
                                             <div class="flex items-baseline justify-between mb-4">
-                                                <h2 class="font-display italic text-[22px] text-primary">"Sign out"</h2>
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"End session"</span>
+                                                <h2 class="font-display text-[22px] text-primary">"Sign out"</h2>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"End session"</span>
                                             </div>
                                             <ActionForm action=logout_action>
                                                 <button
@@ -402,7 +382,7 @@ pub fn ProfilePage() -> impl IntoView {
                                                     "Log Out"
                                                 </button>
                                             </ActionForm>
-                                        </GiltCard>
+                                        </PanelCard>
                                     </div>
                                 }.into_any()
                             }

@@ -1,4 +1,6 @@
-use crate::components::region::*;
+use crate::components::ui::{
+    Badge, BadgeTone, Button, ButtonVariant, PageHeader, PageShell, PageWidth,
+};
 use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
 use crate::models::team::Team;
 use crate::models::user::{JoinRequest, TeamMember};
@@ -502,19 +504,18 @@ pub fn TeamDashboard() -> impl IntoView {
     let pool_gap_panel = Resource::new(|| (), |_| get_pool_gap_panel());
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Team dashboard">
-            <div class="max-w-5xl mx-auto">
+        <PageShell width=PageWidth::Standard attr:data-feedback-label="Team dashboard">
             <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
                 {move || {
                     if is_solo_mode.get() {
                         return Some(view! {
-                            <div class="max-w-2xl py-8 text-center">
-                                <div class="bg-elevated border border-outline rounded-xl p-6">
-                                    <h2 class="font-display italic text-2xl text-primary mb-2">"Team feature"</h2>
-                                    <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
-                                    <button
-                                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                        on:click=move |_| {
+                            <div class="max-w-2xl">
+                                <PageHeader eyebrow="Team" title="Team dashboard" />
+                                <p class="text-reading text-secondary">"You are in solo mode. Switch to team mode to see your team's dashboard, roster and notes."</p>
+                                <div class="mt-6">
+                                    <Button
+                                        variant=ButtonVariant::Primary
+                                        on_click=Callback::new(move |_| {
                                             leptos::task::spawn_local(async move {
                                                 let _ = crate::components::nav::set_user_mode("team".to_string()).await;
                                                 #[cfg(feature = "hydrate")]
@@ -522,10 +523,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     let _ = window.location().reload();
                                                 }
                                             });
-                                        }
+                                        })
                                     >
                                         "Switch to Team Mode"
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         }.into_any());
@@ -533,7 +534,6 @@ pub fn TeamDashboard() -> impl IntoView {
                     dashboard.get().map(|result| match result {
                     Ok(Some((team, members, current_user_id))) => {
                         {
-                            // Demacia: original team management UI with gilt header
                             let is_leader = team.created_by == current_user_id;
                             let created_by = team.created_by.clone();
                             let (edit_name, set_edit_name) = signal(team.name.clone());
@@ -579,62 +579,42 @@ pub fn TeamDashboard() -> impl IntoView {
 
                         view! {
                             <div class="flex flex-col gap-6">
-                                // Team info card — gilt Card (region primitive)
-                                <Card region="demacia".to_string() variant="gilt".to_string()>
-                                <div>
-                                    <div class="flex items-start justify-between gap-4">
-                                        <div>
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"STRATEGY ROOM"</div>
-                                            <div class="flex items-center gap-2">
-                                                <h2 class="font-display italic text-[28px] text-accent">{team.name.clone()}</h2>
-                                                {if is_leader {
-                                                    view! {
-                                                        <button
-                                                            class="text-muted hover:text-accent transition-colors cursor-pointer p-1 rounded-md hover:bg-overlay focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                            title="Edit team details"
-                                                            aria-label="Edit team details"
-                                                            on:click=move |_| set_show_edit_modal.set(true)
-                                                        >
-                                                            // Pencil SVG icon
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                            </svg>
-                                                        </button>
-                                                    }.into_any()
-                                                } else {
-                                                    view! { <span></span> }.into_any()
-                                                }}
-                                            </div>
-                                            <p class="text-muted text-sm mt-1">"Region: " <span class="font-mono text-secondary">{team.region.clone()}</span></p>
-                                            {if is_leader {
-                                                view! { <span class="inline-block mt-1 font-imperial uppercase tracking-[0.18em] text-[10px] text-accent bg-accent/10 rounded-md px-2 py-0.5">"Team Leader"</span> }.into_any()
-                                            } else {
-                                                view! { <span></span> }.into_any()
-                                            }}
-                                        </div>
-                                    </div>
-
-                                    // Riot account status notice
-                                    {if !current_user_riot_linked {
-                                        view! {
-                                            <div class="mt-4 pt-4 border-t border-divider">
-                                                <p class="text-muted text-sm">
-                                                    "Riot account not linked \u{2014} "
-                                                    <A href="/profile" attr:class="text-accent hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"link it in your profile"</A>
-                                                </p>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }}
-                                    <div class="mt-4 pt-3 border-t border-divider/50 flex items-center gap-3">
-                                        <HeraldicDivider width=200 />
-                                        <Btn region="demacia".to_string() variant="primary".to_string()>
-                                            <A href="/draft" attr:class="text-inherit no-underline">"Open Draft"</A>
-                                        </Btn>
-                                    </div>
-                                </div>
-                                </Card>
+                                // Page header: team name, region, role, next action.
+                                {
+                                    let team_name = team.name.clone();
+                                    let team_region = team.region.clone();
+                                    view! {
+                                        <PageHeader
+                                            eyebrow="Team"
+                                            title=team_name
+                                            meta=move || {
+                                                let team_region = team_region.clone();
+                                                view! {
+                                                    <span>"Region " <span class="figures text-primary">{team_region}</span></span>
+                                                    {is_leader.then(|| view! { <Badge tone=BadgeTone::Accent>"Team leader"</Badge> })}
+                                                }
+                                            }
+                                            actions=move || view! {
+                                                {is_leader.then(|| view! {
+                                                    <Button
+                                                        variant=ButtonVariant::Quiet
+                                                        on_click=Callback::new(move |_| set_show_edit_modal.set(true))
+                                                    >
+                                                        "Edit team"
+                                                    </Button>
+                                                })}
+                                                <Button href="/draft" variant=ButtonVariant::Primary>"Open draft"</Button>
+                                            }
+                                        />
+                                    }
+                                }
+                                {(!current_user_riot_linked).then(|| view! {
+                                    <p class="-mt-2 text-body text-secondary">
+                                        "Your Riot account is not linked yet. "
+                                        <A href="/profile" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Link it on your profile"</A>
+                                        " so your games count for the team."
+                                    </p>
+                                })}
 
                                 // Edit team modal (leader only)
                                 {move || if show_edit_modal.get() {
@@ -649,10 +629,10 @@ pub fn TeamDashboard() -> impl IntoView {
                                                 class="bg-elevated border border-outline rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
                                                 on:click=move |ev| ev.stop_propagation()
                                             >
-                                                <h3 class="font-display italic text-primary text-xl mb-4">"Edit Team"</h3>
+                                                <h3 class="font-display text-primary text-xl mb-4">"Edit Team"</h3>
                                                 <div class="flex flex-col gap-4">
                                                     <div>
-                                                        <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Team Name"</label>
+                                                        <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Team Name"</label>
                                                         <input
                                                             type="text"
                                                             prop:value=move || edit_name.get()
@@ -661,7 +641,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Region"</label>
+                                                        <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
                                                         <select
                                                             prop:value=move || edit_region.get()
                                                             on:change=move |ev| set_edit_region.set(event_target_value(&ev))
@@ -734,7 +714,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     } else {
                                                         view! {
                                                             <div class="bg-elevated border border-accent/30 rounded-xl p-5">
-                                                                <h3 class="font-display italic text-accent text-xl mb-3 flex items-center gap-2">
+                                                                <h3 class="font-display text-accent text-xl mb-3 flex items-center gap-2">
                                                                     "Join Requests"
                                                                     <span class="bg-accent text-accent-contrast text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center tabular-nums">
                                                                         {reqs.len()}
@@ -803,8 +783,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Starting roster — 5 role slots
                                 <div data-feedback-label="Team dashboard → Roster">
-                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Order of battle"</div>
-                                    <h3 class="font-display italic text-2xl text-primary mb-3">"Starting Roster"</h3>
+                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Order of battle"</div>
+                                    <h3 class="font-display text-2xl text-primary mb-3">"Starting Roster"</h3>
                                     <div class="grid grid-cols-5 gap-3">
                                         {STARTER_ROLES.iter().map(|&role| {
                                             let assigned = starters.iter().find(|m| m.role == role).cloned();
@@ -896,7 +876,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                     } else {
                                                         view! {
                                                             <div class="flex-1 flex items-center justify-center">
-                                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-dimmed">"Empty"</span>
+                                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-dimmed">"Empty"</span>
                                                             </div>
                                                         }.into_any()
                                                     }}
@@ -913,8 +893,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Coaches section
                                 <div data-feedback-label="Team dashboard → Coaches">
-                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Council"</div>
-                                    <h3 class="font-display italic text-2xl text-primary mb-3">"Coaches"</h3>
+                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Council"</div>
+                                    <h3 class="font-display text-2xl text-primary mb-3">"Coaches"</h3>
                                     {if coaches.is_empty() {
                                         view! { <p class="text-dimmed text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
                                     } else {
@@ -942,7 +922,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                         <span class="text-accent text-xs" title="Team Leader" aria-hidden="true">"★"</span>
                                                                     })}
                                                                 </div>
-                                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-info">"Coach"</span>
+                                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-info">"Coach"</span>
                                                             </div>
                                                         </div>
                                                     }
@@ -954,8 +934,8 @@ pub fn TeamDashboard() -> impl IntoView {
 
                                 // Substitute bench
                                 <div>
-                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Reserves"</div>
-                                    <h3 class="font-display italic text-2xl text-primary mb-3">"Bench / Substitutes"</h3>
+                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Reserves"</div>
+                                    <h3 class="font-display text-2xl text-primary mb-3">"Bench / Substitutes"</h3>
                                     {if subs.is_empty() {
                                         view! { <p class="text-dimmed text-sm">"No players on the bench."</p> }.into_any()
                                     } else {
@@ -1076,8 +1056,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Battle log"</div>
-                                            <h3 class="font-display italic text-2xl text-primary">"Recent Games"</h3>
+                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Battle log"</div>
+                                            <h3 class="font-display text-2xl text-primary">"Recent Games"</h3>
                                         </div>
                                         <A href="/stats" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all stats \u{2192}"</A>
                                     </div>
@@ -1111,9 +1091,9 @@ pub fn TeamDashboard() -> impl IntoView {
                                                                     </div>
                                                                     <span class="text-secondary text-sm font-mono tabular-nums">{kda}</span>
                                                                     <span class=if win {
-                                                                        "font-imperial uppercase tracking-[0.18em] text-[10px] text-info bg-info/20 rounded-md px-2 py-0.5"
+                                                                        "font-mono uppercase tracking-[0.18em] text-caption text-info bg-info/20 rounded-md px-2 py-0.5"
                                                                     } else {
-                                                                        "font-imperial uppercase tracking-[0.18em] text-[10px] text-danger bg-danger/20 rounded-md px-2 py-0.5"
+                                                                        "font-mono uppercase tracking-[0.18em] text-caption text-danger bg-danger/20 rounded-md px-2 py-0.5"
                                                                     }>
                                                                         {if win { "W" } else { "L" }}
                                                                     </span>
@@ -1135,8 +1115,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Tasking"</div>
-                                            <h3 class="font-display italic text-2xl text-primary">"Open Action Items"</h3>
+                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Tasking"</div>
+                                            <h3 class="font-display text-2xl text-primary">"Open Action Items"</h3>
                                         </div>
                                         <A href="/action-items" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all \u{2192}"</A>
                                     </div>
@@ -1179,8 +1159,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Debrief"</div>
-                                            <h3 class="font-display italic text-2xl text-primary">"Recent Reviews"</h3>
+                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Debrief"</div>
+                                            <h3 class="font-display text-2xl text-primary">"Recent Reviews"</h3>
                                         </div>
                                         <A href="/post-game" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all reviews"</A>
                                     </div>
@@ -1228,8 +1208,8 @@ pub fn TeamDashboard() -> impl IntoView {
                                 <div>
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
-                                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Reconnaissance"</div>
-                                            <h3 class="font-display italic text-2xl text-primary">"Pool Gap Warnings"</h3>
+                                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Reconnaissance"</div>
+                                            <h3 class="font-display text-2xl text-primary">"Pool Gap Warnings"</h3>
                                         </div>
                                         <A href="/champion-pool" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"Manage pools"</A>
                                     </div>
@@ -1316,7 +1296,7 @@ pub fn TeamDashboard() -> impl IntoView {
                                 }}
                             </div>
                         }.into_any()
-                        } // end else (Demacia) branch
+                        }
                     },
                     Ok(None) => view! {
                         <NoTeamState />
@@ -1326,8 +1306,7 @@ pub fn TeamDashboard() -> impl IntoView {
                     }.into_any(),
                 })}}
             </Suspense>
-            </div>
-        </div>
+        </PageShell>
     }
 }
 
@@ -1344,8 +1323,8 @@ fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
         <div>
             <div class="flex items-center justify-between mb-3">
                 <div>
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Folio"</div>
-                    <h3 class="font-display italic text-2xl text-primary">"Team Notebook"</h3>
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Folio"</div>
+                    <h3 class="font-display text-2xl text-primary">"Team Notebook"</h3>
                 </div>
                 <button
                     class="text-muted hover:text-accent text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1"

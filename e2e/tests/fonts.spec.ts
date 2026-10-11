@@ -2,7 +2,7 @@
  * Phase 17 plan 17-01 — Wave 0 G-01 enforcement spec.
  *
  * Hard NO from `[[guardrails#G-01]]`: zero requests to fonts.googleapis.com
- * or fonts.gstatic.com. All 5 font families are self-hosted under
+ * or fonts.gstatic.com. The four font families are self-hosted under
  * `/fonts/{family}/*.woff2` (see plan 17-01 task 1).
  */
 import { test, expect } from "@playwright/test";

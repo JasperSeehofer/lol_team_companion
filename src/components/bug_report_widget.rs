@@ -398,11 +398,11 @@ fn BugReportWidgetInner(
                     class="bg-surface border border-divider rounded-xl p-6 shadow-xl max-w-md w-full"
                     on:click=|ev: ev::MouseEvent| ev.stop_propagation()
                 >
-                    <h2 class="font-display italic text-xl text-primary mb-4">
+                    <h2 class="font-display text-xl text-primary mb-4">
                         "Report"
                     </h2>
 
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
                         "Element"
                     </div>
                     <div class="bg-elevated rounded-lg p-2 text-sm text-secondary mb-4">

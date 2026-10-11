@@ -73,10 +73,7 @@ impl PrepStep {
 /// cue. The next step carries `aria-current="step"` and a real link to
 /// where it is done.
 #[component]
-pub fn PrepSequence(
-    #[prop(into)] label: String,
-    steps: Vec<PrepStep>,
-) -> impl IntoView {
+pub fn PrepSequence(#[prop(into)] label: String, steps: Vec<PrepStep>) -> impl IntoView {
     view! {
         <ol class="flex flex-col" aria-label=label>
             {steps

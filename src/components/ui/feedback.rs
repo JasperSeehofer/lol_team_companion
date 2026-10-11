@@ -179,7 +179,8 @@ pub fn SkeletonLine(
     #[prop(default = "w-full")] width: &'static str,
     #[prop(default = "h-4")] height: &'static str,
 ) -> impl IntoView {
-    let cls = format!("animate-pulse motion-reduce:animate-none bg-ink-2 rounded-ctl {width} {height}");
+    let cls =
+        format!("animate-pulse motion-reduce:animate-none bg-ink-2 rounded-ctl {width} {height}");
     view! { <div class=cls aria-hidden="true"></div> }
 }
 
@@ -188,7 +189,9 @@ pub fn SkeletonLine(
 /// A11y: decorative (`aria-hidden`), static under reduced motion.
 #[component]
 pub fn SkeletonCard(#[prop(default = "h-24")] height: &'static str) -> impl IntoView {
-    let cls = format!("animate-pulse motion-reduce:animate-none bg-ink-1 border border-rule {height} w-full");
+    let cls = format!(
+        "animate-pulse motion-reduce:animate-none bg-ink-1 border border-rule {height} w-full"
+    );
     view! { <div class=cls aria-hidden="true"></div> }
 }
 

@@ -23,7 +23,7 @@
  * baselines are gone. Remaining baselines predate the M0 footer and must be
  * re-captured (`--update-snapshots`) once the M2 design system lands.
  */
-import { test, expect, setRegion, setMode } from "./fixtures";
+import { test, expect, setMode } from "./fixtures";
 
 const VR_OPTS = {
   maxDiffPixelRatio: 0.02,
@@ -155,7 +155,6 @@ test.describe("utility auth-required routes", () => {
 
 test.describe("scoped routes - /draft (3 baselines)", () => {
   test("/draft demacia carousel baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/draft");
     await setMode(authedPage, "carousel");
     await authedPage.waitForLoadState("networkidle");
@@ -167,7 +166,6 @@ test.describe("scoped routes - /draft (3 baselines)", () => {
   });
 
   test("/draft demacia war-table baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/draft");
     await setMode(authedPage, "war-table");
     await authedPage.waitForLoadState("networkidle");
@@ -179,7 +177,6 @@ test.describe("scoped routes - /draft (3 baselines)", () => {
   });
 
   test("/draft demacia ledger baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/draft");
     await setMode(authedPage, "ledger");
     await authedPage.waitForLoadState("networkidle");
@@ -194,7 +191,6 @@ test.describe("scoped routes - /draft (3 baselines)", () => {
 
 test.describe("scoped routes - /solo (3 baselines)", () => {
   test("/solo demacia constellation baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/solo");
     await setMode(authedPage, "constellation");
     await authedPage.waitForLoadState("networkidle");
@@ -206,7 +202,6 @@ test.describe("scoped routes - /solo (3 baselines)", () => {
   });
 
   test("/solo demacia forge baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/solo");
     await setMode(authedPage, "forge");
     await authedPage.waitForLoadState("networkidle");
@@ -218,7 +213,6 @@ test.describe("scoped routes - /solo (3 baselines)", () => {
   });
 
   test("/solo demacia journal baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/solo");
     await setMode(authedPage, "journal");
     await authedPage.waitForLoadState("networkidle");
@@ -233,7 +227,6 @@ test.describe("scoped routes - /solo (3 baselines)", () => {
 
 test.describe("scoped routes - /team/dashboard (1 baseline)", () => {
   test("/team/dashboard demacia dashboard baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/team/dashboard");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
@@ -247,7 +240,6 @@ test.describe("scoped routes - /team/dashboard (1 baseline)", () => {
 
 test.describe("scoped routes - single-mode (4 baselines)", () => {
   test("/tree-drafter demacia baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/tree-drafter");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
@@ -258,7 +250,6 @@ test.describe("scoped routes - single-mode (4 baselines)", () => {
   });
 
   test("/champion-pool demacia baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/champion-pool");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
@@ -271,7 +262,6 @@ test.describe("scoped routes - single-mode (4 baselines)", () => {
   test("/match/:id demacia baseline", async ({ authedPage }) => {
     // Synthetic match ID — page renders empty/error state, which is
     // itself a baseline-worthy surface.
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/match/test-match-id");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
@@ -282,7 +272,6 @@ test.describe("scoped routes - single-mode (4 baselines)", () => {
   });
 
   test("/post-game demacia baseline", async ({ authedPage }) => {
-    await setRegion(authedPage, "demacia");
     await authedPage.goto("/post-game");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);

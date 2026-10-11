@@ -1,6 +1,8 @@
-use crate::app::InitialTheme;
 use crate::components::region::*;
 use crate::components::skeleton::{PageEmpty, PageLoading};
+use crate::components::ui::{
+    Badge, BadgeTone, Button, ButtonVariant, PageHeader, PageShell, PageWidth,
+};
 use crate::components::ui::{EmptyState, ErrorBanner, StatusMessage, ToastContext, ToastKind};
 use crate::models::match_data::{GoalProgressPayload, PlayerMatchStats, RankedSnapshot};
 use crate::models::user::RankedInfo;
@@ -239,15 +241,11 @@ pub async fn set_solo_mode_pref(mode: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
-/// Resolve the effective solo mode from a stored preference and region context.
-/// Returns region-coupled defaults when stored == "auto" (D-04).
-/// An explicit user pick (stored != "auto") always wins over the default (D-05).
-fn resolve_mode(stored: &str, region: &str) -> String {
-    if stored != "auto" {
-        return stored.to_string();
-    }
-    match region {
-        "pandemonium" => "forge".to_string(),
+/// Resolve the effective solo view from a stored preference: an explicit
+/// pick wins; "auto" (or anything unknown) is the overview.
+fn resolve_mode(stored: &str) -> String {
+    match stored {
+        "constellation" | "forge" | "journal" => stored.to_string(),
         _ => "constellation".to_string(),
     }
 }
@@ -258,11 +256,6 @@ fn resolve_mode(stored: &str, region: &str) -> String {
 
 #[component]
 pub fn SoloDashboardPage() -> impl IntoView {
-    // Region read ONCE at page entry — passed as prop to all sub-components.
-    // Per SPEC Constraints: InitialTheme context must NOT be read inside primitives.
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-
     // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -277,11 +270,10 @@ pub fn SoloDashboardPage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
 
     // Mode preference — signal-driven, persisted via set_solo_mode_pref server fn (18-08)
-    let (mode_current, set_mode_current) = signal(resolve_mode("auto", &region));
-    let region_for_mode = region.clone();
+    let (mode_current, set_mode_current) = signal(resolve_mode("auto"));
     Effect::new(move |_| {
         if let Some(Ok(Some(user))) = auth_user.get() {
-            let resolved = resolve_mode(&user.solo_mode, &region_for_mode);
+            let resolved = resolve_mode(&user.solo_mode);
             set_mode_current.set(resolved);
         }
     });
@@ -344,7 +336,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
         }
     });
 
-    let do_sync = move |_| {
+    let do_sync = move |_: leptos::ev::MouseEvent| {
         if syncing.get_untracked() {
             return;
         }
@@ -371,80 +363,53 @@ pub fn SoloDashboardPage() -> impl IntoView {
         });
     };
 
-    let region_for_header = region.clone();
-    let region_for_suspense = region.clone();
-    let region_for_toggle = region.clone();
-
+    let sync_cb = Callback::new(do_sync);
+    let syncing_signal = Signal::derive(move || syncing.get());
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6" data-feedback-label="Solo dashboard">
-            <div class="max-w-3xl mx-auto flex flex-col gap-8">
-
-                // ── Solo-Constellation Header — region-aware ─────────────────────
-                <Card region=region_for_header.clone()
-                      variant=if region_for_header == "demacia" { "gilt" } else { "zine" }
-                      attr:data-feedback-label="Solo dashboard → Page header (mode toggle + sync)">
-                    <div class="flex items-end justify-between">
-                        <SectionHead region=region_for_header.clone()
-                                     eyebrow=if region_for_header == "demacia" { "STARS ALIGN" } else { "// SOLO_PROFILE" }
-                                     title=if region_for_header == "demacia" { "Constellation".to_string() } else { "FORGE".to_string() }
-                        />
-                        <button
-                            class=move || if syncing.get() {
-                                "bg-accent opacity-60 cursor-not-allowed text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            } else {
-                                "bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            }
-                            on:click=do_sync
-                            disabled=move || syncing.get()
-                        >
-                            {move || if syncing.get() {
-                                view! { <span>"Syncing..."</span> }.into_any()
-                            } else {
-                                view! { <span>"Sync Matches"</span> }.into_any()
-                            }}
-                        </button>
-                    </div>
-                    // Mode toggle — Constellation / Forge / Journal (18-08)
-                    <div class="mt-3">
-                        <ModeToggle
-                            region=region_for_toggle.clone()
-                            current=mode_current
-                            options=vec![
-                                ("constellation".to_string(), "Constellation".to_string(), "CONSTELLATION".to_string()),
-                                ("forge".to_string(), "Forge".to_string(), "FORGE".to_string()),
-                                ("journal".to_string(), "Journal".to_string(), "JOURNAL".to_string()),
-                            ]
-                            on_select=on_mode_select
-                        />
-                    </div>
-                </Card>
+        <PageShell width=PageWidth::Reading attr:data-feedback-label="Solo dashboard">
+            <div class="flex flex-col gap-8">
+                <div attr:data-feedback-label="Solo dashboard → Page header (mode toggle + sync)">
+                    <PageHeader
+                        eyebrow="Solo"
+                        title="Your games"
+                        meta=|| view! { <span>"Rank, recent matches and personal goals from your linked Riot account."</span> }
+                        actions=move || view! {
+                            <Button variant=ButtonVariant::Primary loading=syncing_signal on_click=sync_cb>
+                                {move || if syncing.get() { "Syncing\u{2026}" } else { "Sync matches" }}
+                            </Button>
+                        }
+                    />
+                    <ModeToggle
+                        current=mode_current
+                        label="Solo view"
+                        options=vec![
+                            ("constellation".to_string(), "Overview".to_string()),
+                            ("forge".to_string(), "Rank".to_string()),
+                            ("journal".to_string(), "Journal".to_string()),
+                        ]
+                        on_select=on_mode_select
+                    />
+                </div>
 
                 // ── Ranked Badge + LP History + Matches + Goals ─────────────────
                 <Suspense fallback={
-                    let r = region_for_suspense.clone();
-                    move || view! { <PageLoading region=r.clone() variant="solo".to_string() /> }
+                    move || view! { <PageLoading variant="solo".to_string() /> }
                 }>
                     {move || dashboard_resource.get().map(|result| match result {
                         Err(e) => view! {
                             <ErrorBanner message=format!("Failed to load dashboard: {e}") />
                         }.into_any(),
                         Ok(data) => {
-                            let region_inner = region.clone();
-                            let region_lp = region.clone();
-                            let region_goals = region.clone();
-                            let region_mode = region.clone();
 
                             // Mode dispatch — signal-driven (18-08: DB persistence + resolve_mode)
                             match mode_current.get().as_str() {
                                 "forge" => view! {
                                     <SoloForgeView
-                                        region=region_mode
                                         ranked=data.ranked
                                     />
                                 }.into_any(),
                                 "journal" => view! {
                                     <SoloJournalView
-                                        region=region_mode
                                         matches=data.matches
                                     />
                                 }.into_any(),
@@ -452,15 +417,12 @@ pub fn SoloDashboardPage() -> impl IntoView {
                                     // SoloConstellationContent: extracted sub-view to avoid FnOnce
                                     // closures (plan step 8 — sub-view extraction for recursion/closure safety).
                                     <SoloConstellationContent
-                                        region=region_inner
                                         ranked=data.ranked
                                         matches=data.matches
                                         lp_history_resource=lp_history_resource
                                         lp_window=lp_window
                                         queue_filter=queue_filter
                                         goal_progress_resource=goal_progress_resource
-                                        lp_region=region_lp
-                                        goals_region=region_goals
                                     />
                                 }.into_any(),
                             }
@@ -468,7 +430,7 @@ pub fn SoloDashboardPage() -> impl IntoView {
                     })}
                 </Suspense>
             </div>
-        </div>
+        </PageShell>
     }
 }
 
@@ -480,15 +442,12 @@ pub fn SoloDashboardPage() -> impl IntoView {
 fn MatchListSection(
     matches: Vec<PlayerMatchStats>,
     queue_filter: RwSignal<Option<i32>>,
-    region: String,
 ) -> impl IntoView {
-    let region_head = region.clone();
     view! {
         <div class="flex flex-col gap-3">
             // Section header
             <div class="flex items-center justify-between">
-                <SectionHead region=region_head.clone()
-                             eyebrow="BATTLE LOG"
+                <SectionHead                              eyebrow="BATTLE LOG"
                              title="Recent Matches".to_string() />
                 <select
                     class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-sm text-secondary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -511,7 +470,7 @@ fn MatchListSection(
             // Match list
             {if matches.is_empty() {
                 view! {
-                    <PageEmpty region=region.clone() kind="matches".to_string() />
+                    <PageEmpty kind="matches".to_string() />
                 }.into_any()
             } else {
                 view! {
@@ -555,7 +514,6 @@ fn MatchListSection(
 fn LpHistoryGraph(
     lp_history_resource: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
     lp_window: RwSignal<&'static str>,
-    region: String,
 ) -> impl IntoView {
     let tooltip: RwSignal<Option<(f64, f64, String, String)>> = RwSignal::new(None);
 
@@ -572,13 +530,10 @@ fn LpHistoryGraph(
             >{w}</button>
         }
     };
-
-    let region_card = region.clone();
     view! {
-        <Card region=region_card.clone()>
+        <Card >
             <div class="flex items-center justify-between">
-                <SectionHead region=region.clone()
-                             eyebrow="FORM CURVE"
+                <SectionHead                              eyebrow="FORM CURVE"
                              title="LP History".to_string() />
                 <div class="flex items-center gap-2">
                     {render_pill("7d")}
@@ -588,8 +543,7 @@ fn LpHistoryGraph(
                 </div>
             </div>
             <Suspense fallback={
-                let r = region.clone();
-                move || view! { <PageLoading region=r.clone() variant="solo".to_string() /> }
+                move || view! { <PageLoading variant="solo".to_string() /> }
             }>
                 {move || lp_history_resource.get().map(|result| match result {
                     Err(_) => view! {
@@ -802,15 +756,15 @@ fn LpGraphSvg(
                 on:mouseleave=move |_| tooltip.set(None)
             >
                 {tier_labels.into_iter().map(|(y, label)| view! {
-                    <text x="4" y=format!("{:.1}", y + 4.0) fill="var(--t-muted)" font-size="11">{label}</text>
+                    <text x="4" y=format!("{:.1}", y + 4.0) fill="var(--color-muted)" font-size="11">{label}</text>
                     <line x1=format!("{}", Y_AXIS_W) y1=format!("{:.1}", y)
                           x2=format!("{}", SVG_W) y2=format!("{:.1}", y)
-                          stroke="var(--t-divider)" stroke-width="1" opacity="0.3" />
+                          stroke="var(--color-rule)" stroke-width="1" opacity="0.3" />
                 }).collect_view()}
 
                 {date_labels.into_iter().map(|(x, label)| view! {
                     <text x=format!("{:.1}", x) y=format!("{:.1}", SVG_H - 6.0)
-                          text-anchor="middle" fill="var(--t-muted)" font-size="11">{label}</text>
+                          text-anchor="middle" fill="var(--color-muted)" font-size="11">{label}</text>
                 }).collect_view()}
 
                 {(!area_d.is_empty()).then(|| view! {
@@ -886,19 +840,13 @@ fn tier_label_display(t: &str) -> &'static str {
 #[component]
 #[allow(clippy::too_many_arguments)]
 fn SoloConstellationContent(
-    region: String,
     ranked: Option<RankedInfo>,
     matches: Vec<PlayerMatchStats>,
     lp_history_resource: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
     lp_window: RwSignal<&'static str>,
     queue_filter: RwSignal<Option<i32>>,
     goal_progress_resource: Resource<Result<GoalProgressPayload, ServerFnError>>,
-    lp_region: String,
-    goals_region: String,
 ) -> impl IntoView {
-    let is_demacia = region == "demacia";
-    let is_pandemonium = region == "pandemonium";
-
     let current_tier = ranked
         .as_ref()
         .map(|r| r.tier.clone())
@@ -909,90 +857,71 @@ fn SoloConstellationContent(
         .unwrap_or_default();
     let current_lp = ranked.as_ref().map(|r| r.lp).unwrap_or(0);
 
-    // Last-10 W/L for Demacia patch
+    // Last-10 W/L sequence
     let last10: Vec<bool> = matches.iter().take(10).map(|m| m.win).collect();
     let last10_empty = last10.is_empty();
-
-    let region_badge = region.clone();
-    let current_tier_pan = current_tier.clone();
-    let region_pool = region.clone();
 
     view! {
         <div class="flex flex-col gap-8">
 
             // ── Rank crest + LP progress ──────────────────────────────────────
-            <Card region=region.clone()
-                  variant=if region == "demacia" { "gilt" } else { "zine" }
-                  attr:data-feedback-label="Solo dashboard → Ranked snapshot">
+            <Card attr:data-feedback-label="Solo dashboard → Ranked snapshot">
                 <div class="flex items-center gap-6">
                     <RankBadge tier=current_tier.clone() division=current_division.clone() large=true />
-                    <LPProgress region=region.clone() lp={current_lp.max(0) as u32} max=100 />
+                    <LPProgress lp={current_lp.max(0) as u32} max=100 />
                 </div>
-
-                // ── PANDEMONIUM PATCH (a): Tier crest — TIER label ──────────
-                {is_pandemonium.then(|| view! {
-                    <div class="flex items-center gap-3 mt-4">
-                        <Glitch region="pandemonium".to_string()>
-                            {format!("// TIER \u{00b7} {}", current_tier_pan.to_uppercase())}
-                        </Glitch>
-                    </div>
-                }.into_any())}
             </Card>
 
             // ── LP History ────────────────────────────────────────────────────
-            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window region=lp_region attr:data-feedback-label="Solo dashboard → LP history graph" />
+            <LpHistoryGraph lp_history_resource=lp_history_resource lp_window=lp_window attr:data-feedback-label="Solo dashboard → LP history graph" />
 
-            // ── DEMACIA PATCH (b): Last-10 W/L sequence ──────────────────────
-            {is_demacia.then(|| {
+            // ── Last 10 results ───────────────────────────────────────────────
+            {
                 if last10_empty {
                     view! {
-                        <Card region="demacia".to_string() variant="gilt">
-                            <SectionHead region="demacia".to_string()
-                                         eyebrow="RECENT"
+                        <Card>
+                            <SectionHead                                          eyebrow="RECENT"
                                          title="Last 10".to_string() />
-                            <PageEmpty region="demacia".to_string() kind="matches".to_string() />
+                            <PageEmpty kind="matches".to_string() />
                         </Card>
                     }.into_any()
                 } else {
                     view! {
-                        <Card region="demacia".to_string() variant="gilt">
-                            <SectionHead region="demacia".to_string()
-                                         eyebrow="RECENT"
+                        <Card>
+                            <SectionHead                                          eyebrow="RECENT"
                                          title="Last 10".to_string() />
-                            <div class="flex gap-1 mt-2">
+                            <div class="mt-2 flex flex-wrap items-center gap-1">
+                                <span class="mr-1 text-caption text-muted">"newest"</span>
                                 {last10.iter().copied().map(|won| {
-                                    let c = if won { "w-4 h-4 rounded-full bg-accent" } else { "w-4 h-4 rounded-full bg-danger" };
-                                    let t = if won { "Win" } else { "Loss" };
-                                    view! { <div class=c title=t></div> }
+                                    if won {
+                                        view! { <Badge tone=BadgeTone::Win label="Win">"W"</Badge> }.into_any()
+                                    } else {
+                                        view! { <Badge tone=BadgeTone::Loss label="Loss">"L"</Badge> }.into_any()
+                                    }
                                 }).collect_view()}
                             </div>
                         </Card>
                     }.into_any()
                 }
-            })}
+            }
 
             // ── Recent Matches (full list) ────────────────────────────────────
             <MatchListSection
                 matches=matches
                 queue_filter=queue_filter
-                region=region_badge
                 attr:data-feedback-label="Solo dashboard → Recent matches"
             />
 
             // ── Pool gaps (not built yet) ─────────────────────────────────────
             // Honest empty state: pool-gap detection does not exist yet, so we
             // explain what will appear instead of showing invented advice.
-            {is_demacia.then(|| view! {
-                <Card region=region_pool.clone() variant="gilt">
-                    <SectionHead region=region_pool.clone()
-                                 eyebrow="REVIEW"
-                                 title="Pool Gaps".to_string() />
-                    <EmptyState message="Pool-gap analysis is not available yet. When it ships, roles and champion types missing from your pool will be detected from your synced match history and listed here." />
-                </Card>
-            }.into_any())}
+            <Card>
+                <SectionHead eyebrow="Review" title="Pool gaps".to_string() />
+                <EmptyState message="Pool-gap analysis is not available yet. When it ships, roles and champion types missing from your pool will be detected from your synced match history and listed here." />
+            </Card>
 
             // ── Goals ─────────────────────────────────────────────────────────
-            <GoalCards progress_resource=goal_progress_resource region=goals_region />
+            <GoalCards progress_resource=goal_progress_resource />
         </div>
     }
 }
@@ -1004,18 +933,13 @@ fn SoloConstellationContent(
 #[component]
 fn GoalCards(
     progress_resource: Resource<Result<GoalProgressPayload, ServerFnError>>,
-    region: String,
 ) -> impl IntoView {
-    let region_head = region.clone();
-    let region_suspense = region.clone();
     view! {
         <div class="flex flex-col gap-3">
-            <SectionHead region=region_head.clone()
-                         eyebrow="CAPTAIN\u{2019}S OATH"
+            <SectionHead                          eyebrow="CAPTAIN\u{2019}S OATH"
                          title="Goals".to_string() />
             <Suspense fallback={
-                let r = region_suspense.clone();
-                move || view! { <PageLoading region=r.clone() variant="solo".to_string() /> }
+                move || view! { <PageLoading variant="solo".to_string() /> }
             }>
                 {move || progress_resource.get().map(|result| match result {
                     Err(_) => view! {
@@ -1097,13 +1021,13 @@ fn RankTargetCard(
                 <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                 </svg>
-                <span class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"Rank Target"</span>
+                <span class="font-mono uppercase tracking-[0.18em] text-caption text-accent">"Rank Target"</span>
             </div>
             {move || if editing.get() {
                 let is_master = matches!(tier_edit.get().to_uppercase().as_str(), "MASTER" | "GRANDMASTER" | "CHALLENGER");
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
-                        <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Tier"</label>
+                        <label class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Tier"</label>
                         <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
                                 on:change=move |ev| tier_edit.set(event_target_value(&ev))>
                             {RANK_TIERS.iter().map(|t| {
@@ -1112,7 +1036,7 @@ fn RankTargetCard(
                             }).collect_view()}
                         </select>
                         {(!is_master).then(|| view! {
-                            <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Division"</label>
+                            <label class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Division"</label>
                             <select class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors w-full"
                                     on:change=move |ev| div_edit.set(event_target_value(&ev))>
                                 {RANK_DIVISIONS.iter().map(|d| {
@@ -1157,11 +1081,11 @@ fn RankTargetCard(
                 view! {
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
-                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target"</div>
-                            {achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-imperial uppercase tracking-[0.18em] text-[10px] rounded-full px-2 py-0.5">"Achieved"</span> })}
+                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target"</div>
+                            {achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-full px-2 py-0.5">"Achieved"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{target_display}</div>
-                        <div class="font-display italic text-primary text-2xl mt-1">{current_label}</div>
+                        <div class="font-display text-primary text-2xl mt-1">{current_label}</div>
                         <div class="text-xs text-muted">{format!("{} LP to go", to_go)}</div>
                         <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
                             <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
@@ -1222,12 +1146,12 @@ fn CsGoalCard(
                 <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                 </svg>
-                <span class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"CS per Minute"</span>
+                <span class="font-mono uppercase tracking-[0.18em] text-caption text-accent">"CS per Minute"</span>
             </div>
             {move || if editing.get() {
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
-                        <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target CS/min"</label>
+                        <label class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target CS/min"</label>
                         <input type="number" min="0" max="15" step="0.1"
                                prop:value=move || target_edit.get()
                                on:input=move |ev| target_edit.set(event_target_value(&ev))
@@ -1249,8 +1173,8 @@ fn CsGoalCard(
                 view! {
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
-                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target"</div>
-                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-imperial uppercase tracking-[0.18em] text-[10px] rounded-full px-2 py-0.5">"On track"</span> })}
+                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target"</div>
+                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-full px-2 py-0.5">"On track"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{format!("{:.1} CS/min", target)}</div>
                         {match p.current_value {
@@ -1261,7 +1185,7 @@ fn CsGoalCard(
                                 let pct = ((cur / target.max(0.01)) * 100.0).clamp(0.0, 100.0);
                                 let achieved = p.achieved;
                                 view! {
-                                    <div class="font-display italic text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
+                                    <div class="font-display text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
                                     <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
                                     <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
                                         <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
@@ -1327,12 +1251,12 @@ fn DeathsGoalCard(
                 <svg class="w-5 h-5 text-dimmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                 </svg>
-                <span class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">"Deaths per Game"</span>
+                <span class="font-mono uppercase tracking-[0.18em] text-caption text-accent">"Deaths per Game"</span>
             </div>
             {move || if editing.get() {
                 view! {
                     <div class="border-t border-divider mt-3 pt-3 flex flex-col gap-2">
-                        <label class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Max deaths per game"</label>
+                        <label class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Max deaths per game"</label>
                         <input type="number" min="0" max="20" step="1"
                                prop:value=move || target_edit.get()
                                on:input=move |ev| target_edit.set(event_target_value(&ev))
@@ -1354,8 +1278,8 @@ fn DeathsGoalCard(
                 view! {
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center justify-between">
-                            <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Target"</div>
-                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-imperial uppercase tracking-[0.18em] text-[10px] rounded-full px-2 py-0.5">"On track"</span> })}
+                            <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Target"</div>
+                            {p.achieved.then(|| view! { <span class="bg-success/20 text-success border border-success/30 font-mono uppercase tracking-[0.18em] text-caption rounded-full px-2 py-0.5">"On track"</span> })}
                         </div>
                         <div class="text-sm text-secondary">{format!("{:.0} deaths or fewer", target)}</div>
                         {match p.current_value {
@@ -1366,7 +1290,7 @@ fn DeathsGoalCard(
                                 let pct = if cur <= target { 100.0f32 } else { ((target / cur.max(0.01)) * 100.0).clamp(0.0, 100.0) };
                                 let achieved = p.achieved;
                                 view! {
-                                    <div class="font-display italic text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
+                                    <div class="font-display text-primary text-2xl mt-1 tabular-nums">{format!("{:.1}", cur)}</div>
                                     <div class="text-xs text-muted font-mono tabular-nums">{format!("Avg last 20 games: {:.1} / {:.1} target", cur, target)}</div>
                                     <div class="w-full bg-surface border border-outline/30 rounded-full h-2 mt-2 overflow-hidden">
                                         <div class=move || if achieved { "h-2 rounded-full bg-success/70 transition-all" } else { "h-2 rounded-full bg-accent/60 transition-all" }
@@ -1386,13 +1310,6 @@ fn DeathsGoalCard(
 // ---------------------------------------------------------------------------
 // SoloJournalView — 18-07
 // Personal journal / match diary sub-view for /solo route mode="journal".
-// Demacia: parchment diary (gilt Cards, Cormorant serif entries)
-// Pandemonium: photocopied fanzine (RiotTape, zine Cards, rotate transforms)
-//
-// ChildrenFn constraints (Card, Glitch both use ChildrenFn):
-//   - All String props in ChildrenFn bodies must use .clone() to remain Fn.
-//   - All String values used in multiple closures must each get their own
-//     StoredValue<String> so closures capture a Copy type and remain Fn.
 // ---------------------------------------------------------------------------
 
 /// Entry data for a journal row.
@@ -1405,11 +1322,9 @@ struct JournalEntry {
 
 #[component]
 fn SoloJournalView(
-    region: String,
     /// Recent matches used as journal entry source.
     matches: Vec<PlayerMatchStats>,
 ) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
     let matches_empty = matches.is_empty();
 
     let entries: Vec<JournalEntry> = matches
@@ -1432,96 +1347,42 @@ fn SoloJournalView(
     // StoredValue<Vec<JournalEntry>> is Copy+Send+Sync; get_value() returns a clone each call.
     let entries_sv = StoredValue::new(entries);
 
-    if is_pandemonium {
-        let r_empty = region.clone();
-        // r_footer: used for Card region prop (clone) and Glitch region (another clone inside).
-        let r_footer = region.clone();
-        view! {
-            <div class="flex flex-col gap-3">
-                <RiotTape label="JOURNAL_RAW" />
-                {if matches_empty {
-                    view! {
-                        <PageEmpty region=r_empty kind="matches".to_string() />
-                    }.into_any()
-                } else {
-                    view! {
-                        <div class="flex flex-col gap-3 mt-2">
-                            // Each field uses its own StoredValue to avoid double-move of e.
-                            {move || entries_sv.get_value().into_iter().enumerate().map(|(i, e)| {
-                                let rotate_class = if i % 2 == 0 { "-rotate-1" } else { "rotate-1" };
-                                let win_label = if e.won { "WIN" } else { "LOSS" };
-                                let tone = if e.won { "accent" } else { "neutral" };
-                                let date_sv = StoredValue::new(e.date_label);
-                                let body_sv = StoredValue::new(e.body);
-                                view! {
-                                    <div class=format!("transform {}", rotate_class)>
-                                        <Card region="pandemonium".to_string() variant="zine">
-                                            <Glitch region="pandemonium".to_string()>
-                                                {move || format!("// ENTRY_{}", date_sv.get_value())}
-                                            </Glitch>
-                                            <div class="mt-2 font-mono text-[12px] text-primary leading-relaxed">
-                                                {move || body_sv.get_value()}
-                                            </div>
-                                            <div class="mt-2">
-                                                <Badge tone=tone>{win_label}</Badge>
-                                            </div>
-                                        </Card>
-                                    </div>
-                                }
-                            }).collect_view()}
-                        </div>
-                    }.into_any()
-                }}
-                // TODO: wire personal_learnings resource when /personal-learnings phase connects
-                <Card region=r_footer.clone() variant="zine">
-                    <Glitch region=r_footer.clone()>"// DEEPER_NOTES"</Glitch>
-                    <pre class="font-mono text-[11px] text-secondary mt-2 whitespace-pre-wrap">
-                        "// Extended notes pending.\n// Navigate to /personal-learnings."
-                    </pre>
-                </Card>
-            </div>
-        }.into_any()
-    } else {
-        let r_empty = region.clone();
-        // r_hdr: used for Card region (.clone()) and SectionHead (.clone()), retain for further use.
-        let r_hdr = region.clone();
-        let r_footer = region.clone();
+    {
         view! {
             <div class="flex flex-col gap-4">
-                <Card region=r_hdr.clone() variant="gilt">
+                <Card>
                     <SectionHead
-                        region=r_hdr.clone()
                         eyebrow="CHRONICLES"
                         title="Journal".to_string()
                     />
                     <div class="mt-2 flex justify-center">
-                        <HeraldicDivider width=480 />
+                        <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                     </div>
                 </Card>
                 {if matches_empty {
                     view! {
-                        <PageEmpty region=r_empty kind="matches".to_string() />
+                        <PageEmpty kind="matches".to_string() />
                     }.into_any()
                 } else {
                     view! {
                         <div class="flex flex-col gap-3">
                             {move || entries_sv.get_value().into_iter().map(|e| {
-                                let mood_class = if e.won {
-                                    "w-1 rounded-full bg-accent/60 self-stretch shrink-0"
-                                } else {
-                                    "w-1 rounded-full bg-secondary/30 self-stretch shrink-0"
-                                };
+                                let won = e.won;
                                 let date_sv = StoredValue::new(e.date_label);
                                 let body_sv = StoredValue::new(e.body);
                                 view! {
-                                    <Card region="demacia".to_string() variant="gilt">
+                                    <Card>
                                         <div class="flex gap-3">
-                                            <div class=mood_class></div>
+                                            {if won {
+                                                view! { <Badge tone=BadgeTone::Win label="Win">"W"</Badge> }.into_any()
+                                            } else {
+                                                view! { <Badge tone=BadgeTone::Loss label="Loss">"L"</Badge> }.into_any()
+                                            }}
                                             <div class="flex-1">
-                                                <div class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted mb-1">
+                                                <div class="font-mono text-caption uppercase tracking-[0.2em] text-muted mb-1">
                                                     {move || date_sv.get_value()}
                                                 </div>
-                                                <p class="font-display italic text-secondary text-[13px] leading-relaxed">
+                                                <p class="font-display text-secondary text-label leading-relaxed">
                                                     {move || body_sv.get_value()}
                                                 </p>
                                             </div>
@@ -1533,9 +1394,9 @@ fn SoloJournalView(
                     }.into_any()
                 }}
                 // TODO: wire personal_learnings resource when /personal-learnings phase connects
-                <Card region=r_footer.clone() variant="gilt">
+                <Card>
                     <Eyebrow>"EXTENDED CHRONICLES"</Eyebrow>
-                    <p class="font-display italic text-secondary mt-2 text-[13px]">
+                    <p class="font-display text-secondary mt-2 text-label">
                         "Navigate to /personal-learnings to document deeper match reflections."
                     </p>
                 </Card>
@@ -1547,12 +1408,10 @@ fn SoloJournalView(
 // ---------------------------------------------------------------------------
 // SoloForgeView — 18-07
 // Champion mastery / queue-prep sub-view for /solo route mode="forge".
-// Demacia: smith's workbench (gilt Cards, Crown, Cormorant typography)
-// Pandemonium: locker/workbench (RiotTape, zine Cards, mono checklist)
 // ---------------------------------------------------------------------------
 
 #[component]
-fn SoloForgeView(region: String, ranked: Option<RankedInfo>) -> impl IntoView {
+fn SoloForgeView(ranked: Option<RankedInfo>) -> impl IntoView {
     let current_tier = ranked
         .as_ref()
         .map(|r| r.tier.clone())
@@ -1566,55 +1425,42 @@ fn SoloForgeView(region: String, ranked: Option<RankedInfo>) -> impl IntoView {
     // Only real data is shown here: the rank snapshot. Improvement targets and
     // pool status are not computed yet, so they render honest empty states
     // instead of placeholder champions.
-    let r1 = region.clone();
-    let r2 = region.clone();
-    let r3 = region.clone();
     view! {
         <div class="flex flex-col gap-4">
             // Forge header
-            <Card region=r1.clone() variant="gilt">
+            <Card>
                 <div class="text-center pb-2">
-                    <div class="flex justify-center mb-2">
-                        <Crown size=36 />
-                    </div>
-                    <h1 class="font-display text-[24px] tracking-[0.08em] text-accent uppercase">
-                        "FORGE"
-                    </h1>
                     <SectionHead
-                        region=r1.clone()
                         eyebrow="CHAMPION MASTERY"
                         title="Workbench".to_string()
                     />
                     <div class="mt-2 flex justify-center">
-                        <HeraldicDivider width=400 />
+                        <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                     </div>
                 </div>
             </Card>
             // Rank display
-            <Card region=r2.clone() variant="gilt">
+            <Card>
                 <SectionHead
-                    region=r2.clone()
                     eyebrow="CURRENT STANDING"
                     title="Rank".to_string()
                 />
                 <div class="flex items-center gap-6 mt-3">
                     <RankBadge tier=current_tier.clone() division=current_division.clone() large=true />
-                    <LPProgress region=r2.clone() lp={current_lp.max(0) as u32} max=100 />
+                    <LPProgress lp={current_lp.max(0) as u32} max=100 />
                 </div>
             </Card>
             // Improvement targets (not built yet)
-            <Card region=r3.clone() variant="gilt">
+            <Card>
                 <SectionHead
-                    region=r3.clone()
                     eyebrow="FORGE"
                     title="Improvement Targets".to_string()
                 />
                 <EmptyState message="Improvement targets are not available yet. They will be derived from your synced matches and personal learnings once that analysis ships." />
             </Card>
             // Champion pool pointer
-            <Card region=region.clone() variant="gilt">
+            <Card>
                 <SectionHead
-                    region=region.clone()
                     eyebrow="TOOL RACK"
                     title="Champion Pool".to_string()
                 />

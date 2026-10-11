@@ -58,10 +58,10 @@ pub fn ChampionPicker(
         <div class="flex flex-col gap-3">
             // Header strip — Champion roster label + role filter pills
             <div class="flex items-center justify-between flex-wrap gap-3">
-                <span class="font-imperial uppercase tracking-[0.18em] text-xs text-secondary">
+                <span class="font-mono uppercase tracking-[0.18em] text-xs text-secondary">
                     "Champion roster"
                 </span>
-                // Role filter pills (Demacia: bg-elevated container with thin pills)
+                // Role filter pills
                 <div class="bg-elevated rounded-lg p-0.5 flex gap-0.5">
                     {roles.iter().map(|&role| {
                         let role_str = role.to_string();
@@ -75,9 +75,9 @@ pub fn ChampionPicker(
                                 class=move || {
                                     let active = role_filter.get() == role_val_for_class.clone();
                                     if active {
-                                        "px-3 py-1.5 flex items-center justify-center gap-1.5 bg-accent text-accent-contrast font-imperial uppercase tracking-[0.14em] text-[10px] rounded-md transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        "px-3 py-1.5 flex items-center justify-center gap-1.5 bg-accent text-accent-contrast font-mono uppercase tracking-[0.14em] text-caption rounded-md transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     } else {
-                                        "px-3 py-1.5 flex items-center justify-center gap-1.5 text-secondary hover:text-primary hover:bg-overlay font-imperial uppercase tracking-[0.14em] text-[10px] rounded-md transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        "px-3 py-1.5 flex items-center justify-center gap-1.5 text-secondary hover:text-primary hover:bg-overlay font-mono uppercase tracking-[0.14em] text-caption rounded-md transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     }
                                 }
                                 on:click=move |_| set_role_filter.set(role_val.clone())
@@ -121,7 +121,7 @@ pub fn ChampionPicker(
                 />
             </div>
 
-            // Champion grid — auto-fill 56px tiles with gilt outline on hover
+            // Champion grid: auto-fill 56px tiles, outline on hover
             <div
                 class="overflow-y-auto max-h-80 p-1"
                 style="display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:8px;"
@@ -165,9 +165,9 @@ pub fn ChampionPicker(
                                         alt=champion.name.clone()
                                         class="w-full h-full object-cover"
                                     />
-                                    // Hover overlay with champion name (Demacia: gold-accent over base/80)
+                                    // Hover overlay with the champion name
                                     <div class="absolute inset-0 bg-overlay-strong opacity-0 hover:opacity-100 flex items-end justify-center pb-1 transition-opacity pointer-events-none">
-                                        <span class="text-primary text-[10px] font-display italic text-center leading-tight px-0.5 truncate w-full">
+                                        <span class="text-primary text-caption font-display text-center leading-tight px-0.5 truncate w-full">
                                             {champion.name.clone()}
                                         </span>
                                     </div>

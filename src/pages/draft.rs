@@ -3,14 +3,9 @@
 // server fns take one argument per form field. A params struct is planned with
 // the API-layer refactor.
 #![allow(clippy::too_many_arguments)]
-
-use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
-use crate::components::region::{
-    Card, CompanionSigil, Crown, Eyebrow, Glitch, HeraldicDivider, ModeToggle, RiotTape,
-    SectionHead,
-};
+use crate::components::region::{Card, Eyebrow, ModeToggle, SectionHead};
 use crate::components::skeleton::PageLoading;
 use crate::components::ui::{
     EmptyState, ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
@@ -843,30 +838,17 @@ pub async fn set_draft_mode_pref(mode: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
-/// Resolve the effective mode from a stored preference and region context.
-/// Returns region-coupled defaults when stored == "auto" (D-04).
-/// An explicit user pick (stored != "auto") always wins over the default (D-05).
-fn resolve_mode(stored: &str, region: &str, route: &str) -> String {
-    if stored != "auto" {
-        return stored.to_string();
-    }
-    match (route, region) {
-        ("draft", "demacia") => "carousel".to_string(),
-        ("draft", "pandemonium") => "ledger".to_string(),
-        ("team-dashboard", "demacia") => "dashboard".to_string(),
-        ("team-dashboard", "pandemonium") => "brief".to_string(),
-        ("solo", "demacia") => "constellation".to_string(),
-        ("solo", "pandemonium") => "forge".to_string(),
+/// Resolve the effective draft view from a stored preference: an explicit
+/// pick wins; "auto" (or anything unknown) is the carousel.
+fn resolve_mode(stored: &str) -> String {
+    match stored {
+        "carousel" | "war-table" | "ledger" => stored.to_string(),
         _ => "carousel".to_string(),
     }
 }
 
 #[component]
 pub fn DraftPage() -> impl IntoView {
-    // Region — read ONCE at page entry, passed to all sub-views (18-04)
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-
     // Auth redirect + user resource (also used for mode preference)
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
@@ -881,13 +863,12 @@ pub fn DraftPage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
 
     // Mode preference — signal-driven, persisted via set_draft_mode_pref server fn (18-08)
-    // Initialised from auth_user resource; resolve_mode() applies region-coupled default when "auto".
-    let (mode_current, set_mode_current) = signal(resolve_mode("auto", &region, "draft"));
+    // Initialised from auth_user resource; resolve_mode() applies the default when "auto".
+    let (mode_current, set_mode_current) = signal(resolve_mode("auto"));
     // Keep mode_current synced with DB value when auth_user loads/refetches
-    let region_for_mode = region.clone();
     Effect::new(move |_| {
         if let Some(Ok(Some(user))) = auth_user.get() {
-            let resolved = resolve_mode(&user.draft_mode, &region_for_mode, "draft");
+            let resolved = resolve_mode(&user.draft_mode);
             set_mode_current.set(resolved);
         }
     });
@@ -1580,16 +1561,14 @@ pub fn DraftPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Draft">
+        <div class="bg-base min-h-screen" data-feedback-label="Draft">
             <div class="max-w-[1600px] mx-auto py-8 px-6 flex flex-col gap-6">
             // War Table header strip — sigil, phase badge, opponent name, intel toggle
-            <div class="bg-surface/80 backdrop-blur border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → War Table header">
-                <CompanionSigil region=region.clone() />
-                <div class="h-6 w-px bg-divider" aria-hidden="true"></div>
-                <span class="bg-accent text-accent-contrast font-imperial uppercase tracking-[0.18em] text-[10px] px-3 py-1 rounded">
+            <div class="bg-surface/80 border-b border-divider rounded-lg px-6 py-3 flex items-center gap-6 flex-wrap" data-feedback-label="Draft → War Table header">
+                <span class="bg-accent text-accent-contrast font-mono uppercase tracking-[0.18em] text-caption px-3 py-1 rounded">
                     {phase_label}
                 </span>
-                <span class="font-display italic text-secondary text-sm">
+                <span class="font-display text-secondary text-sm">
                     {move || {
                         let opp_text = opp_filter_text.get();
                         if opp_text.is_empty() {
@@ -1610,12 +1589,11 @@ pub fn DraftPage() -> impl IntoView {
                 })}
                 // Mode toggle — carousel / war-table / ledger (18-08)
                 <ModeToggle
-                    region=region.clone()
                     current=mode_current
                     options=vec![
-                        ("carousel".to_string(), "Carousel".to_string(), "CAROUSEL".to_string()),
-                        ("war-table".to_string(), "War Table".to_string(), "WAR_TABLE".to_string()),
-                        ("ledger".to_string(), "Ledger".to_string(), "LEDGER".to_string()),
+                        ("carousel".to_string(), "Carousel".to_string()),
+                        ("war-table".to_string(), "War table".to_string()),
+                        ("ledger".to_string(), "Ledger".to_string()),
                     ]
                     on_select=on_mode_select
                 />
@@ -1628,7 +1606,7 @@ pub fn DraftPage() -> impl IntoView {
                         }
                         on:click=move |_| set_intel_open.update(|v| *v = !*v)
                     >
-                        <span class="font-imperial uppercase tracking-[0.14em] text-xs">"Intel"</span>
+                        <span class="font-mono uppercase tracking-[0.14em] text-xs">"Intel"</span>
                         <span>{move || if intel_open.get() { "▼" } else { "▶" }}</span>
                     </button>
                 </div>
@@ -1636,7 +1614,7 @@ pub fn DraftPage() -> impl IntoView {
 
             // Hero divider
             <div class="flex justify-center -mt-2">
-                <HeraldicDivider width=480 />
+                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
             </div>
 
             // Header form
@@ -2216,7 +2194,6 @@ pub fn DraftPage() -> impl IntoView {
                 {move || match mode_current.get().as_str() {
                     "war-table" => view! {
                         <DraftWarTableView
-                            region=region.clone()
                             champions_resource=champions_resource
                             draft_slots=draft_slots
                             active_slot=active_slot
@@ -2239,14 +2216,12 @@ pub fn DraftPage() -> impl IntoView {
                     }.into_any(),
                     "ledger" => view! {
                         <DraftLedgerView
-                            region=region.clone()
                             draft_slots=draft_slots
                             our_side=our_side
                         />
                     }.into_any(),
                     _ => view! {
                         <DraftCarouselView
-                            region=region.clone()
                             champions_resource=champions_resource
                             draft_slots=draft_slots
                             active_slot=active_slot
@@ -2415,7 +2390,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                                         let label = tier_label_fn(tier);
                                                                                         Some(view! {
                                                                                             <div>
-                                                                                                <span class=format!("text-[10px] font-bold uppercase {tier_cls}")>{label.to_string()}</span>
+                                                                                                <span class=format!("text-caption font-bold uppercase {tier_cls}")>{label.to_string()}</span>
                                                                                                 <div class="flex flex-wrap gap-1 mt-0.5">
                                                                                                     {tier_entries.into_iter().map(|entry| {
                                                                                                         let champ_name = entry.champion.clone();
@@ -2455,7 +2430,7 @@ pub fn DraftPage() -> impl IntoView {
                                                                                                                 <span>{champ_for_display}</span>
                                                                                                                 <span class="flex gap-px">{comfort_dots}</span>
                                                                                                                 {stat_badge.map(|badge| view! {
-                                                                                                                    <span class="text-[9px] text-muted ml-0.5">{badge}</span>
+                                                                                                                    <span class="text-caption text-muted ml-0.5">{badge}</span>
                                                                                                                 })}
                                                                                                             </button>
                                                                                                         }
@@ -3740,11 +3715,8 @@ pub fn DraftPage() -> impl IntoView {
 }
 
 /// Draft Carousel view — default view for both regions.
-/// Pandemonium mismatch patch: confidence score + sample-size count per pick.
-/// Demacia mismatch patch: onDeck halo ring on next-pick slot.
 #[component]
 fn DraftCarouselView(
-    region: String,
     champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
     draft_slots: ReadSignal<Vec<Option<String>>>,
     active_slot: ReadSignal<Option<usize>>,
@@ -3764,31 +3736,14 @@ fn DraftCarouselView(
     set_slot_comment_input: WriteSignal<String>,
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
-    let region_for_head = region.clone();
-    let region_for_board = region.clone();
-    let region_for_loading = region.clone();
-
     view! {
         <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
             <SectionHead
-                region=region_for_head
                 eyebrow="STRATEGY".to_string()
                 title="Draft Carousel".to_string()
             />
 
-            {
-                // onDeck halo shown inline via ring-accent on active slot
-                // The DraftBoard itself handles the active-slot ring; the additional halo ring
-                // is rendered here as a context indicator for the next-pick slot.
-                view! {
-                    <div class="mb-3 flex items-center gap-2 py-2 border-b border-divider/50">
-                        <div class="w-3 h-3 rounded-full ring-2 ring-accent/60 animate-pulse"></div>
-                        <span class="font-imperial text-[10px] uppercase tracking-[0.18em] text-muted">"Next pick"</span>
-                    </div>
-                }
-            }
-
-            <Suspense fallback=move || view! { <PageLoading region=region_for_loading.clone() variant="draft".to_string() /> }>
+            <Suspense fallback=move || view! { <PageLoading variant="draft".to_string() /> }>
                 {move || champions_resource.get().map(|result| match result {
                     Err(e) => view! {
                         <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
@@ -3800,7 +3755,6 @@ fn DraftCarouselView(
                             .collect();
                         view! {
                             <DraftBoard
-                                region=region_for_board.clone()
                                 draft_slots=draft_slots
                                 champion_map=champion_map
                                 active_slot=active_slot
@@ -3913,10 +3867,8 @@ fn DraftCarouselView(
 }
 
 /// Draft War Table view — alternate view, accessible via mode toggle (wired in 18-08).
-/// Demacia mismatch patch: composition pillars (DPS/FRONT/POKE/UTIL) + composite score.
 #[component]
 fn DraftWarTableView(
-    region: String,
     champions_resource: Resource<Result<Vec<Champion>, ServerFnError>>,
     draft_slots: ReadSignal<Vec<Option<String>>>,
     active_slot: ReadSignal<Option<usize>>,
@@ -3936,21 +3888,14 @@ fn DraftWarTableView(
     set_slot_comment_input: WriteSignal<String>,
     set_slot_comments: WriteSignal<Vec<Option<String>>>,
 ) -> impl IntoView {
-    let region_for_head = region.clone();
-    let region_for_board = region.clone();
-    let region_for_card = region.clone();
-    let region_for_loading = region.clone();
-    let region_for_pillars = region.clone();
-
     view! {
         <div class="flex-1 bg-elevated border border-divider rounded-lg p-4">
             <SectionHead
-                region=region_for_head
                 eyebrow="WAR TABLE".to_string()
                 title="War Table".to_string()
             />
 
-            <Suspense fallback=move || view! { <PageLoading region=region_for_loading.clone() variant="draft".to_string() /> }>
+            <Suspense fallback=move || view! { <PageLoading variant="draft".to_string() /> }>
                 {move || champions_resource.get().map(|result| match result {
                     Err(e) => view! {
                         <div class="text-red-400">"Failed to load champions: " {e.to_string()}</div>
@@ -3962,7 +3907,6 @@ fn DraftWarTableView(
                             .collect();
                         view! {
                             <DraftBoard
-                                region=region_for_board.clone()
                                 draft_slots=draft_slots
                                 champion_map=champion_map
                                 active_slot=active_slot
@@ -3985,9 +3929,8 @@ fn DraftWarTableView(
             // Composition pillars: not computed yet. Show an honest empty state
             // instead of placeholder scores (the Draft Graph milestone fills this).
             <div class="mt-4">
-                <Card region=region_for_card variant="gilt".to_string()>
+                <Card>
                     <SectionHead
-                        region=region_for_pillars.clone()
                         eyebrow="COMPOSITION".to_string()
                         title="Pillars".to_string()
                     />
@@ -4090,23 +4033,14 @@ fn DraftWarTableView(
 // ---------------------------------------------------------------------------
 // DraftLedgerView — 18-07
 // Ledger-style read-only view of the current draft state.
-// Demacia: medieval double-entry ledger (gilt Card, Cormorant serif)
-// Pandemonium: brutalist ledger (RiotTape header, monospace rows)
 // Mode dispatch wired in 18-08; for now reachable via mode="ledger" stub.
 // ---------------------------------------------------------------------------
 
 #[component]
 fn DraftLedgerView(
-    region: String,
     draft_slots: ReadSignal<Vec<Option<String>>>,
     our_side: ReadSignal<String>,
 ) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
-    let region_for_head = region.clone();
-    let region_for_blue = region.clone();
-    let region_for_red = region.clone();
-    let region_for_journal = region.clone();
-
     // Slot layout per 20-slot draft board convention (see `slot_meta`):
     //   Blue picks: 6,9,10,17,18   Blue bans: 0,2,4,13,15
     //   Red  picks: 7,8,11,16,19   Red  bans: 1,3,5,12,14
@@ -4116,130 +4050,18 @@ fn DraftLedgerView(
     let blue_ban_slots: &[usize] = &[0, 2, 4, 13, 15];
     let red_ban_slots: &[usize] = &[1, 3, 5, 12, 14];
 
-    if is_pandemonium {
-        view! {
-            // Pandemonium: brutalist dual-column ledger per content contract
-            <div class="flex-1 bg-base p-4" style="background-image: repeating-linear-gradient(0deg, transparent, transparent 23px, var(--color-outline, rgba(255,255,255,.05)) 24px)">
-                <RiotTape label="DRAFT_LEDGER · v0.1" />
-                <div class="grid grid-cols-2 gap-2 mt-4">
-                    // Blue log column
-                    <Card region=region_for_blue.clone() variant="zine">
-                        <Glitch region=region_for_blue.clone()>"// BLUE_LOG"</Glitch>
-                        <div class="mt-2 flex flex-col gap-0.5">
-                            {move || {
-                                let slots = draft_slots.get();
-                                blue_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                    let name = slots.get(slot_idx)
-                                        .and_then(|s| s.as_ref())
-                                        .cloned()
-                                        .unwrap_or_else(|| "—".to_string());
-                                    view! {
-                                        <div class="flex items-center gap-2 py-1 border-b border-outline/30 font-mono text-[12px]">
-                                            <span class="text-accent w-5 shrink-0">{format!("{:02}", i + 1)}</span>
-                                            <span class="text-muted shrink-0">"|"</span>
-                                            <span class="text-primary flex-1">{name}</span>
-                                            <span class="text-muted shrink-0">"|"</span>
-                                            <span class="text-muted">"ROLE_TBD"</span>
-                                        </div>
-                                    }
-                                }).collect_view()
-                            }}
-                        </div>
-                        <div class="mt-3">
-                            <span class="font-mono text-[10px] text-muted uppercase tracking-[0.12em]">"// BANS"</span>
-                            <div class="mt-1 flex flex-col gap-0.5">
-                                {move || {
-                                    let slots = draft_slots.get();
-                                    blue_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                        let name = slots.get(slot_idx)
-                                            .and_then(|s| s.as_ref())
-                                            .cloned()
-                                            .unwrap_or_else(|| "—".to_string());
-                                        view! {
-                                            <div class="flex items-center gap-2 py-0.5 font-mono text-[11px] opacity-70">
-                                                <span class="text-muted w-5 shrink-0">{format!("{:02}", i + 1)}</span>
-                                                <span class="text-muted shrink-0">"|"</span>
-                                                <span class="text-secondary line-through flex-1">{name}</span>
-                                            </div>
-                                        }
-                                    }).collect_view()
-                                }}
-                            </div>
-                        </div>
-                    </Card>
-
-                    // Red log column
-                    <Card region=region_for_red.clone() variant="zine">
-                        <Glitch region=region_for_red.clone()>"// RED_LOG"</Glitch>
-                        <div class="mt-2 flex flex-col gap-0.5">
-                            {move || {
-                                let slots = draft_slots.get();
-                                red_pick_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                    let name = slots.get(slot_idx)
-                                        .and_then(|s| s.as_ref())
-                                        .cloned()
-                                        .unwrap_or_else(|| "—".to_string());
-                                    view! {
-                                        <div class="flex items-center gap-2 py-1 border-b border-outline/30 font-mono text-[12px]">
-                                            <span class="text-accent w-5 shrink-0">{format!("{:02}", i + 1)}</span>
-                                            <span class="text-muted shrink-0">"|"</span>
-                                            <span class="text-primary flex-1">{name}</span>
-                                            <span class="text-muted shrink-0">"|"</span>
-                                            <span class="text-muted">"ROLE_TBD"</span>
-                                        </div>
-                                    }
-                                }).collect_view()
-                            }}
-                        </div>
-                        <div class="mt-3">
-                            <span class="font-mono text-[10px] text-muted uppercase tracking-[0.12em]">"// BANS"</span>
-                            <div class="mt-1 flex flex-col gap-0.5">
-                                {move || {
-                                    let slots = draft_slots.get();
-                                    red_ban_slots.iter().enumerate().map(|(i, &slot_idx)| {
-                                        let name = slots.get(slot_idx)
-                                            .and_then(|s| s.as_ref())
-                                            .cloned()
-                                            .unwrap_or_else(|| "—".to_string());
-                                        view! {
-                                            <div class="flex items-center gap-2 py-0.5 font-mono text-[11px] opacity-70">
-                                                <span class="text-muted w-5 shrink-0">{format!("{:02}", i + 1)}</span>
-                                                <span class="text-muted shrink-0">"|"</span>
-                                                <span class="text-secondary line-through flex-1">{name}</span>
-                                            </div>
-                                        }
-                                    }).collect_view()
-                                }}
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                // Journal dump footer
-                <Card region=region_for_journal.clone() variant="zine">
-                    <Glitch region=region_for_journal.clone()>"// JOURNAL_DUMP"</Glitch>
-                    <pre class="font-mono text-[11px] text-secondary whitespace-pre-wrap mt-2">
-                        "// Post-game analysis pending.\n// Run /post-game to populate."
-                    </pre>
-                </Card>
-            </div>
-        }.into_any()
-    } else {
-        // Demacia: medieval double-entry ledger
+    {
         view! {
             <div class="flex-1 p-4">
-                // Heraldic header
-                <Card region=region_for_head.clone() variant="gilt">
+                // Ledger header
+                <Card>
                     <div class="text-center pb-2">
-                        <div class="flex justify-center mb-2">
-                            <Crown size=36 />
-                        </div>
                         <h1 class="font-display text-[28px] tracking-[0.08em] text-accent uppercase">"DRAFT LEDGER"</h1>
                         <div class="mt-1">
                             <Eyebrow>"Chronicled in this campaign"</Eyebrow>
                         </div>
                         <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=400 />
+                            <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                         </div>
                         // Our side indicator
                         {move || {
@@ -4257,16 +4079,16 @@ fn DraftLedgerView(
                 // Two-column ledger
                 <div class="grid grid-cols-2 gap-6 mt-4" data-feedback-label="Draft → Two-column ledger">
                     // Blue side column
-                    <Card region=region_for_blue.clone() variant="gilt" attr:data-feedback-label="Draft → Blue side">
+                    <Card attr:data-feedback-label="Draft → Blue side">
                         <div>
                             <Eyebrow>"BLUE SIDE"</Eyebrow>
                             <div class="mt-2 flex justify-center">
-                                <HeraldicDivider width=240 />
+                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                             </div>
                         </div>
                         // Picks
                         <div class="mt-3">
-                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"PICKS"</span>
+                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"PICKS"</span>
                             <div class="mt-1 flex flex-col gap-1">
                                 {move || {
                                     let slots = draft_slots.get();
@@ -4276,10 +4098,10 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-[13px]">
+                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-label">
                                                 <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-primary flex-1 mx-2">{name}</span>
-                                                <span class="text-muted/50 italic text-[11px]">"role"</span>
+                                                <span class="text-muted/50 italic text-caption">"role"</span>
                                             </div>
                                         }
                                     }).collect_view()
@@ -4289,9 +4111,9 @@ fn DraftLedgerView(
                         // Bans
                         <div class="mt-4">
                             <div class="flex justify-center mb-1">
-                                <HeraldicDivider width=240 />
+                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                             </div>
-                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"BANS"</span>
+                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"BANS"</span>
                             <div class="mt-1 flex flex-col gap-0.5">
                                 {move || {
                                     let slots = draft_slots.get();
@@ -4301,7 +4123,7 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-[12px] opacity-70">
+                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-caption opacity-70">
                                                 <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-secondary line-through flex-1 mx-2">{name}</span>
                                             </div>
@@ -4313,16 +4135,16 @@ fn DraftLedgerView(
                     </Card>
 
                     // Red side column
-                    <Card region=region_for_red.clone() variant="gilt" attr:data-feedback-label="Draft → Red side">
+                    <Card attr:data-feedback-label="Draft → Red side">
                         <div>
                             <Eyebrow>"RED SIDE"</Eyebrow>
                             <div class="mt-2 flex justify-center">
-                                <HeraldicDivider width=240 />
+                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                             </div>
                         </div>
                         // Picks
                         <div class="mt-3">
-                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"PICKS"</span>
+                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"PICKS"</span>
                             <div class="mt-1 flex flex-col gap-1">
                                 {move || {
                                     let slots = draft_slots.get();
@@ -4332,10 +4154,10 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-[13px]">
+                                            <div class="flex items-baseline justify-between py-1 border-b border-outline/20 font-display text-label">
                                                 <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-primary flex-1 mx-2">{name}</span>
-                                                <span class="text-muted/50 italic text-[11px]">"role"</span>
+                                                <span class="text-muted/50 italic text-caption">"role"</span>
                                             </div>
                                         }
                                     }).collect_view()
@@ -4345,9 +4167,9 @@ fn DraftLedgerView(
                         // Bans
                         <div class="mt-4">
                             <div class="flex justify-center mb-1">
-                                <HeraldicDivider width=240 />
+                                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                             </div>
-                            <span class="font-imperial text-[9px] uppercase tracking-[0.2em] text-muted">"BANS"</span>
+                            <span class="font-mono text-caption uppercase tracking-[0.2em] text-muted">"BANS"</span>
                             <div class="mt-1 flex flex-col gap-0.5">
                                 {move || {
                                     let slots = draft_slots.get();
@@ -4357,7 +4179,7 @@ fn DraftLedgerView(
                                             .cloned()
                                             .unwrap_or_else(|| "—".to_string());
                                         view! {
-                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-[12px] opacity-70">
+                                            <div class="flex items-baseline py-0.5 border-b border-outline/15 font-display text-caption opacity-70">
                                                 <span class="text-muted/60 w-5 shrink-0">{format!("{}.", i + 1)}</span>
                                                 <span class="text-secondary line-through flex-1 mx-2">{name}</span>
                                             </div>
@@ -4371,12 +4193,12 @@ fn DraftLedgerView(
 
                 // Footer journal
                 <div class="mt-4">
-                    <Card region=region_for_journal.clone() variant="gilt">
+                    <Card>
                         <Eyebrow>"JOURNAL"</Eyebrow>
                         <div class="mt-2 flex justify-center">
-                            <HeraldicDivider width=560 />
+                            <div class="h-px w-full bg-rule" aria-hidden="true"></div>
                         </div>
-                        <p class="font-display italic text-secondary mt-2 text-[14px]">
+                        <p class="font-display text-secondary mt-2 text-body">
                             // TODO: populate from post-game analysis once /post-game phase lands
                             "Composite analysis to be recorded post-game. Navigate to /post-game to document."
                         </p>

@@ -140,77 +140,12 @@ export const test = base.extend<Fixtures>({
 export { expect };
 
 /**
- * Set the region (theme) for the current page.
- *
- * Sets the `lol_companion_theme` cookie at the browser-context level and reloads so
- * SSR honours the new region. Previously clicked the toggle and waited for the WASM
- * Effect to flip `data-theme` post-hydration; that approach only flipped tokens, not
- * structural region branches. Post-Phase-18.1, structural branches activate when SSR
- * sees the cookie (see `src/server/theme_layer.rs::theme_injection_middleware`).
- *
- * The helper is backwards-compatible — every existing caller continues to work because
- * the reload happens transparently here. Tests that call `setRegion(page, "demacia")`
- * BEFORE `page.goto(...)` work because the cookie is set in the browser context first,
- * so the next navigation already carries it. Tests that call `setRegion` AFTER
- * `page.goto(...)` work because the helper reloads the current page.
- *
- * Phase 18.1 spec_lock D-01: cookie name=`lol_companion_theme`, path=`/`, sameSite=`Lax`.
- * M0: "demacia" is the only theme the server accepts; any other cookie value
- * is clamped back to it, so the helper only accepts "demacia".
- *
- * Edge case: when called BEFORE any `page.goto()`, `page.url()` is `about:blank`. We
- * use the explicit `domain + path` form (rather than `url`) so the cookie is scoped
- * to `127.0.0.1` regardless of the page's current URL. The subsequent `page.reload()`
- * on `about:blank` is a no-op and the next real navigation picks up the cookie.
- *
- * Note: Playwright's `addCookies` API rejects passing BOTH `url` and `path` — you
- * must pass either `url` alone (which derives domain+path) or the explicit
- * `domain` + `path` pair. We use the latter form for clarity and so the cookie
- * works even when called before any navigation.
- */
-export async function setRegion(
-  page: import("@playwright/test").Page,
-  region: "demacia"
-): Promise<void> {
-  // 1. Inject the cookie at the browser-context layer (sent on next request).
-  await page.context().addCookies([
-    {
-      name: "lol_companion_theme",
-      value: region,
-      domain: "127.0.0.1",
-      path: "/",
-      sameSite: "Lax",
-    },
-  ]);
-
-  // 2. Reload so SSR re-renders the page with the new cookie. If the page hasn't
-  //    navigated yet (about:blank), reload is a no-op and the next goto() will
-  //    pick up the cookie. Skip the reload in that case to avoid spurious waits.
-  const currentUrl = page.url();
-  if (currentUrl && currentUrl !== "about:blank") {
-    await page.reload({ waitUntil: "networkidle" });
-    // wasm-patterns rule 56: 500ms hydrate settle.
-    await page.waitForTimeout(500);
-
-    // 3. Assert SSR honoured the cookie.
-    const themeAttr = await page.getAttribute("html", "data-theme");
-    if (themeAttr !== region) {
-      throw new Error(`setRegion failed: expected ${region}, got ${themeAttr}`);
-    }
-  }
-}
-
-/**
  * Set the mode for the current page by clicking a ModeToggle button.
  *
- * Mode toggle buttons render labels per region per UI-SPEC.
- * Actual label text from controls.rs (18-08):
+ * Labels (components/region/controls.rs ModeToggle callers):
  *
- * Draft:   carousel→"Carousel"/"CAROUSEL",  war-table→"War Table"/"WAR_TABLE",  ledger→"Ledger"/"LEDGER"
- * Solo:    constellation→"Constellation"/"CONSTELLATION",  forge→"Forge"/"FORGE",  journal→"Journal"/"JOURNAL"
- *
- * The helper tries title-case, uppercase+underscore, and a label map for
- * multi-word labels ("war-table" → "War Table").
+ * Draft:   carousel→"Carousel", war-table→"War table", ledger→"Ledger"
+ * Solo:    constellation→"Overview", forge→"Rank", journal→"Journal"
  *
  * @param page - Playwright Page
  * @param mode - canonical mode key, e.g. "carousel", "war-table", "journal"
@@ -219,14 +154,14 @@ export async function setMode(
   page: import("@playwright/test").Page,
   mode: string
 ): Promise<void> {
-  // Mapping from canonical mode key → known label variants (demacia + pandemonium)
+  // Mapping from canonical mode key to its button label.
   const LABEL_MAP: Record<string, string[]> = {
-    "carousel": ["Carousel", "CAROUSEL"],
-    "war-table": ["War Table", "WAR_TABLE"],
-    "ledger": ["Ledger", "LEDGER"],
-    "constellation": ["Constellation", "CONSTELLATION"],
-    "forge": ["Forge", "FORGE"],
-    "journal": ["Journal", "JOURNAL"],
+    "carousel": ["Carousel"],
+    "war-table": ["War table"],
+    "ledger": ["Ledger"],
+    "constellation": ["Overview"],
+    "forge": ["Rank"],
+    "journal": ["Journal"],
   };
 
   const candidates = LABEL_MAP[mode] ?? [
@@ -236,7 +171,7 @@ export async function setMode(
   ];
 
   // Build a CSS selector that matches any candidate label (exact text match)
-  const selector = candidates.map(label => `button:has-text("${label}")`).join(", ");
+  const selector = candidates.map(label => `button[aria-pressed]:has-text("${label}")`).join(", ");
   await page.click(selector, { timeout: 10000 });
   await page.waitForTimeout(500);
 }

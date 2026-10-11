@@ -1,6 +1,5 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
-use crate::components::region::HeraldicDivider;
 use crate::components::ui::{
     ErrorBanner, SkeletonCard, SkeletonGrid, SkeletonLine, ToastContext, ToastKind,
 };
@@ -984,15 +983,15 @@ pub fn GamePlanPage() -> impl IntoView {
     // our_champ_signals/enemy_champ_signals used last for role-specific section
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Game plan">
+        <div class="bg-base min-h-screen" data-feedback-label="Game plan">
             <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
                 // Page header per UI-SPEC §"Game Plan Page Layout"
                 <div>
-                    <p class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Strategy hub - game plan"</p>
-                    <h1 class="font-display italic text-4xl text-primary mt-1">"Strategy plans for the field."</h1>
+                    <p class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Strategy hub - game plan"</p>
+                    <h1 class="font-display text-4xl text-primary mt-1">"Strategy plans for the field."</h1>
                     <p class="text-muted text-sm mt-1">"Strategic plans for specific champion matchups."</p>
                 </div>
-                <div class="flex justify-center"><HeraldicDivider width=240 /></div>
+                <div class="flex justify-center"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
 
                 <div class="flex gap-6 min-h-[36rem]">
                 // Left: plan list

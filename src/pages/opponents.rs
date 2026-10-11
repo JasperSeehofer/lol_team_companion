@@ -395,12 +395,12 @@ pub fn OpponentsPage() -> impl IntoView {
     let gate_view = move || {
         if is_solo_mode.get() {
             Some(view! {
-                <div class="canvas-grain bg-base min-h-screen">
+                <div class="bg-base min-h-screen">
                     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-                        <h1 class="font-display italic text-primary text-3xl mb-6">"Opponents"</h1>
+                        <h1 class="font-display text-primary text-3xl mb-6">"Opponents"</h1>
                         <div class="max-w-2xl py-8 text-center">
                             <div class="bg-elevated border border-divider rounded-xl p-6">
-                                <h2 class="font-display italic text-primary text-xl mb-2">"Team feature"</h2>
+                                <h2 class="font-display text-primary text-xl mb-2">"Team feature"</h2>
                                 <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
                                 <button
                                     class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -428,7 +428,7 @@ pub fn OpponentsPage() -> impl IntoView {
 
     view! {
         {gate_view}
-        <div class="canvas-grain bg-base min-h-screen" style:display=move || if is_solo_mode.get() { "none" } else { "" }>
+        <div class="bg-base min-h-screen" style:display=move || if is_solo_mode.get() { "none" } else { "" }>
             <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
             // Back to Draft link (when navigated from draft page via Add New Opponent)
@@ -451,7 +451,7 @@ pub fn OpponentsPage() -> impl IntoView {
             }}
 
             <div class="flex items-center justify-between mb-6">
-                <h1 class="font-display italic text-primary text-3xl">"Opponents"</h1>
+                <h1 class="font-display text-primary text-3xl">"Opponents"</h1>
                 <button
                     on:click=move |_| {
                         selected_id.set(None);
@@ -468,7 +468,7 @@ pub fn OpponentsPage() -> impl IntoView {
                 <div class="lg:col-span-1">
                     <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
                         <div class="px-4 py-3 border-b border-divider">
-                            <h2 class="font-imperial uppercase tracking-wider text-xs text-muted">"All Opponents"</h2>
+                            <h2 class="font-mono uppercase tracking-wider text-xs text-muted">"All Opponents"</h2>
                         </div>
                         <Suspense fallback=move || view! { <div class="p-4 flex flex-col gap-2"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
                             {move || Suspend::new(async move {
@@ -684,7 +684,7 @@ fn CreationForm(
 
     view! {
         <div class="bg-elevated border border-divider rounded-xl p-6">
-            <h2 class="font-imperial uppercase tracking-wider text-xs text-muted mb-4">"New Opponent Team"</h2>
+            <h2 class="font-mono uppercase tracking-wider text-xs text-muted mb-4">"New Opponent Team"</h2>
 
             // Team name input
             <div class="mb-4">
@@ -926,7 +926,7 @@ fn OpponentDetail(
 
             // Notes
             <div class="px-6 py-4 border-b border-divider">
-                <label class="block font-imperial uppercase tracking-wider text-xs text-muted mb-2">"Notes"</label>
+                <label class="block font-mono uppercase tracking-wider text-xs text-muted mb-2">"Notes"</label>
                 <textarea
                     prop:value=move || notes.get()
                     on:input=move |ev| notes.set(event_target_value(&ev))

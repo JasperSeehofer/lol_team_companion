@@ -36,9 +36,7 @@ pub enum TextRole {
 impl TextRole {
     pub fn class(self) -> &'static str {
         match self {
-            TextRole::Display => {
-                "font-display text-display font-semibold tracking-[-0.025em]"
-            }
+            TextRole::Display => "font-display text-display font-semibold tracking-[-0.025em]",
             TextRole::Page => "font-display text-page font-semibold tracking-[-0.02em]",
             TextRole::Title => "font-display text-title font-semibold tracking-[-0.01em]",
             TextRole::Heading => "font-display text-heading font-semibold",
@@ -148,7 +146,10 @@ mod tests {
             TextRole::Note,
         ] {
             assert!(!role.class().is_empty());
-            assert!(!role.class().contains("text-["), "{role:?} uses an arbitrary size");
+            assert!(
+                !role.class().contains("text-["),
+                "{role:?} uses an arbitrary size"
+            );
         }
         assert_eq!(Tone::Inherit.class(), "");
         assert_eq!(join(&["a", "", "b"]), "a b");

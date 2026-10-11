@@ -5,21 +5,18 @@ use leptos::prelude::*;
 pub const RIOT_DISCLAIMER: &str = "Companion isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.";
 
 /// Site-wide footer rendered on every page: legal links plus Riot's
-/// disclaimer.
+/// disclaimer. Quiet chrome: muted caption text on the page ground.
 #[component]
 pub fn SiteFooter() -> impl IntoView {
+    let link = "text-muted underline decoration-rule underline-offset-4 transition-colors hover:text-primary hover:decoration-accent";
     view! {
-        <footer class="border-t border-divider bg-surface/60 mt-12">
-            <div class="max-w-7xl mx-auto px-4 sm:px-8 py-6 flex flex-col gap-3 text-xs text-muted">
-                <nav class="flex flex-wrap gap-4" aria-label="Legal">
-                    <a href="/legal/impressum" class="hover:text-secondary underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
-                        "Impressum"
-                    </a>
-                    <a href="/legal/datenschutz" class="hover:text-secondary underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
-                        "Datenschutz"
-                    </a>
+        <footer class="mt-16 border-t border-rule">
+            <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 sm:flex-row sm:items-start sm:justify-between sm:gap-10 sm:px-8">
+                <p class="max-w-3xl text-caption leading-relaxed text-muted" data-testid="riot-disclaimer">{RIOT_DISCLAIMER}</p>
+                <nav class="flex shrink-0 gap-5 text-caption" aria-label="Legal">
+                    <a href="/legal/impressum" class=link>"Impressum"</a>
+                    <a href="/legal/datenschutz" class=link>"Datenschutz"</a>
                 </nav>
-                <p class="max-w-3xl leading-relaxed" data-testid="riot-disclaimer">{RIOT_DISCLAIMER}</p>
             </div>
         </footer>
     }

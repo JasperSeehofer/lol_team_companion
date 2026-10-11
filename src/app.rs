@@ -33,45 +33,25 @@ use crate::pages::{
     tree_drafter::TreeDrafterPage,
 };
 
-/// Per-request initial theme provided via context from the axum
-/// request handler. Defaults to "demacia" when no user session theme
-/// is available (unauthenticated visitors, hydration mismatch fallback).
-///
-/// Per plan 17-01 task 6 fallback: SSR sets a default; the
-/// `ThemeToggle` component performs a post-hydration sync from the
-/// user's DB record. Brief flicker on the very first authenticated page
-/// load is acceptable; subsequent navigations are flicker-free because
-/// the `data-theme` attribute is preserved across SSR turnarounds.
-#[derive(Clone, Debug)]
-pub struct InitialTheme(pub String);
-
-impl Default for InitialTheme {
-    fn default() -> Self {
-        InitialTheme("demacia".to_string())
-    }
-}
-
 pub fn shell(options: LeptosOptions) -> impl IntoView {
-    // Read the initial theme from request context (provided per-request in
-    // main.rs). Fall back to "demacia" when context is absent (e.g. static
-    // file errors or before context is wired).
-    let theme = use_context::<InitialTheme>()
-        .map(|t| t.0)
-        .unwrap_or_else(|| "demacia".to_string());
-
+    // One theme (dark, "Survey"); tokens live on :root in input.css.
     view! {
         <!DOCTYPE html>
-        <html lang="en" data-theme=theme>
+        <html lang="en">
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <meta name="color-scheme" content="dark" />
+                // The two faces every page needs first (UI text, titles).
+                <link rel="preload" href="/fonts/public-sans/public-sans-latin-wght-normal.woff2" r#as="font" r#type="font/woff2" crossorigin="anonymous" />
+                <link rel="preload" href="/fonts/familjen-grotesk/familjen-grotesk-latin-wght-normal.woff2" r#as="font" r#type="font/woff2" crossorigin="anonymous" />
                 // Live Data Dragon version for image URLs built in the browser.
                 <meta name=crate::models::ddragon::META_NAME content=crate::models::ddragon::version() />
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
             </head>
-            <body class="bg-base min-h-screen text-primary">
+            <body class="bg-page min-h-screen text-primary">
                 <App />
             </body>
         </html>
@@ -82,60 +62,20 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
-    // Phase 18.2 Plan 04 — Hydration-side InitialTheme provider.
-    //
-    // The SSR render path receives `InitialTheme` via
-    // `leptos_routes_with_context` in `main.rs` (the closure calls
-    // `provide_context(theme)` where `theme` is the request-scoped
-    // `REQUEST_THEME` task-local resolved by `theme_injection_middleware`).
-    //
-    // On the WASM hydrate path, `hydrate_body(App)` mounts this `App`
-    // component directly — `leptos_routes_with_context` does NOT run in
-    // the browser. Without an equivalent hydrate-side provider, every
-    // descendant `use_context::<InitialTheme>()` returns `None` and
-    // falls back to the `"demacia"` default. Pages like `Nav`,
-    // `DraftPage`, `SoloDashboardPage`, etc. read the context, derive a
-    // `region: String`, and pass it down to region-branching primitives
-    // (`Btn`, `ModeToggle`, `Card`, `Glitch`, `SectionHead`, ...). When
-    // SSR computed `region = "pandemonium"` and WASM hydrate computed
-    // `region = "demacia"`, every divergent primitive arm causes a
-    // structural mismatch that propagates up to `tachys-0.2.14/src/
-    // html/mod.rs:217 InertElement::hydrate Option::unwrap() on None`.
-    //
-    // Fix: on hydrate, read `<html data-theme="...">` (which the SSR
-    // shell rendered with the same resolved theme value) and provide
-    // it as context BEFORE the `view!` macro instantiates Routes /
-    // child components. The DOM attribute is the canonical SSR→WASM
-    // serialization channel — it survives across page navigations and
-    // is identical to what the SSR `theme_injection_middleware`
-    // resolved for the same request (D-02 precedence).
-    //
-    // On SSR, no provide is needed here because the outer
-    // `leptos_routes_with_context` closure already provided it. We
-    // gate the hydrate-side provide behind `cfg(feature = "hydrate")`
-    // because `web_sys::window()` is WASM-only and would not link in
-    // the SSR build; the SSR owner already has `InitialTheme` from the
-    // parent scope so descendants resolve correctly.
-    #[cfg(feature = "hydrate")]
-    {
-        let theme = web_sys::window()
-            .and_then(|w| w.document())
-            .and_then(|d| d.document_element())
-            .and_then(|el| el.get_attribute("data-theme"))
-            // Release 1 serves one theme; anything else falls back.
-            .filter(|v| v == "demacia")
-            .unwrap_or_else(|| "demacia".to_string());
-        provide_context(InitialTheme(theme));
-    }
-
     view! {
         <Stylesheet id="leptos" href="/pkg/lol_team_companion.css" />
         <Title text="Companion" />
 
         <Router>
             <ToastProvider>
+                <a
+                    href="#main"
+                    class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-(--z-toast) focus:rounded-ctl focus:bg-accent focus:px-3 focus:py-2 focus:text-label focus:font-semibold focus:text-accent-ink"
+                >
+                    "Skip to content"
+                </a>
                 <Nav />
-                <main>
+                <main id="main" tabindex="-1">
                     <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=HomePage />
                         <Route path=path!("/profile") view=ProfilePage />

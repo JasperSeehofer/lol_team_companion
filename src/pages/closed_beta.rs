@@ -1,29 +1,14 @@
-//! Phase 17 plan 17-06 — Closed-beta hero landing.
-//!
-//! D-15 hero tier: Claude Design quality + FLUX background. First
-//! surface external (incognito) visitors see when they reach
-//! `/closed-beta`. Authenticated users are redirected to
-//! `/team/dashboard` because there is no point showing the public
-//! landing to a logged-in user (UI-SPEC §"Closed-Beta Surfaces").
-//!
-//! Theme-conditional background: both `<img>` tags are rendered;
-//! CSS in `input.css` shows only the variant matching the active
-//! `[data-theme]` on `<html>`. This keeps the markup static (no
-//! reactive `if`) and the swap is a pure-CSS toggle on theme change.
+//! Closed-beta landing: the first page invited visitors without a link
+//! see. Signed-in users are sent to `/team/dashboard`. Plain type on the
+//! page ground, no imagery: what the product is, who it is for, how to get
+//! in.
 
-use leptos::prelude::*;
-use leptos_router::components::A;
-
-use crate::app::InitialTheme;
-use crate::components::region::{CompanionSigil, FleurDeLis};
+use crate::components::ui::{Button, ButtonSize, ButtonVariant, PageShell, PageWidth};
 use crate::pages::profile::get_current_user;
+use leptos::prelude::*;
 
 #[component]
 pub fn ClosedBetaPage() -> impl IntoView {
-    // Phase 18.2-03 — read region ONCE at page entry; pass as a prop
-    // to CompanionSigil so its branch decision matches SSR on hydrate.
-    let region = use_context::<InitialTheme>().unwrap_or_default().0;
-
     let user = Resource::new(|| (), |_| get_current_user());
 
     // D-15: redirect authenticated users to /team/dashboard. The
@@ -37,68 +22,54 @@ pub fn ClosedBetaPage() -> impl IntoView {
         }
     });
 
+    let loop_steps = [
+        (
+            "01",
+            "Scout",
+            "Dossiers on every opponent, with the evidence behind each finding.",
+        ),
+        (
+            "02",
+            "Draft",
+            "Plan and branch the draft; every suggestion says why it fits.",
+        ),
+        (
+            "03",
+            "Plan",
+            "Write the game plan the five of you will actually play.",
+        ),
+        (
+            "04",
+            "Review",
+            "Turn each game into lessons and action items for the next prep.",
+        ),
+    ];
     view! {
-        <div class="canvas-grain bg-base min-h-screen relative overflow-hidden">
-            // FLUX-style background images. Both rendered; CSS in
-            // input.css shows only the variant matching [data-theme].
-            // `aria-hidden` + `loading="lazy"` per UI-SPEC perf budget.
-            <img
-                src="/img/beta-landing-demacia.jpg"
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-                class="closed-beta-bg-demacia fixed inset-0 -z-10 w-full h-full object-cover"
-            />
-            <img
-                src="/img/beta-landing-pandemonium.jpg"
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-                class="closed-beta-bg-pandemonium fixed inset-0 -z-10 w-full h-full object-cover"
-            />
-
-            // Soft vignette so headline reads against any FLUX variant.
-            <div
-                class="fixed inset-0 -z-10 pointer-events-none"
-                style="background: radial-gradient(ellipse at center, transparent 0%, var(--color-base) 95%);"
-                aria-hidden="true"
-            ></div>
-
-            <div class="relative z-10 max-w-3xl mx-auto py-24 px-6 text-center flex flex-col items-center">
-                <div class="mb-2">
-                    <CompanionSigil region=region.clone() />
-                </div>
-
-                <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mt-8">
-                    "Closed beta · by invitation"
-                </div>
-
-                <h1 class="font-display italic text-[64px] leading-[1.1] text-primary mt-6">
-                    "The Strategy Room"
-                </h1>
-
-                <p class="font-display italic text-[20px] text-secondary mt-4 max-w-xl">
-                    "Reserved for the named few. Ask your captain for an invite."
-                </p>
-
-                <div class="mt-12">
-                    <A
-                        href="/auth/login"
-                        attr:class="inline-block bg-accent text-accent-contrast font-semibold rounded-lg px-8 py-3 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                    >
-                        "Sign in"
-                    </A>
-                </div>
-
-                <p class="mt-6 text-sm text-muted">
-                    "Already have an invite? Ask your captain for the link."
-                </p>
-
-                // Wax-seal ornament at the bottom — UI-SPEC line 544.
-                <div class="mt-16 flex justify-center" aria-hidden="true">
-                    <FleurDeLis size=24 />
-                </div>
+        <PageShell width=PageWidth::Standard class="pt-12 sm:pt-24">
+            <p class="overline">"Closed beta \u{00b7} by invitation"</p>
+            <h1 class="mt-4 max-w-3xl font-display text-page sm:text-display font-semibold tracking-[-0.025em] text-primary">
+                "The coaching workspace for one team."
+            </h1>
+            <p class="mt-5 max-w-2xl text-reading text-secondary">
+                "Companion keeps a team's scouting, drafts, game plans and reviews in one loop, so every scrim adds to what the team knows. It is in a closed beta: teams join with an invite link from their captain or coach."
+            </p>
+            <div class="mt-8 flex flex-wrap items-center gap-3">
+                <Button href="/auth/login" variant=ButtonVariant::Primary size=ButtonSize::Lg>"Sign in"</Button>
+                <span class="text-body text-muted">"Have an invite link? Open it to create your account."</span>
             </div>
-        </div>
+
+            <ol class="mt-16 grid gap-x-8 gap-y-6 border-t border-rule pt-8 sm:grid-cols-2 lg:grid-cols-4">
+                {loop_steps
+                    .into_iter()
+                    .map(|(n, title, text)| view! {
+                        <li class="flex flex-col gap-1.5">
+                            <span class="figures text-caption text-muted">{n}</span>
+                            <span class="font-display text-heading font-semibold text-primary">{title}</span>
+                            <span class="text-body text-secondary">{text}</span>
+                        </li>
+                    })
+                    .collect_view()}
+            </ol>
+        </PageShell>
     }
 }

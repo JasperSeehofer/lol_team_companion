@@ -196,10 +196,10 @@ pub fn ActionItemsPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="bg-base min-h-screen">
             <div class="max-w-4xl mx-auto p-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h1 class="font-display italic text-primary text-3xl">"Action Items"</h1>
+                    <h1 class="font-display text-primary text-3xl">"Action Items"</h1>
                     <A href="/team/dashboard" attr:class="text-accent hover:underline text-sm rounded-md focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">"Back to Dashboard"</A>
                 </div>
 
@@ -234,7 +234,7 @@ pub fn ActionItemsPage() -> impl IntoView {
 
                 // Add item form (Card.plain)
                 <div class="bg-elevated border border-divider rounded-xl p-6 mb-6">
-                    <h2 class="font-imperial uppercase tracking-wider text-xs text-muted mb-3">"Add Action Item"</h2>
+                    <h2 class="font-mono uppercase tracking-wider text-xs text-muted mb-3">"Add Action Item"</h2>
                     <div class="flex gap-3 flex-wrap">
                         <input
                             type="text"

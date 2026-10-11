@@ -1,4 +1,3 @@
-use crate::app::InitialTheme;
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::{slot_meta, DraftBoard};
 use crate::components::region::*;
@@ -234,8 +233,6 @@ pub fn TreeDrafterPage() -> impl IntoView {
     });
 
     // Region — read ONCE at page entry, passed as String prop to sub-views
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
 
     // Mode: "edit" or "live"
     let (mode, set_mode) = signal("edit".to_string());
@@ -680,18 +677,15 @@ pub fn TreeDrafterPage() -> impl IntoView {
         set_active_slot.set(Some(slot_idx));
     });
 
-    let region_for_section = region.clone();
-
     view! {
-        // Phase 17: canvas-grain wrapper + bg-base. Outer min-h-screen ensures the
+        // Phase 17: wrapper + bg-base. Outer min-h-screen ensures the
         // grain extends past short pages; inner max-width container preserves the
         // 90rem cap from the previous layout.
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="bg-base min-h-screen px-8 py-6">
         <div class="max-w-[90rem] mx-auto flex flex-col gap-6">
             // Header — region-aware SectionHead
             <div class="flex items-center justify-between">
                 <SectionHead
-                    region=region_for_section
                     title="Tree Drafter".to_string()
                     eyebrow="Strategy"
                 />
@@ -725,7 +719,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
             </div>
 
             // Main layout: sidebar + content (Card wraps the interactive area per region grammar)
-            <Card region=region.clone()>
+            <Card >
             <div class="flex gap-6 min-h-[36rem]">
                 // Left sidebar: tree list
                 <div class="w-72 flex-shrink-0 flex flex-col gap-4">
@@ -1337,7 +1331,6 @@ fn NodeEditor(
                                 .collect();
                             view! {
                                 <DraftBoard
-                                    region="demacia".to_string()
                                     draft_slots=draft_slots
                                     champion_map=champion_map
                                     active_slot=active_slot
@@ -1553,7 +1546,6 @@ fn LiveNavigator(
                                                     let noop_clear = Callback::new(|_: usize| {});
                                                     view! {
                                                         <DraftBoard
-                                                            region="demacia".to_string()
                                                             draft_slots=ro_slots
                                                             champion_map=champion_map
                                                             active_slot=ro_active

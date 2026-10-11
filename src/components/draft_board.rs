@@ -1,4 +1,4 @@
-use crate::components::region::{Card, ChampTile, Eyebrow, FleurDeLis, HeraldicDivider};
+use crate::components::region::{Card, ChampTile, Eyebrow};
 use crate::models::champion::Champion;
 use crate::models::draft::role_icon_url;
 use leptos::prelude::*;
@@ -36,7 +36,6 @@ pub fn slot_meta(idx: usize) -> (&'static str, &'static str, &'static str) {
 
 #[component]
 pub fn DraftBoard(
-    region: String,
     draft_slots: ReadSignal<Vec<Option<String>>>,
     champion_map: HashMap<String, Champion>,
     active_slot: ReadSignal<Option<usize>>,
@@ -50,14 +49,13 @@ pub fn DraftBoard(
     #[prop(optional)] role_auto_guessed: Option<ReadSignal<Vec<bool>>>,
     #[prop(optional)] on_role_set: Option<Callback<(usize, String)>>,
 ) -> impl IntoView {
-    let is_pandemonium = region == "pandemonium";
     let (first_pick_blue, set_first_pick_blue) = signal(true);
     // Portraits resolve by champion name via ChampTile; the map prop is kept
     // for callers until the M3 draft rebuild.
     let _ = champion_map;
     let role_popover_open: RwSignal<Option<usize>> = RwSignal::new(None);
 
-    // ── Ban slot: 64×64 circular gilt tile (Demacia "Forsworn") ──────────────
+    // ── Ban slot ──────────────────────────────────────────────────────────────
     let render_ban_slot = move |slot_idx: usize| {
         view! {
             <div class="flex flex-col items-center gap-1">
@@ -68,7 +66,7 @@ pub fn DraftBoard(
                         let is_active = active_slot.get() == Some(slot_idx);
                         let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                         if is_active && !filled {
-                            // Empty + active phase: gilt outline + pulse halo
+                            // Empty + active phase: chalk outline
                             "relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-elevated border-2 animate-pulse ring-2 ring-accent/40"
                         } else if filled && is_highlighted {
                             "relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-surface ring-2 ring-danger"
@@ -84,10 +82,10 @@ pub fn DraftBoard(
                         let filled = slots.get(slot_idx).and_then(|s| s.as_ref()).is_some();
                         let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                         if filled && is_highlighted {
-                            "border: 2px solid var(--gold-3, var(--color-accent)); box-shadow: 0 0 0 1px var(--color-danger) inset;"
+                            "border: 2px solid var(--color-accent); box-shadow: 0 0 0 1px var(--color-danger) inset;"
                                 .to_string()
                         } else if filled {
-                            "border: 2px solid var(--gold-3, var(--color-accent));".to_string()
+                            "border: 2px solid var(--color-accent);".to_string()
                         } else {
                             "".to_string()
                         }
@@ -140,16 +138,6 @@ pub fn DraftBoard(
                                 <div class="relative w-full h-full flex items-center justify-center">
                                     // ChampTile handles grayscale + ban-bar overlay
                                     <ChampTile name=champ_name size=56 banned=true />
-                                    // Wax-seal fleur ornament (Demacia)
-                                    {if !is_pandemonium {
-                                        view! {
-                                            <div class="absolute -bottom-0.5 -right-0.5 opacity-70 pointer-events-none">
-                                                <FleurDeLis size=12 />
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        ().into_any()
-                                    }}
                                     {if is_highlighted {
                                         view! {
                                             <button
@@ -173,20 +161,12 @@ pub fn DraftBoard(
                         }
                     }}
                 </div>
-                {if is_pandemonium {
-                    view! {
-                        <span class="font-mono text-[10px] text-muted leading-none">"// BAN"</span>
-                    }.into_any()
-                } else {
-                    view! {
-                        <Eyebrow>"Forsworn"</Eyebrow>
-                    }.into_any()
-                }}
+                <Eyebrow>"Ban"</Eyebrow>
             </div>
         }
     };
 
-    // ── Pick slot: 64×64 square gilt tile + role/name row + on-deck halo ────
+    // ── Pick slot: portrait + role/name row ──────────────────────────────────
     let render_pick_slot = move |slot_idx: usize, is_blue: bool| {
         let (_, _, label) = slot_meta(slot_idx);
         let is_pick1_slot = slot_idx == 6 || slot_idx == 7;
@@ -276,7 +256,7 @@ pub fn DraftBoard(
                                     <div class="relative flex-shrink-0 h-full">
                                         <ChampTile name=champ_name.clone() size=56 />
                                         {is_first_pick.then(|| view! {
-                                            <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-[10px] font-bold px-1 leading-tight rounded-br font-imperial uppercase tracking-wider">"1st"</div>
+                                            <div class="absolute top-0 left-0 bg-accent text-accent-contrast text-caption font-bold px-1 leading-tight rounded-br font-mono uppercase tracking-wider">"1st"</div>
                                         })}
                                         {warning.map(|(player_name, class_detail)| {
                                             let tooltip = format!("Not in {}'s pool. {}", player_name, class_detail);
@@ -285,13 +265,13 @@ pub fn DraftBoard(
                                                     class="absolute top-0 right-0 bg-warning text-base text-xs font-bold px-1 leading-tight rounded-bl z-10 cursor-help"
                                                     title=tooltip
                                                 >
-                                                    <span class="text-[10px]">{"\u{26A0}"}</span>
+                                                    <span class="text-caption">{"\u{26A0}"}</span>
                                                 </div>
                                             }
                                         })}
                                     </div>
                                     <div class={if is_blue { "flex-1 flex flex-col justify-center px-2 min-w-0" } else { "flex-1 flex flex-col justify-center items-end px-2 min-w-0" }}>
-                                        <span class="text-primary text-sm font-semibold font-display italic truncate">{champ_name}</span>
+                                        <span class="text-primary text-sm font-semibold font-display truncate">{champ_name}</span>
                                         {move || {
                                             slot_comments.and_then(|sc| {
                                                 let comments = sc.get();
@@ -340,7 +320,7 @@ pub fn DraftBoard(
                                             {if !icon_url_opt.is_empty() {
                                                 view! { <img src=icon_url_opt class="w-4 h-4" alt=role_label /> }.into_any()
                                             } else {
-                                                view! { <span class="text-[8px] text-dimmed">"?"</span> }.into_any()
+                                                view! { <span class="text-caption text-dimmed">"?"</span> }.into_any()
                                             }}
                                         </button>
                                         // Popover (5 role buttons in a row)
@@ -380,7 +360,7 @@ pub fn DraftBoard(
                                                                     }
                                                                 >
                                                                     <img src=icon class="w-6 h-6" alt=r />
-                                                                    <span class="text-[10px] text-muted capitalize">{label}</span>
+                                                                    <span class="text-caption text-muted capitalize">{label}</span>
                                                                 </button>
                                                             }
                                                         }).collect_view()}
@@ -430,11 +410,11 @@ pub fn DraftBoard(
                                 } else {
                                     view! { <span class="w-5 h-5 flex-shrink-0"></span> }.into_any()
                                 }}
-                                <span class="text-dimmed text-xs font-imperial uppercase tracking-[0.14em] flex-1 truncate">
+                                <span class="text-dimmed text-xs font-mono uppercase tracking-[0.14em] flex-1 truncate">
                                     {label}
                                 </span>
                                 {is_first_pick.then(|| view! {
-                                    <span class="text-accent text-[10px] font-bold font-imperial uppercase tracking-wider flex-shrink-0">"1st"</span>
+                                    <span class="text-accent text-caption font-bold font-mono uppercase tracking-wider flex-shrink-0">"1st"</span>
                                 })}
                             </div>
                         }.into_any()
@@ -444,31 +424,18 @@ pub fn DraftBoard(
         }
     };
 
-    // Region-branched outer card variant — static, not reactive
-    let card_variant = if is_pandemonium { "zine" } else { "gilt" };
-
     view! {
-        <Card region=region.clone() variant=card_variant.to_string()>
+        <Card>
         <div class="grid grid-cols-[14rem_8rem_14rem] gap-x-4 gap-y-3">
 
-            // Row: Headers — region-branched
-            {if is_pandemonium {
-                view! {
-                    <>
-                    <h3 class="font-mono uppercase tracking-[0.12em] text-center text-xs text-info">"// BLUE_SIDE"</h3>
-                    <div></div>
-                    <h3 class="font-mono uppercase tracking-[0.12em] text-center text-xs text-danger">"// RED_SIDE"</h3>
-                    </>
-                }.into_any()
-            } else {
-                view! {
-                    <>
-                    <h3 class="font-imperial uppercase tracking-[0.18em] text-center text-xs text-info">"House Northwind"</h3>
-                    <div class="flex items-center justify-center"><HeraldicDivider width=64 /></div>
-                    <h3 class="font-imperial uppercase tracking-[0.18em] text-center text-xs text-danger">"House Frostbyte"</h3>
-                    </>
-                }.into_any()
-            }}
+            // Row: side headers (circle = blue, square = red)
+            <h3 class="flex items-center justify-center gap-2 text-label font-semibold text-primary">
+                <span class="size-2.5 rounded-full bg-side-blue" aria-hidden="true"></span>"Blue side"
+            </h3>
+            <div></div>
+            <h3 class="flex items-center justify-center gap-2 text-label font-semibold text-primary">
+                <span class="size-2.5 rounded-[1px] bg-side-red" aria-hidden="true"></span>"Red side"
+            </h3>
 
             // Row: Phase 1 bans + first-pick toggle
             <div class="flex gap-2 justify-end">
@@ -478,7 +445,7 @@ pub fn DraftBoard(
             </div>
             <div class="flex items-center justify-center">
                 <div class="flex flex-col items-center gap-1">
-                    <span class="text-dimmed text-[10px] font-imperial uppercase tracking-[0.18em]">"First pick"</span>
+                    <span class="text-dimmed text-caption font-mono uppercase tracking-[0.18em]">"First pick"</span>
                     <button
                         class="relative w-11 h-6 rounded-full bg-elevated border border-outline/50 hover:border-accent/40 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         title="Toggle first pick side"
@@ -500,7 +467,7 @@ pub fn DraftBoard(
 
             // Row: Pick 1
             {render_pick_slot(6, true)}
-            <div class="flex items-center justify-center font-imperial italic text-dimmed font-semibold text-base tracking-[0.18em]">"vs"</div>
+            <div class="flex items-center justify-center font-mono italic text-dimmed font-semibold text-base tracking-[0.18em]">"vs"</div>
             {render_pick_slot(7, false)}
 
             // Row: Pick 2

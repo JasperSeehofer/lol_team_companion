@@ -227,15 +227,15 @@ pub fn PersonalLearningsPage() -> impl IntoView {
     let toast = use_context::<ToastContext>();
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="bg-base min-h-screen">
             <div class="max-w-7xl mx-auto px-6 py-10">
                 // Page header
                 <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
                     <div class="flex flex-col gap-2">
-                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                        <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
                             "The journal"
                         </span>
-                        <h1 class="font-display italic text-primary text-3xl">"Personal learnings"</h1>
+                        <h1 class="font-display text-primary text-3xl">"Personal learnings"</h1>
                         <p class="text-muted text-sm">"Your private post-game reflections."</p>
                     </div>
                     <a
@@ -275,7 +275,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                 view! {
                                     // Filter bar (Card.plain)
                                     <div class="bg-elevated border border-divider rounded-xl p-4 flex items-center gap-3 mb-6 flex-wrap">
-                                        <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filter"</span>
+                                        <span class="font-mono uppercase tracking-wider text-xs text-muted">"Filter"</span>
                                         // Type filter
                                         <select
                                             class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
@@ -343,8 +343,8 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                             // No learnings at all
                                             return view! {
                                                 <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
-                                                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Empty journal"</span>
-                                                    <h2 class="font-display italic text-primary text-2xl mt-2">"No learnings yet"</h2>
+                                                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Empty journal"</span>
+                                                    <h2 class="font-display text-primary text-2xl mt-2">"No learnings yet"</h2>
                                                     <p class="text-muted text-sm mt-3 mb-6 max-w-md mx-auto">
                                                         "Write your first reflection after a game. Start from a match or create one here."
                                                     </p>
@@ -389,7 +389,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                                     {grouped.into_iter().map(|(champ, items)| {
                                                         view! {
                                                             <div class="mb-6">
-                                                                <p class="font-imperial uppercase tracking-wider text-xs text-muted py-2 mb-2 border-b border-divider/30">
+                                                                <p class="font-mono uppercase tracking-wider text-xs text-muted py-2 mb-2 border-b border-divider/30">
                                                                     {champ}
                                                                 </p>
                                                                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -488,7 +488,7 @@ fn LearningCard(
                         _ => "General",
                     };
                     view! {
-                        <span class="bg-surface text-muted text-[10px] font-imperial uppercase tracking-wider rounded px-2 py-0.5 border border-outline/50">
+                        <span class="bg-surface text-muted text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5 border border-outline/50">
                             {type_label}
                         </span>
                     }
@@ -496,12 +496,12 @@ fn LearningCard(
                 {learning.with_value(|l| {
                     match l.win_loss.as_deref() {
                         Some("win") => view! {
-                            <span class="bg-success/15 text-success border border-success/30 text-[10px] font-imperial uppercase tracking-wider rounded px-2 py-0.5">
+                            <span class="bg-success/15 text-success border border-success/30 text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5">
                                 "Win"
                             </span>
                         }.into_any(),
                         Some("loss") => view! {
-                            <span class="bg-danger/15 text-danger border border-danger/30 text-[10px] font-imperial uppercase tracking-wider rounded px-2 py-0.5">
+                            <span class="bg-danger/15 text-danger border border-danger/30 text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5">
                                 "Loss"
                             </span>
                         }.into_any(),
@@ -519,7 +519,7 @@ fn LearningCard(
             </div>
 
             // Title
-            <p class="font-display italic text-primary text-base leading-snug truncate mb-1">
+            <p class="font-display text-primary text-base leading-snug truncate mb-1">
                 {learning.with_value(|l| l.title.clone())}
             </p>
 
@@ -556,7 +556,7 @@ fn LearningCard(
                     l.tags.iter().map(|tag| {
                         let tag = tag.clone();
                         view! {
-                            <span class="rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-surface text-muted border border-outline/40">
+                            <span class="rounded-full px-2.5 py-0.5 text-caption font-medium bg-surface text-muted border border-outline/40">
                                 {tag}
                             </span>
                         }
@@ -580,15 +580,15 @@ fn LearningCard(
                     <div class="border-t border-divider/40 pt-4 mt-2" on:click=move |ev| ev.stop_propagation()>
                         <div class="space-y-3 mb-4">
                             <div>
-                                <p class="font-imperial uppercase tracking-wider text-[10px] text-muted mb-1">"What happened"</p>
+                                <p class="font-mono uppercase tracking-wider text-caption text-muted mb-1">"What happened"</p>
                                 <p class="text-sm text-secondary">{what_happened}</p>
                             </div>
                             <div>
-                                <p class="font-imperial uppercase tracking-wider text-[10px] text-muted mb-1">"What I learned"</p>
+                                <p class="font-mono uppercase tracking-wider text-caption text-muted mb-1">"What I learned"</p>
                                 <p class="text-sm text-secondary">{what_i_learned}</p>
                             </div>
                             <div>
-                                <p class="font-imperial uppercase tracking-wider text-[10px] text-muted mb-1">"Next time I will..."</p>
+                                <p class="font-mono uppercase tracking-wider text-caption text-muted mb-1">"Next time I will..."</p>
                                 <p class="text-sm text-secondary">{next_time}</p>
                             </div>
                         </div>
@@ -840,14 +840,14 @@ pub fn NewLearningPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="bg-base min-h-screen">
             <div class="max-w-2xl mx-auto px-6 py-10">
                 // Page heading
                 <div class="flex flex-col gap-2 mb-6">
-                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
                         {move || if is_editing.get() { "Revise the entry" } else { "A new chapter" }}
                     </span>
-                    <h1 class="font-display italic text-primary text-3xl">
+                    <h1 class="font-display text-primary text-3xl">
                         {move || if is_editing.get() { "Edit learning" } else { "New learning" }}
                     </h1>
                 </div>
@@ -865,7 +865,7 @@ pub fn NewLearningPage() -> impl IntoView {
                         let formatted = format!("{mins}:{secs:02}");
                         view! {
                             <div class="bg-elevated border border-divider rounded-lg p-3 text-sm text-secondary mb-4">
-                                <span class="font-imperial uppercase tracking-wider text-[10px] text-muted">"From match"</span>
+                                <span class="font-mono uppercase tracking-wider text-caption text-muted">"From match"</span>
                                 <div class="mt-1">{format!("{en} at {formatted}")}</div>
                             </div>
                         }.into_any()
@@ -889,7 +889,7 @@ pub fn NewLearningPage() -> impl IntoView {
 
                         // Step 1: Type selector
                         <div>
-                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Learning type"</label>
+                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Learning type"</label>
                             <div class="flex gap-2 flex-wrap">
                                 {["general", "champion", "matchup"].iter().map(|&lt_val| {
                                     let lt_val_str = lt_val.to_string();
@@ -930,7 +930,7 @@ pub fn NewLearningPage() -> impl IntoView {
                                 match lt.as_str() {
                                     "champion" => view! {
                                         <div>
-                                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Champion"</label>
+                                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Champion"</label>
                                             <ChampionAutocomplete
                                                 champions=champ_list
                                                 value=champion
@@ -941,7 +941,7 @@ pub fn NewLearningPage() -> impl IntoView {
                                     "matchup" => view! {
                                         <div class="space-y-3">
                                             <div>
-                                                <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Your champion"</label>
+                                                <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Your champion"</label>
                                                 <ChampionAutocomplete
                                                     champions=champ_list
                                                     value=champion
@@ -949,7 +949,7 @@ pub fn NewLearningPage() -> impl IntoView {
                                                 />
                                             </div>
                                             <div>
-                                                <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Opponent champion"</label>
+                                                <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Opponent champion"</label>
                                                 <ChampionAutocomplete
                                                     champions=champ_list2
                                                     value=opponent
@@ -965,7 +965,7 @@ pub fn NewLearningPage() -> impl IntoView {
 
                         // Step 3: Three required text areas
                         <div>
-                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"What happened"</label>
+                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"What happened"</label>
                             <textarea
                                 class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 rows="4"
@@ -988,7 +988,7 @@ pub fn NewLearningPage() -> impl IntoView {
                         </div>
 
                         <div>
-                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"What I learned"</label>
+                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"What I learned"</label>
                             <textarea
                                 class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 rows="4"
@@ -1011,7 +1011,7 @@ pub fn NewLearningPage() -> impl IntoView {
                         </div>
 
                         <div>
-                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"Next time I will..."</label>
+                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"Next time I will..."</label>
                             <textarea
                                 class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 rows="4"
@@ -1035,7 +1035,7 @@ pub fn NewLearningPage() -> impl IntoView {
 
                         // Step 4: Tag chips
                         <div>
-                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-2">"Tags"</label>
+                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Tags"</label>
                             <div class="flex flex-wrap gap-2">
                                 {LEARNING_TAGS.iter().map(|&tag| {
                                     let tag_str = tag.to_string();
@@ -1069,7 +1069,7 @@ pub fn NewLearningPage() -> impl IntoView {
 
                         // Step 5: Title field
                         <div>
-                            <label class="font-imperial uppercase tracking-wider text-[10px] text-muted block mb-1">"Title"</label>
+                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"Title"</label>
                             <input
                                 type="text"
                                 class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
