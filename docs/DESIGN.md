@@ -29,7 +29,7 @@ Companion is the team's field survey of the Rift and of every opponent. The map 
 
 - **Canvases** (Sand Table map, Draft Graph, map insets) carry a coordinate frame, a legend and, at most, a faint contour or grid texture.
 - **Everything else** is plain type on hairlines: Match Day's prep list, action items, tables, settings, the community strip. No textures, no compass roses, no parchment.
-- **Surveyor's notes** (the coach's annotations, with a leader line on a canvas) are set in serif italic. The serif appears nowhere else, so italic serif always means "a person wrote this here".
+- **Surveyor's notes** (the coach's annotations, with a leader line on a canvas) are set in serif italic. The serif appears nowhere else, so italic serif always means "a person wrote this here". The one exception off a canvas (owner's decision, M4): team notes quoted in the Draft Graph's text twin (the Why panel and the team's notes on pairs), which are also a person's words.
 - **Dossiers** for opponents carry a "last surveyed" date and the evidence behind each finding.
 - A compass rose or scale bar appears at most once per page, and only where distance means something (the Sand Table).
 
@@ -319,7 +319,7 @@ Pointer: click a slot to choose it, click a champion to fill the current step, d
 
 ### 6.7 Draft Graph, stage A: the ranked list, Why panel and comp profile (M4)
 
-The Draft Graph lives in the draft page as a switchable view next to the board, which stays the primary thing. A `SegmentedControl` above the column beside the board switches between **Picker** and **Draft Graph**. In the graph view the column widens over the intel rail's place at 1280 (the rail moves below the board row), and inside it a container query puts the ranked list and the Why panel side by side from 42rem; on phones they stack (list, Why, comp profile). The view is mounted only while selected, so a hidden graph does no work. Stage B adds the force-directed canvas inside the same panel (section 6.8 then); this section is its text twin, which DESIGN principle 9 requires and which works fully without the canvas.
+The Draft Graph lives in the draft page as a switchable view next to the board, which stays the primary thing. A `SegmentedControl` above the column beside the board switches between **Picker** and **Draft Graph**. In the graph view the column widens over the intel rail's place at 1280 (the rail moves below the board row), and inside it a container query puts the ranked list and the Why panel side by side from 42rem; on phones they stack (list, Why, comp profile). The view is mounted only while selected, so a hidden graph does no work. Stage B put the force-directed canvas at the top of the same panel (section 6.8); this section is its text twin, which DESIGN principle 9 requires and which works fully without the canvas.
 
 **Fit.** Every candidate gets a fit from 0 to 100. It starts at a neutral 50; four parts move it, in the owner's priority order, by at most half their weight: synergy (weight 40, ±20 points), counters (30, ±15), playstyle fit (20, ±10), power spikes (10, ±5); then the slot player's pool adds −8 to +6 (comfort +6, match ready +4, scrim ready +2, practicing 0, to practise −2, not in the pool −8). The word is always "fit", never a percentage or a chance to win, and the panel says "fit 78 of 100, from a neutral 50".
 
@@ -354,7 +354,56 @@ Above the list: the status line (a polite live region: "30 candidates for Blue p
 
 `/admin/traits` follows the page patterns: `PageHeader` with counts (champions, shipped defaults, edited, low confidence), a search field and a `SegmentedControl` filter (All, Defaults only, Edited, Low confidence), a sticky-header `Table` that scrolls inside its own region on phones, and an edit `Dialog` (Lg) with `Checkbox` roles and playstyles, `Select` for damage type and profile, a `SegmentedControl` per scale, "Reviewed for patch 16.20.1", and "Reset to default" for edited rows.
 
-**Reserved for stage B** (the canvas, section 6.8): a `CanvasFrame` (grid A–H by 1–5) with a `LegendBlock` above the list in the same panel, drawing `GraphResult.locked` as pinned nodes (own side left, other side right; blue circles, red squares), the first 24 candidates as free nodes, and `GraphResult.edges` (synergy solid, counter dashed, weak under 1.5 dotted; width = strength; colour = side only), fit as elevation. The list, the Why panel and the canvas share the panel's `focused` signal (a champion id).
+### 6.8 Draft Graph, stage B: the canvas (M4)
+
+The force-directed picture of the same `GraphResult`, at the top of the Draft Graph panel, above the ranked list and the Why panel. Component: `DraftGraphCanvas` (`src/components/graph_canvas.rs`); layout: `src/components/graph_layout.rs` (plain Rust, no JS library, unit-tested). Both twins and the Why panel share the panel's `focused` signal (a champion id), so a focus anywhere is a focus everywhere.
+
+**Frame.** A `CanvasFrame` with grid references A to H by 1 to 5 and the faint grid texture; 16:10 from `sm`, square on phones. The layout space is 800 by 500 units, one grid cell per 100 units, so every position reads as a grid reference ("Thresh, D3"). The caption names the slot and says the ranked list below is the same ranking in words. A `LegendBlock` ("Graph legend", columns) sits under the canvas.
+
+**Nodes.** The ranked side's locked picks are pinned in column A, the other side's in column H, one row per role (Top row 1 to Support row 5; picks without a role fill the free rows in pick order): blue circles and red squares in the side colours with the champion's monogram, the name beside them when the canvas is at least 480 px wide. Open roles of the ranked side are dashed "?" ghosts in their row ("Support open"). Candidates (the top 24, the top 12 under 520 px) are round tokens with a monogram, free to move in columns B to G.
+
+**Fit as elevation.** Each candidate carries a spot height ("▲84") and one contour ring for every 10 fit from 50 (fit 84: rings at 50, 60, 70, 80; under 50: none). The rings are slightly offset ellipses, so the picture reads as terrain rather than targets. Higher fit also means a stronger pull to the middle, so the summits sit near the centre and weak candidates drift outward. The spot height is text, so elevation is never shape alone.
+
+**Edges** join a candidate to the locked picks it relates to (`GraphResult.edges`). Line style is the relation: **solid** synergy, **dashed** counter with an arrowhead at the champion that loses, **dotted** for a weak relation (under 1.5) or a synergy that works against the candidate. Width is strength (1.5 to 4.5 px). Colour is the side of the locked pick, nothing else.
+
+**Forces** (what the positions mean, said in the legend and here): a candidate is pulled toward the picks it has synergy with (rest 190 units, stiffer when stronger) and, more weakly, toward an enemy pick it beats (rest 230); it is pushed away from a pick that beats it or works against it (inside 520 units); nodes repel at short range and never overlap (collision radius = the outer contour ring); a gentle pull to the middle grows with fit. The layout is deterministic: start positions come from the rank (a golden-angle spiral) or from the champion's place in the previous layout, so the same draft draws the same picture.
+
+**Focus.** The focused candidate has a chalk ring (the accent: focus and selection only), its name and "▲ 84" in chalk under it, drawn on top of everything. Its one-hop neighbourhood lights: its edges in side colours at full width and the picks they reach; every other node, edge and ring fades to the rule tone (no opacity over text, faded labels stay in `muted`, 6.9:1). Faded edges show only the strong relations (1.5 and up) as hairlines. Clicking a locked pick lights the candidates related to it instead ("Jinx (your pick, at A4): 23 of the drawn candidates relate to it").
+
+**Interaction.**
+
+| Input | On the canvas |
+|---|---|
+| Tab | The canvas is one tab stop (`role="group"`, `aria-roledescription="graph canvas"`, described by the status line and the key legend) |
+| Arrow keys | Next / previous candidate by rank (Right and Down forward, Left and Up back, wrapping); the list and the Why panel follow |
+| Home / End | First / last drawn candidate |
+| Enter | Pick the focused candidate into the current slot (the picker's path; toast with Undo) |
+| Escape | Back to the board, on the current step |
+| Click | Focus a candidate (or light a locked pick's candidates; click the empty ground to clear) |
+| Double-click | Pick |
+| Drag | Move a candidate; the rest re-settles around it, and on release it settles back to where its relations put it |
+
+The status line under the canvas (`data-graph-canvas-status`) says what the focus means in words: "Thresh, fit 87, at D3 (1 of 24): synergy with Jinx, Vi and Orianna; beats Sejuani, Kai'Sa and Renekton." It is a polite live region while the canvas has focus and silent otherwise (the list announces its own options). Every node also has an SVG `<title>`; nothing lives only on hover. A focus on the canvas below the list's top 10 opens the whole list, so the text twin always shows the focused row.
+
+**Motion.** The layout animates once per draft change, a few ticks per frame, then freezes: no perpetual motion, nothing loops. Under `prefers-reduced-motion: reduce` the simulation runs to the end synchronously and the settled layout is drawn directly; a drag then jumps instead of gliding.
+
+**Performance** (budget from the M4 brief, measured 11 October 2026):
+
+| Measure | Budget | Measured |
+|---|---|---|
+| Nodes | at most 60 | 31 at 1280 px (7 picks + 24 candidates), 19 at 400 px |
+| Tick (layout step) | under 8 ms | natively 0.05 ms per tick for 32 nodes and 41 springs (debug build, `tick_cost_is_far_inside_the_budget`); in headless Chromium with the debug WASM build: mean 0.04 ms, worst 0.5 to 0.8 ms |
+| Settle | under 1.5 s on a laptop | 150 ticks, 6 per frame: 0.4 s at 60 Hz; measured 0.53 to 0.84 s in the container's headless Chromium (its frames come every 30 to 45 ms); reduced motion 7 to 9 ms in one go |
+| DOM | nodes reused, no re-creation per tick | the SVG is built once per result (and again only when a resize changes how many candidates fit); each frame writes one position signal that updates `transform` and the edges' `d` in place |
+| Hidden view | no layout work | the panel (and so the canvas) is mounted only in graph mode; unmounting disposes the signals and the frame loop stops; the browser pauses frames in hidden tabs |
+| Bundle | WASM grows less than 150 KB gzipped | +66 KB gzipped (2,273,468 to 2,341,037 bytes; +284 KB uncompressed): the release WASM (`wasm-release` profile, opt-level z, LTO) with custom sections stripped, gzip -9, before (4e85c76) and after the canvas, both without wasm-bindgen and wasm-opt |
+| Server | recompute only on draft changes | the panel asks again 250 ms after the draft stops changing (stage A); the canvas recomputes the layout only when the result changes |
+
+The page exposes the last run as attributes on `[data-graph-canvas]`: `data-sim-state` (running, settled), `data-sim-mode` (animated, instant), `data-sim-ticks`, `data-sim-nodes`, `data-sim-settle-ms`, `data-sim-tick-max-ms`, `data-sim-tick-mean-ms`, `data-sim-frame-max-ms`; `draft-graph.spec.ts` asserts the budget from them.
+
+**DOM hooks.** `[data-graph-canvas-wrap]`, `[data-graph-canvas]`, `[data-node=candidate|pin][data-champion][data-name][data-fit][data-light=focused|lit|normal|faded]`, `[data-edge="{candidate}-{pick}"]` (lit layer), `[data-graph-canvas-status]`, `#graph-canvas-keys`.
+
+**Not yet.** The tree drafter does not show the graph: its nodes store no roles and no side, so a pick from the graph would lose its role and the ranking would not know whose turn it is; that needs a role and side column on tree nodes first. Edge labels (a short rule name on the focused edges, as direction C sketched) are left out: the Why panel says the full sentence next to the canvas.
 
 ## 7. Champion images
 

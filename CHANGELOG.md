@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M4: Draft Graph, stage B (the canvas)
+
+#### Added
+- The Draft Graph view now opens with a force-directed graph of the pick being decided: your locked picks pinned on the left and theirs on the right (one row per role, blue circles and red squares), the top candidates floating between them, pulled toward the picks they work with and pushed away from the ones that beat them. Fit is drawn as elevation: a spot height ("▲ 84") and one contour ring for every 10 fit from 50. Lines say what kind of relation it is (solid synergy, dashed counter with an arrow at the one that loses, dotted when weak or working against), their width how strong, their colour whose pick it is; a legend under the graph explains every mark, and the grid references (A to H, 1 to 5) let you say "Thresh, D3" on voice.
+- The graph, the ranked list and the Why panel follow one focus: focus a candidate anywhere and its connections light up while the rest fades; click one of the locked picks to see every candidate related to it. A line under the graph says the same in words ("Thresh, fit 87, at D3: synergy with Jinx, Vi and Orianna; beats Sejuani").
+- The graph works from the keyboard as one stop: arrow keys go through the candidates in rank order, Enter picks, Escape goes back to the board. With the mouse, click focuses, double-click picks, and you can drag a candidate (the layout settles again).
+- The layout settles in well under a second and then stays still; with reduced motion turned on, the settled picture appears at once. On phones the graph is square and shows the top 12.
+
+#### Fixed
+- The side marker in the draft page's header now follows the side switch.
+
 ### Milestone M4: Draft Graph, stage A (the model)
 
 #### Added

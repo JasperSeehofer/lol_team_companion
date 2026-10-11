@@ -101,7 +101,7 @@ SurrealKV takes an exclusive lock on `./data`. Only one process can open it: nev
 
 ## Architecture in one paragraph
 
-Single crate, two compile targets. `--features ssr` builds the Axum server (SurrealDB, sessions, Riot API); `--features hydrate` builds the WASM client that hydrates the server-rendered HTML. Pages live in `src/pages/` and usually define their own `#[server]` functions; DB queries live in `src/server/db.rs`; shared types in `src/models/`. Full details in `docs/ARCHITECTURE.md`.
+Single crate, two compile targets. `--features ssr` builds the Axum server (SurrealDB, sessions, Riot API); `--features hydrate` builds the WASM client that hydrates the server-rendered HTML. Pages live in `src/pages/` and usually define their own `#[server]` functions; DB queries live in `src/server/db.rs`; shared types in `src/models/`. The Draft Graph (M4) ranks candidates for the current pick from the trait table, team notes on pairs, the team's games and pools, and draws them as a ranked list and a force-directed canvas; see "Draft Graph" in `docs/ARCHITECTURE.md` and sections 6.7 and 6.8 of `docs/DESIGN.md`. Full details in `docs/ARCHITECTURE.md`.
 
 ```
 src/
@@ -122,18 +122,21 @@ src/
 │   ├── riot.rs          # Shared RiotClient (riven): region routing, global request budget
 │   ├── data_dragon.rs   # Live patch version + champion cache (DB copy, 6 h refresh, patch changes)
 │   ├── sand_table.rs    # Riot Match-V5 timeline importer (replay frames and events)
+│   ├── graph/           # Draft Graph: traits.rs (defaults file champion_traits.csv, startup sync,
+│   │                    # in-memory table), rules.rs (trait rules), evidence.rs (own games), fit.rs (ranking)
 │   └── bug_report_export.rs # Exports open bug reports to markdown on start
-├── models/              # Shared types (SSR + WASM)
+├── models/              # Shared types (SSR + WASM); graph.rs = trait vocabulary, DraftState, GraphResult
 ├── pages/               # Route components (+ their #[server] fns)
 │   ├── auth/{login,register}.rs, team/{dashboard,roster}.rs
-│   ├── admin/invites.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
-│   └── draft.rs, tree_drafter.rs, champion_pool.rs, game_plan.rs, post_game.rs,
+│   ├── admin/{invites,traits}.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
+│   └── draft.rs, draft_graph.rs (Draft Graph view + its server fns), tree_drafter.rs, champion_pool.rs, game_plan.rs, post_game.rs,
 │       opponents.rs, action_items.rs, stats.rs, match_detail.rs, analytics.rs,
 │       solo_dashboard.rs, personal_learnings.rs, profile.rs, team_builder.rs, home.rs,
 │       navigate.rs (client navigation helpers: `navigator`, `go`, `replace_url`)
 └── components/          # ui/ (design-system primitives, see below), nav (command bar, account
                          # menu), footer, skeleton, draft_board (slot metadata only; the board is
                          # ui::DraftBoard), champion_picker/autocomplete, tree_graph,
+                         # graph_canvas (Draft Graph canvas) + graph_layout (its force simulation, pure Rust),
                          # bug_report_widget, region/* (compatibility shims until M5)
 schema.surql             # Baseline DB schema (idempotent), applied on every start; migrations follow
 input.css                # Tailwind entry + Survey tokens (@theme, OKLCH) + @font-face
@@ -168,11 +171,12 @@ tests/integration/       # DB integration tests (one binary)
 | `/analytics` | AnalyticsPage (parked) | Yes |
 | `/personal-learnings`, `/personal-learnings/new` | PersonalLearningsPage, NewLearningPage | Yes |
 | `/admin/invites` | AdminInvitesPage: list, mint, disable invite codes | Admin (404 for everyone else) |
+| `/admin/traits` | AdminTraitsPage: the champion trait table behind the Draft Graph (search, edit, reset to default) | Admin (404 for everyone else) |
 | `/design` | DesignGalleryPage: every primitive, token and state | Admin, or anyone in a dev build (404 otherwise) |
 | `/img/champion/{key}`, `/img/champion/{key}/icon`, `/img/item/{id}` | Axum handlers (not Leptos): cached champion and item images | No |
 | anything else | NotFound (HTTP 404) | No |
 
-Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Registration and login hard-navigate to `/solo` (or `/team/dashboard` when the user's mode is `team`).
+Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Sign-in and registration redirect on the server (so a submit before hydration still lands) and, once hydrated, hard-navigate to `/solo` (or `/team/dashboard` when the user's mode is `team`).
 
 ## Security model (M1)
 
@@ -180,7 +184,7 @@ Pages redirect signed-out visitors to `/auth/login` client-side; the real enforc
 - **DB functions** for team data take `team_id` and verify ownership (`ensure_team_record`, or a `WHERE team = ...` filter); user data takes `user_id` (`ensure_user_record`). A record outside the scope is `DbError::NotFound`, the same as a missing one. Child records check through their parent (`tree.team`, `opponent.team`). IDs that link records (a review's `game_plan_id`, a plan's `draft_id`, a draft's `series_id`) are checked against the team too.
 - **Queries bind every value.** Never `format!` a client value into SurrealQL; `record_key(id, table)` strips the prefix and the key is bound into `type::record('table', $key)`. `format!` is only acceptable for compile-time constants (table/field names in this module).
 - **Errors:** return `.map_err(authz::server_err)` (logs the real error, sends a generic message; `DbError::Invalid` messages are shown as written). Never `ServerFnError::new(e.to_string())`.
-- **Riot-backed endpoints** call `authz::rate_limit(Bucket::Riot)` after the ownership check; syncs also take `authz::user_cooldown`. Login and register are limited per IP (login also per account).
+- **Riot-backed endpoints** call `authz::rate_limit(Bucket::Riot)` after the ownership check; syncs also take `authz::user_cooldown`. Login and register are limited per IP (login also per account). The Draft Graph's `graph_candidates` takes `Bucket::Graph` (per IP). The trait table (`champion_trait`) is global read, admin write; team notes on pairs (`team_relation`), pools, games and dossiers are team data.
 - **Invite gate:** `register_action` consumes one use of an `invite` code atomically (generic error for unknown/used/expired/disabled codes and for duplicate emails). Mint codes on `/admin/invites`, via `BOOTSTRAP_INVITE_CODE`, or with the seed tool.
 - **Sessions:** expired rows load as absent and are purged hourly; the cookie is `HttpOnly`, `SameSite=Strict` and `Secure` outside dev; the session auth hash is an HMAC of the password hash keyed with `SESSION_SECRET`.
 - **Users belong to at most one team**; `create_team` and join requests enforce it.
@@ -202,6 +206,7 @@ Toolchain and external APIs:
 5. **riven:** `Queue::from(u16)`, not `i16`; `puuid` is `String`, not `Option<String>`.
 6. **Unlayered CSS beats Tailwind utilities.** Custom rules in `input.css` that could clash with utilities belong in `@layer components` or `@layer base` (see the forced-state rule for the gallery).
 7. **Tailwind only sees literal class names.** Primitives map enum variants to `&'static str` in `match` arms; never build class names at runtime (`format!("text-{}", x)` produces nothing).
+8. **Disk in the session container is small.** `target/debug/incremental` grows by several GB per session and failed links leave `target/debug/deps/*.rcgu.o` behind; a full disk shows up as `ld terminated with signal 7 [Bus error]`. Delete both (and old test binaries in `deps/`) when `df -h /` runs low; `CARGO_INCREMENTAL=0 cargo test --features ssr` avoids adding to it.
 
 ## Adding things
 
@@ -216,14 +221,14 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 `components::ui` primitives:
 - Batch 1 (layout and controls): `PageShell`, `PageHeader`, `SectionHeader`, `Surface`, `Text`, `Button` (+ `Keycap`), `Field`, `TextField`, `Select`, `Badge`, `Table` (`Th`, `Tr`, `Td`, `RowLink`), `Tabs` (+ `TabPanel`); domain `DraftBoard` (the one tournament board for the draft page, tree drafter and gallery; `DraftFormat` has only `Tournament`), `PrepSequence`. Hooks added in M3: `Button` `pressed` (toggle rows), `TextField` `on_keydown`/`on_blur`/`combobox`.
 - Batch 2 (interaction): `Dialog`, `ConfirmDialog`, `Menu`, `CommandBar`, `Toast` (`ToastContext.show`/`.push` with an "Undo" action), `Callout`, `EmptyState`, `Skeleton` (+ `SkeletonGroup`; the only `animate-pulse`), `Tooltip`, `SegmentedControl` (`manual`: arrows move focus, Enter/Space/click select, for switches with side effects), `Switch`, `Checkbox`.
-- Batch 3 (domain and canvas): `ChampionAvatar` (only `/img/champion/...`, monogram fallback), `UserAvatar`, `RoleLabel` (TOP JGL MID BOT SUP; no role icons), `SideMarker`, `ResultGlyph`, `StatReadout`, `LegendBlock`, `CanvasFrame` + `ScaleBar`, `Annotation`, `TimelineScrub` (the last four reserved for the Sand Table and Draft Graph, M4).
+- Batch 3 (domain and canvas): `ChampionAvatar` (only `/img/champion/...`, monogram fallback), `UserAvatar`, `RoleLabel` (TOP JGL MID BOT SUP; no role icons; `guessed` draws an inferred role as uncertain, as does `DraftBoard`'s `guessed`), `SideMarker`, `ResultGlyph`, `StatReadout`, `LegendBlock`, `CanvasFrame` + `ScaleBar`, `Annotation`, `TimelineScrub`. The Draft Graph canvas (`components::graph_canvas`) uses `CanvasFrame` and `LegendBlock`; `Annotation`, `ScaleBar` and `TimelineScrub` stay reserved for the Sand Table.
 - Compatibility names that render them until M5 (the strategy pages no longer use any; `ChampTile`/`ChampPortrait` were deleted in M3): `ErrorBanner`, `StatusMessage` (Callout), `SkeletonLine/Card/Grid` (Skeleton), `PageLoading`/`PageEmpty`, `region::{Card, SectionHead, Eyebrow, ModeToggle, RankBadge, LPProgress}` (solo dashboard, match detail).
 
 ## Testing
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for `/solo`; `teamPage` also creates a team. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant` and `gallery` specs against a debug build. `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for `/solo`; `teamPage` also creates a team. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant` and `gallery` specs against a debug build. `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container
@@ -243,7 +248,7 @@ Closed-beta users file bug reports through the in-app widget. On every server st
 ## Code style
 
 - **Errors:** `thiserror` for custom error types; in server functions map them with `.map_err(authz::server_err)` (implement `authz::IntoServerError` for a new error type). User-facing rule violations from the DB layer are `DbError::Invalid("...")`.
-- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M5 (only pages not yet migrated still use them). Type: `text-caption` (12px, the floor) to `text-display` (32px page titles are `text-headline`), plus `eyebrow` (mono caps overline), `figures`, `note` (serif italic, annotations only). Never raw palette classes, `text-[Npx]` under 12px, `rounded-full` outside primitives, `animate-pulse` outside `Skeleton`, faded text tones (`text-muted/60`), gradients, blur or emoji: `scripts/lint_design.sh` fails on any hit (hard zero, no baseline). Map old colours by meaning, never "red means red side". The danger button hovers to `danger-deep` with primary text. Headings are plain product language (no lore eyebrows).
+- **Design system:** `docs/DESIGN.md` is the specification (direction "Survey": green-slate OKLCH layers, one chalk accent, matched side colours, plain type, radius with meaning). One dark theme, tokens on `:root` in `input.css` `@theme`; there is no `data-theme`. Use the tokens: surfaces `bg-page`, `bg-ink-1|2|3`, `bg-canvas` (canvases only); lines `border-rule` (hairline), `border-outline` (controls); text `text-primary|secondary|muted`; `bg-accent` + `text-accent-ink`; domain `side-blue|side-red` (with a shape), `win|win-ink|loss`; status `success|warning|danger|info`. Legacy names (`bg-base`, `bg-surface`, `bg-elevated`, `border-divider`, `text-dimmed`, `text-accent-contrast`) alias them until M5 (only pages not yet migrated still use them). Type: `text-caption` (12px, the floor) to `text-display` (32px page titles are `text-headline`), plus `eyebrow` (mono caps overline), `figures`, `note` (serif italic: annotations, and team notes quoted in the Draft Graph's text twin, nowhere else). Never raw palette classes, `text-[Npx]` under 12px, `rounded-full` outside primitives, `animate-pulse` outside `Skeleton`, faded text tones (`text-muted/60`), gradients, blur or emoji: `scripts/lint_design.sh` fails on any hit (hard zero, no baseline). Map old colours by meaning, never "red means red side". The danger button hovers to `danger-deep` with primary text. Headings are plain product language (no lore eyebrows).
 - **Forms:** `Field` + `TextField`/`Select` from `components::ui`; the M3 strategy pages have no raw `<button>`/`<input>`/`<select>`/`<textarea>`. Pages left for M5 still have inline inputs (`bg-surface/50 border-outline`); control edges are always the full `border-outline` (3:1; the lint rule `faint-outline` rejects `border-outline/N`).
 - **Strategy page patterns (M3, `docs/DESIGN.md` 6.6):** list on the left, editor on the right; save state in the `PageHeader` meta; saving puts the id in the URL (`?draft_id=`, `?plan_id=`, `?review_id=`) via `pages::navigate::replace_url`; Undo toasts for reversible deletes, `ConfirmDialog` for the rest; a `Keycap` legend where a page has its own keys.
 - **Naming:** snake_case files and functions, PascalCase components.
