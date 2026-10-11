@@ -15,4 +15,5 @@ mod db_opponents;
 mod db_teams;
 mod db_tree;
 mod db_users;
+mod migrations;
 mod security;

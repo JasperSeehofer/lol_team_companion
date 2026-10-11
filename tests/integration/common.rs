@@ -5,10 +5,6 @@ pub async fn test_db() -> Arc<Surreal<Db>> {
     use surrealdb::engine::local::Mem;
     let db = Surreal::new::<Mem>(()).await.unwrap();
     db.use_ns("test").use_db("test").await.unwrap();
-    db.query(include_str!("../../schema.surql"))
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
+    lol_team_companion::server::db::prepare(&db).await.unwrap();
     Arc::new(db)
 }

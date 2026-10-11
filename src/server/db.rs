@@ -222,7 +222,7 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
 
     let db = Surreal::new::<SurrealKv>(path).await?;
     db.use_ns("lol_companion").use_db("app").await?;
-    apply_schema(&db).await?;
+    prepare(&db).await?;
     // Best-effort champion name normalization (skipped if Data Dragon is unreachable)
     if let Err(e) = migrate_champion_names(&db).await {
         tracing::warn!("Champion name migration failed: {e}");
@@ -230,11 +230,62 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     Ok(Arc::new(db))
 }
 
+/// Bring a database up to date: apply the `schema.surql` baseline, then every
+/// pending migration (`server::migrations`). Fails when a migration fails, so
+/// the server refuses to start on a half-migrated database. Tests call this on
+/// their in-memory databases too.
+pub async fn prepare(db: &Surreal<Db>) -> DbResult<()> {
+    apply_schema(db).await?;
+    let applied = crate::server::migrations::run(db).await?;
+    if !applied.is_empty() {
+        tracing::info!(versions = ?applied, "migrations applied");
+    }
+    Ok(())
+}
+
 async fn apply_schema(db: &Surreal<Db>) -> DbResult<()> {
     db.query(include_str!("../../schema.surql"))
         .await?
         .check()?;
     Ok(())
+}
+
+/// Like `IndexedResults::check`, but for a `BEGIN ... COMMIT` query: when a
+/// transaction fails, every statement reports "not executed due to a failed
+/// transaction" and only one carries the real cause (a `THROW` or a constraint
+/// violation). Return that one, so callers can match on a thrown tag.
+pub fn check_tx(mut response: surrealdb::IndexedResults) -> DbResult<surrealdb::IndexedResults> {
+    let errors = response.take_errors();
+    if errors.is_empty() {
+        return Ok(response);
+    }
+    let mut errors: Vec<(usize, surrealdb::types::Error)> = errors.into_iter().collect();
+    errors.sort_by_key(|(i, _)| *i);
+    let is_not_executed = |e: &surrealdb::types::Error| {
+        matches!(
+            e.details(),
+            surrealdb::types::ErrorDetails::Query(Some(surrealdb::types::QueryError::NotExecuted))
+        )
+    };
+    let pos = errors
+        .iter()
+        .position(|(_, e)| e.details().is_thrown())
+        .or_else(|| errors.iter().position(|(_, e)| !is_not_executed(e)))
+        .unwrap_or(0);
+    Err(DbError::Surreal(errors.swap_remove(pos).1))
+}
+
+/// The tag of a `THROW 'TAG'` that aborted a transaction, if that is what
+/// `err` is (see `check_tx`).
+pub fn thrown_tag(err: &DbError) -> Option<String> {
+    match err {
+        DbError::Surreal(e) if e.details().is_thrown() => Some(
+            e.message()
+                .trim_start_matches("An error occurred: ")
+                .to_string(),
+        ),
+        _ => None,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +300,30 @@ pub const GENERIC_REGISTRATION_ERROR: &str =
 /// Normalise an email address for storage and lookup: trimmed, lowercase.
 pub fn normalize_email(email: &str) -> String {
     email.trim().to_lowercase()
+}
+
+/// Lookup form of a username: trimmed, lowercase. Stored in `user.username_lc`,
+/// which has a unique index (migration 2).
+pub fn normalize_username(username: &str) -> String {
+    username.trim().to_lowercase()
+}
+
+const USERNAME_TAKEN: &str = "That username is taken. Choose another one.";
+
+/// Map a failed user write to a user-safe error. The unique indexes decide
+/// (no check-first query, so concurrent registrations cannot race past it):
+/// a duplicate username says so, a duplicate email gets the generic
+/// registration message so it does not reveal that the address has an account.
+fn user_write_error(e: surrealdb::types::Error) -> DbError {
+    let msg = e.to_string();
+    if msg.contains("username_lc_unique") {
+        DbError::Invalid(USERNAME_TAKEN.into())
+    } else if msg.contains("email_unique") {
+        DbError::Invalid(GENERIC_REGISTRATION_ERROR.into())
+    } else {
+        tracing::warn!("user write failed: {msg}");
+        DbError::Invalid(GENERIC_REGISTRATION_ERROR.into())
+    }
 }
 
 /// Create a user. `email` is normalised here as well, so every caller stores
@@ -266,44 +341,19 @@ pub async fn create_user(
     if username.is_empty() {
         return Err(DbError::Invalid("Choose a username.".into()));
     }
-
-    let mut check = db
-        .query(
-            "SELECT id FROM user WHERE string::lowercase(email) = $email LIMIT 1; \
-                SELECT id FROM user WHERE string::lowercase(username) = $username_lower LIMIT 1",
-        )
-        .bind(("email", email.clone()))
-        .bind(("username_lower", username.to_lowercase()))
-        .await?;
-    let email_taken: Vec<IdRecord> = check.take(0).unwrap_or_default();
-    let username_taken: Vec<IdRecord> = check.take(1).unwrap_or_default();
-    if !email_taken.is_empty() {
-        return Err(DbError::Invalid(GENERIC_REGISTRATION_ERROR.into()));
-    }
-    if !username_taken.is_empty() {
-        return Err(DbError::Invalid(
-            "That username is taken. Choose another one.".into(),
-        ));
-    }
+    let username_lc = normalize_username(&username);
 
     let response = db
         .query(
-            "CREATE user SET username = $username, email = $email, password_hash = $password_hash, is_admin = false",
+            "CREATE user SET username = $username, username_lc = $username_lc, email = $email, password_hash = $password_hash, is_admin = false",
         )
         .bind(("username", username))
+        .bind(("username_lc", username_lc))
         .bind(("email", email))
         .bind(("password_hash", password_hash))
         .await?;
 
-    // A concurrent registration can still hit the unique email index; report
-    // it like any other duplicate instead of leaking the index error.
-    let mut response = match response.check() {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("create_user failed: {e}");
-            return Err(DbError::Invalid(GENERIC_REGISTRATION_ERROR.into()));
-        }
-    };
+    let mut response = response.check().map_err(user_write_error)?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
         Some(r) => Ok(r.id.to_sql()),
@@ -312,29 +362,26 @@ pub async fn create_user(
 }
 
 /// Change a user's username. Fails when another user already has it
-/// (case-insensitive).
+/// (case-insensitive, enforced by the `username_lc` unique index).
 pub async fn update_username(db: &Surreal<Db>, user_id: &str, username: String) -> DbResult<()> {
     let username = username.trim().to_string();
     if username.is_empty() {
         return Err(DbError::Invalid("Choose a username.".into()));
     }
-    let user_key = record_key(user_id, "user");
-    let mut check = db
-        .query("SELECT id FROM user WHERE string::lowercase(username) = $username_lower AND id != type::record('user', $user_key) LIMIT 1")
-        .bind(("username_lower", username.to_lowercase()))
-        .bind(("user_key", user_key.clone()))
-        .await?;
-    let taken: Vec<IdRecord> = check.take(0).unwrap_or_default();
-    if !taken.is_empty() {
-        return Err(DbError::Invalid(
-            "That username is taken. Choose another one.".into(),
-        ));
-    }
-    db.query("UPDATE type::record('user', $user_key) SET username = $username")
-        .bind(("user_key", user_key))
+    let username_lc = normalize_username(&username);
+    db.query("UPDATE type::record('user', $user_key) SET username = $username, username_lc = $username_lc")
+        .bind(("user_key", record_key(user_id, "user")))
         .bind(("username", username))
+        .bind(("username_lc", username_lc))
         .await?
-        .check()?;
+        .check()
+        .map_err(|e| {
+            if e.to_string().contains("username_lc_unique") {
+                DbError::Invalid(USERNAME_TAKEN.into())
+            } else {
+                DbError::Surreal(e)
+            }
+        })?;
     Ok(())
 }
 
@@ -1196,18 +1243,20 @@ pub async fn respond_to_join_request(
             .bind(("team_key", team_key))
             .bind(("user_key", user_key))
             .await?;
-        if let Err(e) = result.check() {
-            let msg = e.to_string();
-            if msg.contains("JOIN_ALREADY_MEMBER") {
-                return Err(DbError::Invalid(
-                    "That player already belongs to a team.".into(),
-                ));
-            }
-            if msg.contains("JOIN_NOT_PENDING") || msg.to_lowercase().contains("conflict") {
+        if let Err(e) = check_tx(result) {
+            match thrown_tag(&e).as_deref() {
+                Some("JOIN_ALREADY_MEMBER") => {
+                    return Err(DbError::Invalid(
+                        "That player already belongs to a team.".into(),
+                    ));
+                }
                 // Someone else handled the request first.
-                return Err(DbError::NotFound);
+                Some("JOIN_NOT_PENDING") => return Err(DbError::NotFound),
+                _ if e.to_string().to_lowercase().contains("conflict") => {
+                    return Err(DbError::NotFound)
+                }
+                _ => return Err(e),
             }
-            return Err(e.into());
         }
     } else {
         db.query("UPDATE type::record('join_request', $req_key) SET status = 'declined' WHERE status = 'pending'")

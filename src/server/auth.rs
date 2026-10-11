@@ -178,7 +178,7 @@ impl axum_login::AuthnBackend for AuthBackend {
         // the lowercase comparison.
         let mut result = self
             .db
-            .query("SELECT * FROM user WHERE string::lowercase(email) = $email LIMIT 1")
+            .query("SELECT * FROM user WHERE email = $email LIMIT 1")
             .bind(("email", email))
             .await
             .map_err(AuthError::Db)?;

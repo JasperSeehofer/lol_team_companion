@@ -4,6 +4,7 @@ pub mod bug_report_export;
 pub mod config;
 pub mod data_dragon;
 pub mod db;
+pub mod migrations;
 pub mod rate_limit;
 pub mod riot;
 pub mod session_store;
