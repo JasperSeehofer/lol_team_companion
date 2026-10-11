@@ -31,7 +31,7 @@ description: SurrealDB 3.x patterns and gotchas for lol_team_companion
 
 12. **Links are `record<...>`, not ID strings** — A record never equals a string (`draft = 'draft:abc'` matches nothing). Store links as `record<table>`; write them with `IF $k = NONE { NONE } ELSE { type::record('table', $k) }` and `db::opt_key(id, "table")`; read them as `Option<RecordId>` and `.to_sql()` for the model. External IDs (Riot match IDs, PUUIDs) stay strings.
 
-13. **Unique indexes decide uniqueness** — Do not check-then-insert for uniqueness (it races). Let the UNIQUE index reject the write and map its error by index name (`username_lc_unique`, `email_unique`, `team_member_user_unique`, `board_version_unique`) to a friendly `DbError::Invalid`. NONE values do not collide in a unique index.
+13. **Unique indexes decide uniqueness, under `invariant_lock`** — Do not check-then-insert for uniqueness (it races). Let the UNIQUE index reject the write and map its error by index name (`username_lc_unique`, `email_unique`, `team_member_user_unique`, `board_version_unique`) to a friendly `DbError::Invalid`. On SurrealKV the index alone is not enough under concurrency (two writes of the same key could both report success with one row lost, or both be kept), so hold `db::invariant_lock()` around such writes, as `create_user`, `update_username`, `join_team` and `save_board_version` do. NONE values do not collide in a unique index.
 
 ## Query Patterns
 

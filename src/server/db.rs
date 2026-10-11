@@ -126,6 +126,12 @@ async fn ensure_owned(
 /// concurrency test), and check-then-create across records is open to write
 /// skew. One process owns the embedded database, so an in-process lock is
 /// enough. Hold it for the whole check and write; never nest it.
+///
+/// Writes that rely on a UNIQUE index take it too (`create_user`,
+/// `update_username`, `join_team`, `save_board_version`): on SurrealKV two
+/// concurrent writes of the same unique key could both report success while
+/// only one row was kept, or both be kept (M6 review, tests
+/// `concurrent_signups_*`, `concurrent_board_saves_*`, `concurrent_joins_*`).
 async fn invariant_lock() -> tokio::sync::MutexGuard<'static, ()> {
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     LOCK.lock().await
@@ -368,6 +374,8 @@ pub async fn create_user(
     }
     let username_lc = normalize_username(&username);
 
+    // The unique indexes decide; the lock makes them reliable on SurrealKV.
+    let _guard = invariant_lock().await;
     let response = db
         .query(
             "CREATE user SET username = $username, username_lc = $username_lc, email = $email, password_hash = $password_hash, is_admin = false",
@@ -394,6 +402,7 @@ pub async fn update_username(db: &Surreal<Db>, user_id: &str, username: String) 
         return Err(DbError::Invalid("Choose a username.".into()));
     }
     let username_lc = normalize_username(&username);
+    let _guard = invariant_lock().await;
     db.query("UPDATE type::record('user', $user_key) SET username = $username, username_lc = $username_lc")
         .bind(("user_key", record_key(user_id, "user")))
         .bind(("username", username))
@@ -1060,6 +1069,7 @@ pub async fn list_all_teams(db: &Surreal<Db>) -> DbResult<Vec<Team>> {
 pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
+    let _guard = invariant_lock().await;
     // Prevent duplicate membership
     let mut check = db
         .query("SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) LIMIT 1")
@@ -5895,7 +5905,8 @@ pub async fn list_boards(
 
 /// Save `scene` as the next version of a board of `team_id` and return its
 /// number (1, 2, ...). Two saves at the same moment cannot get the same
-/// number: the unique (board, version) index rejects the second one.
+/// number: they are serialised by `invariant_lock`, and the unique
+/// (board, version) index rejects a duplicate.
 pub async fn save_board_version(
     db: &Surreal<Db>,
     team_id: &str,
@@ -5907,6 +5918,7 @@ pub async fn save_board_version(
     if !scene.is_object() {
         return Err(DbError::Invalid("A board scene must be an object.".into()));
     }
+    let _guard = invariant_lock().await;
     let response = db
         .query(
             "BEGIN TRANSACTION; \

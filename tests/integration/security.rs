@@ -1157,11 +1157,9 @@ async fn surrealkv_db() -> (std::sync::Arc<Surreal<Db>>, std::path::PathBuf) {
         .await
         .unwrap();
     db.use_ns("test").use_db("test").await.unwrap();
-    db.query(include_str!("../../schema.surql"))
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
+    // Baseline plus migrations, so the unique indexes added by migrations
+    // (username_lc, team_member.user) exist as in production.
+    db::prepare(&db).await.unwrap();
     (std::sync::Arc::new(db), dir)
 }
 
@@ -1311,6 +1309,164 @@ fn concurrent_cross_team_accepts_keep_one_team_surrealkv() {
     on_kv_runtime(async {
         let (db, dir) = surrealkv_db().await;
         cross_team_accepts_add_one_membership(db.clone()).await;
+        std::mem::forget(db);
+        let _ = std::fs::remove_dir_all(dir);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Unique indexes under concurrency (M6 review). M6 dropped the check-first
+// queries for usernames and emails and relies on the unique indexes alone;
+// board versions and `join_team` have no process lock either.
+// ---------------------------------------------------------------------------
+
+async fn concurrent_signups_take_a_name_once(db: std::sync::Arc<Surreal<Db>>) {
+    let mut handles = Vec::new();
+    for i in 0..12 {
+        let db = db.clone();
+        // Case variants of one username, each with its own email.
+        let name = ["Racer", "racer", "RACER"][i % 3].to_string();
+        handles.push(tokio::spawn(async move {
+            db::create_user(&db, name, format!("racer{i}@example.com"), "h".into()).await
+        }));
+    }
+    let mut ok = 0;
+    for h in handles {
+        if h.await.unwrap().is_ok() {
+            ok += 1;
+        }
+    }
+    let mut handles = Vec::new();
+    for i in 0..12 {
+        let db = db.clone();
+        let email = ["same@example.com", "Same@Example.com"][i % 2].to_string();
+        handles.push(tokio::spawn(async move {
+            db::create_user(&db, format!("same{i}"), email, "h".into()).await
+        }));
+    }
+    let mut ok_email = 0;
+    for h in handles {
+        if h.await.unwrap().is_ok() {
+            ok_email += 1;
+        }
+    }
+    let mut r = db
+        .query(
+            "RETURN [array::len((SELECT VALUE id FROM user WHERE username_lc = 'racer')), \
+                     array::len((SELECT VALUE id FROM user WHERE email = 'same@example.com'))]",
+        )
+        .await
+        .unwrap();
+    let rows: Vec<i64> = r.take(0).unwrap();
+    assert_eq!(
+        (ok, ok_email, rows),
+        (1, 1, vec![1, 1]),
+        "one account per username and per email"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_signups_take_a_name_once_mem() {
+    concurrent_signups_take_a_name_once(common::test_db().await).await;
+}
+
+#[test]
+fn concurrent_signups_take_a_name_once_surrealkv() {
+    on_kv_runtime(async {
+        let (db, dir) = surrealkv_db().await;
+        concurrent_signups_take_a_name_once(db.clone()).await;
+        std::mem::forget(db);
+        let _ = std::fs::remove_dir_all(dir);
+    });
+}
+
+async fn concurrent_board_saves_get_distinct_versions(db: std::sync::Arc<Surreal<Db>>) {
+    let t = tenants(&db).await;
+    let board = db::create_board(&db, &t.team1, &t.a, "Race".into())
+        .await
+        .unwrap();
+    let mut handles = Vec::new();
+    for i in 0..8 {
+        let (db, board, team, user) = (db.clone(), board.clone(), t.team1.clone(), t.a.clone());
+        handles.push(tokio::spawn(async move {
+            db::save_board_version(&db, &team, &board, &user, serde_json::json!({ "i": i })).await
+        }));
+    }
+    let mut versions = Vec::new();
+    for h in handles {
+        if let Ok(v) = h.await.unwrap() {
+            versions.push(v);
+        }
+    }
+    let mut r = db
+        .query("SELECT VALUE version FROM board_version WHERE board = type::record('board', $k)")
+        .bind(("k", db::record_key(&board, "board")))
+        .await
+        .unwrap();
+    let mut stored: Vec<i64> = r.take(0).unwrap();
+    stored.sort();
+    versions.sort();
+    assert!(!versions.is_empty());
+    assert_eq!(stored, versions, "every reported version is stored once");
+    let mut dedup = stored.clone();
+    dedup.dedup();
+    assert_eq!(dedup, stored, "no two saves share a version number");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_board_saves_get_distinct_versions_mem() {
+    concurrent_board_saves_get_distinct_versions(common::test_db().await).await;
+}
+
+#[test]
+fn concurrent_board_saves_get_distinct_versions_surrealkv() {
+    on_kv_runtime(async {
+        let (db, dir) = surrealkv_db().await;
+        concurrent_board_saves_get_distinct_versions(db.clone()).await;
+        std::mem::forget(db);
+        let _ = std::fs::remove_dir_all(dir);
+    });
+}
+
+async fn concurrent_joins_keep_one_team(db: std::sync::Arc<Surreal<Db>>) {
+    let t = tenants(&db).await;
+    let dave = db::create_user(&db, "dave".into(), "dave@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let mut handles = Vec::new();
+    for i in 0..8 {
+        let (db, dave) = (db.clone(), dave.clone());
+        let team = if i % 2 == 0 {
+            t.team1.clone()
+        } else {
+            t.team2.clone()
+        };
+        handles.push(tokio::spawn(async move {
+            db::join_team(&db, &dave, &team).await
+        }));
+    }
+    for h in handles {
+        let _ = h.await.unwrap();
+    }
+    let mut r = db
+        .query("SELECT VALUE id FROM team_member WHERE user = type::record('user', $k)")
+        .bind(("k", db::record_key(&dave, "user")))
+        .await
+        .unwrap();
+    let rows: Vec<surrealdb::types::RecordId> = r.take(0).unwrap();
+    assert_eq!(rows.len(), 1, "the unique index keeps one membership");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_joins_keep_one_team_mem() {
+    concurrent_joins_keep_one_team(common::test_db().await).await;
+}
+
+#[test]
+fn concurrent_joins_keep_one_team_surrealkv() {
+    on_kv_runtime(async {
+        let (db, dir) = surrealkv_db().await;
+        concurrent_joins_keep_one_team(db.clone()).await;
         std::mem::forget(db);
         let _ = std::fs::remove_dir_all(dir);
     });

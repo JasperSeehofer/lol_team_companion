@@ -87,7 +87,7 @@ Applied so far: 1 `lowercase_emails` (case collisions are logged and left alone)
 - A user belongs to at most one team: `create_team` and join requests refuse a second membership; join requests are answered only by the leader of the requested team and only while pending.
 - `/healthz` returns 200 with `{"status":"ok","db":"ok"}`, or 503 when a trivial DB query fails.
 
-- Usernames are unique case-insensitively through `user.username_lc` (unique index); emails are stored lowercase and looked up with `email = $email` (unique index). `create_user` / `update_username` rely on the indexes and map their violations to the friendly messages.
+- Usernames are unique case-insensitively through `user.username_lc` (unique index); emails are stored lowercase and looked up with `email = $email` (unique index). `create_user` / `update_username` rely on the indexes and map their violations to the friendly messages. They run under `invariant_lock`: on SurrealKV a unique index alone did not stop two concurrent writes of the same key (one could report success and be lost).
 
 Users have a `mode` (`solo` or `team`). New users start in solo mode and land on `/solo`; login sends team-mode users to `/team/dashboard`.
 
