@@ -1634,7 +1634,7 @@ fn DraftEditor(
             eyebrow="Draft"
             meta=move || view! {
                 {move || opp_name.get().map(|o| view! { <span>"vs " {o}</span> })}
-                <SideMarker side=our_side.get() text=SideText::Long />
+                {move || view! { <SideMarker side=our_side.get() text=SideText::Long /> }}
                 <span data-testid="draft-save-state" class="text-muted">
                     {move || match save_state.get() {
                         SaveState::New => "Not saved yet",
