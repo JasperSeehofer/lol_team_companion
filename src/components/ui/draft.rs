@@ -729,7 +729,17 @@ pub fn DraftBoard(
                 aria-live="polite"
                 data-draft-status=""
             >
-                {move || step_status(current.get())}
+                {move || match current.get() {
+                    Some(c) => step_status(Some(c)),
+                    None => {
+                        let filled = champions.with(|v| v.iter().filter(|c| c.is_some()).count());
+                        if filled >= 20 {
+                            step_status(None)
+                        } else {
+                            format!("{filled} of 20 steps decided")
+                        }
+                    }
+                }}
             </p>
             <div
                 role="grid"

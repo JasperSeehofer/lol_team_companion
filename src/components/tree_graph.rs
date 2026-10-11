@@ -21,9 +21,10 @@ use leptos::prelude::*;
 //       * `ghost`    — improvised node (faint, dashed)
 //       * `locked`   — has populated `actions`
 //       * `alternate`— default fallback (regular node)
-//   - Animated dash-flow on selected edges via an inline `<style>` block (the
-//     `@keyframes dashFlow` rule is scoped to this component to avoid leaking
-//     into global CSS).
+//   - M3: tokens only (canvas ground, outline edges, chalk for the selected
+//     node and its edge), no glow, no looping animation, 12px text floor.
+//     Edges into a node whose diff is ours are thick, theirs thin, improvised
+//     lineage dashed (line weight and style, not hue).
 //   - SVG strokes use `style="stroke: var(--color-…)"` because Tailwind
 //     utilities don't reach SVG `stroke`. CSS custom properties are
 //     re-evaluated by the browser on theme switch (see 17-RESEARCH.md
@@ -281,12 +282,12 @@ fn canvas_size(roots: &[LayoutNode]) -> (f64, f64) {
 fn edge_base_style(state: NodeState, side: Option<EdgeSide>) -> &'static str {
     match (state, side) {
         // Ghost lineage: faint, dashed-feel, regardless of side.
-        (NodeState::Ghost, _) => "stroke: var(--color-muted); stroke-width: 1; opacity: 0.25",
+        (NodeState::Ghost, _) => "stroke: var(--color-muted); stroke-width: 1",
         // Side-tinted edges (when diff actions exist).
-        (_, Some(EdgeSide::Us)) => "stroke: var(--color-info); stroke-width: 1.5; opacity: 0.7",
-        (_, Some(EdgeSide::Them)) => "stroke: var(--color-danger); stroke-width: 1.5; opacity: 0.7",
+        (_, Some(EdgeSide::Us)) => "stroke: var(--color-secondary); stroke-width: 2.5",
+        (_, Some(EdgeSide::Them)) => "stroke: var(--color-muted); stroke-width: 1",
         // Alternate / fallback.
-        _ => "stroke: var(--color-secondary); stroke-width: 1.5; opacity: 0.6",
+        _ => "stroke: var(--color-outline); stroke-width: 1.5",
     }
 }
 
@@ -326,39 +327,18 @@ pub fn TreeGraph(
     }
 
     view! {
-        <div class="w-full overflow-auto bg-elevated/30 border border-divider/30 rounded-xl" style="max-height: 85vh;">
+        <div class="w-full overflow-auto border border-rule bg-canvas" style="max-height: 85vh;">
             <svg
+                role="group"
+                aria-label="Branches as a graph (the list view has the same branches and is keyboard-operable)"
                 width=format!("{canvas_w}")
                 height=format!("{canvas_h}")
                 viewBox=format!("0 0 {canvas_w} {canvas_h}")
                 xmlns="http://www.w3.org/2000/svg"
                 class="block"
             >
-                // Inline style: dash-flow keyframe + selected-state animation. Scoped
-                // to this component to avoid leaking globally and keep CSS-variable
-                // re-evaluation working across themes (Pitfall 9).
-                <style>
-                    {r#"
-                    @keyframes dashFlow {
-                        from { stroke-dashoffset: 0; }
-                        to { stroke-dashoffset: -20; }
-                    }
-                    .tree-edge-selected {
-                        animation: dashFlow 1.2s linear infinite;
-                    }
-                    "#}
-                </style>
                 // SVG filters for selected node halo + ban grayscale.
                 <defs>
-                    <filter id="selected-glow" x="-30%" y="-30%" width="160%" height="160%">
-                        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur" />
-                        <feFlood flood-color="var(--color-accent)" flood-opacity="0.5" result="color" />
-                        <feComposite in="color" in2="blur" operator="in" result="glow" />
-                        <feMerge>
-                            <feMergeNode in="glow" />
-                            <feMergeNode in="SourceGraphic" />
-                        </feMerge>
-                    </filter>
                     <filter id="grayscale-ban" color-interpolation-filters="sRGB">
                         <feColorMatrix type="saturate" values="0"/>
                     </filter>
@@ -375,8 +355,7 @@ pub fn TreeGraph(
                     );
                     let path_for_selected = path.clone();
                     let to_id_for_style = edge.to_id.clone();
-                    let to_id_for_selected_class = edge.to_id.clone();
-                    let to_id_for_selected_style = edge.to_id.clone();
+                                        let to_id_for_selected_style = edge.to_id.clone();
                     let to_state = edge.to_state;
                     let side = edge.side;
                     let all_icons = edge.diff_champions.clone();
@@ -416,13 +395,6 @@ pub fn TreeGraph(
                             d=path_for_selected
                             fill="none"
                             stroke-dasharray="6 4"
-                            class=move || {
-                                if selected_node_id.get().as_deref() == Some(to_id_for_selected_class.as_str()) {
-                                    "tree-edge-selected"
-                                } else {
-                                    ""
-                                }
-                            }
                             style=move || {
                                 if selected_node_id.get().as_deref() == Some(to_id_for_selected_style.as_str()) {
                                     "stroke: var(--color-accent); stroke-width: 2"
@@ -450,7 +422,7 @@ pub fn TreeGraph(
                                         cx=format!("{}", ix + ICON_SIZE / 2.0)
                                         cy=format!("{}", iy + ICON_SIZE / 2.0)
                                         r=format!("{}", ICON_SIZE / 2.0 + 2.0)
-                                        style=format!("fill: var(--color-elevated); {}; stroke-width: 1.5", border_style)
+                                        style=format!("fill: var(--color-ink-2); {}; stroke-width: 1.5", border_style)
                                     />
                                     // Champion image (clipped to circle)
                                     <clipPath id=format!("clip-edge-{}-{}", ix as i32, iy as i32)>
@@ -482,7 +454,7 @@ pub fn TreeGraph(
                                 <text
                                     x=format!("{}", bx + 2.0)
                                     y=format!("{}", by + ICON_SIZE * 0.7)
-                                    font-size="9"
+                                    font-size="12"
                                     style="fill: var(--color-muted)"
                                 >{format!("+{overflow}")}</text>
                             }
@@ -496,8 +468,7 @@ pub fn TreeGraph(
                     let nid_for_click = nid.clone();
                     let nid_for_add = nid.clone();
                     let nid_for_rect_style = nid.clone();
-                    let nid_for_rect_filter = nid.clone();
-                    let nid_for_rect_dasharray = nid.clone();
+                                        let nid_for_rect_dasharray = nid.clone();
                     let nid_for_label_style = nid.clone();
                     let label = n.label.clone();
                     let is_improvised = n.is_improvised;
@@ -509,9 +480,6 @@ pub fn TreeGraph(
                     // Leaf rendering uses a circular tile centred on the rect's
                     // mid-point. We still draw the rect underneath so layout/edge
                     // anchors stay aligned with the existing algorithm.
-                    let is_leaf = matches!(default_state, NodeState::Leaf);
-                    let leaf_cx = x + NODE_W / 2.0;
-                    let leaf_cy = y + NODE_H / 2.0;
 
                     view! {
                         <g
@@ -543,8 +511,8 @@ pub fn TreeGraph(
                                 y=format!("{y}")
                                 width=format!("{NODE_W}")
                                 height=format!("{NODE_H}")
-                                rx={if is_leaf { format!("{}", NODE_H / 2.0) } else { "10".to_string() }}
-                                ry={if is_leaf { format!("{}", NODE_H / 2.0) } else { "10".to_string() }}
+                                rx="3"
+                                ry="3"
                                 stroke-dasharray=move || {
                                     let selected = selected_node_id.get().as_deref()
                                         == Some(nid_for_rect_dasharray.as_str());
@@ -563,58 +531,40 @@ pub fn TreeGraph(
                                     if selected {
                                         // Selected state: gold halo via filter +
                                         // accent ring (stroke-width 2.5).
-                                        "fill: var(--color-accent); stroke: var(--color-accent-hover); stroke-width: 2.5; opacity: 1".to_string()
+                                        "fill: var(--color-accent); stroke: var(--color-accent); stroke-width: 2; opacity: 1".to_string()
                                     } else {
                                         match default_state {
                                             NodeState::Locked => {
-                                                "fill: var(--color-elevated); stroke: var(--color-outline); stroke-width: 1.5; opacity: 1".to_string()
+                                                "fill: var(--color-ink-2); stroke: var(--color-outline); stroke-width: 1.5; opacity: 1".to_string()
                                             }
                                             NodeState::Alternate => {
-                                                "fill: var(--color-elevated); stroke: var(--color-divider); stroke-width: 1.5; opacity: 0.78".to_string()
+                                                "fill: var(--color-ink-1); stroke: var(--color-outline); stroke-width: 1; opacity: 1".to_string()
                                             }
                                             NodeState::Ghost => {
-                                                "fill: var(--color-elevated); stroke: var(--color-divider); stroke-width: 1; opacity: 0.3".to_string()
+                                                "fill: var(--color-canvas); stroke: var(--color-outline); stroke-width: 1; opacity: 1".to_string()
                                             }
                                             NodeState::Leaf => {
                                                 // Leaf: subtle ring; outer fill set on the
                                                 // overlay circle below.
-                                                "fill: var(--color-elevated); stroke: var(--color-accent); stroke-width: 1.5; opacity: 0.9".to_string()
+                                                "fill: var(--color-ink-2); stroke: var(--color-outline); stroke-width: 1.5; opacity: 1".to_string()
                                             }
                                         }
                                     }
                                 }
-                                filter=move || {
-                                    if selected_node_id.get().as_deref() == Some(nid_for_rect_filter.as_str()) {
-                                        "url(#selected-glow)"
-                                    } else {
-                                        ""
-                                    }
-                                }
                             />
-
-                            // Leaf overlay: a glowing aureole. Only visible when this
-                            // node is a leaf (no children).
-                            {is_leaf.then(|| view! {
-                                <circle
-                                    cx=format!("{leaf_cx}")
-                                    cy=format!("{leaf_cy}")
-                                    r="22"
-                                    style="fill: var(--color-accent-soft); stroke: var(--color-accent); stroke-width: 1.5; opacity: 0.6"
-                                />
-                            })}
 
                             // Phase / role indicator (small glyph on the left).
                             <text
                                 x=format!("{}", x + 12.0)
                                 y=format!("{}", y + NODE_H / 2.0 + 4.0)
-                                font-size="11"
+                                font-size="12"
                                 style={
                                     if is_improvised {
                                         "fill: var(--color-warning)"
                                     } else if is_root {
                                         "fill: var(--color-success)"
                                     } else {
-                                        "fill: var(--color-dimmed)"
+                                        "fill: var(--color-muted)"
                                     }
                                 }
                             >
@@ -631,7 +581,7 @@ pub fn TreeGraph(
                                 font-weight="600"
                                 style=move || {
                                     if selected_node_id.get().as_deref() == Some(nid_for_label_style.as_str()) {
-                                        "fill: var(--color-accent-contrast)"
+                                        "fill: var(--color-accent-ink)"
                                     } else {
                                         match default_state {
                                             NodeState::Alternate => "fill: var(--color-secondary)",
@@ -661,12 +611,12 @@ pub fn TreeGraph(
                                         width="22"
                                         height="16"
                                         rx="7"
-                                        style="fill: var(--color-overlay-strong)"
+                                        style="fill: var(--color-ink-3)"
                                     />
                                     <text
                                         x=format!("{}", badge_x + 11.0)
                                         y=format!("{}", badge_y + 12.0)
-                                        font-size="9"
+                                        font-size="12"
                                         text-anchor="middle"
                                         style="fill: var(--color-secondary)"
                                     >
@@ -689,7 +639,7 @@ pub fn TreeGraph(
                                         cx=format!("{}", x + NODE_W + 4.0)
                                         cy=format!("{}", y + NODE_H / 2.0)
                                         r="9"
-                                        style="fill: var(--color-overlay)"
+                                        style="fill: var(--color-ink-3)"
                                         class="opacity-0 hover:opacity-100 transition-opacity"
                                     />
                                     <text
