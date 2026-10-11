@@ -4,6 +4,83 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M3: Strategy pages onto the system
+
+#### Added
+- Action items have an optional due day; overdue items are flagged, and the header counts what is open, in progress, done and overdue.
+- Action items can be edited in place, deleted with Undo, and worked from the keyboard: arrow keys move between items, Space completes, E edits, Delete removes.
+- Opponent dossiers show how much evidence each holds (players and champions seen) and when they were last surveyed, flagged after a week; empty role slots can be filled with a Riot ID or a name.
+- Champion pool tiers can be rearranged from the keyboard: Space picks a champion up, the arrow keys choose a tier, Space drops it there.
+- Drafts can be deleted (with a confirmation).
+- Saved drafts, game plans and reviews keep their id in the address, so a reload or a shared link reopens them.
+
+#### Changed
+- The draft page is one compact tournament board: blue left, red right, five bans per side grouped by ban rotation, then the picks in pick order grouped by rotation, with only the current step lit and a counter such as "Pick 7 of 10 · Red to pick". It fits beside the champion search on a laptop screen and works entirely from the keyboard (arrows, Enter, Escape, Backspace). The earlier draft board showed three bans per side instead of five.
+- The draft page shows the opponent's brief beside the board, and saving, comments and "next steps" (prep a game plan, review the game) sit around it; saved drafts open from their address.
+- The tree drafter, champion pool, game plan, post-game review, opponents and action items pages were rebuilt on the design system, each with one page title, clear save states and empty states that say what will appear.
+- The game plan checklist uses real checkboxes and shows its progress; a saved plan can start a review that is already linked to it.
+- Faint control borders across the app now meet the 3:1 contrast minimum.
+- Tooltips stay open while you move the pointer onto them; the command bar's search shows a focus ring; the Solo / Team switch in the navigation moves with the arrow keys and only switches on Enter, Space or a click.
+- On phones the bug-report button sits in the footer area instead of covering the page.
+- Simultaneous requests for the same champion picture share one download.
+- Lines under "Action items" in a post-game review now become action items when you save, as the form says (lines under "To improve" still do too; open duplicates are skipped).
+- Older drafts that name their opponent open with that opponent's scouting brief beside the board.
+
+#### Fixed
+- Deleting the open tree in the tree drafter no longer breaks the page.
+- A game plan started from a draft no longer replaces a name you typed while the draft was loading.
+- "Branch" in the tree drafter puts the cursor in the new branch's name field.
+
+#### Removed
+- The draft page's carousel, table and ledger views and its first-pick toggle (blue picks first in a tournament draft).
+- The privacy page no longer lists a theme preference among the stored data.
+
+### M2 review fixes
+
+#### Fixed
+- Sign-in and registration no longer clear an email or password that your browser filled in (or that you typed) while the page was still loading.
+- The Solo / Team workspace switch is back in the navigation on phones.
+- A few faint labels on the draft, post-game, stats, tree drafter and learnings pages now meet the contrast minimum.
+- Champion pictures for multi-word names such as Nunu & Willump load again where the older picture component is still used.
+- A short outage of the image source no longer leaves champion pictures missing until the next patch; the image routes are also rate limited per visitor.
+
+### Milestone M2: Design system foundation (stage B)
+
+#### Added
+- A command bar: press Ctrl+K (Cmd+K on a Mac), or use "Go to" in the navigation, type a few letters and press Enter to jump to any page. Commands for drafting and Match Day arrive with those pages.
+- The account menu, dialogs, menus, notifications, tooltips, switches and segmented controls are now one consistent, fully keyboard-operable set. Notifications appear bottom left, can carry an action such as "Undo", and pause while you point at them.
+- New gallery sections for every interaction and domain component, including the coordinate frame, legend, surveyor's notes and replay timeline reserved for the Sand Table and the Draft Graph.
+
+#### Changed
+- Roles are shown as short labels (TOP, JGL, MID, BOT, SUP) instead of icons loaded from a third-party site; your browser now loads nothing from outside Companion.
+- Champion pictures show a two-letter monogram while they load or when an image is missing.
+- Section headings say what the section is ("Starting roster", "Coaches", "Bench", "Recent games", "Team notes", "Open action items", "Recent reviews", "Pool gaps") instead of fantasy labels such as "Order of battle" or "Battle log".
+- Every page uses the design tokens: side colours only for sides (match timeline events now use the blue and red side colours instead of status colours), results in their own colours, statuses with words, one rounded shape only for avatars and switches, and loading placeholders that stop moving when you ask your system for reduced motion.
+- The destructive button turns dark crimson on hover instead of a pale pink.
+- The first-pick choice on the draft board and the Improvised flag in the tree drafter are now a segmented control and a switch.
+
+#### Removed
+- The per-user theme setting stored in the database (there is one theme); a migration removes the stored values.
+- The "resource read outside Suspense" warning from the bug-report button on every page load.
+
+### Milestone M2: Design system foundation (stage A)
+
+#### Added
+- A new visual language, "Survey": a dark green-slate ground in tonal layers, one chalk accent for focus, selection and the next action, matched blue and red side colours, win and loss on their own colours, and plain, precise type. Every text and control colour meets WCAG AA contrast.
+- New typefaces, served by the app itself: Familjen Grotesk for titles, Public Sans for text, JetBrains Mono for numbers, Source Serif 4 italic for annotations. Numbers line up in every table and readout, and no text is smaller than 12px.
+- A design-system gallery at `/design` for admins (and developers): every component in every state, the colour tokens with their measured contrast, the type scale, a worked tournament draft and the Match Day preparation checklist.
+- A tournament draft layout that shows the real order (five bans and five picks per side; blue starts, red opens the second ban phase) with the current step highlighted, and a "what to do next" checklist for Match Day. Pages adopt them in M3 and M5.
+- A "Skip to content" link for keyboard users and a visible focus outline everywhere.
+
+#### Changed
+- Champion and item pictures load from Companion's own server (cached per patch) instead of from Riot's image servers, so your browser no longer contacts a third party for them.
+- Sign-in, registration, the closed-beta page, the 404 page, the navigation, the footer and the headers of the solo and team dashboards use the new components; every other page already wears the new colours and type and is rebuilt in M3 and M5.
+- The solo dashboard's views are called Overview, Rank and Journal; the last ten results show W and L marks.
+
+#### Removed
+- The heraldic ornaments, the painted background images, gradients, glows and blur, emoji icons and the leftover second theme.
+- The theme card on the profile page, which pointed at a switch that no longer exists.
+
 ### Milestone M6: Data layer and integrations
 
 #### Added

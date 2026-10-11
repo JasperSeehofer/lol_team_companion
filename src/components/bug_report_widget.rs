@@ -154,31 +154,31 @@ pub fn BugReportWidget() -> impl IntoView {
         HIDDEN_PREFIXES.iter().any(|prefix| p.starts_with(prefix))
     };
 
-    let is_authed = move || matches!(user.get(), Some(Ok(Some(_))));
-
-    let widget_visible = move || is_authed() && !on_pathname_excluded();
-
-    // NOTE: deliberately NOT wrapped in <Suspense>. This widget lives in
-    // the global app shell (app.rs), so its hydration runs on every route.
-    // A <Suspense> here paints its fallback before the SSR-serialized
-    // `user` resource resolves on the first hydration pass, while SSR
-    // already emitted the full widget DOM — a racy structural mismatch
-    // that panics tachys hydration and freezes ALL WASM handlers on the
-    // page ("sometimes unresponsive"). The plain <Show> reads the
-    // serialized resource value synchronously and matches SSR. The Leptos
-    // "reading resource outside <Suspense>" console warning is benign
-    // here precisely because the value is serialized from SSR. Do not
-    // re-add <Suspense> around this widget (regression: 837a859).
+    // The signed-in check awaits the resource inside <Suspense> through
+    // `Suspend`, the pattern the nav uses in the same shell. (An earlier
+    // version put a reactive `user.get()` <Show> directly inside
+    // <Suspense>, which raced the first hydration pass and panicked; a
+    // version without <Suspense> hydrated but logged Leptos' "resource read
+    // outside <Suspense>" warning, regression spec BUG-04.) `Suspend`
+    // resolves from the value serialized by the server, so both passes
+    // render the same tree.
     view! {
-        <Show when=widget_visible fallback=|| ()>
-            <BugReportWidgetInner
-                widget_state=widget_state
-                report_kind=report_kind
-                report_text=report_text
-                element_label=element_label
-                submit_error=submit_error
-            />
-        </Show>
+        <Suspense fallback=|| ()>
+            {move || Suspend::new(async move {
+                let authed = matches!(user.await, Ok(Some(_)));
+                view! {
+                    <Show when=move || authed && !on_pathname_excluded() fallback=|| ()>
+                        <BugReportWidgetInner
+                            widget_state=widget_state
+                            report_kind=report_kind
+                            report_text=report_text
+                            element_label=element_label
+                            submit_error=submit_error
+                        />
+                    </Show>
+                }
+            })}
+        </Suspense>
     }
 }
 
@@ -372,15 +372,20 @@ fn BugReportWidgetInner(
         // Floating button (UI-SPEC line 583). Single click enters
         // select-mode directly — no intermediate menu, per D-08 (no
         // multi-step nags).
-        <button
-            type="button"
-            class="fixed bottom-6 right-6 z-50 w-11 h-11 rounded-full bg-elevated border border-divider shadow-lg hover:bg-surface hover:border-outline transition-all flex items-center justify-center focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-            title="Report a bug or wishlist item"
-            aria-label="Report a bug or wishlist item"
-            on:click=move |_| start_select_mode()
-        >
-            <Icon name="feather" size=18 class="text-muted" />
-        </button>
+        // On phones the button docks under the footer as a labelled text
+        // button, so it never covers content; from `sm` it floats.
+        <div class="mx-auto flex max-w-7xl justify-end px-4 pb-6 sm:contents">
+            <button
+                type="button"
+                class="inline-flex h-9 items-center gap-2 rounded-ctl border border-outline bg-ink-1 px-3 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary sm:fixed sm:bottom-6 sm:right-6 sm:z-50 sm:size-11 sm:justify-center sm:px-0 sm:shadow-overlay"
+                title="Report a bug or wishlist item"
+                aria-label="Report a bug or wishlist item"
+                on:click=move |_| start_select_mode()
+            >
+                <Icon name="feather" size=18 class="text-muted" />
+                <span class="sm:sr-only" aria-hidden="true">"Report a bug"</span>
+            </button>
+        </div>
 
         // Editing modal — only rendered when WidgetState::Editing.
         <Show when=move || matches!(widget_state.get(), WidgetState::Editing) fallback=|| ()>
@@ -395,14 +400,14 @@ fn BugReportWidgetInner(
                 // Inner card — stop propagation so clicking inside
                 // does not close the modal.
                 <div
-                    class="bg-surface border border-divider rounded-xl p-6 shadow-xl max-w-md w-full"
+                    class="bg-surface border border-divider rounded-xl p-6 shadow-overlay max-w-md w-full"
                     on:click=|ev: ev::MouseEvent| ev.stop_propagation()
                 >
-                    <h2 class="font-display italic text-xl text-primary mb-4">
+                    <h2 class="font-display text-xl text-primary mb-4">
                         "Report"
                     </h2>
 
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
                         "Element"
                     </div>
                     <div class="bg-elevated rounded-lg p-2 text-sm text-secondary mb-4">
@@ -436,7 +441,7 @@ fn BugReportWidgetInner(
                     </div>
 
                     <textarea
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         rows="4"
                         placeholder="What went wrong, or what would you like?"
                         prop:value=move || report_text_get.get()
@@ -444,10 +449,8 @@ fn BugReportWidgetInner(
                     />
 
                     // Inline submit error (only rendered on server-fn failure).
-                    // Uses text-red-400 per CLAUDE.md "Exceptions to semantic
-                    // tokens" — error literals are explicitly allowed.
                     <Show when=move || submit_error.get().is_some() fallback=|| ()>
-                        <p class="text-sm text-red-400 mt-2">
+                        <p class="text-sm text-danger mt-2" role="alert">
                             {move || submit_error.get().unwrap_or_default()}
                         </p>
                     </Show>

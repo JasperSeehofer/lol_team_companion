@@ -8,7 +8,6 @@
 
 use leptos::prelude::*;
 
-use crate::components::region::HeraldicDivider;
 use crate::components::ui::{ToastContext, ToastKind};
 use crate::error_template::NotFound;
 use crate::models::invite::Invite;
@@ -145,20 +144,20 @@ pub fn AdminInvitesPage() -> impl IntoView {
                 Err(_) => view! { <NotFound /> }.into_any(),
                 Ok((now, rows)) => {
                     view! {
-                        <div class="canvas-grain bg-base min-h-screen px-4 sm:px-8 py-6">
+                        <div class="bg-base min-h-screen px-4 sm:px-8 py-6">
                             <div class="max-w-5xl mx-auto flex flex-col gap-6">
                                 <header>
-                                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
                                         "Invite management"
                                     </div>
-                                    <h1 class="font-display italic text-[44px] leading-tight text-primary mt-2">
+                                    <h1 class="font-display text-display leading-tight text-primary mt-2">
                                         "Beta invitations"
                                     </h1>
-                                    <div class="mt-3"><HeraldicDivider width=320 /></div>
+                                    <div class="mt-3"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
                                 </header>
 
                                 <section class="bg-surface border border-divider rounded-xl p-6">
-                                    <h2 class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-3">
+                                    <h2 class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-3">
                                         "Mint a code"
                                     </h2>
                                     <ActionForm action=mint>
@@ -175,7 +174,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     max="1000"
                                                     value="1"
                                                     required
-                                                    class="w-28 bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="w-28 bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 />
                                             </div>
                                             <div>
@@ -189,7 +188,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     min="1"
                                                     max="365"
                                                     value="14"
-                                                    class="w-28 bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="w-28 bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 />
                                             </div>
                                             <div class="flex-1 min-w-[12rem]">
@@ -202,7 +201,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     name="note"
                                                     maxlength="200"
                                                     placeholder="Who is this for?"
-                                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 />
                                             </div>
                                             <button
@@ -228,7 +227,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
 
                                 <section class="bg-surface border border-divider rounded-xl overflow-hidden">
                                     <div class="px-6 py-4 border-b border-divider">
-                                        <h2 class="font-display italic text-[20px] text-primary">
+                                        <h2 class="font-display text-heading text-primary">
                                             "All invitations"
                                         </h2>
                                     </div>
@@ -265,7 +264,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                             view! {
                                                                 <tr class="border-t border-divider/50">
                                                                     <td class="px-4 py-3">
-                                                                        <code class="font-mono text-[12px] text-primary">{inv.code.clone()}</code>
+                                                                        <code class="font-mono text-caption text-primary">{inv.code.clone()}</code>
                                                                     </td>
                                                                     <td class=format!("px-4 py-3 text-sm {}", status_class(status))>{status}</td>
                                                                     <td class="px-4 py-3 text-sm text-secondary tabular-nums">

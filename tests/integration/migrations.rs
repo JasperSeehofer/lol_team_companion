@@ -376,3 +376,47 @@ async fn extra_memberships_are_resolved_before_the_unique_index() {
         other => panic!("expected a refusal, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn the_user_theme_field_is_dropped() {
+    let db = baseline_only().await;
+    // The pre-M2 shape: the field was defined and every user carried a value.
+    db.query(
+        "DEFINE FIELD theme ON user TYPE string DEFAULT 'demacia'; \
+         CREATE user:themed SET username = 'Theo', email = 'theo@example.com', password_hash = 'h', theme = 'pandemonium';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    assert!(info_for_table(&db, "user").await.contains("theme"));
+
+    migrations::run(&db).await.unwrap();
+
+    assert!(
+        !info_for_table(&db, "user").await.contains("theme"),
+        "the field definition is gone"
+    );
+    let mut r = db
+        .query("SELECT VALUE theme FROM user:themed")
+        .await
+        .unwrap();
+    let v: Value = r.take(0).unwrap();
+    let shown = format!("{v:?}");
+    assert!(!shown.contains("pandemonium"), "the value is gone: {shown}");
+
+    // A user created afterwards gets no theme either.
+    db.query(
+        "CREATE user:fresh SET username = 'Fay', username_lc = 'fay', email = 'fay@example.com', password_hash = 'h'",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    let mut r = db
+        .query("SELECT VALUE theme FROM user:fresh")
+        .await
+        .unwrap();
+    let v: Value = r.take(0).unwrap();
+    assert!(!format!("{v:?}").contains("demacia"));
+}

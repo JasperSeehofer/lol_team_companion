@@ -249,22 +249,37 @@ impl Ctx {
 /// The client's IP: the peer address, or the last `X-Forwarded-For` hop when
 /// `TRUST_FORWARDED_FOR` is set (behind a reverse proxy).
 pub async fn client_ip() -> String {
+    let headers = leptos_axum::extract::<axum::http::HeaderMap>()
+        .await
+        .unwrap_or_default();
+    let peer = leptos_axum::extract::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .await
+        .ok()
+        .map(|axum::extract::ConnectInfo(addr)| addr);
+    client_ip_from(&headers, peer)
+}
+
+/// The rate-limit key for a request outside a server function (plain Axum
+/// handlers): the last `X-Forwarded-For` hop when `TRUST_FORWARDED_FOR` is
+/// set, else the peer address.
+pub fn client_ip_from(
+    headers: &axum::http::HeaderMap,
+    peer: Option<std::net::SocketAddr>,
+) -> String {
     if crate::server::config::get().trust_forwarded_for {
-        if let Ok(headers) = leptos_axum::extract::<axum::http::HeaderMap>().await {
-            if let Some(ip) = headers
-                .get("x-forwarded-for")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.rsplit(',').next())
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-            {
-                return ip;
-            }
+        if let Some(ip) = headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.rsplit(',').next())
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+        {
+            return ip;
         }
     }
-    match leptos_axum::extract::<axum::extract::ConnectInfo<std::net::SocketAddr>>().await {
-        Ok(axum::extract::ConnectInfo(addr)) => addr.ip().to_string(),
-        Err(_) => "unknown".to_string(),
+    match peer {
+        Some(addr) => addr.ip().to_string(),
+        None => "unknown".to_string(),
     }
 }
 

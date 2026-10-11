@@ -2,26 +2,24 @@
 //!
 //! D-13 utility tier. Full 4-section DSE (logfiles, registration,
 //! hosting, betroffenenrechte) lands in Phase 21 per guardrails.
-//! Phase 17 only ensures the route returns 200 with canvas-grain
+//! Phase 17 only ensures the route returns 200 with
 //! chrome so it exists pre-deploy.
 
 use leptos::prelude::*;
 
-use crate::components::region::HeraldicDivider;
-
 #[component]
 pub fn DatenschutzPage() -> impl IntoView {
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-12">
+        <div class="bg-base min-h-screen px-8 py-12">
             <div class="max-w-2xl mx-auto flex flex-col gap-6">
                 <header>
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
                         "Legal"
                     </div>
-                    <h1 class="font-display italic text-[44px] leading-tight text-primary mt-2">
+                    <h1 lang="de" class="font-display text-headline sm:text-display leading-tight text-primary mt-2 break-words hyphens-auto">
                         "Datenschutzerkl\u{00e4}rung"
                     </h1>
-                    <div class="mt-3"><HeraldicDivider width=240 /></div>
+                    <div class="mt-3"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
                 </header>
 
                 <section class="bg-elevated border border-divider rounded-xl p-6">
@@ -34,12 +32,12 @@ pub fn DatenschutzPage() -> impl IntoView {
                 </section>
 
                 <section class="bg-surface border border-divider rounded-xl p-6">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
                         "Sections planned"
                     </div>
                     <ul class="text-secondary text-sm mt-3 space-y-2 list-disc list-inside">
                         <li>"Logfiles \u{2014} server access logs, retention 14 days"</li>
-                        <li>"Registration \u{2014} username, email, hashed password, theme preference"</li>
+                        <li>"Registration \u{2014} username, email, hashed password"</li>
                         <li>"Hosting \u{2014} provider details and DPA"</li>
                         <li>"Betroffenenrechte \u{2014} Auskunft, Berichtigung, L\u{00f6}schung, Widerspruch"</li>
                     </ul>

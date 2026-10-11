@@ -1,4 +1,3 @@
-use crate::components::region::HeraldicDivider;
 use crate::components::stat_card::StatCard;
 use crate::components::ui::{EmptyState, ErrorBanner, NoTeamState, SkeletonCard};
 use crate::models::match_data::ChampionTrend;
@@ -334,23 +333,23 @@ pub fn StatsPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Stats">
+        <div class="bg-base min-h-screen" data-feedback-label="Stats">
             <div class="max-w-7xl mx-auto px-8 lg:px-16 py-11 flex flex-col gap-6">
-                // Imperial header
+                // Page header
                 <div class="flex items-end justify-between gap-6 flex-wrap">
                     <div class="flex flex-col gap-2">
-                        <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
-                            "Chapter VII · Battle log"
+                        <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
+                            "Match history"
                         </span>
                         <BattleLogHeadline stats=stats />
-                        <p class="font-display italic text-secondary text-base mt-1 max-w-[640px]">
-                            "Each match is a chapter. Click a row to read the recap; the day's lesson sits in the right margin."
+                        <p class="font-display text-secondary text-base mt-1 max-w-[640px]">
+                            "Your recent games. Select a row to see its recap on the right."
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
                         // Queue type selector for sync
                         <select
-                            class="bg-surface/50 border border-outline/50 rounded-lg px-3 py-2.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                             on:change=move |ev| {
                                 let v = event_target_value(&ev);
                                 let q = match v.as_str() {
@@ -389,7 +388,7 @@ pub fn StatsPage() -> impl IntoView {
                     </div>
                 </div>
 
-                <HeraldicDivider />
+                <div class="h-px w-full bg-rule" aria-hidden="true"></div>
 
                 // API key warning
                 <Suspense fallback=|| ()>
@@ -400,7 +399,7 @@ pub fn StatsPage() -> impl IntoView {
                                     <span class="text-warning text-lg flex-shrink-0" aria-hidden="true">"!"</span>
                                     <div>
                                         <p class="text-warning font-medium text-sm">"RIOT_API_KEY not configured"</p>
-                                        <p class="text-warning/70 text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
+                                        <p class="text-warning text-xs mt-1">"Add RIOT_API_KEY to your .env file to enable match history syncing. Get a key from developer.riotgames.com."</p>
                                     </div>
                                 </div>
                             }.into_any()
@@ -437,7 +436,7 @@ pub fn StatsPage() -> impl IntoView {
 
                 // All / Team toggle (always visible)
                 <div class="flex items-center gap-3">
-                    <div class="flex rounded-lg overflow-hidden border border-outline/50">
+                    <div class="flex rounded-lg overflow-hidden border border-outline">
                         <button
                             class=move || if show_all.get() {
                                 "px-3 py-1.5 text-sm font-medium bg-accent text-accent-contrast focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -483,7 +482,6 @@ pub fn StatsPage() -> impl IntoView {
                             if user_has_team {
                                 view! {
                                     <EmptyState
-                                        icon="\u{2756}"
                                         message="No match stats yet — link your Riot account and play some games to see stats here"
                                         cta_label="Link Riot Account"
                                         cta_href="/profile"
@@ -529,13 +527,13 @@ pub fn StatsPage() -> impl IntoView {
     }
 }
 
-/// Imperial display headline: "A week of {wins} victories and {losses} defeats."
+/// Display headline: "A week of {wins} wins and {losses} losses."
 #[component]
 fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) -> impl IntoView {
     view! {
         <Suspense fallback=move || view! {
-            <h1 class="font-display italic text-primary text-[40px] sm:text-[56px] leading-tight">
-                "Battle log"
+            <h1 class="font-display text-primary text-[40px] sm:text-[56px] leading-tight">
+                "Stats"
             </h1>
         }>
             {move || {
@@ -549,11 +547,11 @@ fn BattleLogHeadline(stats: Resource<Result<Vec<TeamMatchRow>, ServerFnError>>) 
                     _ => (0_usize, 0_usize),
                 };
                 view! {
-                    <h1 class="font-display italic text-primary text-[40px] sm:text-[56px] leading-tight">
+                    <h1 class="font-display text-primary text-[40px] sm:text-[56px] leading-tight">
                         "A week of "
-                        <span class="text-success">{format!("{wins} victories")}</span>
+                        <span class="text-win">{format!("{wins} wins")}</span>
                         " and "
-                        <span class="text-danger">{format!("{losses} defeats")}</span>
+                        <span class="text-secondary">{format!("{losses} losses")}</span>
                         "."
                     </h1>
                 }.into_any()
@@ -665,13 +663,13 @@ fn StatsContent(
         <div class="flex flex-col gap-6">
             // Filters
             <div class="bg-elevated/50 border border-divider/50 rounded-xl p-4 flex items-center gap-4 flex-wrap" data-feedback-label="Stats → Filters">
-                <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Filters"</span>
+                <span class="font-mono uppercase tracking-wider text-xs text-muted">"Filters"</span>
 
                 // Queue type filter
                 <div class="flex items-center gap-2">
                     <span class="text-secondary text-sm">"Queue:"</span>
                     <select
-                        class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                        class="bg-overlay/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                         on:change=move |ev| {
                             let v: i32 = event_target_value(&ev).parse().unwrap_or(0);
                             set_filter_queue.set(v);
@@ -691,7 +689,7 @@ fn StatsContent(
                         <div class="flex items-center gap-2">
                             <span class="text-secondary text-sm">"Min. players:"</span>
                             <select
-                                class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                                class="bg-overlay/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                                 on:change=move |ev| {
                                     let v: usize = event_target_value(&ev).parse().unwrap_or(2);
                                     set_min_players.set(v);
@@ -716,7 +714,7 @@ fn StatsContent(
 
                 // Player filter
                 <select
-                    class="bg-overlay/50 border border-outline/50 rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                    class="bg-overlay/50 border border-outline rounded-lg px-3 py-1.5 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                     on:change=move |ev| set_filter_player.set(event_target_value(&ev))
                 >
                     <option value="">"All Players"</option>
@@ -752,8 +750,8 @@ fn StatsContent(
                 // Battle log column
                 <div class="bg-elevated border border-divider rounded-xl p-6" data-feedback-label="Stats → Match list">
                     <div class="flex items-baseline justify-between mb-4">
-                        <span class="font-imperial uppercase tracking-wider text-xs text-muted">
-                            "Battle log"
+                        <span class="eyebrow">
+                            "Recent games"
                         </span>
                         <span class="font-mono text-xs text-dimmed tabular-nums">
                             {move || {
@@ -797,9 +795,9 @@ fn StatsContent(
                                         } else {
                                             "grid grid-cols-[8px_56px_1fr_130px_80px_24px] gap-4 items-center py-4 px-3 -mx-3 border-b border-divider/30 last:border-b-0 hover:bg-overlay/30 cursor-pointer transition-all duration-200 text-left focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                         };
-                                        let bar_class = if win { "bg-success self-stretch rounded-sm" } else { "bg-danger self-stretch rounded-sm" };
+                                        let bar_class = if win { "bg-win self-stretch" } else { "border border-loss self-stretch" };
                                         let result_word = if win { "Victory" } else { "Defeat" };
-                                        let result_color = if win { "text-success" } else { "text-danger" };
+                                        let result_color = if win { "text-win" } else { "text-secondary" };
                                         let chevron = if is_active { "\u{25BC}" } else { "\u{25B6}" };
                                         let _ = idx;
 
@@ -839,13 +837,13 @@ fn StatsContent(
                                                     view! {
                                                         <div class="min-w-0">
                                                             <div class="flex items-baseline gap-2 flex-wrap">
-                                                                <span class=format!("font-imperial uppercase tracking-wider text-[10px] {result_color}")>{result_word}</span>
-                                                                <span class="font-mono text-[11px] text-dimmed tabular-nums">{duration.clone()}</span>
-                                                                <span class="font-mono text-[11px] text-dimmed">"·"</span>
-                                                                <span class="font-mono text-[11px] text-dimmed">{q_label}</span>
+                                                                <span class=format!("font-mono uppercase tracking-wider text-caption {result_color}")>{result_word}</span>
+                                                                <span class="font-mono text-caption text-dimmed tabular-nums">{duration.clone()}</span>
+                                                                <span class="font-mono text-caption text-dimmed">"·"</span>
+                                                                <span class="font-mono text-caption text-dimmed">{q_label}</span>
                                                                 {if player_count > 1 {
                                                                     view! {
-                                                                        <span class="font-mono text-[11px] text-dimmed">
+                                                                        <span class="font-mono text-caption text-dimmed">
                                                                             {format!("· {player_count}p")}
                                                                         </span>
                                                                     }.into_any()
@@ -853,7 +851,7 @@ fn StatsContent(
                                                                     view! { <span></span> }.into_any()
                                                                 }}
                                                             </div>
-                                                            <div class="font-display italic text-secondary text-sm mt-1 truncate">
+                                                            <div class="font-display text-secondary text-sm mt-1 truncate">
                                                                 {format!("\"{champ} · {username}\"")}
                                                             </div>
                                                         </div>
@@ -871,9 +869,9 @@ fn StatsContent(
                                                     view! {
                                                         <div class="text-right">
                                                             <div class="font-mono text-sm text-primary tabular-nums">{kda_str}</div>
-                                                            <div class="font-imperial uppercase tracking-wider text-[9px] text-muted mt-0.5">"K/D/A"</div>
+                                                            <div class="font-mono uppercase tracking-wider text-caption text-muted mt-0.5">"K/D/A"</div>
                                                             {team_str.map(|s| view! {
-                                                                <div class="font-mono text-[10px] text-dimmed mt-0.5 tabular-nums">{s}</div>
+                                                                <div class="font-mono text-caption text-dimmed mt-0.5 tabular-nums">{s}</div>
                                                             })}
                                                         </div>
                                                     }
@@ -885,7 +883,7 @@ fn StatsContent(
                                                     view! {
                                                         <div class="text-right">
                                                             <div class="font-mono text-sm text-secondary tabular-nums">{dmg}</div>
-                                                            <div class="text-dimmed text-[10px] mt-0.5">"dmg · " {date.clone()}</div>
+                                                            <div class="text-dimmed text-caption mt-0.5">"dmg · " {date.clone()}</div>
                                                         </div>
                                                     }
                                                 })}
@@ -917,14 +915,14 @@ fn StatsContent(
                         match active_match {
                             None => view! {
                                 <div class="bg-elevated border border-divider rounded-xl p-6 text-center">
-                                    <span class="font-imperial uppercase tracking-wider text-[10px] text-muted">"Folio recap"</span>
+                                    <span class="font-mono uppercase tracking-wider text-caption text-muted">"Game recap"</span>
                                     <p class="text-dimmed text-sm mt-3">"Select a match to read the recap."</p>
                                 </div>
                             }.into_any(),
                             Some(m) => {
                                 let win = m.win;
                                 let result_word = if win { "Victory" } else { "Defeat" };
-                                let result_color = if win { "text-success" } else { "text-danger" };
+                                let result_color = if win { "text-win" } else { "text-secondary" };
                                 let primary = m.players.first().cloned();
                                 let players_for_detail = m.players.clone();
                                 let q_label = queue_label(m.queue_id);
@@ -939,10 +937,10 @@ fn StatsContent(
                                 view! {
                                     <div class="bg-elevated border border-divider rounded-xl p-6 transition-all duration-200">
                                         <div class="flex items-baseline justify-between mb-4">
-                                            <span class=format!("font-imperial uppercase tracking-wider text-[10px] {result_color}")>
-                                                {format!("{result_word} · folio")}
+                                            <span class=format!("font-mono uppercase tracking-wider text-caption {result_color}")>
+                                                {format!("{result_word} \u{00b7} recap")}
                                             </span>
-                                            <span class="font-mono text-[11px] text-dimmed truncate max-w-[140px]">
+                                            <span class="font-mono text-caption text-dimmed truncate max-w-[140px]">
                                                 {format!("match {}", m.riot_match_id)}
                                             </span>
                                         </div>
@@ -954,15 +952,15 @@ fn StatsContent(
                                             let username = fp.username.clone();
                                             view! {
                                                 <div class="flex items-center gap-4 mb-4">
-                                                    <img src=icon_url alt=champ.clone() class="w-16 h-16 rounded-lg border border-outline/50 object-cover" />
+                                                    <img src=icon_url alt=champ.clone() class="w-16 h-16 rounded-lg border border-outline object-cover" />
                                                     <div class="min-w-0">
-                                                        <div class="font-display italic text-primary text-2xl leading-tight truncate">
+                                                        <div class="font-display text-primary text-2xl leading-tight truncate">
                                                             {champ}
                                                         </div>
                                                         <div class="font-mono text-xs text-secondary mt-1 truncate">
                                                             {format!("{username} · {q_label} · {duration}")}
                                                         </div>
-                                                        <div class="font-mono text-[11px] text-dimmed mt-0.5">{date.clone()}</div>
+                                                        <div class="font-mono text-caption text-dimmed mt-0.5">{date.clone()}</div>
                                                     </div>
                                                 </div>
                                             }
@@ -984,7 +982,7 @@ fn StatsContent(
                                                     <FolioStatTone
                                                         label="Result".to_string()
                                                         value={if win { "Won".to_string() } else { "Lost".to_string() }}
-                                                        tone={if win { "text-success" } else { "text-danger" }}
+                                                        tone={if win { "text-win" } else { "text-secondary" }}
                                                     />
                                                 </div>
                                             }
@@ -994,8 +992,8 @@ fn StatsContent(
                                         {if player_count > 1 {
                                             view! {
                                                 <div class="bg-accent-soft border-l-[3px] border-accent rounded-r p-3 mb-4">
-                                                    <span class="font-imperial uppercase tracking-wider text-[9px] text-accent">"Team line"</span>
-                                                    <div class="font-display italic text-primary text-sm mt-1">
+                                                    <span class="font-mono uppercase tracking-wider text-caption text-accent">"Team line"</span>
+                                                    <div class="font-display text-primary text-sm mt-1">
                                                         {format!("{player_count} roster members · combined {total_kills}/{total_deaths}/{total_assists}")}
                                                     </div>
                                                 </div>
@@ -1017,10 +1015,10 @@ fn StatsContent(
                                     {if player_count > 1 {
                                         view! {
                                             <div class="bg-elevated border border-divider rounded-xl p-6">
-                                                <span class="font-imperial uppercase tracking-wider text-[10px] text-muted">"Roster line"</span>
+                                                <span class="font-mono uppercase tracking-wider text-caption text-muted">"Roster line"</span>
                                                 <table class="w-full mt-3 text-sm">
                                                     <thead>
-                                                        <tr class="border-b border-divider/30 text-muted text-[10px] uppercase tracking-wider">
+                                                        <tr class="border-b border-divider/30 text-muted text-caption uppercase tracking-wider">
                                                             <th class="text-left py-1.5 font-normal">"Player"</th>
                                                             <th class="text-left py-1.5 font-normal">"Champion"</th>
                                                             <th class="text-right py-1.5 font-normal">"K/D/A"</th>
@@ -1031,7 +1029,7 @@ fn StatsContent(
                                                         {players_for_detail.into_iter().map(|p| {
                                                             let icon_url = champion_icon_url(&p.champion);
                                                             let kda_str = format!("{}/{}/{}", p.kills, p.deaths, p.assists);
-                                                            let p_result_cls = if p.win { "text-success" } else { "text-danger" };
+                                                            let p_result_cls = if p.win { "text-win" } else { "text-secondary" };
                                                             let p_result = if p.win { "Won" } else { "Lost" };
                                                             view! {
                                                                 <tr class="border-b border-divider/20 last:border-0">
@@ -1043,7 +1041,7 @@ fn StatsContent(
                                                                         </div>
                                                                     </td>
                                                                     <td class="py-2 text-right font-mono text-sm text-primary tabular-nums">{kda_str}</td>
-                                                                    <td class=format!("py-2 text-right font-imperial uppercase tracking-wider text-[10px] {p_result_cls}")>{p_result}</td>
+                                                                    <td class=format!("py-2 text-right font-mono uppercase tracking-wider text-caption {p_result_cls}")>{p_result}</td>
                                                                 </tr>
                                                             }
                                                         }).collect_view()}
@@ -1067,8 +1065,8 @@ fn StatsContent(
 #[component]
 fn FolioStat(label: String, value: String) -> impl IntoView {
     view! {
-        <div class="bg-surface border border-outline/50 rounded-md px-3 py-2.5">
-            <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">{label}</span>
+        <div class="bg-surface border border-outline rounded-md px-3 py-2.5">
+            <span class="font-mono uppercase tracking-wider text-caption text-muted">{label}</span>
             <div class="font-mono text-base text-primary mt-1 tabular-nums">{value}</div>
         </div>
     }
@@ -1078,8 +1076,8 @@ fn FolioStat(label: String, value: String) -> impl IntoView {
 fn FolioStatTone(label: String, value: String, tone: &'static str) -> impl IntoView {
     let value_class = format!("font-mono text-base mt-1 tabular-nums {tone}");
     view! {
-        <div class="bg-surface border border-outline/50 rounded-md px-3 py-2.5">
-            <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">{label}</span>
+        <div class="bg-surface border border-outline rounded-md px-3 py-2.5">
+            <span class="font-mono uppercase tracking-wider text-caption text-muted">{label}</span>
             <div class=value_class>{value}</div>
         </div>
     }
@@ -1163,9 +1161,9 @@ fn ChampionTrendsSection() -> impl IntoView {
         view! {
             <button
                 class=move || if active() {
-                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 } else {
-                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                    "bg-elevated border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                 }
                 on:click=move |_| trends_window.set(w)
             >{w}</button>
@@ -1202,8 +1200,8 @@ fn ChampionTrendsSection() -> impl IntoView {
         <div class="bg-surface border border-divider rounded-xl p-6 flex flex-col gap-4 mt-2">
             <div class="flex items-center justify-between">
                 <div class="flex flex-col gap-1">
-                    <span class="font-imperial uppercase tracking-wider text-xs text-muted">"Champion trends"</span>
-                    <h2 class="font-display italic text-primary text-2xl">"The week's pattern"</h2>
+                    <span class="font-mono uppercase tracking-wider text-xs text-muted">"Champion trends"</span>
+                    <h2 class="font-display text-primary text-2xl">"The week's pattern"</h2>
                 </div>
                 <div class="flex items-center gap-2">
                     {render_pill("7d")}

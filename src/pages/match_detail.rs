@@ -1,5 +1,4 @@
-use crate::app::InitialTheme;
-use crate::components::region::{Card, HeraldicDivider, SectionHead};
+use crate::components::region::{Card, SectionHead};
 use crate::models::match_data::{
     ComparisonMode, EventCategory, MatchParticipant, PerformanceStats, TimelineEvent,
 };
@@ -244,16 +243,16 @@ fn ParticipantRow(p: MatchParticipant, is_user: bool) -> impl IntoView {
     view! {
         <div class=row_class>
             // Cell 1: role label (40px)
-            <span class="font-imperial uppercase tracking-wider text-[10px] text-muted text-center">
+            <span class="font-mono uppercase tracking-wider text-caption text-muted text-center">
                 {role_label}
             </span>
 
             // Cell 2: champion tile + summoner (120px)
             <div class="flex items-center gap-2 min-w-0">
-                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-full border border-outline/50 shrink-0" />
+                <img src=champ_icon alt=champ_name.clone() class="w-7 h-7 rounded-ctl border border-outline shrink-0" />
                 <div class="min-w-0">
                     <span class="text-primary text-xs font-medium truncate block">{summoner}</span>
-                    <span class="font-mono text-[10px] text-dimmed truncate block">{champ_name}</span>
+                    <span class="font-mono text-caption text-dimmed truncate block">{champ_name}</span>
                 </div>
             </div>
 
@@ -290,24 +289,29 @@ fn TeamScoreboard(
     user_participant_id: i32,
     team_color: &'static str, // "blue" or "red"
 ) -> impl IntoView {
-    // Use semantic info (lapis blue) for friendly side, danger (oxblood red) for enemy side.
+    // Side colours for the side (blue / red), never status colours.
     let (header_bg, eyebrow_color) = if team_color == "blue" {
-        ("bg-info/15 border-b border-info/30", "text-info")
+        (
+            "bg-side-blue-deep border-b border-side-blue/50",
+            "text-primary",
+        )
     } else {
-        ("bg-danger/15 border-b border-danger/30", "text-danger")
+        (
+            "bg-side-red-deep border-b border-side-red/50",
+            "text-primary",
+        )
     };
 
     let result_text = if team_win { "Victory" } else { "Defeat" };
     let result_color = if team_win {
-        "text-success"
+        "text-win"
     } else {
-        "text-danger"
+        "text-secondary"
     };
     let header_class = format!("{header_bg} px-4 py-3 flex items-center justify-between");
     let eyebrow_class =
-        format!("font-imperial uppercase tracking-[0.18em] text-[10px] {eyebrow_color}");
-    let result_class =
-        format!("font-imperial uppercase tracking-[0.18em] text-[10px] {result_color}");
+        format!("font-mono uppercase tracking-[0.18em] text-caption {eyebrow_color}");
+    let result_class = format!("font-mono uppercase tracking-[0.18em] text-caption {result_color}");
 
     view! {
         <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
@@ -321,13 +325,13 @@ fn TeamScoreboard(
 
             // Column headers
             <div class="grid grid-cols-[40px_120px_80px_1fr_80px_60px_60px] gap-3 items-center px-3 py-2 border-b border-divider bg-surface/50">
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-center">"Role"</span>
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">"Player"</span>
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-center">"KDA"</span>
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted">"Items"</span>
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-right">"Damage"</span>
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-right">"Gold"</span>
-                <span class="font-imperial uppercase tracking-wider text-[9px] text-muted text-right">"Vision"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted text-center">"Role"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted">"Player"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted text-center">"KDA"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted">"Items"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted text-right">"Damage"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted text-right">"Gold"</span>
+                <span class="font-mono uppercase tracking-wider text-caption text-muted text-right">"Vision"</span>
             </div>
 
             // Participant rows
@@ -382,17 +386,17 @@ fn PerformanceBar(
         _ => "text-muted",
     };
     let verdict_class =
-        format!("font-imperial uppercase tracking-wider text-[10px] w-24 shrink-0 {verdict_color}");
+        format!("font-mono uppercase tracking-wider text-caption w-24 shrink-0 {verdict_color}");
 
     view! {
         <div class="flex items-center gap-3 mb-3">
             // Label (140px) — imperial eyebrow
-            <span class="font-imperial uppercase tracking-wider text-[10px] text-muted w-[140px] shrink-0">{label}</span>
+            <span class="font-mono uppercase tracking-wider text-caption text-muted w-[140px] shrink-0">{label}</span>
             // Bar track (flex-1)
-            <div class="bg-surface border border-outline/30 h-3.5 rounded-full relative flex-1 overflow-hidden">
+            <div class="bg-surface border border-rule h-3.5 relative flex-1 overflow-hidden">
                 // Bar fill
                 <div
-                    class="bg-accent/70 h-full rounded-full transition-all duration-200"
+                    class="bg-accent/70 h-full transition-all duration-200"
                     style=format!("width: {}%", fill_pct)
                 />
                 // Average marker
@@ -433,17 +437,17 @@ fn PerformanceSection(
         <div class="bg-elevated border border-divider rounded-xl p-6">
             <div class="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
                 <div class="flex flex-col gap-1">
-                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"My performance"</span>
-                    <h2 class="font-display italic text-primary text-xl">"The breakdown"</h2>
+                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"My performance"</span>
+                    <h2 class="font-display text-primary text-xl">"The breakdown"</h2>
                 </div>
 
                 // Comparison toggle
                 <div class="flex gap-2">
                     <button
                         class=move || if comparison_mode.get() == ComparisonMode::GameAverage {
-                            "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         } else {
-                            "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                            "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         }
                         on:click=move |_| set_comparison_mode.set(ComparisonMode::GameAverage)
                     >
@@ -452,9 +456,9 @@ fn PerformanceSection(
                     <button
                         class=move || {
                             let base = if comparison_mode.get() == ComparisonMode::LaneOpponent {
-                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             } else {
-                                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             };
                             if !has_lane_opponent {
                                 format!("{base} opacity-40 cursor-not-allowed")
@@ -576,8 +580,6 @@ pub fn MatchDetailPage() -> impl IntoView {
     });
 
     // Region — read ONCE at page entry, passed as String prop to sub-views
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
 
     // Route param extraction
     let params = use_params_map();
@@ -598,17 +600,16 @@ pub fn MatchDetailPage() -> impl IntoView {
     let (selected_event, set_selected_event) = signal(Option::<usize>::None);
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="bg-base min-h-screen">
             <div class="max-w-6xl mx-auto px-8 py-6 flex flex-col gap-6">
                 // Page header — region-aware SectionHead with back-link action
                 <SectionHead
-                    region=region.clone()
                     title="Match Report".to_string()
                     eyebrow="Stats"
                 />
 
                 // Match detail content — wrapped in region-aware Card
-                <Card region=region.clone()>
+                <Card >
                 <div>
                     <Suspense fallback=move || view! {
                         <div class="flex flex-col gap-6">
@@ -689,8 +690,8 @@ pub fn MatchDetailPage() -> impl IntoView {
                                         .unwrap_or(false);
 
                                     let result_word = if user_win { "Victory" } else { "Defeat" };
-                                    let result_color = if user_win { "text-success" } else { "text-danger" };
-                                    let result_eyebrow_class = format!("font-imperial uppercase tracking-[0.18em] text-[11px] {result_color}");
+                                    let result_color = if user_win { "text-win" } else { "text-secondary" };
+                                    let result_eyebrow_class = format!("font-mono uppercase tracking-[0.18em] text-caption {result_color}");
 
                                     let perf = d_stored.with_value(|d| d.performance.clone());
                                     let game_duration = d.game_duration;
@@ -715,11 +716,11 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                         let champ = p.champion_name.clone();
                                                         let champ_label = champ.clone();
                                                         view! {
-                                                            <h1 class="font-display italic text-primary text-[40px] leading-none">
+                                                            <h1 class="font-display text-primary text-[40px] leading-none">
                                                                 {champ_label}
                                                             </h1>
                                                             <div class="flex items-center gap-3">
-                                                                <img src=icon alt=champ class="w-10 h-10 rounded-full border border-outline/50" />
+                                                                <img src=icon alt=champ class="w-10 h-10 rounded-ctl border border-outline" />
                                                                 <span class="font-mono text-sm text-secondary tabular-nums">{user_kda}</span>
                                                             </div>
                                                         }
@@ -732,7 +733,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                 </div>
                                             </div>
 
-                                            <HeraldicDivider />
+                                            <div class="h-px w-full bg-rule" aria-hidden="true"></div>
 
                                             // Blue team scoreboard
                                             <TeamScoreboard
@@ -761,8 +762,8 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                 view! {
                                                     <div class="bg-elevated border border-divider rounded-xl p-6">
                                                         <div class="flex flex-col gap-1 mb-4">
-                                                            <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"The game · 00:00 \u{2192} " {format_duration(d.game_duration)}</span>
-                                                            <h2 class="font-display italic text-primary text-xl">"Timeline"</h2>
+                                                            <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"The game · 00:00 \u{2192} " {format_duration(d.game_duration)}</span>
+                                                            <h2 class="font-display text-primary text-xl">"Timeline"</h2>
                                                         </div>
 
                                                         // Filter pills row
@@ -812,21 +813,21 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                         EventCategory::Objective => {
                                                                             match event.monster_type.as_deref() {
                                                                                 Some(m) if m.contains("BARON") || m.contains("HORDE") =>
-                                                                                    ("w-4 h-4", "rounded-full border-2"),
-                                                                                _ => ("w-3 h-3", "rounded-full"),
+                                                                                    ("w-4 h-4", "rounded-full border-2"), // lint:allow(rounded-full): timeline tokens, M4 TimelineScrub
+                                                                                _ => ("w-3 h-3", "rounded-full"), // lint:allow(rounded-full)
                                                                             }
                                                                         }
                                                                         EventCategory::Tower => ("w-2.5 h-2.5", "rounded-sm"),
-                                                                        EventCategory::Kill => ("w-2.5 h-2.5", "rounded-full"),
-                                                                        EventCategory::Ward => ("w-2 h-2", "rounded-full"),
-                                                                        EventCategory::Recall => ("w-2 h-2", "rounded-full"),
-                                                                        EventCategory::Teamfight => ("w-4 h-4", "rounded-full"),
+                                                                        EventCategory::Kill => ("w-2.5 h-2.5", "rounded-full"), // lint:allow(rounded-full)
+                                                                        EventCategory::Ward => ("w-2 h-2", "rounded-full"), // lint:allow(rounded-full)
+                                                                        EventCategory::Recall => ("w-2 h-2", "rounded-full"), // lint:allow(rounded-full)
+                                                                        EventCategory::Teamfight => ("w-4 h-4", "rounded-full"), // lint:allow(rounded-full)
                                                                     };
 
-                                                                    // Friendly side -> info; enemy side -> danger.
+                                                                    // Team 100 is the blue side, 200 the red side.
                                                                     let team_color = match event.team_id {
-                                                                        Some(100) => "bg-info border-info",
-                                                                        Some(200) => "bg-danger border-danger",
+                                                                        Some(100) => "bg-side-blue border-side-blue",
+                                                                        Some(200) => "bg-side-red border-side-red",
                                                                         _ => "bg-muted border-muted",
                                                                     };
 
@@ -902,7 +903,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                                                                     };
 
                                                                     return view! {
-                                                                        <div class="bg-surface border border-outline/50 rounded-lg p-4 mt-4">
+                                                                        <div class="bg-surface border border-outline rounded-lg p-4 mt-4">
                                                                             <p class="font-mono text-sm text-secondary">{detail_text}</p>
                                                                             {if has_involved {
                                                                                 view! {
@@ -963,9 +964,9 @@ fn FilterPill(
     view! {
         <button
             class=move || if active.get() {
-                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                "bg-accent text-accent-contrast text-xs px-3 py-1.5 rounded-ctl font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
             } else {
-                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-full hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                "bg-surface border border-divider text-muted text-xs px-3 py-1.5 rounded-ctl hover:border-outline hover:text-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
             }
             on:click=move |_| setter.set(!active.get_untracked())
         >

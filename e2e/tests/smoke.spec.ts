@@ -78,3 +78,31 @@ test("unauthenticated redirect from protected route", async ({ page }) => {
   // Should be on /profile (redirect happens client-side) or /auth/login
   expect(url).toMatch(/\/(profile|auth\/login)/);
 });
+
+test("image endpoint refuses unknown champions and bad item ids", async ({ request }) => {
+  for (const path of [
+    "/img/champion/NotAChampion/icon",
+    "/img/champion/..%2F..%2Fetc%2Fpasswd",
+    "/img/item/abc",
+    "/img/item/1234567",
+  ]) {
+    const resp = await request.get(path);
+    expect(resp.status(), path).toBe(404);
+  }
+});
+
+test("champion icon is served by the app with cache headers", async ({ request }) => {
+  const resp = await request.get("/img/champion/Ahri/icon");
+  test.skip(
+    resp.status() !== 200,
+    "Data Dragon is not reachable from this server (sandbox); the 404 path is covered above"
+  );
+  expect(resp.headers()["content-type"]).toBe("image/png");
+  expect(resp.headers()["cache-control"]).toContain("max-age");
+  const etag = resp.headers()["etag"];
+  expect(etag).toBeTruthy();
+  const again = await request.get("/img/champion/Ahri/icon", {
+    headers: { "If-None-Match": etag },
+  });
+  expect(again.status()).toBe(304);
+});

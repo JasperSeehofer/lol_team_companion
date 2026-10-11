@@ -4,22 +4,22 @@
  * Originally added in Phase 18.2 to lock in the fix for the tachys
  * `InertElement::hydrate Option::unwrap() on None` panic caused by SSR and
  * hydrate rendering different region-branching markup. M0 retired the
- * Pandemonium theme, so the gate now covers the single shipped theme
- * ("demacia") plus a check that a stale "pandemonium" cookie is clamped
- * back to it without a panic.
+ * Pandemonium theme and M2 removed theme plumbing entirely, so the gate
+ * covers the single theme plus a check that a stale theme cookie from an
+ * old session is ignored without a panic.
  *
  * Coverage:
  * 1. Panic sweep: every scoped route hydrates without a WASM panic.
  *    Listeners are attached BEFORE navigation so first-hydrate panics
  *    are captured. PANIC_REGEX is intentionally narrow so unrelated
  *    console errors (favicon 404 etc.) do not fail the gate.
- * 2. Stale-cookie clamp: a leftover `lol_companion_theme=pandemonium`
- *    cookie renders `<html data-theme="demacia">` and hydrates cleanly.
+ * 2. Stale cookie: a leftover `lol_companion_theme=pandemonium` cookie
+ *    changes nothing (no `data-theme`) and hydrates cleanly.
  * 3. Interactivity: mode toggles on /draft and /solo respond after
  *    hydration, and a draft slot can be filled from the champion grid.
  */
 
-import { test, expect, setRegion, setMode } from "./fixtures";
+import { test, expect, setMode } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -89,7 +89,6 @@ async function attachPanicListeners(page: Page): Promise<string[]> {
 for (const url of SCOPED_ROUTES) {
   test(`${url} hydrates without tachys panic`, async ({ authedPage }) => {
     const errors = await attachPanicListeners(authedPage);
-    await setRegion(authedPage, "demacia");
     await authedPage.goto(url);
     await authedPage.waitForLoadState("networkidle");
     // 1500ms hydrate-settle: WASM may crash mid-hydrate AFTER networkidle
@@ -104,10 +103,10 @@ for (const url of SCOPED_ROUTES) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Stale "pandemonium" cookie is clamped to the single shipped theme
+// 2. A stale theme cookie is ignored
 // ---------------------------------------------------------------------------
 
-test("stale pandemonium cookie is clamped to demacia", async ({ authedPage }) => {
+test("stale theme cookie is ignored", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
   await authedPage.context().addCookies([
     {
@@ -121,7 +120,7 @@ test("stale pandemonium cookie is clamped to demacia", async ({ authedPage }) =>
   await authedPage.goto("/draft");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
-  expect(await authedPage.getAttribute("html", "data-theme")).toBe("demacia");
+  expect(await authedPage.getAttribute("html", "data-theme")).toBeNull();
   expect(errors, `Panic with stale cookie: ${errors.join("\n")}`).toEqual([]);
 });
 
@@ -129,51 +128,47 @@ test("stale pandemonium cookie is clamped to demacia", async ({ authedPage }) =>
 // 3. Interactivity after hydration
 // ---------------------------------------------------------------------------
 //
-// Default modes (src/pages/draft.rs::resolve_mode): /draft = carousel,
-// /solo = constellation. We click a non-default mode so the toggle produces
-// an observable `aria-pressed` change.
+// /solo has a page-mode toggle (default constellation); the draft page has
+// one board, so its check switches "Our side" instead. Either way a click
+// must produce an observable `aria-checked` change after hydration.
 
-test("mode-toggle observable on /draft", async ({ authedPage }) => {
+test("segmented control observable on /draft", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
-  await setRegion(authedPage, "demacia");
   await authedPage.goto("/draft");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
-  await setMode(authedPage, "war-table");
-  await expect(
-    authedPage.locator('button[aria-pressed="true"]:has-text("War Table")')
-  ).toBeVisible({ timeout: 2000 });
-  expect(errors, `Panic during /draft mode-toggle: ${errors.join("\n")}`).toEqual([]);
+  const red = authedPage.locator('[data-segmented="our-side"] [role="radio"]:text-is("Red")');
+  await red.click({ timeout: 10000 });
+  await expect(red).toHaveAttribute("aria-checked", "true", { timeout: 2000 });
+  expect(errors, `Panic during /draft side switch: ${errors.join("\n")}`).toEqual([]);
 });
 
 test("mode-toggle observable on /solo", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
-  await setRegion(authedPage, "demacia");
   await authedPage.goto("/solo");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
   await setMode(authedPage, "journal");
   await expect(
-    authedPage.locator('button[aria-pressed="true"]:has-text("Journal")')
+    authedPage.locator('[data-segmented="page-mode"] [role="radio"][aria-checked="true"]:text-is("Journal")')
   ).toBeVisible({ timeout: 2000 });
   expect(errors, `Panic during /solo mode-toggle: ${errors.join("\n")}`).toEqual([]);
 });
 
 test("draft slot click-fill", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
-  await setRegion(authedPage, "demacia");
   await authedPage.goto("/draft");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
 
-  const searchInput = authedPage.locator('input[placeholder="Search champion..."]');
-  await expect(searchInput).toBeVisible({ timeout: 5000 });
-  await searchInput.fill("Ahri");
-  await authedPage.waitForTimeout(300);
-  const ahriBtn = authedPage.locator('div[style*="display:grid"] button img[alt="Ahri"]');
-  await ahriBtn.first().click();
+  // Click the first ban, then click Ahri in the picker beside the board.
+  const slot = authedPage.locator("#draft-board-slot-0");
+  await slot.click();
+  await authedPage.locator("#draft-picker-search").fill("Ahri");
+  await authedPage.locator('#draft-picker-list li[data-champion="Ahri"]').click();
 
-  // Observable change: "Ahri" appears on the page (grid + filled slot).
-  await expect(authedPage.locator("text=Ahri").first()).toBeVisible({ timeout: 2000 });
+  // Observable change: the slot is filled and names the champion.
+  await expect(slot).toHaveAttribute("data-filled", "true", { timeout: 2000 });
+  await expect(slot).toHaveAttribute("aria-label", /: Ahri/);
   expect(errors, `Panic during draft slot click-fill: ${errors.join("\n")}`).toEqual([]);
 });

@@ -1,5 +1,7 @@
 use leptos::prelude::*;
 
+use crate::components::ui::{Button, ButtonVariant, PageShell, PageWidth};
+
 /// Fallback for unknown routes. Sets HTTP 404 during SSR and tells the user
 /// plainly that the page does not exist.
 #[component]
@@ -12,21 +14,16 @@ pub fn NotFound() -> impl IntoView {
     }
 
     view! {
-        <div class="min-h-[60vh] bg-base flex items-center justify-center">
-            <div class="max-w-lg text-center px-6">
-                <p class="text-muted text-sm uppercase tracking-widest mb-2">"404"</p>
-                <h1 class="text-4xl font-bold text-primary mb-4">"Page not found"</h1>
-                <p class="text-secondary mb-6">
-                    "The page you are looking for does not exist or has moved. Check the address, or head back to the start."
-                </p>
-                <a
-                    href="/"
-                    class="inline-block bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                >
-                    "Go to the start page"
-                </a>
+        <PageShell width=PageWidth::Reading class="pt-16">
+            <p class="eyebrow">"Error 404"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">"Page not found"</h1>
+            <p class="mt-4 max-w-prose text-reading text-secondary">
+                "The page you are looking for does not exist or has moved. Check the address, or head back to the start."
+            </p>
+            <div class="mt-8">
+                <Button href="/" variant=ButtonVariant::Primary>"Go to the start page"</Button>
             </div>
-        </div>
+        </PageShell>
     }
 }
 
@@ -50,24 +47,22 @@ pub fn ErrorTemplate(
             .map(|(_, e)| {
                 let e_string = e.to_string();
                 view! {
-                    <li class="list-disc ml-4 text-red-400">{e_string}</li>
+                    <li class="ml-4 list-disc text-danger">{e_string}</li>
                 }
             })
             .collect_view()
     };
 
     view! {
-        <div class="min-h-screen bg-base flex items-center justify-center">
-            <div class="max-w-lg text-center px-6">
-                <h1 class="text-6xl font-bold text-accent mb-4">"Oops"</h1>
-                <p class="text-secondary mb-6">"Something went wrong:"</p>
-                <ul class="text-left bg-elevated border border-divider rounded p-4">
-                    {error_list}
-                </ul>
-                <a href="/" class="mt-6 inline-block text-accent hover:text-accent-hover underline">
-                    "Go Home"
-                </a>
+        <PageShell width=PageWidth::Reading class="pt-16">
+            <p class="eyebrow">"Error"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold text-primary">"Something went wrong"</h1>
+            <ul class="mt-6 border-y border-rule py-4 text-body">
+                {error_list}
+            </ul>
+            <div class="mt-8">
+                <Button href="/" variant=ButtonVariant::Secondary>"Go to the start page"</Button>
             </div>
-        </div>
+        </PageShell>
     }
 }

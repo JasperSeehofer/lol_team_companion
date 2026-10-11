@@ -1,15 +1,15 @@
-pub mod chrome;
-pub mod controls;
-pub mod data_viz;
-pub mod layout;
-pub mod ornaments;
-pub mod solo;
-pub mod typography;
+//! Compatibility shims for pages that predate the design system.
+//!
+//! The names and props the solo dashboard and match detail still call
+//! (`Card`, `SectionHead`, `ModeToggle`, `Eyebrow`, `RankBadge`,
+//! `LPProgress`) render batch 1 primitives or token-only markup. There is
+//! one theme, so nothing here branches. New code uses `components::ui`
+//! directly; M5 deletes this module when those two pages move.
 
-pub use chrome::*;
+pub mod controls;
+pub mod layout;
+pub mod solo;
+
 pub use controls::*;
-pub use data_viz::*;
 pub use layout::*;
-pub use ornaments::*;
 pub use solo::*;
-pub use typography::*;

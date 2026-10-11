@@ -2354,12 +2354,14 @@ pub async fn save_post_game_learning(
     }
 }
 
-/// Improvements from a review that should become new action items: trimmed,
-/// non-empty, and not already an open or in-progress item of the team
-/// (case-insensitive).
+/// Lines from a review that should become new action items: trimmed,
+/// non-empty, not already an open or in-progress item of the team, and not
+/// an item this review already created in any status, so saving a review
+/// again does not bring back items the team has done (case-insensitive).
 async fn new_action_item_texts(
     db: &Surreal<Db>,
     team_id: &str,
+    review_id: Option<&str>,
     improvements: &[String],
 ) -> DbResult<Vec<String>> {
     if improvements.iter().all(|t| t.trim().is_empty()) {
@@ -2368,6 +2370,17 @@ async fn new_action_item_texts(
     let existing = list_open_action_items(db, team_id).await?;
     let mut seen: std::collections::HashSet<String> =
         existing.iter().map(|i| i.text.to_lowercase()).collect();
+    if let Some(review) = review_id {
+        let mut r = db
+            .query(
+                "SELECT VALUE text FROM action_item WHERE team = type::record('team', $team_key) AND source_review = type::record('post_game_learning', $review_key)",
+            )
+            .bind(("team_key", record_key(team_id, "team")))
+            .bind(("review_key", record_key(review, "post_game_learning")))
+            .await?;
+        let own: Vec<String> = r.take(0).unwrap_or_default();
+        seen.extend(own.into_iter().map(|t| t.to_lowercase()));
+    }
     Ok(improvements
         .iter()
         .map(|t| t.trim().to_string())
@@ -2375,15 +2388,27 @@ async fn new_action_item_texts(
         .collect())
 }
 
+/// The lines of a review that become action items: its improvements and
+/// its action item lines (blank and already-open ones are skipped later).
+fn review_item_lines(review: &PostGameLearning) -> Vec<String> {
+    review
+        .improvements
+        .iter()
+        .chain(review.action_items.iter())
+        .cloned()
+        .collect()
+}
+
 /// Create a review (with its plan and draft links) and an action item for
-/// each new improvement in one transaction. Returns the review ID and how
+/// each new improvement or action item line in one transaction. Returns the review ID and how
 /// many action items were created. `review.team_id` and `created_by` must
 /// already be the caller's team and user (the server function sets them).
 pub async fn create_review_with_action_items(
     db: &Surreal<Db>,
     review: PostGameLearning,
 ) -> DbResult<(String, usize)> {
-    let items = new_action_item_texts(db, &review.team_id, &review.improvements).await?;
+    let items =
+        new_action_item_texts(db, &review.team_id, None, &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
@@ -2424,7 +2449,7 @@ pub async fn update_review_with_action_items(
 ) -> DbResult<usize> {
     let id = review.id.clone().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", &id, team_id).await?;
-    let items = new_action_item_texts(db, team_id, &review.improvements).await?;
+    let items = new_action_item_texts(db, team_id, Some(&id), &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
@@ -3523,6 +3548,7 @@ struct DbActionItem {
     text: String,
     status: String,
     assigned_to: Option<String>,
+    due: Option<String>,
     created_at: Option<Datetime>,
     resolved_at: Option<Datetime>,
 }
@@ -3536,10 +3562,17 @@ impl From<DbActionItem> for ActionItem {
             text: a.text,
             status: a.status,
             assigned_to: a.assigned_to,
+            due: a.due,
             created_at: opt_dt(a.created_at),
             resolved_at: opt_dt(a.resolved_at),
         }
     }
+}
+
+/// A due date as stored: `None` for empty input, `Invalid` unless it is a
+/// calendar date written `YYYY-MM-DD`.
+fn checked_due(due: Option<String>) -> DbResult<Option<String>> {
+    ActionItem::parse_due(due.as_deref().unwrap_or("")).map_err(|e| DbError::Invalid(e.to_string()))
 }
 
 pub async fn create_action_item(
@@ -3548,16 +3581,22 @@ pub async fn create_action_item(
     text: String,
     source_review: Option<String>,
     assigned_to: Option<String>,
+    due: Option<String>,
 ) -> DbResult<String> {
+    let due = checked_due(due)?;
+    if let Some(review) = source_review.as_deref() {
+        ensure_team_record(db, "post_game_learning", review, team_id).await?;
+    }
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let mut response = db
         .query(
-            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = IF $review_key = NONE { NONE } ELSE { type::record('post_game_learning', $review_key) }, assigned_to = $assigned_to",
+            "CREATE action_item SET team = type::record('team', $team_key), text = $text, source_review = IF $review_key = NONE { NONE } ELSE { type::record('post_game_learning', $review_key) }, assigned_to = $assigned_to, due = $due",
         )
         .bind(("team_key", team_key))
         .bind(("text", text))
         .bind(("review_key", opt_key(source_review, "post_game_learning")))
         .bind(("assigned_to", assigned_to))
+        .bind(("due", due))
         .await?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
@@ -3600,7 +3639,7 @@ pub async fn batch_create_action_items_from_review(
         return Ok(0);
     }
     ensure_team_record(db, "post_game_learning", review_id, team_id).await?;
-    let items = new_action_item_texts(db, team_id, improvements).await?;
+    let items = new_action_item_texts(db, team_id, Some(review_id), improvements).await?;
     let count = items.len();
     if count == 0 {
         return Ok(0);
@@ -3653,21 +3692,24 @@ pub async fn update_action_item(
     item_id: &str,
     text: String,
     assigned_to: Option<String>,
+    due: Option<String>,
     status: Option<String>,
 ) -> DbResult<()> {
+    let due = checked_due(due)?;
     ensure_team_record(db, "action_item", item_id, team_id).await?;
     let item_key = record_key(item_id, "action_item");
     // `None` keeps the current status and resolved_at (editing the text of a
     // done item must not reopen it).
     let query = if status.is_some() {
-        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, status = $status, resolved_at = IF $status = 'done' { time::now() } ELSE { NONE }"
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, due = $due, status = $status, resolved_at = IF $status = 'done' { time::now() } ELSE { NONE }"
     } else {
-        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to"
+        "UPDATE type::record('action_item', $item_key) SET text = $text, assigned_to = $assigned_to, due = $due"
     };
     db.query(query)
         .bind(("item_key", item_key))
         .bind(("text", text))
         .bind(("assigned_to", assigned_to))
+        .bind(("due", due))
         .bind(("status", status))
         .await?
         .check()?;
@@ -4864,37 +4906,6 @@ pub async fn set_user_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbRes
     db.query("UPDATE type::record('user', $user_key) SET mode = $mode")
         .bind(("user_key", user_key))
         .bind(("mode", mode.to_string()))
-        .await?
-        .check()?;
-    Ok(())
-}
-
-/// Read the user's theme preference. Returns 'demacia' if the field is not set
-/// (legacy users created before Phase 17, or when the row doesn't exist).
-pub async fn get_user_theme(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct ThemeRecord {
-        theme: Option<String>,
-    }
-    let mut result = db
-        .query("SELECT theme FROM type::record('user', $user_key)")
-        .bind(("user_key", user_key))
-        .await?;
-    let row: Option<ThemeRecord> = result.take(0)?;
-    Ok(row
-        .and_then(|r| r.theme)
-        .unwrap_or_else(|| "demacia".to_string()))
-}
-
-/// Persist the user's theme preference. The SurrealDB schema enforces
-/// `ASSERT $value IN ['demacia', 'pandemonium']` — invalid values fail at
-/// the DB layer (defense-in-depth alongside the server-fn pre-validation).
-pub async fn set_user_theme(db: &Surreal<Db>, user_id: &str, theme: &str) -> DbResult<()> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE type::record('user', $user_key) SET theme = $theme")
-        .bind(("user_key", user_key))
-        .bind(("theme", theme.to_string()))
         .await?
         .check()?;
     Ok(())

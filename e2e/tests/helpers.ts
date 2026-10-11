@@ -80,99 +80,59 @@ export function captureHydrationWarnings(page: Page): string[] {
   return warnings;
 }
 
+/** DOM id of draft board slot `i` (0-based, tournament order). */
+export const draftSlot = (i: number) => `#draft-board-slot-${i}`;
+
+/** The draft page's champion search (the picker beside the board). */
+export const DRAFT_SEARCH = "#draft-picker-search";
+
 /**
- * Select a champion from the champion picker grid by name.
- *
- * Strategy:
- * 1. Type the champion name into the search input (placeholder="Search champion...")
- * 2. Wait for the grid to filter
- * 3. Click the matching champion button (matches by alt text on the img)
- *
- * The champion picker grid is inside:
- *   div[style*="display:grid"] button (see champion_picker.rs)
- * Each button contains an <img alt="ChampionName">.
+ * Put a champion into the board's current step: type the name into the
+ * picker's search and press Enter (Enter takes the first match). The board
+ * then moves on to the next empty step.
  */
 export async function selectChampion(page: Page, name: string): Promise<void> {
-  const searchInput = page.locator('input[placeholder="Search champion..."]');
-  await searchInput.fill(name);
-  await page.waitForTimeout(300);
-
-  // Click the champion button matching the name (img alt attribute)
-  const champBtn = page.locator(
-    `div[style*="display:grid"] button img[alt="${name}"]`
-  );
-  await champBtn.first().click();
-  await page.waitForTimeout(100);
+  const search = page.locator(DRAFT_SEARCH);
+  await search.fill(name);
+  await expect(page.locator(`#draft-picker-list li[data-champion="${name}"]`).first()).toBeVisible();
+  await search.press("Enter");
 }
 
 /**
- * Fill a specific draft slot (0-indexed) with a champion.
- *
- * The draft board advances slots sequentially — clicking a champion fills
- * the currently active slot. To fill a specific slot:
- * 1. Click the target slot div to make it active (on_slot_click callback)
- * 2. Call selectChampion to pick the champion
- *
- * Slots are rendered as divs with on:click handlers. We select by nth child
- * of the ban/pick containers. The draft board renders bans in one row and
- * picks in another (see draft_board.rs). We use a data-slot attribute if
- * available, or fall back to clicking slots in order.
- *
- * Note: The simplest approach is to ensure the slot is active (by clicking
- * an empty slot) and then select a champion. For sequential fills, just
- * call selectChampion repeatedly — the board auto-advances the active slot.
+ * Fill draft slot `slot` (0-based) with a champion: focus the slot, press
+ * Enter (focus moves to the picker), type and press Enter.
  */
 export async function fillDraftSlot(
   page: Page,
   slot: number,
   champion: string
 ): Promise<void> {
-  // The draft board doesn't expose data-slot attributes, so we select by
-  // clicking champions in order (the board auto-advances the active slot).
-  // For a specific slot, we need to click it first if it's not already active.
-  //
-  // The draft board renders 6 ban slots + 5 pick slots per side.
-  // Slots are rendered inside the main content area as clickable divs.
-  // We use the pipeline.spec.ts pattern: click the nth champion grid button.
+  await page.locator(draftSlot(slot)).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(DRAFT_SEARCH)).toBeFocused();
   await selectChampion(page, champion);
+  await expect(page.locator(draftSlot(slot))).toHaveAttribute("data-filled", "true");
 }
 
 /**
- * Create a draft with the given name.
- *
- * Navigates to /draft, fills the draft name input (first textbox on the page),
- * then clicks "Save Draft". Waits for "Update Draft" to appear confirming save.
- *
- * Pattern from pipeline.spec.ts lines 43-72.
+ * Create and save a draft named `name` on /draft; waits for "Saved" and the
+ * draft id in the URL.
  */
 export async function createDraft(page: Page, name: string): Promise<void> {
   await navigateTo(page, "/draft");
-  await page.waitForTimeout(1000);
-
-  // Fill draft name — first textbox on the draft page (pipeline.spec.ts line 48)
-  await page.getByRole("textbox").first().fill(name);
-
-  // Save the draft
-  await page.locator('button:has-text("Save Draft")').click();
-  await page.waitForTimeout(2000);
+  await page.locator("#draft-name").fill(name);
+  await page.getByTestId("draft-save").click();
+  await expect(page.getByTestId("draft-save-state")).toHaveText("Saved", { timeout: 10000 });
+  await expect(page).toHaveURL(/draft_id=/);
 }
 
 /**
- * Save a game plan by filling the name input and clicking Save Plan.
- *
- * Fills the plan name input (placeholder contains "Comp" — pipeline.spec.ts line 97),
- * clicks "Save Plan", and waits for a confirmation message.
- *
- * Assumes the game plan page is already loaded.
+ * Save the open game plan under `name` (the plan page must be loaded).
  */
 export async function saveGamePlan(page: Page, name: string): Promise<void> {
-  const planNameInput = page.locator('input[placeholder*="Comp"]');
-  if (await planNameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await planNameInput.fill(name);
-  }
-
-  await page.locator('button:has-text("Save Plan")').click();
-  await page.waitForTimeout(2000);
+  await page.locator("#plan-name").fill(name);
+  await page.getByTestId("plan-save").click();
+  await expect(page.getByTestId("plan-save-state")).toHaveText("Saved", { timeout: 10000 });
 }
 
 /**

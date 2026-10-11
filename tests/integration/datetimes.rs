@@ -26,7 +26,7 @@ async fn lists_with_timestamps_return_their_rows() {
     let d = common::test_db().await;
     let (u, t) = user_and_team(&d).await;
 
-    db::create_action_item(&d, &t, "Ward river".into(), None, None)
+    db::create_action_item(&d, &t, "Ward river".into(), None, None, None)
         .await
         .unwrap();
     let items = db::list_action_items(&d, &t).await.unwrap();

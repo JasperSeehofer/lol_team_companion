@@ -1,121 +1,94 @@
 /**
- * Pipeline e2e test: draft → game plan → post-game linking.
- *
- * Verification for GSD Phase 1 (Pipeline CTAs):
- * 1. Create draft with champion picks → save
- * 2. Click "Prep for This Draft" → game plan prefills champions
- * 3. Save game plan → click "Source Draft" → draft loads correctly
- * 4. Game plan + post-game pages handle draft_id query param gracefully
+ * Pipeline e2e test, the core loop on the rebuilt strategy pages:
+ * 1. Draft through the board with the keyboard, save, reopen.
+ * 2. "Prep a game plan" opens a plan linked to the draft; save it.
+ * 3. "Start the review" opens a review linked to the plan; its action
+ *    item lines become action items.
+ * 4. The action item is completed on the action items page.
+ * Plus: game plan and post-game handle a bad draft_id gracefully.
  *
  * Requires a running dev server: cargo leptos watch
  */
 import { test, expect } from "./fixtures";
-import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
+import { captureErrors, DRAFT_SEARCH, draftSlot, filterRealErrors, navigateTo, selectChampion } from "./helpers";
 
-test("full pipeline: draft with picks → game plan prefill → save → source draft roundtrip", async ({
+const CHAMPS = ["Aatrox", "Ahri", "Akali", "Alistar", "Amumu", "Anivia", "Annie", "Ashe", "Azir", "Bard"];
+
+test("full pipeline: keyboard draft -> linked plan -> linked review -> action item done", async ({
   teamPage,
 }) => {
-  // --- 1. Team: the teamPage fixture registers, switches to team mode and
-  // creates a team (new users start in solo mode, where the roster page
-  // shows a mode gate instead of the create form).
   const page = teamPage;
-  const timestamp = Date.now();
+  const ts = Date.now();
   const errors = captureErrors(page);
+  const draftName = `PipeDraft_${ts}`;
+  const planName = `PipePlan_${ts}`;
+  const actionText = `Ward the river at 3:00 ${ts}`;
 
-  // --- 2. Create draft with champion picks ---
+  // --- 1. Draft with the keyboard ---
   await navigateTo(page, "/draft");
-  await page.waitForTimeout(1000);
+  await page.locator("#draft-name").fill(draftName);
+  await page.locator(draftSlot(0)).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(DRAFT_SEARCH)).toBeFocused();
+  for (const name of CHAMPS) {
+    await selectChampion(page, name);
+  }
+  for (let i = 0; i < CHAMPS.length; i++) {
+    await expect(page.locator(draftSlot(i))).toHaveAttribute("data-filled", "true");
+  }
+  await expect(page.locator("[data-draft-status]")).toContainText("Pick 5 of 10");
 
-  // Fill draft name
-  await page.getByRole("textbox").first().fill(`PipeDraft_${timestamp}`);
+  await page.getByTestId("draft-save").click();
+  await expect(page.getByTestId("draft-save-state")).toHaveText("Saved", { timeout: 10000 });
+  await expect(page).toHaveURL(/draft_id=/);
+  const draftUrl = page.url();
+  const draftId = new URL(draftUrl).searchParams.get("draft_id");
 
-  // Pick 10 champions (6 bans + 4 picks) from the champion grid
-  // Champion picker uses buttons inside a grid with display:grid style
-  const champButtons = page.locator(
-    'div[style*="display:grid"] button:not([disabled])'
+  // Reopen: a fresh load shows the same name and filled steps.
+  await navigateTo(page, new URL(draftUrl).pathname + new URL(draftUrl).search);
+  await expect(page.locator("#draft-name")).toHaveValue(draftName, { timeout: 10000 });
+  await expect(page.getByTestId("draft-save-state")).toHaveText("Saved");
+  for (let i = 0; i < CHAMPS.length; i++) {
+    await expect(page.locator(draftSlot(i))).toHaveAttribute("data-filled", "true");
+  }
+
+  // --- 2. A game plan linked to the draft ---
+  await page.getByRole("button", { name: "Prep a game plan" }).click();
+  await page.waitForURL(/\/game-plan\?draft_id=/, { timeout: 10000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator("#plan-draft")).toHaveValue(draftId ?? "", { timeout: 10000 });
+  await expect(page.getByRole("link", { name: "Open the draft" })).toBeVisible();
+  await page.locator("#plan-name").fill(planName);
+  await page.getByTestId("plan-save").click();
+  await expect(page.getByTestId("plan-save-state")).toHaveText("Saved", { timeout: 10000 });
+  await expect(page).toHaveURL(/plan_id=/);
+  await expect(page.getByTestId("plan-list").getByText(planName)).toBeVisible();
+
+  // --- 3. A review linked to the plan ---
+  await page.getByRole("button", { name: "Start the review" }).click();
+  await page.waitForURL(/\/post-game\?review_id=/, { timeout: 10000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByText(`Plan: ${planName}`)).toBeVisible({ timeout: 10000 });
+  await expect(page.locator("#review-plan option:checked")).toHaveText(planName);
+  await page.locator("#review-actions").fill(actionText);
+  await page.getByTestId("review-save").click();
+  await expect(page.getByText("1 action item created")).toBeVisible({ timeout: 10000 });
+
+  // --- 4. Complete the action item ---
+  await page.getByRole("link", { name: "Open action items" }).click();
+  await page.waitForURL(/\/action-items/);
+  await page.waitForLoadState("networkidle");
+  const item = page.locator("[data-action-item]", { hasText: actionText });
+  await expect(item).toHaveAttribute("data-status", "open", { timeout: 10000 });
+  await expect(item.getByRole("link", { name: "From a review" })).toBeVisible();
+  await item.getByRole("checkbox", { name: actionText }).check();
+  await expect(page.locator("[data-action-item]", { hasText: actionText })).toHaveAttribute(
+    "data-status",
+    "done",
+    { timeout: 10000 }
   );
-  let picked = 0;
-  const champCount = await champButtons.count();
-  for (let i = 0; i < champCount && picked < 10; i++) {
-    const btn = champButtons.nth(i);
-    if (await btn.isDisabled().catch(() => true)) continue;
-    await btn.click();
-    await page.waitForTimeout(100);
-    picked++;
-  }
 
-  // Save the draft
-  await page.locator('button:has-text("Save Draft")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify draft saved — "Update Draft" button appears when loaded
-  await expect(
-    page.locator('button:has-text("Update Draft")')
-  ).toBeVisible({ timeout: 3000 });
-
-  // --- 3. Click "Prep for This Draft" → game plan page ---
-  const prepBtn = page.locator('button:has-text("Prep for This Draft")');
-  await expect(prepBtn.first()).toBeVisible({ timeout: 5000 });
-  await prepBtn.first().click();
-
-  // Wait for hard navigation to game plan page
-  await page.waitForTimeout(3000);
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(2000);
-
-  // Verify game plan page loaded with draft_id
-  expect(page.url()).toContain("/game-plan");
-  expect(page.url()).toContain("draft_id=");
-
-  // Verify "Source Draft" badge and "Champions pre-filled" indicator
-  await expect(
-    page.locator('text=Source Draft')
-  ).toBeVisible({ timeout: 3000 });
-  await expect(
-    page.locator('text=Champions pre-filled from draft')
-  ).toBeVisible({ timeout: 3000 });
-
-  // --- 4. Save the game plan ---
-  const planNameInput = page.locator('input[placeholder*="Comp"]');
-  if (await planNameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await planNameInput.fill(`PipePlan_${timestamp}`);
-  }
-
-  await page.locator('button:has-text("Save Plan")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify plan saved
-  const bodyText = await page.textContent("body") || "";
-  expect(bodyText).toMatch(/Plan created|saved|Updated/i);
-
-  // --- 5. Click Source Draft link → verify draft loads ---
-  const sourceDraftLink = page.locator('a[href*="/draft?draft_id="]');
-  await expect(sourceDraftLink.first()).toBeVisible({ timeout: 3000 });
-  await sourceDraftLink.first().click();
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(2000);
-
-  // Verify draft page loaded with correct draft
-  expect(page.url()).toContain("/draft?draft_id=");
-
-  // Draft name should be loaded
-  const draftNameVal = await page.getByRole("textbox").first().inputValue();
-  expect(draftNameVal).toContain(`PipeDraft_${timestamp}`);
-
-  // "Update Draft" button means draft is loaded from DB
-  await expect(
-    page.locator('button:has-text("Update Draft")')
-  ).toBeVisible({ timeout: 3000 });
-
-  // "Review This Game" button should be visible (draft has a linked game plan)
-  await expect(
-    page.locator('button:has-text("Review This Game")')
-  ).toBeVisible({ timeout: 3000 });
-
-  // Nav should be present
   await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
-
-  // No real JS errors
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
 

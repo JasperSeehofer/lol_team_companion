@@ -1,8 +1,16 @@
-use crate::app::InitialTheme;
-use crate::components::region::{Card, SectionHead};
-use crate::components::ui::{ErrorBanner, SkeletonCard, ToastContext, ToastKind};
+//! Post-game reviews: what went well, what to improve and the action
+//! items that come out of a game, linked to its match, plan and draft, with
+//! the patterns that recur across reviews.
+
+use crate::components::ui::{
+    Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ConfirmDialog, ConfirmTone, Density,
+    EmptySize, EmptyState, Field, GameResult, GlyphSize, PageHeader, PageShell, ResultGlyph, Role,
+    RoleLabel, SectionHeader, Segment, SegmentedControl, Select, SelectOption, Skeleton,
+    SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
+};
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
+use crate::pages::navigate::{navigator, replace_url};
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -257,18 +265,6 @@ pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, Ser
     Ok(None) // No matching game found in recent history
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn textarea_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 resize-none transition-colors"
-}
-
-fn input_class() -> &'static str {
-    "w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm placeholder-dimmed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent/60 transition-colors"
-}
-
 /// Basic pattern analysis: find recurring themes across reviews
 #[allow(clippy::type_complexity)]
 fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<(String, usize)>) {
@@ -301,12 +297,149 @@ fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<
 }
 
 // ---------------------------------------------------------------------------
+// Editor state
+// ---------------------------------------------------------------------------
+
+fn opt(s: String) -> Option<String> {
+    (!s.trim().is_empty()).then_some(s)
+}
+
+fn lines(s: &str) -> Vec<String> {
+    s.lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+fn result_of(win_loss: Option<&str>) -> Option<GameResult> {
+    match win_loss {
+        Some("win") => Some(GameResult::Win),
+        Some("loss") => Some(GameResult::Loss),
+        _ => None,
+    }
+}
+
+/// Short label for a match id ("EUW1_7012345678" stays as it is; very long
+/// ids keep their tail).
+fn match_label(id: &str) -> String {
+    if id.chars().count() > 20 {
+        let tail: String = id
+            .chars()
+            .rev()
+            .take(12)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("\u{2026}{tail}")
+    } else {
+        id.to_string()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ReviewEd {
+    id: RwSignal<Option<String>>,
+    match_id: RwSignal<String>,
+    plan_id: RwSignal<String>,
+    draft_id: RwSignal<String>,
+    went_well: RwSignal<String>,
+    improve: RwSignal<String>,
+    actions: RwSignal<String>,
+    notes: RwSignal<String>,
+    /// "", "win" or "loss".
+    outcome: RwSignal<String>,
+    /// "" or "1".."5".
+    rating: RwSignal<String>,
+}
+
+impl ReviewEd {
+    fn new() -> Self {
+        let s = || RwSignal::new(String::new());
+        Self {
+            id: RwSignal::new(None),
+            match_id: s(),
+            plan_id: s(),
+            draft_id: s(),
+            went_well: s(),
+            improve: s(),
+            actions: s(),
+            notes: s(),
+            outcome: s(),
+            rating: s(),
+        }
+    }
+    fn clear(&self) {
+        self.id.set(None);
+        for sig in [
+            self.match_id,
+            self.plan_id,
+            self.draft_id,
+            self.went_well,
+            self.improve,
+            self.actions,
+            self.notes,
+            self.outcome,
+            self.rating,
+        ] {
+            sig.set(String::new());
+        }
+    }
+    fn load(&self, r: &PostGameLearning) {
+        self.id.set(r.id.clone());
+        self.match_id
+            .set(r.match_riot_id.clone().unwrap_or_default());
+        self.plan_id.set(r.game_plan_id.clone().unwrap_or_default());
+        self.draft_id.set(r.draft_id.clone().unwrap_or_default());
+        self.went_well.set(r.what_went_well.join("\n"));
+        self.improve.set(r.improvements.join("\n"));
+        self.actions.set(r.action_items.join("\n"));
+        self.notes.set(r.open_notes.clone().unwrap_or_default());
+        self.outcome.set(r.win_loss.clone().unwrap_or_default());
+        self.rating
+            .set(r.rating.map(|n| n.to_string()).unwrap_or_default());
+    }
+    /// Subscribe to every field (for the "unsaved changes" memo).
+    fn track(&self) {
+        self.id.track();
+        for sig in [
+            self.match_id,
+            self.plan_id,
+            self.draft_id,
+            self.went_well,
+            self.improve,
+            self.actions,
+            self.notes,
+            self.outcome,
+            self.rating,
+        ] {
+            sig.track();
+        }
+    }
+    fn build(&self) -> PostGameLearning {
+        PostGameLearning {
+            id: self.id.get_untracked(),
+            team_id: String::new(),
+            match_riot_id: opt(self.match_id.get_untracked()),
+            game_plan_id: opt(self.plan_id.get_untracked()),
+            draft_id: opt(self.draft_id.get_untracked()),
+            what_went_well: lines(&self.went_well.get_untracked()),
+            improvements: lines(&self.improve.get_untracked()),
+            action_items: lines(&self.actions.get_untracked()),
+            open_notes: opt(self.notes.get_untracked()),
+            created_by: String::new(),
+            win_loss: opt(self.outcome.get_untracked()),
+            rating: self.rating.get_untracked().parse::<u8>().ok(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 #[component]
 pub fn PostGamePage() -> impl IntoView {
-    // Auth redirect
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -317,763 +450,463 @@ pub fn PostGamePage() -> impl IntoView {
         }
     });
 
-    // Region — read ONCE at page entry, passed as String prop to sub-views
-    let theme = use_context::<InitialTheme>().unwrap_or_default();
-    let region = theme.0.clone();
-
-    // URL query params
-    use leptos_router::hooks::use_query_map;
-    let query = use_query_map();
-    let url_review_id = move || query.read().get("review_id");
-    let url_plan_id = move || query.read().get("plan_id");
-    let url_draft_id = move || query.read().get("draft_id");
-    let (url_review_loaded, set_url_review_loaded) = signal(false);
-
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let query = leptos_router::hooks::use_query_map();
     let reviews = Resource::new(|| (), |_| list_reviews());
     let plans = Resource::new(|| (), |_| list_plans_for_postgame());
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
     let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
+    let ed = ReviewEd::new();
+    let created_items = RwSignal::new(None::<usize>);
+    // The open review as loaded or last saved (as the editor builds it).
+    let saved = RwSignal::new(None::<PostGameLearning>);
+    let dirty = Memo::new(move |_| {
+        ed.track();
+        saved.with(|s| s.as_ref() != Some(&ed.build()))
+    });
+    // Bumped when the editor switches review, so a late save result does
+    // not land in another review.
+    let edit_gen = StoredValue::new(0_u64);
+    let saving = RwSignal::new(false);
 
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let action_item_count: RwSignal<Option<usize>> = RwSignal::new(None);
-    let (editing_id, set_editing_id) = signal(Option::<String>::None);
-    let (match_riot_id, set_match_riot_id) = signal(String::new());
-    let (game_plan_id, set_game_plan_id) = signal(String::new());
-    let (draft_id, set_draft_id) = signal(String::new());
-    let (went_well, set_went_well) = signal(String::new());
-    let (improvements, set_improvements) = signal(String::new());
-    let (action_items, set_action_items) = signal(String::new());
-    let (open_notes, set_open_notes) = signal(String::new());
-    let (win_loss, set_win_loss) = signal::<Option<String>>(None);
-    let (rating, set_rating) = signal::<Option<u8>>(None);
-    let (fetching, set_fetching) = signal(false);
-    let (fetch_status, set_fetch_status) = signal::<Option<String>>(None);
-
-    let clear_editor = move || {
-        set_editing_id.set(None);
-        set_match_riot_id.set(String::new());
-        set_game_plan_id.set(String::new());
-        set_draft_id.set(String::new());
-        set_went_well.set(String::new());
-        set_improvements.set(String::new());
-        set_action_items.set(String::new());
-        set_open_notes.set(String::new());
-        set_win_loss.set(None);
-        set_rating.set(None);
-        set_fetching.set(false);
-        set_fetch_status.set(None);
-    };
-
-    let load_review = move |r: &PostGameLearning| {
-        set_editing_id.set(r.id.clone());
-        set_match_riot_id.set(r.match_riot_id.clone().unwrap_or_default());
-        set_game_plan_id.set(r.game_plan_id.clone().unwrap_or_default());
-        set_draft_id.set(r.draft_id.clone().unwrap_or_default());
-        set_went_well.set(r.what_went_well.join("\n"));
-        set_improvements.set(r.improvements.join("\n"));
-        set_action_items.set(r.action_items.join("\n"));
-        set_open_notes.set(r.open_notes.clone().unwrap_or_default());
-        set_win_loss.set(r.win_loss.clone());
-        set_rating.set(r.rating);
-    };
-
-    // URL param: auto-load review when ?review_id=X is present
+    // `?review_id=` opens a review; `?plan_id=`/`?draft_id=` seed a new one.
+    let opened = StoredValue::new(false);
     Effect::new(move |_| {
-        if url_review_loaded.get_untracked() {
+        if opened.get_value() {
             return;
         }
-        let Some(target_id) = url_review_id() else {
+        let q = query.read();
+        if let Some(target) = q.get("review_id") {
+            if let Some(Ok(list)) = reviews.get() {
+                if let Some(r) = list
+                    .iter()
+                    .find(|r| r.id.as_deref() == Some(target.as_str()))
+                {
+                    ed.load(r);
+                    saved.set(Some(ed.build()));
+                    edit_gen.update_value(|g| *g += 1);
+                    opened.set_value(true);
+                }
+            }
+            return;
+        }
+        if let Some(pid) = q.get("plan_id") {
+            ed.plan_id.set(pid);
+        }
+        if let Some(did) = q.get("draft_id") {
+            ed.draft_id.set(did);
+        }
+        opened.set_value(true);
+    });
+
+    // The open review's id goes in the address so a reload or link reopens it.
+    let nav = navigator();
+    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+        // One save at a time: a double click must not create two reviews.
+        if saving.get_untracked() {
+            return;
+        }
+        let review = ed.build();
+        let json = serde_json::to_string(&review).unwrap_or_default();
+        let is_update = review.id.is_some();
+        let gen = edit_gen.get_value();
+        saving.set(true);
+        leptos::task::spawn_local(async move {
+            let res = if is_update {
+                update_review(json).await.map(|n| (String::new(), n))
+            } else {
+                create_review(json).await
+            };
+            saving.set(false);
+            match res {
+                Ok((id, n)) => {
+                    reviews.refetch();
+                    toast.push.run(Toast::success("Review saved"));
+                    // The editor moved on to another review meanwhile.
+                    if edit_gen.get_value() != gen {
+                        return;
+                    }
+                    let mut sent = review;
+                    if !is_update && !id.is_empty() {
+                        opened.set_value(true);
+                        replace_url(nav, &format!("/post-game?review_id={id}"));
+                        sent.id = Some(id.clone());
+                        ed.id.set(Some(id));
+                    }
+                    saved.set(Some(sent));
+                    created_items.set((n > 0).then_some(n));
+                }
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not save the review: {e}"))),
+            }
+        });
+    });
+    let new_review = Callback::new(move |_: leptos::ev::MouseEvent| {
+        opened.set_value(true);
+        replace_url(nav, "/post-game");
+        ed.clear();
+        saved.set(None);
+        edit_gen.update_value(|g| *g += 1);
+        created_items.set(None);
+    });
+    let confirm_delete = RwSignal::new(false);
+    let do_delete = Callback::new(move |_| {
+        let Some(id) = ed.id.get_untracked() else {
             return;
         };
-        if let Some(Ok(list)) = reviews.get() {
-            if let Some(r) = list.iter().find(|r| r.id.as_deref() == Some(&target_id)) {
-                load_review(r);
-                set_url_review_loaded.set(true);
-            }
-        }
-    });
-
-    // URL param: seed plan_id and draft_id signals when present (for new review flows)
-    Effect::new(move |_| {
-        if url_review_loaded.get_untracked() {
-            return;
-        }
-        if let Some(pid) = url_plan_id() {
-            if game_plan_id.get_untracked().is_empty() {
-                set_game_plan_id.set(pid);
-            }
-        }
-        if let Some(did) = url_draft_id() {
-            if draft_id.get_untracked().is_empty() {
-                set_draft_id.set(did);
-            }
-        }
-    });
-
-    let build_review = move || -> PostGameLearning {
-        PostGameLearning {
-            id: editing_id.get_untracked(),
-            team_id: String::new(),
-            match_riot_id: {
-                let s = match_riot_id.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            game_plan_id: {
-                let s = game_plan_id.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            draft_id: {
-                let s = draft_id.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            what_went_well: went_well
-                .get_untracked()
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            improvements: improvements
-                .get_untracked()
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            action_items: action_items
-                .get_untracked()
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            open_notes: {
-                let s = open_notes.get_untracked();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
-            },
-            created_by: String::new(),
-            win_loss: win_loss.get_untracked(),
-            rating: rating.get_untracked(),
-        }
-    };
-
-    let do_save = move |_| {
-        let review = build_review();
-        let json = serde_json::to_string(&review).unwrap_or_default();
-        let is_update = editing_id.get_untracked().is_some();
-
         leptos::task::spawn_local(async move {
-            if is_update {
-                match update_review(json).await {
-                    Ok(n_items) => {
-                        action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
-                        toast
-                            .show
-                            .run((ToastKind::Success, "Review updated".into()));
-                        reviews.refetch();
-                    }
-                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                }
-            } else {
-                match create_review(json).await {
-                    Ok((id, n_items)) => {
-                        if !id.is_empty() {
-                            set_editing_id.set(Some(id));
-                        }
-                        action_item_count.set(if n_items > 0 { Some(n_items) } else { None });
-                        toast.show.run((ToastKind::Success, "Review saved".into()));
-                        reviews.refetch();
-                    }
-                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                }
-            }
-        });
-    };
-
-    let do_delete = move |review_id: String| {
-        leptos::task::spawn_local(async move {
-            match delete_review(review_id).await {
-                Ok(_) => {
-                    clear_editor();
-                    toast
-                        .show
-                        .run((ToastKind::Success, "Review deleted".into()));
+            match delete_review(id).await {
+                Ok(()) => {
+                    replace_url(nav, "/post-game");
+                    ed.clear();
+                    saved.set(None);
+                    edit_gen.update_value(|g| *g += 1);
+                    created_items.set(None);
                     reviews.refetch();
+                    toast.push.run(Toast::success("Review deleted"));
                 }
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(format!("Could not delete: {e}"))),
             }
         });
+    });
+
+    let plan_name = move |id: &str| -> Option<String> {
+        plans
+            .get()
+            .and_then(|r| r.ok())
+            .and_then(|l| l.into_iter().find(|p| p.id.as_deref() == Some(id)))
+            .map(|p| {
+                if p.name.trim().is_empty() {
+                    "Untitled plan".to_string()
+                } else {
+                    p.name
+                }
+            })
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen" data-feedback-label="Post game">
-            <div class="max-w-[80rem] mx-auto py-8 px-6 flex flex-col gap-6">
-                // Page header — region-aware SectionHead
-                <SectionHead
-                    region=region.clone()
-                    title="What we learned in the field.".to_string()
-                    eyebrow="Strategy hub \u{00B7} Post-Game"
-                />
-
-                // Main content — wrapped in region-aware Card
-                <Card region=region.clone() attr:data-feedback-label="Post game → Learning list">
-            {move || action_item_count.get().map(|n| {
-                let label = if n == 1 {
-                    "1 action item created".to_string()
-                } else {
-                    format!("{n} action items created")
-                };
-                view! {
-                    <div class="bg-accent/10 border border-accent/30 text-secondary text-sm rounded-xl px-4 py-3">
-                        {label}" — "<a href="/action-items" class="text-accent underline">"View"</a>
-                    </div>
+        <PageShell density=Density::Compact attr:data-feedback-label="Post game">
+            <PageHeader
+                title=move || if ed.id.get().is_some() { "Review".to_string() } else { "New review".to_string() }
+                eyebrow="Post-game"
+                meta=move || view! {
+                    {move || result_of(Some(ed.outcome.get().as_str())).map(|r| view! { <ResultGlyph result=r word=true /> })}
+                    <Suspense fallback=|| ()>
+                        {move || {
+                            let pid = ed.plan_id.get();
+                            (!pid.is_empty()).then(|| plan_name(&pid).map(|n| view! { <span>"Plan: " {n}</span> }))
+                        }}
+                    </Suspense>
+                    <span class="text-muted" data-testid="review-save-state">
+                        {move || match (ed.id.get().is_some(), saving.get(), dirty.get()) {
+                            (_, true, _) => "Saving\u{2026}",
+                            (false, _, _) => "Not saved yet",
+                            (true, _, true) => "Unsaved changes",
+                            (true, _, false) => "Saved",
+                        }}
+                    </span>
                 }
+                actions=move || view! {
+                    <Button variant=ButtonVariant::Quiet on_click=new_review>"New review"</Button>
+                    {move || ed.id.get().map(|_| view! {
+                        <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
+                    })}
+                    <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="review-save">"Save review"</Button>
+                }
+            />
+            <ConfirmDialog
+                id="delete-review"
+                open=confirm_delete
+                title="Delete this review?"
+                message="The review is deleted. Action items created from it stay on the action items page."
+                confirm_label="Delete review"
+                tone=ConfirmTone::Destructive
+                on_confirm=do_delete
+            />
+            {move || created_items.get().map(|n| view! {
+                <div class="mb-6">
+                    <Callout
+                        tone=CalloutTone::Success
+                        title=if n == 1 { "1 action item created".to_string() } else { format!("{n} action items created") }
+                        action=move || view! { <Button size=ButtonSize::Sm href="/action-items">"Open action items"</Button> }
+                    >
+                        "New lines under To improve and Action items became items the team can track."
+                    </Callout>
+                </div>
             })}
-
-            <div class="flex gap-6 min-h-[36rem]">
-                // Left: review list + patterns
-                <div class="w-72 flex-shrink-0 flex flex-col gap-4">
-                    <button
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
-                        on:click=move |_| clear_editor()
-                    >"+ New Review"</button>
-
-                    // Saved reviews
-                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
-                        {move || reviews.get().map(|result| match result {
-                            Ok(list) if list.is_empty() => view! {
-                                <div class="text-center py-6">
-                                    <p class="text-dimmed text-sm mb-3">"No post-game reviews yet"</p>
-                                    <p class="text-dimmed text-xs mb-4">"Create or join a team to get started."</p>
-                                    <a href="/team/roster" class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded px-3 py-1.5 text-xs transition-colors">
-                                        "Go to Team"
-                                    </a>
-                                </div>
-                            }.into_any(),
-                            Ok(list) => {
-                                let list_for_patterns = list.clone();
-                                let (good_patterns, bad_patterns) = analyze_patterns(&list_for_patterns);
-                                let has_patterns = !good_patterns.is_empty() || !bad_patterns.is_empty();
-                                view! {
-                                    <div class="flex flex-col gap-1.5">
+            <div class="grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-[16rem_minmax(0,1fr)]">
+                <div class="flex min-w-0 flex-col gap-10">
+                    <section aria-labelledby="reviews-heading" class="flex flex-col gap-3">
+                        <SectionHeader title="Reviews" id="reviews-heading" />
+                        <Suspense fallback=|| view! { <SkeletonGroup label="Loading reviews"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
+                            {move || reviews.get().map(|r| match r {
+                                Err(_) => view! { <Callout tone=CalloutTone::Danger>"The reviews did not load."</Callout> }.into_any(),
+                                Ok(list) if list.is_empty() => view! {
+                                    <EmptyState size=EmptySize::Compact message="Reviews your team writes after games are listed here. Write one on the right, or start one from a game plan." />
+                                }.into_any(),
+                                Ok(list) => view! {
+                                    <ul class="flex flex-col border-t border-rule" data-testid="review-list">
                                         {list.into_iter().map(|r| {
-                                            let review_for_load = r.clone();
-                                            let rid = r.id.clone().unwrap_or_default();
-                                            let rid_for_cls = rid.clone();
-                                            let rid_for_delete = rid.clone();
-                                            let match_label = r.match_riot_id.clone().unwrap_or_else(|| "No match linked".to_string());
-                                            let item_count = r.what_went_well.len() + r.improvements.len() + r.action_items.len();
+                                            let id = r.id.clone().unwrap_or_default();
+                                            let label = r.game_plan_id.as_deref().and_then(plan_name)
+                                                .or_else(|| r.match_riot_id.as_deref().map(match_label))
+                                                .unwrap_or_else(|| "Review without a plan".to_string());
+                                            let points = r.what_went_well.len() + r.improvements.len() + r.action_items.len();
+                                            let result = result_of(r.win_loss.as_deref());
+                                            let r2 = r.clone();
                                             view! {
-                                                <div class=move || {
-                                                    if editing_id.get().as_deref() == Some(&rid_for_cls) {
-                                                        "bg-accent/10 border border-accent/30 rounded-lg p-3 transition-all"
-                                                    } else {
-                                                        "bg-elevated/30 border border-divider/30 rounded-lg p-3 hover:bg-overlay/30 transition-all"
-                                                    }
-                                                }>
-                                                    <button
-                                                        class="w-full text-left"
-                                                        on:click=move |_| load_review(&review_for_load)
+                                                <li class="border-b border-rule">
+                                                    <Button
+                                                        variant=ButtonVariant::Quiet
+                                                        full_width=true
+                                                        pressed=Signal::derive(move || ed.id.get().as_deref() == Some(id.as_str()))
+                                                        on_click=Callback::new(move |_| {
+                                                            created_items.set(None);
+                                                            ed.load(&r2);
+                                                            saved.set(Some(ed.build()));
+                                                            edit_gen.update_value(|g| *g += 1);
+                                                            opened.set_value(true);
+                                                            if let Some(id) = r2.id.as_deref() {
+                                                                replace_url(nav, &format!("/post-game?review_id={id}"));
+                                                            }
+                                                        })
                                                     >
-                                                        <div class="text-primary text-sm font-medium truncate">{match_label}</div>
-                                                        <div class="text-dimmed text-xs mt-0.5">{format!("{item_count} points")}</div>
-                                                    </button>
-                                                    <button
-                                                        class="text-red-400/50 hover:text-red-400 text-xs mt-1 transition-colors"
-                                                        on:click=move |_| do_delete(rid_for_delete.clone())
-                                                    >"Delete"</button>
-                                                </div>
+                                                        <span class="flex w-full min-w-0 items-center gap-2 text-left">
+                                                            {match result {
+                                                                Some(res) => view! { <ResultGlyph result=res size=GlyphSize::Sm /> }.into_any(),
+                                                                None => view! { <span class="figures inline-grid size-5 shrink-0 place-items-center text-caption text-muted" aria-label="No result">"\u{2014}"</span> }.into_any(),
+                                                            }}
+                                                            <span class="min-w-0 flex-1 truncate">{label}</span>
+                                                            <span class="figures shrink-0 text-caption font-normal text-muted">{format!("{points} pts")}</span>
+                                                        </span>
+                                                    </Button>
+                                                </li>
                                             }
                                         }).collect_view()}
-                                    </div>
-
-                                    // Pattern analysis
-                                    {has_patterns.then(|| view! {
-                                        <div class="mt-4 bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-3">
-                                            <h4 class="text-primary font-semibold text-xs uppercase tracking-wider">"Recurring Patterns"</h4>
-                                            {(!good_patterns.is_empty()).then(|| {
-                                                let patterns = good_patterns.clone();
-                                                view! {
-                                                    <div>
-                                                        <span class="text-emerald-400 text-xs font-medium">"Strengths"</span>
-                                                        {patterns.into_iter().map(|(item, count)| view! {
-                                                            <div class="flex items-center gap-2 mt-1">
-                                                                <span class="text-secondary text-xs truncate flex-1">{item}</span>
-                                                                <span class="text-dimmed text-xs flex-shrink-0">{format!("{count}x")}</span>
-                                                            </div>
-                                                        }).collect_view()}
-                                                    </div>
-                                                }
-                                            })}
-                                            {(!bad_patterns.is_empty()).then(|| {
-                                                let patterns = bad_patterns.clone();
-                                                view! {
-                                                    <div>
-                                                        <span class="text-red-400 text-xs font-medium">"Recurring Issues"</span>
-                                                        {patterns.into_iter().map(|(item, count)| view! {
-                                                            <div class="flex items-center gap-2 mt-1">
-                                                                <span class="text-secondary text-xs truncate flex-1">{item}</span>
-                                                                <span class="text-dimmed text-xs flex-shrink-0">{format!("{count}x")}</span>
-                                                            </div>
-                                                        }).collect_view()}
-                                                    </div>
-                                                }
-                                            })}
-                                        </div>
-                                    })}
-                                }.into_any()
-                            },
-                            Err(e) => view! {
-                                <ErrorBanner message=format!("Failed to load reviews: {e}") />
-                            }.into_any(),
-                        })}
-                    </Suspense>
+                                    </ul>
+                                }.into_any(),
+                            })}
+                        </Suspense>
+                    </section>
+                    <PatternsSection reviews=reviews />
                 </div>
-
-                // Right: editor
-                <div class="flex-1 flex flex-col gap-5">
-                    // Back-reference badges (when a review is loaded)
-                    {move || {
-                        let gp_id = game_plan_id.get();
-                        let dr_id = draft_id.get();
-                        let has_refs = !gp_id.is_empty() || !dr_id.is_empty();
-                        if has_refs {
-                            view! {
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    {if !gp_id.is_empty() {
-                                        view! {
-                                            <a href="/game-plan"
-                                               class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors">
-                                                <span class="text-accent">"Game Plan"</span>
-                                            </a>
-                                        }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }}
-                                    {move || {
-                                        let did = draft_id.get();
-                                        if did.is_empty() {
-                                            view! { <span></span> }.into_any()
-                                        } else {
-                                            view! {
-                                                <a
-                                                    href=format!("/draft?draft_id={did}")
-                                                    class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors"
-                                                >
-                                                    <span class="text-accent">"Draft"</span>
-                                                </a>
-                                            }.into_any()
-                                        }
-                                    }}
-                                </div>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }
-                    }}
-                    // Linking: match, game plan, draft
-                    <div class="bg-elevated border border-outline rounded-xl p-6">
-                        <h3 class="text-primary font-semibold text-sm mb-3">"Link to..."</h3>
-                        <div class="grid grid-cols-3 gap-4">
-                            // Match
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Match"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
-                                    {move || match_ids.get().map(|result| match result {
-                                        Ok(ids) => view! {
-                                            <select class=input_class()
-                                                prop:value=move || match_riot_id.get()
-                                                on:change=move |ev| set_match_riot_id.set(event_target_value(&ev))
-                                            >
-                                                <option value="">"None"</option>
-                                                {ids.into_iter().map(|id| {
-                                                    let label = if id.len() > 20 {
-                                                        format!("...{}", &id[id.len()-12..])
-                                                    } else {
-                                                        id.clone()
-                                                    };
-                                                    view! { <option value=id>{label}</option> }
-                                                }).collect_view()}
-                                            </select>
-                                        }.into_any(),
-                                        Err(_) => view! { <p class="text-dimmed text-xs">"No matches"</p> }.into_any(),
-                                    })}
-                                </Suspense>
-                            </div>
-                            // Game Plan
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Game Plan"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
-                                    {move || plans.get().map(|result| match result {
-                                        Ok(list) => view! {
-                                            <select class=input_class()
-                                                prop:value=move || game_plan_id.get()
-                                                on:change=move |ev| set_game_plan_id.set(event_target_value(&ev))
-                                            >
-                                                <option value="">"None"</option>
-                                                {list.into_iter().map(|p| {
-                                                    let id = p.id.clone().unwrap_or_default();
-                                                    let name = if p.name.is_empty() { "Untitled".to_string() } else { p.name };
-                                                    view! { <option value=id>{name}</option> }
-                                                }).collect_view()}
-                                            </select>
-                                        }.into_any(),
-                                        Err(_) => view! { <p class="text-dimmed text-xs">"No plans"</p> }.into_any(),
-                                    })}
-                                </Suspense>
-                            </div>
-                            // Draft
-                            <div>
-                                <label class="block text-muted text-xs font-medium mb-1">"Draft"</label>
-                                <Suspense fallback=|| view! { <div class="h-9 bg-overlay/50 rounded-lg animate-pulse"></div> }>
-                                    {move || drafts.get().map(|result| match result {
-                                        Ok(list) => view! {
-                                            <select class=input_class()
-                                                prop:value=move || draft_id.get()
-                                                on:change=move |ev| set_draft_id.set(event_target_value(&ev))
-                                            >
-                                                <option value="">"None"</option>
-                                                {list.into_iter().map(|d| {
-                                                    let id = d.id.clone().unwrap_or_default();
-                                                    let name = d.name.clone();
-                                                    view! { <option value=id>{name}</option> }
-                                                }).collect_view()}
-                                            </select>
-                                        }.into_any(),
-                                        Err(_) => view! { <p class="text-dimmed text-xs">"No drafts"</p> }.into_any(),
-                                    })}
-                                </Suspense>
-                            </div>
+                <div class="flex min-w-0 flex-col gap-12">
+                    <LinksSection ed=ed plans=plans drafts=drafts match_ids=match_ids />
+                    <OutcomeSection ed=ed />
+                    <section aria-labelledby="review-points-heading" class="flex flex-col gap-4">
+                        <SectionHeader title="What we learned" id="review-points-heading" />
+                        <div class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
+                            <Field id="review-well" label="What went well" hint="One point per line.">
+                                <TextField value=ed.went_well rows=7 placeholder="Dragon control around 14 minutes" />
+                            </Field>
+                            <Field id="review-improve" label="To improve" hint="One point per line; each new point also becomes an action item.">
+                                <TextField value=ed.improve rows=7 placeholder="Vision before Baron" />
+                            </Field>
+                            <Field id="review-actions" label="Action items" hint="Each line becomes an action item when you save.">
+                                <TextField value=ed.actions rows=7 placeholder="Drill Baron setups in Thursday scrims" />
+                            </Field>
                         </div>
-                    </div>
-
-                    // Linked game plan summary
-                    {move || {
-                        let gp_id = game_plan_id.get();
-                        if gp_id.is_empty() {
-                            None
-                        } else {
-                            Some(view! { <LinkedPlanCard plan_id=gp_id /> })
-                        }
-                    }}
-
-                    // Game Outcome and Plan Rating
-                    <div class="bg-elevated border border-outline rounded-xl p-6 flex flex-col gap-4">
-                        // Win/Loss selector
-                        <div class="flex flex-col gap-2">
-                            <span class="text-sm font-semibold text-primary">"Game Outcome"</span>
-                            <div class="flex gap-2">
-                                // None / unset button
-                                <button
-                                    type="button"
-                                    class=move || {
-                                        let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
-                                        if win_loss.get().is_none() {
-                                            format!("{base} bg-overlay text-muted")
-                                        } else {
-                                            format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
-                                        }
-                                    }
-                                    on:click=move |_| set_win_loss.set(None)
-                                >"---"</button>
-                                // Win button
-                                <button
-                                    type="button"
-                                    class=move || {
-                                        let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
-                                        if win_loss.get().as_deref() == Some("win") {
-                                            format!("{base} bg-emerald-500/20 text-emerald-400 border border-emerald-500/30")
-                                        } else {
-                                            format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
-                                        }
-                                    }
-                                    on:click=move |_| set_win_loss.set(Some("win".into()))
-                                >"Win"</button>
-                                // Loss button
-                                <button
-                                    type="button"
-                                    class=move || {
-                                        let base = "px-3 py-2 rounded-lg text-sm font-semibold transition-colors";
-                                        if win_loss.get().as_deref() == Some("loss") {
-                                            format!("{base} bg-red-500/20 text-red-400 border border-red-500/30")
-                                        } else {
-                                            format!("{base} bg-overlay/50 text-dimmed hover:text-primary")
-                                        }
-                                    }
-                                    on:click=move |_| set_win_loss.set(Some("loss".into()))
-                                >"Loss"</button>
-                            </div>
-
-                            // Fetch Result button (shown when no outcome set and a draft is linked)
-                            {move || {
-                                let wl = win_loss.get();
-                                let did = draft_id.get();
-                                if wl.is_none() && !did.is_empty() {
-                                    view! {
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-1 bg-surface border border-outline/50 text-muted text-xs rounded px-2 py-1 hover:text-primary hover:border-accent/50 transition-colors disabled:opacity-50"
-                                                on:click=move |_| {
-                                                    let did = draft_id.get_untracked();
-                                                    if did.is_empty() { return; }
-                                                    set_fetching.set(true);
-                                                    set_fetch_status.set(None);
-                                                    leptos::task::spawn_local(async move {
-                                                        match auto_detect_outcome(did).await {
-                                                            Ok(Some(result)) => {
-                                                                set_win_loss.set(Some(result));
-                                                                set_fetch_status.set(Some("detected".into()));
-                                                            }
-                                                            Ok(None) => {
-                                                                set_fetch_status.set(Some("Result not found \u{2014} select manually".into()));
-                                                            }
-                                                            Err(_) => {
-                                                                set_fetch_status.set(Some("Result not found \u{2014} select manually".into()));
-                                                            }
-                                                        }
-                                                        set_fetching.set(false);
-                                                    });
-                                                }
-                                                prop:disabled=move || fetching.get()
-                                            >
-                                                {move || if fetching.get() { "Fetching..." } else { "Fetch result" }}
-                                            </button>
-                                            {move || {
-                                                let status = fetch_status.get();
-                                                let wl = win_loss.get();
-                                                if let Some(s) = status {
-                                                    if s == "detected" {
-                                                        let cls = if wl.as_deref() == Some("win") {
-                                                            "text-emerald-400 text-xs"
-                                                        } else {
-                                                            "text-red-400 text-xs"
-                                                        };
-                                                        let label = if wl.as_deref() == Some("win") { "Win detected" } else { "Loss detected" };
-                                                        view! { <span class=cls>{label}</span> }.into_any()
-                                                    } else {
-                                                        view! { <span class="text-muted text-xs">{s}</span> }.into_any()
-                                                    }
-                                                } else {
-                                                    view! { <span></span> }.into_any()
-                                                }
-                                            }}
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }
-                            }}
-                        </div>
-
-                        // Star Rating input
-                        <div class="flex flex-col gap-1">
-                            <span class="text-sm font-semibold text-primary">"Plan Rating"</span>
-                            <span class="text-xs text-muted">"How well did the plan work?"</span>
-                            <div class="flex gap-1">
-                                {(1u8..=5).map(|n| {
-                                    view! {
-                                        <button
-                                            type="button"
-                                            class=move || {
-                                                if rating.get().is_some_and(|r| r >= n) {
-                                                    "text-accent text-xl hover:text-accent transition-colors"
-                                                } else {
-                                                    "text-dimmed text-xl hover:text-accent/70 transition-colors"
-                                                }
-                                            }
-                                            on:click=move |_| set_rating.set(Some(n))
-                                            aria-label=format!("Rate how well the plan worked: {} of 5 stars", n)
-                                        >
-                                            {move || if rating.get().is_some_and(|r| r >= n) { "\u{2605}" } else { "\u{2606}" }}
-                                        </button>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        </div>
-                    </div>
-
-                    // Structured feedback
-                    <div class="grid grid-cols-3 gap-4" data-feedback-label="Post game → Patterns">
-                        // What went well
-                        <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col gap-2">
-                            <label class="text-emerald-400 text-xs font-semibold uppercase tracking-wider">"What Went Well"</label>
-                            <textarea rows="8" class=textarea_class()
-                                placeholder="Good dragon control\nSupport roaming paid off\nStrong level 1 invade"
-                                prop:value=move || went_well.get()
-                                on:input=move |ev| set_went_well.set(event_target_value(&ev))
-                            />
-                        </div>
-
-                        // Improvements
-                        <div class="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex flex-col gap-2">
-                            <label class="text-amber-400 text-xs font-semibold uppercase tracking-wider">"Improvements Needed"</label>
-                            <textarea rows="8" class=textarea_class()
-                                placeholder="Ward coverage around Baron\nBetter grouping after towers\nMid-game macro decisions"
-                                prop:value=move || improvements.get()
-                                on:input=move |ev| set_improvements.set(event_target_value(&ev))
-                            />
-                        </div>
-
-                        // Action items
-                        <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex flex-col gap-2">
-                            <label class="text-blue-400 text-xs font-semibold uppercase tracking-wider">"Action Items"</label>
-                            <textarea rows="8" class=textarea_class()
-                                placeholder="Review VOD of teamfights\nPractice 2v2 bot lane\nDrill baron timings"
-                                prop:value=move || action_items.get()
-                                on:input=move |ev| set_action_items.set(event_target_value(&ev))
-                            />
-                        </div>
-                    </div>
-
-                    // Open notes
-                    <div class="bg-elevated border border-outline rounded-xl p-6">
-                        <label class="block text-muted text-xs font-medium mb-1">"Open Notes"</label>
-                        <textarea rows="4" class=textarea_class()
-                            placeholder="Any additional thoughts, observations, or context..."
-                            prop:value=move || open_notes.get()
-                            on:input=move |ev| set_open_notes.set(event_target_value(&ev))
-                        />
-                    </div>
-
-                    // Save buttons
-                    <div class="flex gap-3 items-center">
-                        <button
-                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-6 py-2 text-sm transition-colors"
-                            on:click=do_save
-                        >
-                            {move || if editing_id.get().is_some() { "Update Review" } else { "Save Review" }}
-                        </button>
-                        <button
-                            class="bg-overlay hover:bg-overlay-strong text-secondary rounded-lg px-4 py-2 text-sm transition-colors"
-                            on:click=move |_| clear_editor()
-                        >"Clear"</button>
-                    </div>
+                        <Field id="review-notes" label="Notes">
+                            <TextField value=ed.notes rows=4 placeholder="Context the points above do not cover." />
+                        </Field>
+                    </section>
                 </div>
             </div>
-            </Card>
-            </div>
-        </div>
+        </PageShell>
     }
 }
 
-// ---------------------------------------------------------------------------
-// Linked game plan summary card
-// ---------------------------------------------------------------------------
-
+/// Links to the match, the game plan and the draft, plus the plan summary.
 #[component]
-fn LinkedPlanCard(plan_id: String) -> impl IntoView {
-    let pid = plan_id.clone();
-    let linked_plan = Resource::new(move || pid.clone(), get_linked_plan);
-
+fn LinksSection(
+    ed: ReviewEd,
+    plans: Resource<Result<Vec<GamePlan>, ServerFnError>>,
+    drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
+    match_ids: Resource<Result<Vec<String>, ServerFnError>>,
+) -> impl IntoView {
     view! {
-        <Suspense fallback=|| view! { <SkeletonCard height="h-16" /> }>
-            {move || linked_plan.get().map(|result| match result {
-                Ok(Some(plan)) => {
-                    let name = if plan.name.is_empty() { "Untitled Plan".to_string() } else { plan.name.clone() };
-                    let our_champs = plan.our_champions.clone();
-                    let enemy_champs = plan.enemy_champions.clone();
-                    let win_conds = plan.win_conditions.clone();
-                    let teamfight = plan.teamfight_strategy.clone();
-                    let top = plan.top_strategy.clone();
-                    let jg = plan.jungle_strategy.clone();
-                    let mid = plan.mid_strategy.clone();
-                    let bot = plan.bot_strategy.clone();
-                    let sup = plan.support_strategy.clone();
+        <section aria-labelledby="review-links-heading" class="flex flex-col gap-4">
+            <SectionHeader title="Game" id="review-links-heading" />
+            <div class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
+                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                    {move || match_ids.get().map(|r| {
+                        let ids = r.unwrap_or_default();
+                        let hint = if ids.is_empty() { "Synced team matches appear here." } else { "From your team's synced matches." };
+                        let mut opts = vec![SelectOption::new("", "No match")];
+                        opts.extend(ids.into_iter().map(|id| { let l = match_label(&id); SelectOption::new(id, l) }));
+                        view! { <Field id="review-match" label="Match" hint=hint><Select value=ed.match_id options=opts /></Field> }
+                    })}
+                </Suspense>
+                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                    {move || plans.get().map(|r| {
+                        let mut opts = vec![SelectOption::new("", "No game plan")];
+                        opts.extend(r.unwrap_or_default().into_iter().map(|p| {
+                            let n = if p.name.trim().is_empty() { "Untitled plan".to_string() } else { p.name };
+                            SelectOption::new(p.id.unwrap_or_default(), n)
+                        }));
+                        view! { <Field id="review-plan" label="Game plan"><Select value=ed.plan_id options=opts /></Field> }
+                    })}
+                </Suspense>
+                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                    {move || drafts.get().map(|r| {
+                        let mut opts = vec![SelectOption::new("", "No draft")];
+                        opts.extend(r.unwrap_or_default().into_iter().map(|d| SelectOption::new(d.id.unwrap_or_default(), d.name)));
+                        view! { <Field id="review-draft" label="Draft"><Select value=ed.draft_id options=opts /></Field> }
+                    })}
+                </Suspense>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {move || { let p = ed.plan_id.get(); (!p.is_empty()).then(|| view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=format!("/game-plan?plan_id={p}")>"Open the game plan"</Button> }) }}
+                {move || { let d = ed.draft_id.get(); (!d.is_empty()).then(|| view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=format!("/draft?draft_id={d}")>"Open the draft"</Button> }) }}
+            </div>
+            {move || {
+                let pid = ed.plan_id.get();
+                (!pid.is_empty()).then(|| view! { <LinkedPlan plan_id=pid /> })
+            }}
+        </section>
+    }
+}
 
+/// Win or loss, the Riot lookup, and how well the plan worked.
+#[component]
+fn OutcomeSection(ed: ReviewEd) -> impl IntoView {
+    let fetching = RwSignal::new(false);
+    let status = RwSignal::new(None::<String>);
+    let fetch = Callback::new(move |_: leptos::ev::MouseEvent| {
+        let did = ed.draft_id.get_untracked();
+        if did.is_empty() {
+            return;
+        }
+        fetching.set(true);
+        status.set(None);
+        leptos::task::spawn_local(async move {
+            match auto_detect_outcome(did).await {
+                Ok(Some(r)) => {
+                    let word = if r == "win" { "a win" } else { "a loss" };
+                    ed.outcome.set(r);
+                    status.set(Some(format!("Found {word} with one of the draft's picks in your recent games.")));
+                }
+                Ok(None) => status.set(Some("No recent game of yours matches the draft's picks (or no Riot account is linked). Set the result yourself.".into())),
+                Err(e) => status.set(Some(format!("The lookup failed: {e}. Set the result yourself."))),
+            }
+            fetching.set(false);
+        });
+    });
+    view! {
+        <section aria-labelledby="review-outcome-heading" class="flex flex-col gap-4">
+            <SectionHeader title="Result" id="review-outcome-heading" />
+            <div class="flex flex-wrap items-end gap-x-10 gap-y-4">
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-label font-medium text-secondary">"Outcome"</span>
+                    <div>
+                        <SegmentedControl
+                            id="review-outcome"
+                            label="Outcome"
+                            options=vec![Segment::new("", "Not set"), Segment::new("win", "Win"), Segment::new("loss", "Loss")]
+                            value=ed.outcome
+                        />
+                    </div>
+                </div>
+                <div class="w-48">
+                    <Field id="review-rating" label="How well did the plan work?">
+                        <Select value=ed.rating options={
+                            let mut o = vec![SelectOption::new("", "Not rated")];
+                            o.extend((1..=5).map(|i| SelectOption::new(i.to_string(), format!("{i} of 5"))));
+                            o
+                        } />
+                    </Field>
+                </div>
+            </div>
+            {move || (ed.outcome.get().is_empty() && !ed.draft_id.get().is_empty()).then(|| view! {
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button size=ButtonSize::Sm on_click=fetch loading=Signal::derive(move || fetching.get())>"Look up the result"</Button>
+                    <span class="text-caption text-muted">"Checks your recent ranked games for one of the draft's picks (uses the Riot request budget)."</span>
+                </div>
+            })}
+            {move || status.get().map(|s| view! { <p class="text-label text-secondary" role="status">{s}</p> })}
+        </section>
+    }
+}
+
+/// Recurring points across reviews (two or more mentions).
+#[component]
+fn PatternsSection(
+    reviews: Resource<Result<Vec<PostGameLearning>, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <section aria-labelledby="patterns-heading" class="flex flex-col gap-3">
+            <SectionHeader title="Patterns" id="patterns-heading" />
+            <Suspense fallback=|| ()>
+                {move || reviews.get().map(|r| {
+                    let list = r.unwrap_or_default();
+                    let (good, bad) = analyze_patterns(&list);
+                    if good.is_empty() && bad.is_empty() {
+                        return view! {
+                            <EmptyState size=EmptySize::Compact message="A point that shows up in two or more reviews appears here, as a strength or a recurring issue." />
+                        }.into_any();
+                    }
+                    let block = |title: &'static str, rows: Vec<(String, usize)>| (!rows.is_empty()).then(|| view! {
+                        <div class="flex flex-col gap-1">
+                            <h3 class="eyebrow">{title}</h3>
+                            <ul class="flex flex-col">
+                                {rows.into_iter().map(|(t, n)| view! {
+                                    <li class="flex items-baseline justify-between gap-2 border-b border-rule py-1.5 last:border-b-0">
+                                        <span class="min-w-0 truncate text-label text-primary">{t}</span>
+                                        <span class="figures shrink-0 text-caption text-muted">{format!("{n} reviews")}</span>
+                                    </li>
+                                }).collect_view()}
+                            </ul>
+                        </div>
+                    });
                     view! {
-                        <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex flex-col gap-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-blue-400 text-xs font-semibold uppercase tracking-wider">"Game Plan Summary"</span>
-                                <span class="text-primary text-sm font-medium">{name}</span>
-                            </div>
-
-                            // Champions
-                            {(!our_champs.is_empty() || !enemy_champs.is_empty()).then(|| {
-                                let ours = our_champs.join(", ");
-                                let theirs = enemy_champs.join(", ");
-                                view! {
-                                    <div class="grid grid-cols-[1fr_auto_1fr] gap-2 text-xs">
-                                        <div>
-                                            <span class="text-blue-400 font-medium">"Our Team: "</span>
-                                            <span class="text-secondary">{ours}</span>
-                                        </div>
-                                        <span class="text-dimmed">"vs"</span>
-                                        <div>
-                                            <span class="text-red-400 font-medium">"Enemy: "</span>
-                                            <span class="text-secondary">{theirs}</span>
-                                        </div>
-                                    </div>
-                                }
-                            })}
-
-                            // Win conditions
-                            {(!win_conds.is_empty()).then(|| {
-                                view! {
-                                    <div class="text-xs">
-                                        <span class="text-muted font-medium">"Win Conditions: "</span>
-                                        <span class="text-secondary">{win_conds.join(" | ")}</span>
-                                    </div>
-                                }
-                            })}
-
-                            // Teamfight
-                            {(!teamfight.is_empty()).then(|| {
-                                view! {
-                                    <div class="text-xs">
-                                        <span class="text-muted font-medium">"Teamfight: "</span>
-                                        <span class="text-secondary">{teamfight}</span>
-                                    </div>
-                                }
-                            })}
-
-                            // Role strategies (compact)
-                            {
-                                let roles = vec![
-                                    ("Top", top),
-                                    ("Jg", jg),
-                                    ("Mid", mid),
-                                    ("Bot", bot),
-                                    ("Sup", sup),
-                                ];
-                                let has_any = roles.iter().any(|(_, s)| s.is_some());
-                                has_any.then(|| {
-                                    view! {
-                                        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                                            {roles.into_iter().filter_map(|(role, strat)| {
-                                                strat.map(|s| view! {
-                                                    <div>
-                                                        <span class="text-accent font-medium">{role}": "</span>
-                                                        <span class="text-secondary">{s}</span>
-                                                    </div>
-                                                })
-                                            }).collect_view()}
-                                        </div>
-                                    }
-                                })
-                            }
+                        <div class="flex flex-col gap-4">
+                            {block("Strengths", good)}
+                            {block("Recurring issues", bad)}
                         </div>
                     }.into_any()
-                },
-                Ok(None) => view! {
-                    <div class="text-dimmed text-xs py-1">"Linked plan not found."</div>
-                }.into_any(),
-                Err(e) => view! {
-                    <div class="text-red-400 text-xs py-1">{format!("Error loading plan: {e}")}</div>
-                }.into_any(),
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+/// What the linked plan said, to review against.
+#[component]
+fn LinkedPlan(plan_id: String) -> impl IntoView {
+    let plan = Resource::new(move || plan_id.clone(), get_linked_plan);
+    view! {
+        <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Line lines=3 /> }>
+            {move || plan.get().map(|r| match r {
+                Ok(Some(p)) => {
+                    let roles = [
+                        (Role::Top, p.top_strategy.clone()),
+                        (Role::Jungle, p.jungle_strategy.clone()),
+                        (Role::Mid, p.mid_strategy.clone()),
+                        (Role::Bot, p.bot_strategy.clone()),
+                        (Role::Support, p.support_strategy.clone()),
+                    ];
+                    view! {
+                        <div class="flex flex-col gap-2 border-t border-rule pt-3" data-testid="linked-plan">
+                            <p class="eyebrow">"What the plan said"</p>
+                            {(!p.win_conditions.is_empty()).then(|| view! {
+                                <p class="text-label text-secondary"><span class="font-medium text-primary">"Win conditions: "</span>{p.win_conditions.join("; ")}</p>
+                            })}
+                            {(!p.teamfight_strategy.is_empty()).then(|| view! {
+                                <p class="text-label text-secondary"><span class="font-medium text-primary">"Teamfights: "</span>{p.teamfight_strategy.clone()}</p>
+                            })}
+                            <ul class="flex flex-col gap-0.5">
+                                {roles.into_iter().filter_map(|(role, s)| s.map(|s| view! {
+                                    <li class="flex gap-2 text-label text-secondary"><RoleLabel role=role /><span>{s}</span></li>
+                                })).collect_view()}
+                            </ul>
+                        </div>
+                    }.into_any()
+                }
+                Ok(None) => view! { <p class="text-label text-muted">"The linked plan no longer exists."</p> }.into_any(),
+                Err(_) => view! { <p class="text-label text-muted">"The linked plan did not load."</p> }.into_any(),
             })}
         </Suspense>
     }

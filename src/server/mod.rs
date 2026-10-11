@@ -4,12 +4,12 @@ pub mod bug_report_export;
 pub mod config;
 pub mod data_dragon;
 pub mod db;
+pub mod images;
 pub mod migrations;
 pub mod rate_limit;
 pub mod riot;
 pub mod sand_table;
 pub mod session_store;
-pub mod theme_layer;
 
 #[cfg(test)]
 pub mod test_helpers;

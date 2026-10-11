@@ -62,9 +62,10 @@ async fn snapshots_persist_and_patch_changes_are_recorded() {
         Some("90.2.1")
     );
     let champs = data_dragon::champions().await.unwrap();
-    assert!(champs[0].image_full.contains("/cdn/90.2.1/img/champion/"));
+    assert!(champs[0].image_full.starts_with("/img/champion/"));
+    assert!(champs[0].image_full.ends_with("/icon?v=90.2.1"));
     assert_eq!(
         lol_team_companion::models::ddragon::champion_icon_url("Ahri"),
-        "https://ddragon.leagueoflegends.com/cdn/90.2.1/img/champion/Ahri.png"
+        "/img/champion/Ahri/icon?v=90.2.1"
     );
 }

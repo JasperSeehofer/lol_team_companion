@@ -222,6 +222,41 @@ async fn review_and_its_action_items_are_written_together() {
     );
     assert_eq!(db::list_action_items(&d, &t).await.unwrap().len(), 3);
 
+    // Action item lines become items too (an open duplicate is skipped).
+    let mut edit = review(&t, &u, &["Ward river", "Respect timers"]);
+    edit.id = Some(id.clone());
+    edit.action_items = vec!["Drill Baron setups".into(), "respect timers".into()];
+    assert_eq!(
+        db::update_review_with_action_items(&d, &t, edit)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(db::list_action_items(&d, &t).await.unwrap().len(), 4);
+
+    // Saving again does not bring back an item of this review that is done.
+    let drill = db::list_action_items(&d, &t)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|i| i.text == "Drill Baron setups")
+        .and_then(|i| i.id)
+        .unwrap();
+    db::update_action_item_status(&d, &t, &drill, "done".into())
+        .await
+        .unwrap();
+    let mut again = review(&t, &u, &["Ward river", "Respect timers"]);
+    again.id = Some(id.clone());
+    again.action_items = vec!["Drill Baron setups".into()];
+    assert_eq!(
+        db::update_review_with_action_items(&d, &t, again)
+            .await
+            .unwrap(),
+        0,
+        "a done item of the same review is not recreated"
+    );
+    assert_eq!(db::list_action_items(&d, &t).await.unwrap().len(), 4);
+
     // A failing action item rolls back the review.
     forbid(&d, "action_item", "text", "BOOM").await;
     assert!(
@@ -230,7 +265,7 @@ async fn review_and_its_action_items_are_written_together() {
             .is_err()
     );
     assert_eq!(count(&d, "post_game_learning").await, 1);
-    assert_eq!(count(&d, "action_item").await, 3);
+    assert_eq!(count(&d, "action_item").await, 4);
 }
 
 #[tokio::test]

@@ -69,6 +69,9 @@ jobs:
       E2E_INVITE_CODE: E2E-INVITE-CODE
       RATE_LIMIT_MULTIPLIER: "100"
       ADMIN_EMAILS: e2e-admin@test.invalid
+      # The server runs in production mode: gallery.spec.ts asserts that
+      # /design is a 404 for visitors and non-admins.
+      E2E_EXPECT_PRODUCTION: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -109,7 +112,7 @@ jobs:
 
       - name: Playwright smoke, hydration gate, auth and admin
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts --retries=1
 
       - name: Server log
         if: always()
@@ -126,15 +129,11 @@ jobs:
           retention-days: 7
 
   style_guardrails:
-    name: Style Guardrails (G-01 / G-12 / raw-hex)
+    name: Style guardrails (G-01, design lint)
     runs-on: ubuntu-latest
-    # Plan 17-01 task 12: Wave 0 enforcement. G-01 and raw-hex are HARD
-    # gates from day one (Phase 17 brought the codebase into compliance).
-    # G-12 is enforced in scope: only files touched by Phase 17 plans
-    # (nav.rs, theme_toggle.rs, ornaments.rs, icon.rs) must be clean.
-    # Pre-existing form inputs across the codebase use the legacy
-    # `focus:outline-none focus:border-accent` pattern; their migration
-    # is tracked in the M2 design-system migration and lands in the hub plans (02-04).
+    # G-01 (no font CDN) is a hard gate. scripts/lint_design.sh enforces the
+    # design-system rules (docs/DESIGN.md section 9) over all of src/: every
+    # rule is hard zero, and a grep error fails the job too.
     steps:
       - uses: actions/checkout@v4
 
@@ -152,41 +151,5 @@ jobs:
             exit 1
           fi
 
-      - name: G-12 — No outline:none without ring replacement (Phase 17 scope)
-        run: |
-          # Phase 17 in-scope files only. Pre-existing violations in form
-          # inputs are tracked in the M2 design-system migration and migrated by hub plans.
-          PHASE_17_FILES="src/components/nav.rs src/components/footer.rs src/components/region/ornaments.rs src/components/icon.rs"
-          set +e
-          HITS=$(grep -nE "outline\s*:\s*none|outline-none" $PHASE_17_FILES 2>/dev/null)
-          set -e
-          if [ -n "$HITS" ]; then
-            echo "$HITS" | while IFS= read -r line; do
-              file=$(echo "$line" | cut -d: -f1)
-              lineno=$(echo "$line" | cut -d: -f2)
-              start=$((lineno > 2 ? lineno - 1 : 1))
-              end=$((lineno + 3))
-              context=$(sed -n "${start},${end}p" "$file")
-              if ! echo "$context" | grep -qE "focus-visible:ring|focus-visible:outline"; then
-                echo "::error file=$file,line=$lineno::G-12 violation — outline:none without focus-visible:ring"
-                exit 1
-              fi
-            done
-          fi
-
-      - name: Raw-hex in Phase 17 components (excluding theme blocks)
-        run: |
-          # Theme blocks in input.css are ALLOWED to have raw hex (canonical
-          # token source). The Phase 17 ornament components reference
-          # var(--color-*) only. Pre-existing components migrate in hub plans.
-          PHASE_17_FILES="src/components/nav.rs src/components/footer.rs src/components/region/ornaments.rs src/components/icon.rs src/pages/closed_beta.rs src/pages/admin/invites.rs src/pages/legal/impressum.rs src/pages/legal/datenschutz.rs"
-          set +e
-          HITS=$(grep -nE "#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b" $PHASE_17_FILES 2>/dev/null \
-            | grep -v "^[^:]*://" \
-            | grep -v ":\s*//")
-          set -e
-          if [ -n "$HITS" ]; then
-            echo "::error::Raw hex found in Phase 17 components — use semantic tokens"
-            echo "$HITS"
-            exit 1
-          fi
+      - name: Design lint (palette, sub-12px text, radius, blur, gradients, ornaments, emoji, theme branching, G-12, hex)
+        run: ./scripts/lint_design.sh

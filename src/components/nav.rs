@@ -1,8 +1,10 @@
 use leptos::prelude::*;
 use leptos_router::{components::A, hooks::use_location};
 
-use crate::app::InitialTheme;
-use crate::components::region::CompanionSigil;
+use crate::components::ui::{
+    AvatarSize, Button, ButtonSize, ButtonVariant, Command, CommandBar, Menu, MenuAlign, MenuItem,
+    Segment, SegmentSize, SegmentedControl, UserAvatar,
+};
 use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};
 use crate::pages::team::dashboard::handle_join_request;
@@ -19,68 +21,66 @@ pub async fn set_user_mode(mode: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
+/// The Solo / Team workspace switch in the nav.
 #[component]
 pub fn ModeToggle(mode: String) -> impl IntoView {
-    let current_mode = RwSignal::new(mode);
-
-    let on_click_solo = move |_| {
-        let m = current_mode.get_untracked();
-        if m == "solo" {
-            return;
-        }
-        current_mode.set("solo".to_string());
+    let value = RwSignal::new(mode);
+    let on_change = Callback::new(move |m: String| {
         leptos::task::spawn_local(async move {
-            let _ = set_user_mode("solo".to_string()).await;
+            let _ = set_user_mode(m).await;
             #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
                 let _ = window.location().reload();
             }
         });
-    };
-
-    let on_click_team = move |_| {
-        let m = current_mode.get_untracked();
-        if m == "team" {
-            return;
-        }
-        current_mode.set("team".to_string());
-        leptos::task::spawn_local(async move {
-            let _ = set_user_mode("team".to_string()).await;
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().reload();
-            }
-        });
-    };
-
+    });
+    // Shown at every width: on phones it is the only way to switch.
     view! {
-        <div class="bg-elevated rounded-lg p-0.5 flex">
-            <button
-                class=move || {
-                    if current_mode.get() == "solo" {
-                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    } else {
-                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    }
-                }
-                on:click=on_click_solo
-            >
-                "Solo"
-            </button>
-            <button
-                class=move || {
-                    if current_mode.get() == "team" {
-                        "bg-accent text-accent-contrast font-semibold px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    } else {
-                        "text-muted hover:text-secondary px-3 py-1 text-sm rounded-md cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    }
-                }
-                on:click=on_click_team
-            >
-                "Team"
-            </button>
-        </div>
+        <SegmentedControl
+            id="workspace"
+            label="Workspace"
+            options=vec![Segment::new("solo", "Solo"), Segment::new("team", "Team")]
+            value=value
+            size=SegmentSize::Sm
+            on_change=on_change
+            // Switching saves the mode and reloads: arrows only move focus.
+            manual=true
+        />
     }
+}
+
+/// Every page the command bar can jump to: the hub routes plus home.
+fn route_commands(is_admin: bool) -> Vec<Command> {
+    let mut out = vec![Command::go("Home", "/").hint("Companion")];
+    for (hub, routes) in HUB_ROUTES {
+        let hint = match *hub {
+            "strategy" => "Strategy",
+            "history" => "History",
+            _ => "Profile",
+        };
+        for (path, label) in routes.iter() {
+            let words = match *path {
+                "/draft" => "pick ban picks bans",
+                "/tree-drafter" => "tree branches draft",
+                "/champion-pool" => "pool champions tiers",
+                "/post-game" => "review debrief",
+                "/opponents" => "scouting dossier enemy",
+                "/stats" => "matches games history",
+                "/team/roster" => "members players join",
+                _ => "",
+            };
+            out.push(Command::go(*label, *path).hint(hint).keywords(words));
+        }
+    }
+    if is_admin {
+        out.push(Command::go("Invites", "/admin/invites").hint("Admin"));
+        out.push(
+            Command::go("Design system", "/design")
+                .hint("Admin")
+                .keywords("gallery primitives tokens"),
+        );
+    }
+    out
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
@@ -204,24 +204,35 @@ fn hub_for_path(path: &str) -> &'static str {
     }
 }
 
+/// Classes for a primary hub link.
+fn hub_class(active: bool) -> &'static str {
+    if active {
+        "flex h-12 items-center border-b-2 border-secondary px-0.5 text-label font-semibold text-primary"
+    } else {
+        "flex h-12 items-center border-b-2 border-transparent px-0.5 text-label text-muted transition-colors hover:text-primary"
+    }
+}
+
+/// Classes for a sub-navigation link.
+fn sub_class(active: bool) -> &'static str {
+    if active {
+        "flex h-10 items-center whitespace-nowrap border-b-2 border-accent text-label font-medium text-primary"
+    } else {
+        "flex h-10 items-center whitespace-nowrap border-b-2 border-transparent text-label text-muted transition-colors hover:text-primary"
+    }
+}
+
 #[component]
 pub fn Nav() -> impl IntoView {
-    // Phase 18.2-03 — read region ONCE at shell entry and pass it to
-    // CompanionSigil as a prop. The InitialTheme context is provided
-    // SSR-side only; props serialize across the SSR→WASM boundary and
-    // ensure hydration sees the same value the server rendered.
-    let region = use_context::<InitialTheme>().unwrap_or_default().0;
-
     let logout_action = ServerAction::<Logout>::new();
-    let menu_open = RwSignal::new(false);
     let notif_open = RwSignal::new(false);
+    let command_open = RwSignal::new(false);
 
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
     let notifications = Resource::new(|| (), |_| get_notifications());
 
     let close_all = move || {
-        menu_open.set(false);
         notif_open.set(false);
     };
 
@@ -235,7 +246,7 @@ pub fn Nav() -> impl IntoView {
         }
     });
 
-    // Escape key listener to close all dropdowns
+    // Escape closes any open dropdown.
     #[cfg(feature = "hydrate")]
     {
         let close_all_esc = close_all;
@@ -257,56 +268,45 @@ pub fn Nav() -> impl IntoView {
         });
     }
 
-    let any_dropdown_open = move || menu_open.get() || notif_open.get();
+    let any_dropdown_open = move || notif_open.get();
 
-    // Reactive hub derivation from current URL path.
     let location = use_location();
     let active_hub = Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
 
-    // Primary hub buttons.
-    let hub_btn_class = move |hub_id: &'static str| -> Memo<String> {
-        Memo::new(move |_| {
-            let active = active_hub.get() == hub_id;
-            let base = "px-4 py-2 rounded-md font-imperial text-[10px] uppercase tracking-[0.18em] transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
-            if active {
-                format!("{base} bg-accent text-accent-contrast font-semibold cursor-pointer")
-            } else {
-                format!("{base} text-muted hover:text-secondary cursor-pointer")
-            }
-        })
-    };
-
-    let strategy_btn_cls = hub_btn_class("strategy");
-    let history_btn_cls = hub_btn_class("history");
-    let profile_btn_cls = hub_btn_class("profile");
-
     view! {
-        <header class="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-divider">
-            <div class="max-w-7xl mx-auto px-4 sm:px-8">
-                // ── Top row: Sigil · Hubs · Notifications · Theme · User ──
-                <div class="flex items-center gap-7 h-14">
-                    // Sigil → home
-                    <A href="/" attr:class="flex items-center shrink-0 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
-                        <CompanionSigil region=region.clone() />
+        <header class="sticky top-0 z-(--z-nav) border-b border-rule bg-ink-1">
+            <div class="mx-auto max-w-7xl px-4 sm:px-8">
+                <div class="flex h-12 items-center gap-6">
+                    <A href="/" attr:class="shrink-0 font-display text-reading font-bold tracking-[-0.01em] text-primary">
+                        "Companion"
                     </A>
 
-                    // Primary hubs
-                    <nav class="hidden md:flex items-center gap-1" aria-label="Primary">
-                        <A href="/draft" attr:class=move || strategy_btn_cls.get()>
+                    <nav class="hidden md:flex items-center gap-5" aria-label="Primary">
+                        <A
+                            href="/draft"
+                            attr:class=move || hub_class(active_hub.get() == "strategy")
+                            attr:aria-current=move || (active_hub.get() == "strategy").then_some("true")
+                        >
                             "Strategy"
                         </A>
-                        <A href="/stats" attr:class=move || history_btn_cls.get()>
+                        <A
+                            href="/stats"
+                            attr:class=move || hub_class(active_hub.get() == "history")
+                            attr:aria-current=move || (active_hub.get() == "history").then_some("true")
+                        >
                             "History"
                         </A>
-                        <A href="/profile" attr:class=move || profile_btn_cls.get()>
+                        <A
+                            href="/profile"
+                            attr:class=move || hub_class(active_hub.get() == "profile")
+                            attr:aria-current=move || (active_hub.get() == "profile").then_some("true")
+                        >
                             "Profile"
                         </A>
                     </nav>
 
                     <div class="flex-1" />
 
-                    // Right cluster: ModeToggle (auth-only) · Notifications · User menu
-                    // (Release 1 ships a single theme, so there is no theme toggle.)
                     <div class="flex items-center gap-3">
                         <Suspense fallback=|| ()>
                             {move || Suspend::new(async move {
@@ -317,86 +317,71 @@ pub fn Nav() -> impl IntoView {
                             })}
                         </Suspense>
 
-                        // Notifications bell (unchanged from previous nav, focus-visible added)
+                        // Join requests waiting for the team leader.
                         <Suspense fallback=|| ()>
                             {move || {
                                 let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
                                 let count = notifs.pending_requests.len();
                                 if count == 0 {
-                                    return view! { <span></span> }.into_any();
+                                    return ().into_any();
                                 }
                                 let reqs = notifs.pending_requests;
                                 view! {
                                     <div class="relative">
                                         <button
+                                            type="button"
                                             on:click=move |_| {
                                                 notif_open.update(|v| *v = !*v);
-                                                menu_open.set(false);
                                             }
-                                            class="relative text-muted hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-elevated cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                            aria-label="Notifications"
+                                            class="relative inline-flex h-8 items-center gap-2 rounded-ctl px-2 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary cursor-pointer"
+                                            aria-expanded=move || notif_open.get().to_string()
+                                            aria-label=format!("Notifications: {count} join request(s)")
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                             </svg>
-                                            <span class="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none">
+                                            <span class="figures inline-grid h-5 min-w-5 place-items-center rounded-ctl bg-accent px-1 text-caption font-semibold text-accent-ink">
                                                 {count}
                                             </span>
                                         </button>
 
                                         <div
-                                            class="absolute right-0 mt-2 w-80 bg-elevated border border-divider rounded-xl shadow-xl overflow-hidden z-[60]"
+                                            class="absolute right-0 mt-2 w-80 overflow-hidden rounded-ctl border border-rule bg-ink-2 shadow-overlay z-(--z-popover)"
                                             style:display=move || if notif_open.get() { "block" } else { "none" }
                                         >
-                                            <div class="px-4 py-3 border-b border-divider">
-                                                <span class="text-primary text-sm font-semibold">"Notifications"</span>
-                                            </div>
+                                            <p class="border-b border-rule px-4 py-3 eyebrow">"Join requests"</p>
                                             <div class="max-h-64 overflow-y-auto">
                                                 {reqs.into_iter().map(|req| {
                                                     let req_id_accept = req.id.clone();
                                                     let req_id_decline = req.id.clone();
+                                                    let accept = Callback::new(move |_| {
+                                                        let id = req_id_accept.clone();
+                                                        leptos::task::spawn_local(async move {
+                                                            let _ = handle_join_request(id, true).await;
+                                                            notifications.refetch();
+                                                        });
+                                                        notif_open.set(false);
+                                                    });
+                                                    let decline = Callback::new(move |_| {
+                                                        let id = req_id_decline.clone();
+                                                        leptos::task::spawn_local(async move {
+                                                            let _ = handle_join_request(id, false).await;
+                                                            notifications.refetch();
+                                                        });
+                                                        notif_open.set(false);
+                                                    });
                                                     view! {
-                                                        <div class="px-4 py-3 border-b border-divider/50 flex items-center justify-between gap-2">
+                                                        <div class="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
                                                             <div class="min-w-0">
-                                                                <p class="text-primary text-sm font-medium truncate">{req.username}</p>
+                                                                <p class="truncate text-body font-medium text-primary">{req.username}</p>
                                                                 {req.riot_summoner_name.map(|n| view! {
-                                                                    <p class="text-muted text-xs truncate">{n}</p>
+                                                                    <p class="truncate text-caption text-muted">{n}</p>
                                                                 })}
-                                                                <p class="text-dimmed text-xs">"Wants to join"</p>
+                                                                <p class="text-caption text-muted">"Wants to join"</p>
                                                             </div>
-                                                            <div class="flex gap-1.5 flex-shrink-0">
-                                                                <button
-                                                                    class="bg-green-700 hover:bg-green-600 text-white text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                                    title="Accept"
-                                                                    on:click=move |_| {
-                                                                        let id = req_id_accept.clone();
-                                                                        leptos::task::spawn_local(async move {
-                                                                            let _ = handle_join_request(id, true).await;
-                                                                            notifications.refetch();
-                                                                        });
-                                                                        notif_open.set(false);
-                                                                    }
-                                                                >
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                                                                    </svg>
-                                                                </button>
-                                                                <button
-                                                                    class="bg-overlay-strong hover:bg-red-700 text-secondary hover:text-primary text-xs font-medium rounded px-2 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                                    title="Decline"
-                                                                    on:click=move |_| {
-                                                                        let id = req_id_decline.clone();
-                                                                        leptos::task::spawn_local(async move {
-                                                                            let _ = handle_join_request(id, false).await;
-                                                                            notifications.refetch();
-                                                                        });
-                                                                        notif_open.set(false);
-                                                                    }
-                                                                >
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                                                    </svg>
-                                                                </button>
+                                                            <div class="flex shrink-0 gap-1.5">
+                                                                <Button size=ButtonSize::Sm on_click=accept>"Accept"</Button>
+                                                                <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=decline>"Decline"</Button>
                                                             </div>
                                                         </div>
                                                     }
@@ -404,10 +389,10 @@ pub fn Nav() -> impl IntoView {
                                             </div>
                                             <A
                                                 href="/team/dashboard"
-                                                attr:class="block px-4 py-2.5 text-center text-muted hover:text-primary text-xs transition-colors"
+                                                attr:class="block px-4 py-2.5 text-center text-label text-muted transition-colors hover:text-primary"
                                                 on:click=move |_| notif_open.set(false)
                                             >
-                                                "View all on Team Dashboard"
+                                                "View all on the team dashboard"
                                             </A>
                                         </div>
                                     </div>
@@ -415,91 +400,86 @@ pub fn Nav() -> impl IntoView {
                             }}
                         </Suspense>
 
-                        // User menu / sign-in
-                        <div class="relative text-sm">
-                            <Suspense fallback=move || view! {
-                                <span class="text-dimmed text-sm">"..."</span>
-                            }>
-                                {move || Suspend::new(async move {
-                                    match user.await {
-                                        Ok(Some(u)) => view! {
+                        // Command bar trigger, user menu, or sign-in links.
+                        <Suspense fallback=move || view! {
+                            <span class="text-label text-muted">"\u{2026}"</span>
+                        }>
+                            {move || Suspend::new(async move {
+                                match user.await {
+                                    Ok(Some(u)) => {
+                                        let name = u.username.clone();
+                                        let name_for_trigger = StoredValue::new(name.clone());
+                                        let mut items = vec![
+                                            MenuItem::link("profile", "Profile", "/profile"),
+                                            MenuItem::link("pool", "Champion pool", "/champion-pool"),
+                                        ];
+                                        // Admin links only for admins; the pages check on the server too.
+                                        if u.is_admin {
+                                            items.push(MenuItem::link("invites", "Invites", "/admin/invites"));
+                                            items.push(MenuItem::link("design", "Design system", "/design"));
+                                        }
+                                        items.push(MenuItem::new("sign-out", "Sign out").danger());
+                                        let on_select = Callback::new(move |id: String| {
+                                            if id == "sign-out" {
+                                                logout_action.dispatch(Logout {});
+                                            }
+                                        });
+                                        let commands = route_commands(u.is_admin);
+                                        view! {
                                             <button
-                                                on:click=move |_| {
-                                                    menu_open.update(|v| *v = !*v);
-                                                    notif_open.set(false);
-                                                }
-                                                class="flex items-center gap-2 text-secondary hover:text-primary transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-elevated focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                type="button"
+                                                class="inline-flex h-8 cursor-pointer items-center gap-2 rounded-ctl border border-rule px-2 text-label text-muted transition-colors hover:border-outline hover:text-primary"
+                                                aria-keyshortcuts="Control+K Meta+K"
+                                                aria-haspopup="dialog"
+                                                data-testid="command-trigger"
+                                                on:click=move |_| command_open.set(true)
                                             >
-                                                <span class="bg-accent/20 text-accent rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold uppercase">
-                                                    {u.username.chars().next().unwrap_or('?').to_string()}
-                                                </span>
-                                                <span class="hidden sm:inline text-sm font-medium">{u.username}</span>
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-dimmed" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                                <svg class="size-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                                                    <circle cx="7" cy="7" r="4.5" />
+                                                    <path d="M10.5 10.5L14 14" stroke-linecap="round" />
                                                 </svg>
+                                                <span class="sr-only lg:not-sr-only">"Go to"</span>
+                                                <kbd class="hidden rounded-ctl border border-outline px-1 text-caption leading-4 text-muted sm:inline-block" aria-hidden="true">"Ctrl K"</kbd>
                                             </button>
-                                            <div
-                                                class="absolute right-0 mt-2 w-44 bg-elevated border border-divider rounded-xl shadow-xl overflow-hidden z-[60]"
-                                                style:display=move || if menu_open.get() { "block" } else { "none" }
-                                            >
-                                                <A
-                                                    href="/profile"
-                                                    attr:class="block px-4 py-2.5 text-secondary hover:bg-elevated hover:text-primary transition-colors text-sm"
-                                                    on:click=move |_| menu_open.set(false)
-                                                >
-                                                    "Profile"
-                                                </A>
-                                                <A
-                                                    href="/champion-pool"
-                                                    attr:class="block px-4 py-2.5 text-secondary hover:bg-elevated hover:text-primary transition-colors text-sm"
-                                                    on:click=move |_| menu_open.set(false)
-                                                >
-                                                    "Champion Pool"
-                                                </A>
-                                                // Admin link only for admins; the page itself
-                                                // also checks on the server.
-                                                {u.is_admin.then(|| view! {
-                                                    <A
-                                                        href="/admin/invites"
-                                                        attr:class="block px-4 py-2.5 text-secondary hover:bg-elevated hover:text-primary transition-colors text-sm"
-                                                        on:click=move |_| menu_open.set(false)
-                                                    >
-                                                        "Invites"
-                                                    </A>
-                                                })}
-                                                <div class="border-t border-divider"></div>
-                                                <ActionForm action=logout_action>
-                                                    <button
-                                                        type="submit"
-                                                        class="block w-full text-left px-4 py-2.5 text-red-400 hover:bg-elevated hover:text-red-300 transition-colors cursor-pointer text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                    >
-                                                        "Sign Out"
-                                                    </button>
-                                                </ActionForm>
-                                            </div>
-                                        }.into_any(),
-                                        _ => view! {
-                                            <div class="flex items-center gap-2 text-sm">
-                                                <A href="/auth/login" attr:class="text-secondary hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-elevated focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
-                                                    "Sign In"
-                                                </A>
-                                                <A href="/auth/register" attr:class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-3 py-1.5 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none">
-                                                    "Register"
-                                                </A>
-                                            </div>
-                                        }.into_any(),
+                                            <CommandBar id="command-bar" open=command_open commands=commands />
+                                            <Menu
+                                                id="user-menu"
+                                                label=format!("Account menu, {name}")
+                                                items=items
+                                                on_select=on_select
+                                                align=MenuAlign::End
+                                                variant=ButtonVariant::Quiet
+                                                size=ButtonSize::Md
+                                                trigger=move || {
+                                                    let n = name_for_trigger.get_value();
+                                                    view! {
+                                                        <UserAvatar name=n.clone() size=AvatarSize::Sm />
+                                                        <span class="hidden text-label font-medium sm:inline">{n}</span>
+                                                        <svg class="size-3.5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    }
+                                                }
+                                            />
+                                        }.into_any()
                                     }
-                                })}
-                            </Suspense>
-                        </div>
+                                    _ => view! {
+                                        <div class="flex items-center gap-2">
+                                            <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
+                                            <Button href="/closed-beta" variant=ButtonVariant::Primary>"Request access"</Button>
+                                        </div>
+                                    }.into_any(),
+                                }
+                            })}
+                        </Suspense>
                     </div>
                 </div>
 
-                // ── Sub-nav strip — driven by use_location() ──
+                // Sub-navigation for the current hub.
                 {move || {
                     let hub = active_hub.get();
                     if hub.is_empty() {
-                        view! { <div class="hidden" /> }.into_any()
+                        ().into_any()
                     } else {
                         let routes: &[(&str, &str)] = HUB_ROUTES
                             .iter()
@@ -507,22 +487,18 @@ pub fn Nav() -> impl IntoView {
                             .map(|(_, r)| *r)
                             .unwrap_or(&[]);
                         view! {
-                            <nav class="flex gap-1 py-2 border-t border-divider/30 overflow-x-auto" aria-label="Sub-navigation">
+                            <nav class="-mb-px flex gap-5 overflow-x-auto border-t border-rule [scrollbar-width:none]" aria-label="Sub-navigation">
                                 {routes.iter().map(|(path, label)| {
                                     let path_owned = path.to_string();
                                     let path_for_class = path_owned.clone();
+                                    let path_for_aria = path_owned.clone();
                                     let location = use_location();
-                                    let is_active = move || location.pathname.get().starts_with(&path_for_class);
+                                    let is_active = move |p: &str| location.pathname.get().starts_with(p);
                                     view! {
                                         <A
                                             href=path_owned
-                                            attr:class=move || {
-                                                if is_active() {
-                                                    "px-3 py-1.5 rounded-md bg-accent-soft text-accent text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none whitespace-nowrap"
-                                                } else {
-                                                    "px-3 py-1.5 rounded-md text-dimmed hover:text-muted text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none whitespace-nowrap"
-                                                }
-                                            }
+                                            attr:class=move || sub_class(is_active(&path_for_class))
+                                            attr:aria-current=move || is_active(&path_for_aria).then_some("page")
                                         >
                                             {*label}
                                         </A>
@@ -535,17 +511,14 @@ pub fn Nav() -> impl IntoView {
             </div>
         </header>
 
-        // Click-outside backdrop: covers full screen behind dropdowns
+        // Click-outside backdrop behind open dropdowns.
         {move || {
             if any_dropdown_open() {
                 view! {
-                    <div
-                        class="fixed inset-0 z-40"
-                        on:click=move |_| close_all()
-                    />
+                    <div class="fixed inset-0 z-20" on:click=move |_| close_all() />
                 }.into_any()
             } else {
-                view! { <span></span> }.into_any()
+                ().into_any()
             }
         }}
     }

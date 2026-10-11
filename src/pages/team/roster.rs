@@ -116,13 +116,13 @@ pub fn RosterPage() -> impl IntoView {
     });
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen px-8 py-6">
+        <div class="bg-base min-h-screen px-8 py-6">
             <div class="max-w-3xl mx-auto">
                 <header class="mb-6">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[11px] text-accent">
-                        "Founding the banner"
+                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">
+                        "Team"
                     </div>
-                    <h1 class="font-display italic text-[40px] leading-tight text-primary mt-1">
+                    <h1 class="font-display text-[40px] leading-tight text-primary mt-1">
                         "Team Roster"
                     </h1>
                 </header>
@@ -131,7 +131,7 @@ pub fn RosterPage() -> impl IntoView {
                     view! {
                         <div class="py-8 text-center">
                             <div class="bg-elevated border border-outline rounded-xl p-6">
-                                <h2 class="font-display italic text-2xl text-primary mb-2">"Team feature"</h2>
+                                <h2 class="font-display text-2xl text-primary mb-2">"Team feature"</h2>
                                 <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
                                 <button
                                     class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
@@ -155,14 +155,13 @@ pub fn RosterPage() -> impl IntoView {
             <div class="flex flex-col gap-8">
                 // No-team context message
                 <EmptyState
-                    icon="👥"
                     message="You're not part of a team yet — create a new team or join an existing one"
                 />
 
                 // Create Team — Card.plain
                 <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Found"</div>
-                    <h2 class="font-display italic text-2xl text-primary mb-4">"Create a New Team"</h2>
+                    <div class="eyebrow">"New team"</div>
+                    <h2 class="font-display text-2xl text-primary mb-4">"Create a New Team"</h2>
                     <ActionForm action=create_team_action>
                         <div class="flex flex-col gap-4">
                             {move || create_team_action.value().get().and_then(|r| r.err()).map(|e| view! {
@@ -171,19 +170,19 @@ pub fn RosterPage() -> impl IntoView {
                                 </div>
                             })}
                             <div>
-                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Team Name"</label>
+                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Team Name"</label>
                                 <input
                                     type="text"
                                     name="name"
                                     required
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 />
                             </div>
                             <div>
-                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">"Region"</label>
+                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
                                 <select
                                     name="region"
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 >
                                     <option value="EUW">"EUW"</option>
                                     <option value="EUNE">"EUNE"</option>
@@ -204,8 +203,8 @@ pub fn RosterPage() -> impl IntoView {
 
                 // Join Existing Team — Card.plain
                 <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Enlist"</div>
-                    <h2 class="font-display italic text-2xl text-primary mb-1">"Join an Existing Team"</h2>
+                    <div class="eyebrow">"Join"</div>
+                    <h2 class="font-display text-2xl text-primary mb-1">"Join an Existing Team"</h2>
                     <p class="text-muted text-sm mb-4">"Search for a team by name and request to join."</p>
 
                     <input
@@ -213,7 +212,7 @@ pub fn RosterPage() -> impl IntoView {
                         placeholder="Search teams by name..."
                         prop:value=move || search_query.get()
                         on:input=move |ev| set_search_query.set(event_target_value(&ev))
-                        class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none mb-4"
+                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none mb-4"
                     />
 
                     <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
@@ -241,9 +240,9 @@ pub fn RosterPage() -> impl IntoView {
                                                     let region = team.region.clone();
                                                     let member_count = team.member_count.unwrap_or(0);
                                                     view! {
-                                                        <div class="bg-surface border border-outline/50 rounded-lg px-4 py-3 flex items-center justify-between">
+                                                        <div class="bg-surface border border-outline rounded-lg px-4 py-3 flex items-center justify-between">
                                                             <div class="flex items-center gap-3">
-                                                                <span class="font-display italic text-primary text-base">{team_name.clone()}</span>
+                                                                <span class="font-display text-primary text-base">{team_name.clone()}</span>
                                                                 <span class="font-mono text-muted text-sm">{region}</span>
                                                                 <span class="text-muted text-sm tabular-nums">{member_count} " members"</span>
                                                             </div>
@@ -279,12 +278,11 @@ pub fn RosterPage() -> impl IntoView {
 
                 // Link Riot Account — Card.plain
                 <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Linked seal"</div>
-                    <h2 class="font-display italic text-2xl text-primary mb-4">"Link Riot Account"</h2>
+                    <h2 class="font-display text-2xl text-primary mb-4">"Link Riot Account"</h2>
                     <ActionForm action=link_riot>
                         <div class="flex flex-col gap-4">
                             <div>
-                                <label class="block font-imperial uppercase tracking-[0.18em] text-[10px] text-muted mb-1">
+                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
                                     "Riot ID (e.g. PlayerName#EUW)"
                                 </label>
                                 <input
@@ -292,7 +290,7 @@ pub fn RosterPage() -> impl IntoView {
                                     name="riot_id"
                                     placeholder="GameName#TAG"
                                     required
-                                    class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                 />
                             </div>
                             <button

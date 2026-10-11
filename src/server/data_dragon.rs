@@ -34,15 +34,21 @@ pub fn normalize_champion_name(input: &str, champions: &[Champion]) -> Option<St
     if input_stripped.is_empty() {
         return None;
     }
+    let stripped = |s: &str| -> String {
+        s.chars()
+            .filter(|ch| ch.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase()
+    };
+    // Ids first, then display names ("NunuWillump" -> "Nunu & Willump",
+    // whose id is "Nunu").
     champions
         .iter()
-        .find(|c| {
-            let id_stripped: String =
-                c.id.chars()
-                    .filter(|ch| ch.is_alphanumeric())
-                    .collect::<String>()
-                    .to_lowercase();
-            id_stripped == input_stripped
+        .find(|c| stripped(&c.id) == input_stripped)
+        .or_else(|| {
+            champions
+                .iter()
+                .find(|c| stripped(&c.name) == input_stripped)
         })
         .map(|c| c.id.clone())
 }
@@ -81,7 +87,25 @@ mod tests {
                 tags: vec!["Fighter".into()],
                 image_full: "Belveth.png".into(),
             },
+            Champion {
+                id: "Nunu".into(),
+                name: "Nunu & Willump".into(),
+                title: "The Boy and His Yeti".into(),
+                tags: vec!["Tank".into()],
+                image_full: "Nunu.png".into(),
+            },
         ]
+    }
+
+    #[test]
+    fn stripped_display_names_resolve() {
+        // Stripped names (spaces and "&" removed), as older stored data has them.
+        let champs = sample_champions();
+        assert_eq!(
+            normalize_champion_name("NunuWillump", &champs),
+            Some("Nunu".into())
+        );
+        assert_eq!(normalize_champion_name("NotAChampion", &champs), None);
     }
 
     #[test]
@@ -155,7 +179,7 @@ use std::time::Duration;
 use surrealdb::{engine::local::Db, Surreal};
 
 const VERSIONS_URL: &str = "https://ddragon.leagueoflegends.com/api/versions.json";
-const CDN: &str = "https://ddragon.leagueoflegends.com/cdn";
+pub(crate) const CDN: &str = "https://ddragon.leagueoflegends.com/cdn";
 
 /// How often the background task refreshes the cache.
 pub const REFRESH_EVERY: Duration = Duration::from_secs(6 * 3600);
@@ -183,8 +207,26 @@ fn state() -> &'static RwLock<Option<Arc<DdSnapshot>>> {
     STATE.get_or_init(|| RwLock::new(None))
 }
 
-fn set_snapshot(s: DdSnapshot) {
+fn set_snapshot(mut s: DdSnapshot) {
+    // Image URLs always point at the app's own endpoint (older DB copies
+    // stored CDN URLs).
+    for c in &mut s.champions {
+        c.image_full = app_icon_url(&c.id, &s.version);
+    }
     *state().write().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(s));
+}
+
+/// The app's square-icon URL for a champion id at a version.
+fn app_icon_url(id: &str, version: &str) -> String {
+    format!("/img/champion/{id}/icon?v={version}")
+}
+
+/// Resolve a champion id ("KSante") or display name ("K'Sante", "ksante")
+/// to its Data Dragon id, using the cache. `None` when unknown or when no
+/// copy is loaded.
+pub fn resolve_champion_id(key_or_name: &str) -> Option<String> {
+    let snap = snapshot()?;
+    normalize_champion_name(key_or_name, &snap.champions)
 }
 
 /// The cached snapshot, if any has been loaded.
@@ -218,7 +260,7 @@ pub async fn champions() -> Result<Vec<Champion>, DataDragonError> {
     Ok(champions)
 }
 
-fn http() -> &'static reqwest::Client {
+pub(crate) fn http() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
@@ -267,11 +309,12 @@ pub fn parse_champion_json(
                 .iter()
                 .filter_map(|t| t.as_str().map(|s| s.to_string()))
                 .collect();
-            let image_filename = v.get("image")?.get("full")?.as_str()?.to_string();
+            // Every champion has an image entry; the app serves it itself.
+            v.get("image")?.get("full")?.as_str()?;
             Some((
                 key,
                 Champion {
-                    image_full: format!("{CDN}/{version}/img/champion/{image_filename}"),
+                    image_full: app_icon_url(&id, version),
                     id,
                     name,
                     title,
@@ -467,10 +510,8 @@ mod cache_tests {
         assert_eq!(s.champions.len(), 2, "entries without a key are skipped");
         assert_eq!(s.id_by_key.get(&897).map(String::as_str), Some("KSante"));
         let aatrox = s.champions.iter().find(|c| c.id == "Aatrox").unwrap();
-        assert_eq!(
-            aatrox.image_full,
-            "https://ddragon.leagueoflegends.com/cdn/99.1.1/img/champion/Aatrox.png"
-        );
+        // Images are served by the app, never the CDN, from the browser.
+        assert_eq!(aatrox.image_full, "/img/champion/Aatrox/icon?v=99.1.1");
     }
 
     #[test]

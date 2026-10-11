@@ -1,18 +1,19 @@
-//! Data Dragon image URLs built from the live patch version.
+//! Champion and item image URLs, and the live Data Dragon version.
 //!
-//! The server keeps the current version in its Data Dragon cache
+//! Images are served by the app itself (`server::images`: `/img/champion/..`
+//! and `/img/item/..`), which fetches each one once per patch from Data
+//! Dragon and caches it, so the browser never calls a third party. The
+//! server keeps the current version in its Data Dragon cache
 //! (`server::data_dragon`, refreshed every 6 hours) and writes it into the
-//! page head as `<meta name="ddragon-version">`. In the browser the hydrated
-//! components read it back from that tag, so server and client build the
-//! same URLs.
+//! page head as `<meta name="ddragon-version">`; the browser reads it back
+//! from that tag and adds it to image URLs (`?v=`), so a new patch busts the
+//! browser cache.
 
 /// Used until a live (or cached) version is known.
 pub const FALLBACK_VERSION: &str = "15.6.1";
 
 /// `name` of the `<meta>` tag that carries the version to the browser.
 pub const META_NAME: &str = "ddragon-version";
-
-const CDN: &str = "https://ddragon.leagueoflegends.com/cdn";
 
 /// The current Data Dragon version.
 pub fn version() -> String {
@@ -48,14 +49,37 @@ fn client_version() -> String {
     })
 }
 
-/// Square champion icon for a Data Dragon champion ID ("KSante").
-pub fn champion_icon_url(champion_id: &str) -> String {
-    format!("{CDN}/{}/img/champion/{champion_id}.png", version())
+/// Percent-encode a champion id or name for a URL path segment.
+fn path_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// Square champion icon for a Data Dragon champion id ("KSante") or a
+/// display name ("K'Sante"); the server resolves either.
+pub fn champion_icon_url(champion: &str) -> String {
+    format!(
+        "/img/champion/{}/icon?v={}",
+        path_segment(champion),
+        version()
+    )
+}
+
+/// Loading-screen portrait (tall) for a champion id or name.
+pub fn champion_portrait_url(champion: &str) -> String {
+    format!("/img/champion/{}?v={}", path_segment(champion), version())
 }
 
 /// Item icon for an item ID.
 pub fn item_icon_url(item_id: i32) -> String {
-    format!("{CDN}/{}/img/item/{item_id}.png", version())
+    format!("/img/item/{item_id}?v={}", version())
 }
 
 #[cfg(test)]
@@ -63,12 +87,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn urls_use_the_current_version() {
+    fn urls_point_at_the_app_and_carry_the_version() {
         let v = version();
         assert_eq!(
             champion_icon_url("Ahri"),
-            format!("https://ddragon.leagueoflegends.com/cdn/{v}/img/champion/Ahri.png")
+            format!("/img/champion/Ahri/icon?v={v}")
         );
-        assert!(item_icon_url(3157).ends_with(&format!("/{v}/img/item/3157.png")));
+        assert_eq!(
+            champion_portrait_url("Kai'Sa"),
+            format!("/img/champion/Kai%27Sa?v={v}")
+        );
+        assert_eq!(item_icon_url(3157), format!("/img/item/3157?v={v}"));
+        assert!(!champion_icon_url("Ahri").contains("://"));
     }
 }

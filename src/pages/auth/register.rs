@@ -8,13 +8,13 @@
 //! Preserves the existing `register_action` server fn + auto-login
 //! redirect Effect (leptos rules 8, 51). Visual layer only.
 
+use crate::components::ui::{
+    Button, ButtonSize, ButtonType, ButtonVariant, ErrorBanner, Field, InputKind, PageShell,
+    PageWidth, TextField,
+};
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_query_map;
-
-use crate::app::InitialTheme;
-use crate::components::region::CompanionSigil;
-use crate::components::ui::ErrorBanner;
 
 /// Minimum password length enforced by `register_action`.
 pub const MIN_PASSWORD_LEN: usize = 10;
@@ -102,16 +102,14 @@ pub async fn register_action(
         Err(e) => tracing::warn!("auto-login lookup failed: {e}"),
     }
 
-    // New users default to solo mode (D-03)
+    // New users default to solo mode (D-03). Redirect on the server too, so a
+    // form submitted before hydration still lands on /solo.
+    leptos_axum::redirect("/solo");
     Ok("/solo".to_string())
 }
 
 #[component]
 pub fn RegisterPage() -> impl IntoView {
-    // Phase 18.2-03 — read region ONCE at page entry; pass as a prop
-    // to CompanionSigil so SSR and WASM hydrate see the same value.
-    let region = use_context::<InitialTheme>().unwrap_or_default().0;
-
     let register = ServerAction::<RegisterAction>::new();
     let query = use_query_map();
 
@@ -158,99 +156,44 @@ pub fn RegisterPage() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
-            <img
-                src="/img/auth-bg-demacia.jpg"
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-                class="auth-bg-demacia fixed inset-0 -z-10 w-full h-full object-cover"
-            />
+        <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
+            <p class="eyebrow">"Closed beta \u{00b7} invitation"</p>
+            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">
+                "Create your account"
+            </h1>
+            <p class="mt-2 text-body text-secondary">
+                "You were invited to the closed beta. Pick a username your team will recognise."
+            </p>
 
-            <div class="relative z-10 bg-surface border border-divider rounded-xl p-8 max-w-sm w-full shadow-xl">
-                <div class="flex justify-center mb-6">
-                    <CompanionSigil region=region.clone() />
+            <ActionForm action=register>
+                <div class="mt-8 flex flex-col gap-5">
+                    {move || error().map(|e| view! { <ErrorBanner message=e /> })}
+
+                    // The invite code travels with the form; the server checks it.
+                    <input type="hidden" name="invite_code" prop:value=move || invite.get() />
+
+                    <Field id="register-username" label="Username">
+                        <TextField name="username" required=true autocomplete="username" />
+                    </Field>
+                    <Field id="register-email" label="Email">
+                        <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
+                    </Field>
+                    <Field id="register-password" label="Password" hint="Use 10 or more characters.">
+                        <TextField kind=InputKind::Password name="password" required=true minlength=10 autocomplete="new-password" />
+                    </Field>
+
+                    <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Lg full_width=true>
+                        "Create account"
+                    </Button>
+
+                    <p class="border-t border-rule pt-5 text-body text-secondary">
+                        "Already have an account? "
+                        <A href="/auth/login" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                            "Sign in"
+                        </A>
+                    </p>
                 </div>
-
-                <h1 class="font-display italic text-[24px] text-primary text-center">
-                    "Join the beta"
-                </h1>
-                <p class="text-sm text-muted mt-1 text-center">
-                    "You have been invited."
-                </p>
-
-                <ActionForm action=register>
-                    <div class="flex flex-col gap-4 mt-6">
-                        {move || error().map(|e| view! {
-                            <ErrorBanner message=e />
-                        })}
-
-                        // Hidden invite code travels with the form
-                        // (D-16). Phase 19.1 wires real server-side
-                        // validation. Threat T-17-24 mitigation:
-                        // Leptos view! macro escapes attribute values.
-                        <input
-                            type="hidden"
-                            name="invite_code"
-                            prop:value=move || invite.get()
-                        />
-
-                        <div>
-                            <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                "Username"
-                            </label>
-                            <input
-                                type="text"
-                                name="username"
-                                required
-                                autocomplete="username"
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                "Email"
-                            </label>
-                            <input
-                                type="email"
-                                name="email"
-                                required
-                                autocomplete="email"
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                "Password"
-                            </label>
-                            <input
-                                type="password"
-                                name="password"
-                                required
-                                minlength="10"
-                                autocomplete="new-password"
-                                class="w-full bg-surface/50 border border-outline/50 rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            class="bg-accent text-accent-contrast font-semibold w-full py-3 rounded-lg hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors mt-2"
-                        >
-                            "Create account"
-                        </button>
-
-                        <p class="text-sm text-muted text-center mt-2">
-                            "Already have an account? "
-                            <A href="/auth/login" attr:class="text-accent hover:text-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded">
-                                "Sign in"
-                            </A>
-                        </p>
-                    </div>
-                </ActionForm>
-            </div>
-        </div>
+            </ActionForm>
+        </PageShell>
     }
 }

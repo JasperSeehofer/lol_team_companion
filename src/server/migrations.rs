@@ -94,6 +94,12 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "one_team_per_user_unique",
         step: Step::Rust(|db| Box::pin(one_team_per_user_unique(db))),
     },
+    Migration {
+        version: 7,
+        name: "drop_user_theme",
+        // M2 left one theme; the per-user theme field is dead data.
+        step: Step::Surql("REMOVE FIELD IF EXISTS theme ON user; UPDATE user UNSET theme;"),
+    },
 ];
 
 #[derive(Debug, Deserialize, SurrealValue)]

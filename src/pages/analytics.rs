@@ -56,23 +56,11 @@ enum SortDir {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-/// Map strategy tags to semantic-token color pairs (bg+border classes, text class).
-///
-/// All raw color literals (red/blue/violet/orange/emerald/cyan/amber) were
-/// retired in plan 17-04 in favour of theme-aware semantic tokens. The mapping
-/// preserves the editorial intent (warm/cool/neutral) while allowing the
-/// pandemonium theme to recolor without code changes.
-fn tag_colors(tag: &str) -> (&'static str, &'static str) {
-    match tag {
-        "teamfight" => ("bg-danger/10 border border-danger/30", "text-danger"),
-        "split-push" => ("bg-info/10 border border-info/30", "text-info"),
-        "poke" => ("bg-accent/10 border border-accent/30", "text-accent"),
-        "engage" => ("bg-warning/10 border border-warning/30", "text-warning"),
-        "protect-the-adc" => ("bg-success/10 border border-success/30", "text-success"),
-        "scaling" => ("bg-info/10 border border-info/30", "text-info"),
-        "skirmish" => ("bg-warning/10 border border-warning/30", "text-warning"),
-        _ => ("bg-elevated border border-divider", "text-muted"),
-    }
+/// Classes for a strategy tag (bg+border classes, text class). Tags are
+/// categories, so they share one neutral style; status and side colours
+/// mean something else (docs/DESIGN.md section 4).
+fn tag_colors(_tag: &str) -> (&'static str, &'static str) {
+    ("bg-ink-2 border border-outline", "text-secondary")
 }
 
 fn stars_display(rating: Option<u8>) -> String {
@@ -129,14 +117,14 @@ pub fn AnalyticsPage() -> impl IntoView {
     let open_plan: RwSignal<Option<String>> = RwSignal::new(None);
 
     view! {
-        <div class="canvas-grain bg-base min-h-screen">
+        <div class="bg-base min-h-screen">
             <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-                // Imperial header
+                // Page header
                 <div class="flex flex-col gap-2 mb-6">
-                    <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">
-                        "The ledger"
+                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
+                        "History"
                     </span>
-                    <h1 class="font-display italic text-primary text-3xl">"Analytics"</h1>
+                    <h1 class="font-display text-primary text-3xl">"Analytics"</h1>
                     <p class="text-muted text-sm">"Track strategy effectiveness and plan outcomes."</p>
                 </div>
 
@@ -158,8 +146,8 @@ pub fn AnalyticsPage() -> impl IntoView {
                                     if no_team {
                                         view! {
                                             <div class="bg-elevated border border-divider rounded-xl py-16 px-6 text-center">
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"No analytics yet"</span>
-                                                <h2 class="font-display italic text-primary text-2xl mt-2">"No data to chart."</h2>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"No analytics yet"</span>
+                                                <h2 class="font-display text-primary text-2xl mt-2">"No data to chart."</h2>
                                                 <p class="text-muted text-sm mt-3 max-w-md mx-auto">
                                                     "Create or join a team to get started."
                                                 </p>
@@ -175,8 +163,8 @@ pub fn AnalyticsPage() -> impl IntoView {
                                         // Has plans but no tagged reviews
                                         view! {
                                             <div class="bg-elevated border border-divider rounded-xl py-16 px-6 text-center">
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"Awaiting reviews"</span>
-                                                <h2 class="font-display italic text-primary text-2xl mt-2">"No plan effectiveness data yet."</h2>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Awaiting reviews"</span>
+                                                <h2 class="font-display text-primary text-2xl mt-2">"No plan effectiveness data yet."</h2>
                                                 <p class="text-muted text-sm mt-3 max-w-md mx-auto">
                                                     "Link post-game reviews to game plans to start tracking strategy outcomes."
                                                 </p>
@@ -198,10 +186,10 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                     let games = s.games_played;
                                                     view! {
                                                         <div class=format!("rounded-xl p-4 {bg_border}")>
-                                                            <div class=format!("font-imperial uppercase tracking-wider text-[10px] mb-2 {text_color}")>
+                                                            <div class=format!("font-mono uppercase tracking-wider text-caption mb-2 {text_color}")>
                                                                 {tag_label}
                                                             </div>
-                                                            <div class="font-display italic text-primary text-3xl tabular-nums">
+                                                            <div class="font-display text-primary text-3xl tabular-nums">
                                                                 {format!("{win_pct}%")}
                                                             </div>
                                                             <div class="flex items-center gap-3 mt-1">
@@ -218,26 +206,26 @@ pub fn AnalyticsPage() -> impl IntoView {
 
                                             // Game Plan Effectiveness Table
                                             <div class="mt-10 mb-4 flex flex-col gap-1">
-                                                <span class="font-imperial uppercase tracking-[0.18em] text-[10px] text-muted">"By plan"</span>
-                                                <h2 class="font-display italic text-primary text-2xl">"Game plan effectiveness"</h2>
+                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"By plan"</span>
+                                                <h2 class="font-display text-primary text-2xl">"Game plan effectiveness"</h2>
                                             </div>
                                             <div class="bg-elevated border border-divider rounded-xl overflow-hidden">
                                                 <table class="w-full">
                                                     <thead class="bg-surface/50">
                                                         <tr>
-                                                            <th class="px-4 py-4 text-left font-imperial uppercase tracking-wider text-[10px] text-muted">
+                                                            <th class="px-4 py-4 text-left font-mono uppercase tracking-wider text-caption text-muted">
                                                                 "Plan"
                                                             </th>
-                                                            <th class="px-4 py-4 text-left font-imperial uppercase tracking-wider text-[10px] text-muted">
+                                                            <th class="px-4 py-4 text-left font-mono uppercase tracking-wider text-caption text-muted">
                                                                 "Tag"
                                                             </th>
                                                             <th
                                                                 class=move || {
                                                                     let (col, _) = sort_state.get();
                                                                     if col == SortColumn::WinLoss {
-                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-primary cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                        "px-4 py-4 text-center font-mono uppercase tracking-wider text-caption text-primary cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     } else {
-                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-muted cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                        "px-4 py-4 text-center font-mono uppercase tracking-wider text-caption text-muted cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     }
                                                                 }
                                                                 on:click=move |_| {
@@ -269,9 +257,9 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                 class=move || {
                                                                     let (col, _) = sort_state.get();
                                                                     if col == SortColumn::Rating {
-                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-primary cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                        "px-4 py-4 text-center font-mono uppercase tracking-wider text-caption text-primary cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     } else {
-                                                                        "px-4 py-4 text-center font-imperial uppercase tracking-wider text-[10px] text-muted cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                                        "px-4 py-4 text-center font-mono uppercase tracking-wider text-caption text-muted cursor-pointer hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                                     }
                                                                 }
                                                                 on:click=move |_| {
@@ -363,7 +351,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                             </span>
                                                                         </td>
                                                                         <td class="px-4 py-4">
-                                                                            <span class=format!("font-imperial uppercase tracking-wider text-[10px] px-2 py-1 rounded {tag_bg} {tag_text}")>
+                                                                            <span class=format!("font-mono uppercase tracking-wider text-caption px-2 py-1 rounded {tag_bg} {tag_text}")>
                                                                                 {match &tag {
                                                                                     Some(t) => t.clone(),
                                                                                     None => "\u{2014}".to_string(),
@@ -371,9 +359,9 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                             </span>
                                                                         </td>
                                                                         <td class="px-4 py-4 text-center font-mono text-sm tabular-nums">
-                                                                            <span class="text-success">{wins}</span>
+                                                                            <span class="text-win">{wins}</span>
                                                                             <span class="text-muted mx-1">"-"</span>
-                                                                            <span class="text-danger">{losses}</span>
+                                                                            <span class="text-secondary">{losses}</span>
                                                                         </td>
                                                                         <td class="px-4 py-4 text-center text-sm text-accent">
                                                                             {rating_to_stars(avg_rating)}
@@ -397,8 +385,8 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                                                 <div>
                                                                                                     {reviews_inner.into_iter().map(|review| {
                                                                                                         let outcome_class = match review.win_loss.as_deref() {
-                                                                                                            Some("win") => "text-success",
-                                                                                                            Some("loss") => "text-danger",
+                                                                                                            Some("win") => "text-win",
+                                                                                                            Some("loss") => "text-secondary",
                                                                                                             _ => "text-muted",
                                                                                                         };
                                                                                                         let outcome_label = match review.win_loss.as_deref() {
@@ -413,7 +401,7 @@ pub fn AnalyticsPage() -> impl IntoView {
                                                                                                         view! {
                                                                                                             <div class="border-l-2 border-accent pl-3 mb-2 last:mb-0">
                                                                                                                 <div class="flex items-center gap-3">
-                                                                                                                    <span class=format!("font-imperial uppercase tracking-wider text-[10px] {outcome_class}")>
+                                                                                                                    <span class=format!("font-mono uppercase tracking-wider text-caption {outcome_class}")>
                                                                                                                         {outcome_label}
                                                                                                                     </span>
                                                                                                                     <span class="text-accent text-xs">{stars}</span>

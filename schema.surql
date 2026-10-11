@@ -23,8 +23,8 @@ DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
 DEFINE FIELD IF NOT EXISTS mode ON user TYPE string DEFAULT 'solo';
 DEFINE FIELD IF NOT EXISTS riot_region ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS theme ON user TYPE string DEFAULT 'demacia'
-  ASSERT $value IN ['demacia', 'pandemonium'];
+-- user.theme (Demacia/Pandemonium) was removed by migration 7 (drop_user_theme):
+-- there is one theme, and nothing reads the field.
 
 -- Phase 18 region-variants: per-route mode persistence (D-03)
 -- No ASSERT constraint — value set is wider (route-scoped) + may grow in future phases
@@ -247,6 +247,8 @@ DEFINE FIELD IF NOT EXISTS source_review ON action_item TYPE option<record<post_
 DEFINE FIELD IF NOT EXISTS text ON action_item TYPE string;
 DEFINE FIELD IF NOT EXISTS status ON action_item TYPE string DEFAULT 'open';
 DEFINE FIELD IF NOT EXISTS assigned_to ON action_item TYPE option<string>;
+-- Due date as a calendar day, YYYY-MM-DD (no time zone; checked in db.rs).
+DEFINE FIELD IF NOT EXISTS due ON action_item TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON action_item TYPE datetime DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS resolved_at ON action_item TYPE option<datetime>;
 
