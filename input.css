@@ -130,6 +130,8 @@
   --color-success: oklch(0.790 0.120 155);
   --color-warning: oklch(0.800 0.140 78);
   --color-danger: oklch(0.720 0.160 12);
+  /* Danger button hover: a dark crimson fill with primary text, never a pastel. */
+  --color-danger-deep: oklch(0.420 0.130 14);
   --color-info: oklch(0.790 0.080 215);
 
   /* ---- Terrain: canvases (map, graph) only, never behind running text. */

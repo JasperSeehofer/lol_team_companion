@@ -3,34 +3,35 @@
 
 use leptos::prelude::*;
 
+use crate::components::ui::{Skeleton, SkeletonShape};
+
 /// Loading placeholder for a page-level Suspense fallback.
 /// `variant` picks the rough layout: "draft" | "solo" | "team".
 ///
 /// The blocks are decorative; a visually hidden status says "Loading".
 #[component]
 pub fn PageLoading(#[prop(into)] variant: String) -> impl IntoView {
-    let block = "animate-pulse motion-reduce:animate-none bg-ink-1 border border-rule";
     let layout = match variant.as_str() {
         "draft" => view! {
-            <div class="grid grid-cols-3 gap-4" aria-hidden="true">
-                <div class=format!("{block} h-72")></div>
-                <div class=format!("{block} h-72")></div>
-                <div class=format!("{block} h-72")></div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3" aria-hidden="true">
+                <Skeleton shape=SkeletonShape::Block size="h-72" />
+                <Skeleton shape=SkeletonShape::Block size="h-72" />
+                <Skeleton shape=SkeletonShape::Block size="h-72" />
             </div>
         }
         .into_any(),
         "solo" => view! {
-            <div class="flex gap-6" aria-hidden="true">
-                <div class=format!("{block} h-48 w-48")></div>
+            <div class="flex flex-col gap-6 sm:flex-row" aria-hidden="true">
+                <div class="sm:w-48"><Skeleton shape=SkeletonShape::Block size="h-48" /></div>
                 <div class="grid flex-1 grid-cols-2 gap-4">
-                    {(0..4).map(|_| view! { <div class=format!("{block} h-20")></div> }).collect_view()}
+                    {(0..4).map(|_| view! { <Skeleton shape=SkeletonShape::Block size="h-20" /> }).collect_view()}
                 </div>
             </div>
         }
         .into_any(),
         _ => view! {
             <div class="flex flex-col gap-3" aria-hidden="true">
-                {(0..4).map(|_| view! { <div class=format!("{block} h-14")></div> }).collect_view()}
+                {(0..4).map(|_| view! { <Skeleton shape=SkeletonShape::Block size="h-14" /> }).collect_view()}
             </div>
         }
         .into_any(),

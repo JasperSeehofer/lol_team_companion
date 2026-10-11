@@ -3,45 +3,81 @@
 //! Batch 1: layout (PageShell, PageHeader, SectionHeader, Surface), Text,
 //! Button (+ Keycap), Field, TextField, Select, Badge, Table, Tabs, and the
 //! domain primitives DraftSlot/DraftSequence and PrepSequence.
-//! `feedback` holds the older ErrorBanner, StatusMessage, toasts, skeletons
-//! and empty states, restyled onto the tokens until batch 2 replaces them.
+//! Batch 2 (interaction): Dialog/ConfirmDialog, Menu, CommandBar, Toast,
+//! Callout, EmptyState, Skeleton, Tooltip, SegmentedControl, Switch.
+//! Batch 3 (domain): ChampionAvatar/UserAvatar, RoleLabel, SideMarker,
+//! ResultGlyph, StatReadout, LegendBlock, CanvasFrame/ScaleBar,
+//! Annotation, TimelineScrub.
+//! `ErrorBanner`, `StatusMessage` and `SkeletonLine/Card/Grid` remain as
+//! compatibility names that render the batch 2 primitives.
 //!
 //! Rules for every component here: typed variants (enums, no strings),
 //! class names written out in full (Tailwind only sees literals), identical
 //! markup on server and browser, and a doc comment that states the
 //! accessibility contract on a line starting with `A11y:` (a test checks).
 
+pub mod a11y;
+pub mod avatar;
 pub mod badge;
 pub mod button;
+pub mod callout;
+pub mod canvas;
+pub mod command;
+pub mod dialog;
 pub mod draft;
-pub mod feedback;
+pub mod empty;
 pub mod field;
 pub mod layout;
+pub mod markers;
+pub mod menu;
 pub mod prep;
+pub mod readout;
+pub mod skeleton;
 pub mod table;
 pub mod tabs;
 pub mod text;
+pub mod timeline;
+pub mod toast;
+pub mod toggle;
 pub mod tokens;
+pub mod tooltip;
 
+pub use avatar::{AvatarShape, AvatarSize, AvatarState, ChampionAvatar, UserAvatar};
 pub use badge::{Badge, BadgeTone};
 pub use button::{Button, ButtonSize, ButtonType, ButtonVariant, Force, Keycap};
+pub use callout::{Callout, CalloutTone, ErrorBanner, StatusMessage};
+pub use canvas::{
+    Annotation, CanvasFrame, FrameGrid, LegendBlock, LegendEntry, LineStyle, LineWeight,
+    NotePlacement, ScaleBar, Swatch, SwatchInk,
+};
+pub use command::{Command, CommandBar};
+pub use dialog::{ConfirmDialog, ConfirmTone, Dialog, DialogSize};
 pub use draft::{
     DraftAction, DraftPhase, DraftSequence, DraftSide, DraftSlot, DraftStep, SlotState,
     TOURNAMENT_ORDER,
 };
-pub use feedback::{
-    EmptyState, ErrorBanner, NoTeamState, SkeletonCard, SkeletonGrid, SkeletonLine, StatusMessage,
-    ToastContext, ToastEntry, ToastKind, ToastProvider,
-};
+pub use empty::{EmptySize, EmptyState, NoTeamState};
 pub use field::{Field, FieldContext, FieldSize, InputKind, Select, SelectOption, TextField};
 pub use layout::{
     Density, Edge, HeadingLevel, Layer, Pad, PageHeader, PageShell, PageWidth, SectionHeader,
     Surface, SurfaceTag,
 };
+pub use markers::{
+    GameResult, GlyphSize, ResultGlyph, Role, RoleLabel, RoleLabelStyle, SideMarker, SideText,
+};
+pub use menu::{Menu, MenuAlign, MenuItem};
 pub use prep::{PrepSequence, PrepState, PrepStep};
+pub use readout::{Delta, ReadoutSize, Sentiment, StatReadout, Trend};
+pub use skeleton::{
+    Skeleton, SkeletonCard, SkeletonGrid, SkeletonGroup, SkeletonLine, SkeletonShape,
+};
 pub use table::{Align, RowLink, SortDir, Table, Td, Th, Tr};
 pub use tabs::{TabItem, TabPanel, Tabs};
 pub use text::{Text, TextRole, TextTag, Tone};
+pub use timeline::{Moment, TimelineScrub};
+pub use toast::{Toast, ToastAction, ToastContext, ToastEntry, ToastKind, ToastProvider};
+pub use toggle::{Segment, SegmentSize, SegmentedControl, Switch};
+pub use tooltip::{Tooltip, TooltipPlacement};
 
 #[cfg(test)]
 mod tests {

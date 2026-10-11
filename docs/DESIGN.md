@@ -65,6 +65,7 @@ All colours are OKLCH, defined once in `input.css` `@theme` (Tailwind turns `--c
 | `success` | `oklch(0.790 0.120 155)` | Done, saved, ready | 9.0+ |
 | `warning` | `oklch(0.800 0.140 78)` | Needs attention | 8.7+ |
 | `danger` | `oklch(0.720 0.160 12)` | Errors, destructive actions | 6.2+ |
+| `danger-deep` | `oklch(0.420 0.130 14)` | Danger button hover fill, with primary text | primary 7.86 |
 | `info` | `oklch(0.790 0.080 215)` | Neutral information | 8.8+ |
 | `terrain-jungle`, `terrain-river`, `terrain-lane`, `terrain-texture` | see `input.css` | Canvases only; texture is 1.1:1 on canvas | n/a |
 | `scrim` | `oklch(0.140 0.016 200 / 0.88)` | Behind dialogs (opaque enough, no blur) | |
@@ -130,7 +131,7 @@ The unit test `components::ui::tokens::tests::design_md_contrast_pairs_meet_thei
 | `info` | `page` | 4.5 | 9.94 | status text |
 | `info` | `ink-1` | 4.5 | 9.46 | status text |
 | `info` | `ink-2` | 4.5 | 8.79 | status text |
-| `page` | `danger` | 4.5 | 7.01 | text on the danger button (hover) |
+| `primary` | `danger-deep` | 4.5 | 7.86 | text on the danger button (hover) |
 <!-- contrast-pairs:end -->
 
 ### 3.3 Type

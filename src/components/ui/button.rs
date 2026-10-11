@@ -15,7 +15,8 @@ pub enum ButtonVariant {
     Secondary,
     /// No edge until hovered: toolbars, inline actions, "Cancel".
     Quiet,
-    /// Destructive. Outline in danger, filled on hover.
+    /// Destructive. Outline and text in danger; on hover a dark crimson
+    /// fill with primary text (never a pastel fill).
     Danger,
 }
 
@@ -32,7 +33,7 @@ impl ButtonVariant {
                 "bg-transparent border-transparent text-secondary hover:bg-ink-3 hover:text-primary data-[force=hover]:bg-ink-3 data-[force=hover]:text-primary active:bg-ink-2 data-[force=active]:bg-ink-2"
             }
             ButtonVariant::Danger => {
-                "bg-transparent border-danger text-danger hover:bg-danger hover:text-page data-[force=hover]:bg-danger data-[force=hover]:text-page"
+                "bg-transparent border-danger text-danger hover:bg-danger-deep hover:text-primary data-[force=hover]:bg-danger-deep data-[force=hover]:text-primary active:bg-danger-deep/80 data-[force=active]:bg-danger-deep/80"
             }
         }
     }
@@ -98,7 +99,7 @@ impl Force {
     }
 }
 
-const BASE: &str = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress";
+pub(crate) const BASE: &str = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress";
 
 /// A button, or a link styled as one when `href` is set.
 ///

@@ -247,6 +247,14 @@ pub const TOKENS: &[ColorToken] = &[
         "Errors, destructive actions",
     ),
     t(
+        "danger-deep",
+        0.420,
+        0.130,
+        14.0,
+        TokenGroup::Status,
+        "Danger button hover fill (with primary text)",
+    ),
+    t(
         "info",
         0.790,
         0.080,
@@ -316,6 +324,7 @@ pub const GALLERY_PAIRS: &[ContrastPair] = &[
     p("loss", "ink-1", 3.0, "glyph"),
     p("warning", "ink-1", 4.5, "text"),
     p("danger", "ink-1", 4.5, "text"),
+    p("primary", "danger-deep", 4.5, "danger button hover"),
     p("success", "ink-1", 4.5, "text"),
     p("info", "ink-1", 4.5, "text"),
     p("primary", "side-blue-deep", 4.5, "token label"),
