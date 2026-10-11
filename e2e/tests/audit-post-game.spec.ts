@@ -14,20 +14,12 @@ test("post-game: create a new review", async ({ teamPage }) => {
   const errors = captureErrors(page);
 
   await navigateTo(page, "/post-game");
-  await page.waitForTimeout(500);
+  await page.locator("#review-well").fill("Good teamfight execution around Dragon");
+  await page.getByTestId("review-save").click();
 
-  // Fill "What Went Well" textarea
-  const wentWellTextarea = page.locator("textarea").first();
-  await wentWellTextarea.fill("Good teamfight execution around Dragon");
-
-  // Click "Save Review" button
-  await page.locator('button:has-text("Save Review")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify save succeeded — button switches to "Update Review"
-  await expect(page.locator('button:has-text("Update Review")')).toBeVisible({
-    timeout: 5000,
-  });
+  // Saved: the state reads "Saved" and the title switches to "Review".
+  await expect(page.getByTestId("review-save-state")).toHaveText("Saved", { timeout: 5000 });
+  await expect(page.getByRole("heading", { level: 1, name: "Review" })).toBeVisible();
 
   // Assert no real console errors
   expect(filterRealErrors(errors)).toHaveLength(0);
@@ -42,10 +34,8 @@ test("post-game: draft_id param loads without crash", async ({ teamPage }) => {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1000);
 
-  // Page should render. The page has no h1 (its title comes from the legacy
-  // SectionHead primitive, which renders a styled div), so check the page
-  // container instead.
-  await expect(page.locator('[data-feedback-label="Post game"]')).toBeVisible({ timeout: 5000 });
+  // Page should render with its h1.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 5000 });
 
   // No WASM panics
   const panics = filterRealErrors(errors).filter((e) =>
@@ -64,33 +54,14 @@ test("post-game: review appears in saved list", async ({ teamPage }) => {
   const page = teamPage;
 
   await navigateTo(page, "/post-game");
-  await page.waitForTimeout(500);
+  await page.locator("#review-well").fill("AuditListCheck_won_teamfight");
+  await page.getByTestId("review-save").click();
+  await expect(page.getByTestId("review-save-state")).toHaveText("Saved", { timeout: 5000 });
 
-  // Create a review
-  const wentWellTextarea = page.locator("textarea").first();
-  await wentWellTextarea.fill("AuditListCheck_won_teamfight");
-  await page.locator('button:has-text("Save Review")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify save succeeded (prerequisite)
-  const updateBtn = page.locator('button:has-text("Update Review")');
-  const updateVisible = await updateBtn.isVisible({ timeout: 5000 }).catch(() => false);
-  if (!updateVisible) {
-    console.log("AUDIT-FINDING: Save Review did not switch to Update Review — save may have failed");
-    return;
-  }
-
-  // The saved reviews list is on the left sidebar; look for any review item
-  // The list shows match_riot_id or "No match linked" for each review
-  const reviewListItem = page.locator('text=No match linked').first();
-  const listVisible = await reviewListItem.isVisible({ timeout: 3000 }).catch(() => false);
-
-  if (!listVisible) {
-    console.log("AUDIT-FINDING: Saved review not visible in left sidebar list after save + refetch");
-  } else {
-    // At least one review appears in the list
-    await expect(reviewListItem).toBeVisible({ timeout: 3000 });
-  }
+  // A review without a plan or match is listed under that label.
+  await expect(
+    page.getByTestId("review-list").getByText("Review without a plan").first()
+  ).toBeVisible({ timeout: 5000 });
 });
 
 test("post-game: no console errors during form interactions", async ({ teamPage }) => {

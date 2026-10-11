@@ -7,7 +7,7 @@
  * Uses teamPage fixture since game plans are scoped to a team.
  */
 import { test, expect } from "./fixtures";
-import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
+import { captureErrors, filterRealErrors, navigateTo, saveGamePlan } from "./helpers";
 
 test("game-plan: create a new game plan", async ({ teamPage }) => {
   const page = teamPage;
@@ -15,20 +15,9 @@ test("game-plan: create a new game plan", async ({ teamPage }) => {
   const planName = `AuditPlan_${Date.now()}`;
 
   await navigateTo(page, "/game-plan");
-  await page.waitForTimeout(500);
-
-  // Fill the plan name input (prop:value-controlled input near label)
-  const planNameInput = page.locator("input").first();
-  await planNameInput.fill(planName);
-
-  // Click "Save Plan" button
-  await page.locator('button:has-text("Save Plan")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify save succeeded — button switches to "Update Plan"
-  await expect(page.locator('button:has-text("Update Plan")')).toBeVisible({
-    timeout: 5000,
-  });
+  // Saving shows "Saved" and puts the plan id in the URL.
+  await saveGamePlan(page, planName);
+  await expect(page).toHaveURL(/plan_id=/);
 
   // Assert no real console errors
   expect(filterRealErrors(errors)).toHaveLength(0);
@@ -39,21 +28,10 @@ test("game-plan: plan appears in saved plans list", async ({ teamPage }) => {
   const planName = `AuditPlanList_${Date.now()}`;
 
   await navigateTo(page, "/game-plan");
-  await page.waitForTimeout(500);
+  await saveGamePlan(page, planName);
 
-  // Create and save a plan
-  const planNameInput = page.locator("input").first();
-  await planNameInput.fill(planName);
-  await page.locator('button:has-text("Save Plan")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify save succeeded (prerequisite)
-  await expect(page.locator('button:has-text("Update Plan")')).toBeVisible({
-    timeout: 5000,
-  });
-
-  // The plan should appear in the left sidebar plan list
-  await expect(page.locator(`text=${planName}`)).toBeVisible({
+  // The plan appears in the plan list beside the editor.
+  await expect(page.getByTestId("plan-list").getByText(planName)).toBeVisible({
     timeout: 5000,
   });
 });
@@ -81,44 +59,26 @@ test("game-plan: draft_id prefill works without crash", async ({ teamPage }) => 
   await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
 });
 
-test("game-plan: checklist interaction (if available)", async ({ teamPage }) => {
+test("game-plan: checklist add, tick and progress", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
-  const planName = `AuditChecklist_${Date.now()}`;
 
   await navigateTo(page, "/game-plan");
-  await page.waitForTimeout(500);
+  await saveGamePlan(page, `AuditChecklist_${Date.now()}`);
 
-  // Create and save a plan first
-  const planNameInput = page.locator("input").first();
-  await planNameInput.fill(planName);
-  await page.locator('button:has-text("Save Plan")').click();
-  await page.waitForTimeout(2000);
-
-  // Verify plan saved
-  await expect(page.locator('button:has-text("Update Plan")')).toBeVisible({
-    timeout: 5000,
-  });
-
-  // Look for checklist section or "Add" button for objectives
-  const checklistSection = page.locator('[class*="checklist"], button:has-text("Add Checklist"), button:has-text("Add Item")').first();
-  const hasChecklist = await checklistSection.isVisible({ timeout: 2000 }).catch(() => false);
-
-  if (hasChecklist) {
-    await checklistSection.click();
-    await page.waitForTimeout(500);
-    // Look for checkbox items
-    const checkboxes = page.locator('input[type="checkbox"]');
-    const checkboxCount = await checkboxes.count();
-    if (checkboxCount > 0) {
-      await checkboxes.first().click();
-      await page.waitForTimeout(300);
-    }
-  } else {
-    // No checklist UI visible — this is an audit finding, not necessarily a bug
-    console.log("AUDIT-FINDING: No checklist interaction UI visible on /game-plan after plan creation");
+  const progress = page.getByTestId("checklist-progress");
+  for (const item of ["Check summoner spells", "Agree the level 1"]) {
+    await page.locator("#checklist-new").fill(item);
+    await page.locator("#checklist-new").press("Enter");
   }
+  await expect(progress).toHaveText("0 of 2 done");
 
-  // No real errors in any case
+  // Space on a checkbox ticks it (a native checkbox inside its label).
+  const first = page.getByRole("checkbox", { name: "Check summoner spells" });
+  await first.focus();
+  await page.keyboard.press("Space");
+  await expect(first).toBeChecked();
+  await expect(progress).toHaveText("1 of 2 done");
+
   expect(filterRealErrors(errors)).toHaveLength(0);
 });

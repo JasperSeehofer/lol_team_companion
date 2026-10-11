@@ -165,18 +165,61 @@ test("text field and select update from the keyboard", async ({ adminPage }) => 
   await expect(adminPage.locator("#g-error-error")).toHaveAttribute("role", "alert");
 });
 
-test("the draft example follows the tournament order", async ({ adminPage }) => {
+test("the draft example is the page's board, in tournament order", async ({ adminPage }) => {
   await openGallery(adminPage);
-  const steps = adminPage.locator('[data-gallery="draft"] [data-step]');
-  // 20 in the sequence plus the state and interactive examples.
-  const orders = await adminPage
-    .locator('[data-gallery="draft"] section [data-step]')
-    .evaluateAll((els) => els.map((e) => Number(e.getAttribute("data-step"))));
-  expect(orders).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
-  expect(await steps.count()).toBeGreaterThan(20);
-  const current = adminPage.locator('[data-gallery="draft"] section [aria-current="step"]');
+  const board = adminPage.locator('[data-draft-board="gallery-draft"]');
+  const cells = board.locator('[role="gridcell"]');
+  await expect(cells).toHaveCount(20);
+  // Every step once; five bans and five picks per side.
+  const steps = await cells.evaluateAll((els) =>
+    els.map((e) => Number(e.getAttribute("data-step"))).sort((a, b) => a - b)
+  );
+  expect(steps).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+  for (const side of ["blue", "red"]) {
+    for (const action of ["ban", "pick"]) {
+      await expect(board.locator(`[data-side="${side}"][data-action="${action}"]`)).toHaveCount(5);
+    }
+  }
+  // Only the step being decided is current, and the counter names it.
+  const current = board.locator('[aria-current="step"]');
   await expect(current).toHaveCount(1);
-  await expect(current).toHaveAttribute("aria-label", /Step 19, Blue pick 5, Support: selecting now/);
+  await expect(current).toHaveAttribute("aria-label", /^Blue pick 5, .*Support, selecting now/);
+  await expect(board.locator("[data-draft-status]")).toHaveText("Pick 9 of 10 \u00b7 Blue to pick");
+  // Keyboard: one Tab stop, arrows move, Enter chooses.
+  await adminPage.locator("#gallery-draft-slot-0").focus();
+  await adminPage.keyboard.press("ArrowRight");
+  await expect(adminPage.locator("#gallery-draft-slot-2")).toBeFocused();
+  await adminPage.keyboard.press("Enter");
+  await expect(adminPage.locator("[data-gallery-draft-chosen]")).toHaveText("Chosen: Blue ban 2");
+  // The complete example has no current step.
+  const done = adminPage.locator('[data-draft-board="gallery-draft-done"]');
+  await expect(done.locator('[aria-current="step"]')).toHaveCount(0);
+  await expect(done.locator("[data-draft-status]")).toHaveText("Draft complete");
+});
+
+test("manual segmented control moves focus first, checkbox toggles with Space", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const solo = adminPage.locator("#gal-manual-seg-0");
+  const team = adminPage.locator("#gal-manual-seg-1");
+  await expect(solo).toHaveAttribute("aria-checked", "true");
+  await solo.focus();
+  // Arrow keys move focus only; Enter or Space switches.
+  await adminPage.keyboard.press("ArrowRight");
+  await expect(team).toBeFocused();
+  await expect(solo).toHaveAttribute("aria-checked", "true");
+  await expect(adminPage.getByTestId("segmented-manual-value")).toHaveText("Workspace: solo");
+  await adminPage.keyboard.press("Enter");
+  await expect(team).toHaveAttribute("aria-checked", "true");
+  await expect(adminPage.getByTestId("segmented-manual-value")).toHaveText("Workspace: team");
+
+  const box = adminPage.getByTestId("checkbox-demo").getByRole("checkbox", { name: "Agree on the level 1 plan" });
+  const before = await box.isChecked();
+  await box.focus();
+  await adminPage.keyboard.press("Space");
+  await expect(box).toBeChecked({ checked: !before });
+  await expect(
+    adminPage.getByTestId("checkbox-demo").getByRole("checkbox", { name: "Disabled item" })
+  ).toBeDisabled();
 });
 
 test("dialog: focus moves in, Escape closes and focus returns", async ({ adminPage }) => {

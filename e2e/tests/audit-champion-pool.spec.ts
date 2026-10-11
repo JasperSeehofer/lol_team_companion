@@ -1,40 +1,34 @@
 /**
- * Champion pool audit tests.
- *
- * Documents any bugs and verifies working flows for the /champion-pool route.
+ * Champion pool audit tests: empty state, add, remove (with Undo) and the
+ * keyboard tier move. The pool is per user; teamPage gives a fresh user.
  * Requires a running dev server: cargo leptos watch
- *
- * Champion pool is per-user (not per-team), but we use teamPage to ensure a
- * consistent test environment with a known user.
  */
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
+
+const TOP = "#pool-roles-panel-Top";
+
+/** Add a champion to the Top ledger through the search field. */
+async function addTop(page: Page, name: string) {
+  const field = page.locator("#pool-add-top");
+  await field.fill(name);
+  await expect(page.locator(`#pool-add-top-list [role="option"]`).first()).toBeVisible();
+  await field.press("Enter");
+  await expect(page.locator(`${TOP} [data-tier="comfort"] li[data-champion="${name}"]`)).toBeVisible({
+    timeout: 5000,
+  });
+}
 
 test("champion-pool: page loads with empty state", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
   await navigateTo(page, "/champion-pool");
-  await page.waitForTimeout(500);
-
-  // Page should render. The page has no h1 (its title comes from the legacy
-  // SectionHead primitive, which renders a styled div), so check the page
-  // container instead.
-  await expect(page.locator('[data-feedback-label="Champion pool"]')).toBeVisible({ timeout: 5000 });
-
-  // Should NOT show a full-page error banner
-  const errorBanner = page.locator('[class*="error"], [class*="Error"]').filter({ hasText: /error|failed/i });
-  const errorVisible = await errorBanner.isVisible({ timeout: 1000 }).catch(() => false);
-  if (errorVisible) {
-    console.log("AUDIT-FINDING: Error banner visible on /champion-pool page load");
-  }
-
-  // Look for champion autocomplete or grid
-  const autocompleteInput = page.locator("input").first();
-  const hasInput = await autocompleteInput.isVisible({ timeout: 2000 }).catch(() => false);
-  if (!hasInput) {
-    console.log("AUDIT-FINDING: No input/autocomplete visible on /champion-pool — may need Data Dragon data");
-  }
+  await expect(page.getByRole("heading", { level: 1, name: "Champion pool" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Top" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(TOP).getByText("No top champions yet.")).toBeVisible();
+  await expect(page.locator("#pool-add-top")).toBeVisible();
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
@@ -44,105 +38,52 @@ test("champion-pool: add a champion to pool", async ({ teamPage }) => {
   const errors = captureErrors(page);
 
   await navigateTo(page, "/champion-pool");
-  await page.waitForTimeout(1000);
-
-  // Look for an autocomplete input to search for a champion
-  const autocompleteInput = page.locator("input").first();
-  const hasInput = await autocompleteInput.isVisible({ timeout: 3000 }).catch(() => false);
-
-  if (!hasInput) {
-    console.log("AUDIT-FINDING: No autocomplete input visible on /champion-pool — cannot test add flow");
-    expect(filterRealErrors(errors)).toHaveLength(0);
-    return;
-  }
-
-  // Type a champion name
-  await autocompleteInput.fill("Ahri");
-  await page.waitForTimeout(500);
-
-  // Look for dropdown suggestions
-  const dropdown = page.locator('[class*="dropdown"], [class*="autocomplete"], [role="listbox"], [class*="suggestion"]').first();
-  const hasDropdown = await dropdown.isVisible({ timeout: 2000 }).catch(() => false);
-
-  if (hasDropdown) {
-    // Click the first suggestion
-    const firstSuggestion = dropdown.locator("button, li, [role='option']").first();
-    const hasSuggestion = await firstSuggestion.isVisible({ timeout: 1000 }).catch(() => false);
-    if (hasSuggestion) {
-      await firstSuggestion.click();
-      await page.waitForTimeout(1000);
-    }
-  } else {
-    // Try pressing Enter to select
-    await autocompleteInput.press("Enter");
-    await page.waitForTimeout(1000);
-  }
-
-  // Look for "Add to Pool" or similar button
-  const addBtn = page.locator('button:has-text("Add"), button:has-text("Add to Pool")').first();
-  const hasAddBtn = await addBtn.isVisible({ timeout: 2000 }).catch(() => false);
-  if (hasAddBtn) {
-    await addBtn.click();
-    await page.waitForTimeout(1500);
-    // Verify champion appears in pool (look for Ahri text)
-    const ahriInPool = page.locator("text=Ahri").first();
-    const isInPool = await ahriInPool.isVisible({ timeout: 3000 }).catch(() => false);
-    if (!isInPool) {
-      console.log("AUDIT-FINDING: Ahri not visible in champion pool after add — add may have failed or UI not updated");
-    }
-  } else {
-    console.log("AUDIT-FINDING: No explicit Add button found on /champion-pool after champion selection");
-  }
+  await addTop(page, "Ahri");
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
-test("champion-pool: remove a champion from pool", async ({ teamPage }) => {
+test("champion-pool: remove a champion, then undo", async ({ teamPage }) => {
   const page = teamPage;
   const errors = captureErrors(page);
 
   await navigateTo(page, "/champion-pool");
-  await page.waitForTimeout(1000);
+  await addTop(page, "Garen");
 
-  // First check if there are any existing pool entries with remove buttons
-  const removeBtn = page.locator('button:has-text("Remove"), button[aria-label*="remove"], button[title*="remove"]').first();
-  const hasRemoveBtn = await removeBtn.isVisible({ timeout: 2000 }).catch(() => false);
+  // Open the champion's detail and remove it.
+  await page.locator("#pool-top-Garen").click();
+  await page.getByRole("button", { name: "Remove from pool" }).click();
+  await expect(page.locator(`${TOP} li[data-champion="Garen"]`)).toHaveCount(0, { timeout: 5000 });
 
-  if (!hasRemoveBtn) {
-    // Try adding a champion first (using the same pattern as test 2)
-    const autocompleteInput = page.locator("input").first();
-    const hasInput = await autocompleteInput.isVisible({ timeout: 2000 }).catch(() => false);
-    if (!hasInput) {
-      console.log("AUDIT-FINDING: Cannot test remove — no input and no existing pool entries found");
-      expect(filterRealErrors(errors)).toHaveLength(0);
-      return;
-    }
-    await autocompleteInput.fill("Garen");
-    await page.waitForTimeout(500);
-    await autocompleteInput.press("Enter");
-    await page.waitForTimeout(500);
-    const addBtn2 = page.locator('button:has-text("Add")').first();
-    if (await addBtn2.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await addBtn2.click();
-      await page.waitForTimeout(1500);
-    }
-  }
+  // Undo puts it back.
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.locator(`${TOP} li[data-champion="Garen"]`)).toBeVisible({ timeout: 5000 });
 
-  // Now look for a remove button
-  const removeBtnAfterAdd = page.locator('button:has-text("Remove"), button[aria-label*="emove"]').first();
-  const hasRemove = await removeBtnAfterAdd.isVisible({ timeout: 3000 }).catch(() => false);
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});
 
-  if (hasRemove) {
-    await removeBtnAfterAdd.click();
-    await page.waitForTimeout(1000);
-    // Verify it's gone (soft check)
-    const stillVisible = await removeBtnAfterAdd.isVisible({ timeout: 1000 }).catch(() => false);
-    if (stillVisible) {
-      console.log("AUDIT-FINDING: Remove button still visible after click — champion may not have been removed");
-    }
-  } else {
-    console.log("AUDIT-FINDING: No remove button found on /champion-pool — remove flow untestable");
-  }
+test("champion-pool: move a champion between tiers with the keyboard", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+
+  await navigateTo(page, "/champion-pool");
+  await addTop(page, "Ahri");
+
+  // Space picks it up, Down chooses the next tier, Space drops it there.
+  await page.locator("#pool-top-Ahri").focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Space");
+
+  await expect(page.locator(`${TOP} [data-tier="match_ready"] li[data-champion="Ahri"]`)).toBeVisible({
+    timeout: 5000,
+  });
+  await expect(page.locator(`${TOP} [data-tier="comfort"] li[data-champion="Ahri"]`)).toHaveCount(0);
+  await expect(page.getByTestId("pool-announce")).toHaveText("Ahri moved to Match ready.");
+
+  // The move is stored: it survives a reload.
+  await navigateTo(page, "/champion-pool");
+  await expect(page.locator(`${TOP} [data-tier="match_ready"] li[data-champion="Ahri"]`)).toBeVisible();
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
