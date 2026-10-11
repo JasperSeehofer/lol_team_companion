@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn stripped_display_names_resolve() {
-        // What the legacy ChampPortrait shim sends (spaces and "&" removed).
+        // Stripped names (spaces and "&" removed), as older stored data has them.
         let champs = sample_champions();
         assert_eq!(
             normalize_champion_name("NunuWillump", &champs),

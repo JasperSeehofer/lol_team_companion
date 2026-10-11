@@ -400,7 +400,7 @@ fn BugReportWidgetInner(
                 // Inner card — stop propagation so clicking inside
                 // does not close the modal.
                 <div
-                    class="bg-surface border border-divider rounded-xl p-6 shadow-xl max-w-md w-full"
+                    class="bg-surface border border-divider rounded-xl p-6 shadow-overlay max-w-md w-full"
                     on:click=|ev: ev::MouseEvent| ev.stop_propagation()
                 >
                     <h2 class="font-display text-xl text-primary mb-4">
