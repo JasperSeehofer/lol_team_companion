@@ -4,6 +4,7 @@ pub mod champion;
 pub mod ddragon;
 pub mod draft;
 pub mod game_plan;
+pub mod graph;
 pub mod invite;
 pub mod match_data;
 pub mod opponent;

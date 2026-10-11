@@ -487,3 +487,44 @@ DEFINE INDEX IF NOT EXISTS team_note_team ON team_note FIELDS team;
 DEFINE INDEX IF NOT EXISTS checklist_template_team ON checklist_template FIELDS team;
 DEFINE INDEX IF NOT EXISTS checklist_instance_team ON checklist_instance FIELDS team;
 DEFINE INDEX IF NOT EXISTS bug_report_user ON bug_report FIELDS user;
+
+-- Draft Graph (M4). The trait table is global (read by every signed-in
+-- user, written by admins); one row per Data Dragon champion id, keyed by
+-- that id (champion_trait:Ahri). Defaults come from
+-- src/server/graph/champion_traits.csv (server::graph::traits::sync); the
+-- vocabularies below must match models::graph.
+DEFINE TABLE IF NOT EXISTS champion_trait SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS champion ON champion_trait TYPE string;
+DEFINE FIELD IF NOT EXISTS roles ON champion_trait TYPE array<string> ASSERT array::len($value) > 0 AND $value ALLINSIDE ['top', 'jungle', 'mid', 'bot', 'support'];
+DEFINE FIELD IF NOT EXISTS damage_type ON champion_trait TYPE string ASSERT $value IN ['physical', 'magic', 'mixed', 'true_heavy'];
+DEFINE FIELD IF NOT EXISTS damage_profile ON champion_trait TYPE string ASSERT $value IN ['burst', 'sustained', 'poke', 'hybrid'];
+DEFINE FIELD IF NOT EXISTS range_class ON champion_trait TYPE string ASSERT $value IN ['melee', 'short', 'long'];
+DEFINE FIELD IF NOT EXISTS engage ON champion_trait TYPE string ASSERT $value IN ['none', 'conditional', 'hard'];
+DEFINE FIELD IF NOT EXISTS disengage ON champion_trait TYPE string ASSERT $value IN ['none', 'some', 'strong'];
+DEFINE FIELD IF NOT EXISTS peel ON champion_trait TYPE string ASSERT $value IN ['none', 'some', 'strong'];
+DEFINE FIELD IF NOT EXISTS frontline ON champion_trait TYPE string ASSERT $value IN ['none', 'some', 'strong'];
+DEFINE FIELD IF NOT EXISTS cc ON champion_trait TYPE string ASSERT $value IN ['none', 'light', 'medium', 'heavy'];
+DEFINE FIELD IF NOT EXISTS wave_clear ON champion_trait TYPE string ASSERT $value IN ['weak', 'ok', 'strong'];
+DEFINE FIELD IF NOT EXISTS scaling ON champion_trait TYPE string ASSERT $value IN ['early', 'mid', 'late', 'flat'];
+DEFINE FIELD IF NOT EXISTS mobility ON champion_trait TYPE string ASSERT $value IN ['low', 'medium', 'high'];
+DEFINE FIELD IF NOT EXISTS styles ON champion_trait TYPE array<string> ASSERT $value ALLINSIDE ['poke', 'dive', 'pick', 'split_push', 'teamfight', 'protect_the_carry', 'skirmish', 'siege', 'front_to_back', 'wombo'];
+DEFINE FIELD IF NOT EXISTS confidence ON champion_trait TYPE string ASSERT $value IN ['normal', 'low'];
+DEFINE FIELD IF NOT EXISTS source ON champion_trait TYPE string ASSERT $value IN ['default', 'maintainer'];
+DEFINE FIELD IF NOT EXISTS edited_by ON champion_trait TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS edited_by_name ON champion_trait TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS edited_at ON champion_trait TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS reviewed_for_patch ON champion_trait TYPE option<string>;
+
+-- What a team knows about a pair of champions (team-scoped). For a counter,
+-- a beats b; synergies are stored with a < b.
+DEFINE TABLE IF NOT EXISTS team_relation SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON team_relation TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS a ON team_relation TYPE string;
+DEFINE FIELD IF NOT EXISTS b ON team_relation TYPE string;
+DEFINE FIELD IF NOT EXISTS kind ON team_relation TYPE string ASSERT $value IN ['synergy', 'counter'];
+DEFINE FIELD IF NOT EXISTS weight ON team_relation TYPE int ASSERT $value >= 1 AND $value <= 3;
+DEFINE FIELD IF NOT EXISTS reason ON team_relation TYPE string;
+DEFINE FIELD IF NOT EXISTS author ON team_relation TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS author_name ON team_relation TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON team_relation TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS team_relation_team ON team_relation FIELDS team;

@@ -4,6 +4,7 @@ pub mod bug_report_export;
 pub mod config;
 pub mod data_dragon;
 pub mod db;
+pub mod graph;
 pub mod images;
 pub mod migrations;
 pub mod rate_limit;

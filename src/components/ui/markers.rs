@@ -6,8 +6,12 @@ use leptos::prelude::*;
 
 use super::draft::DraftSide;
 
-/// A lane role.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// A lane role. Serialised in lowercase ("top", "jungle", "mid", "bot",
+/// "support"): the Draft Graph's trait table stores it that way.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
 pub enum Role {
     Top,
     Jungle,
@@ -28,6 +32,17 @@ impl Role {
             "bot" | "bottom" | "adc" | "carry" | "marksman" => Some(Role::Bot),
             "support" | "sup" | "supp" | "utility" => Some(Role::Support),
             _ => None,
+        }
+    }
+
+    /// The stored spelling: top, jungle, mid, bot, support.
+    pub fn key(self) -> &'static str {
+        match self {
+            Role::Top => "top",
+            Role::Jungle => "jungle",
+            Role::Mid => "mid",
+            Role::Bot => "bot",
+            Role::Support => "support",
         }
     }
 
