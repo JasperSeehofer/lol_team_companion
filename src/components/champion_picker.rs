@@ -13,17 +13,6 @@ fn role_tags(role: &str) -> &'static [&'static str] {
     }
 }
 
-fn role_icon_url(role: &str) -> &'static str {
-    match role {
-        "Top"     => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
-        "Jungle"  => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-jungle.svg",
-        "Mid"     => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-middle.svg",
-        "ADC"     => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-bottom.svg",
-        "Support" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-utility.svg",
-        _         => "",
-    }
-}
-
 #[component]
 pub fn ChampionPicker(
     champions: Vec<Champion>,
@@ -67,7 +56,6 @@ pub fn ChampionPicker(
                         let role_str = role.to_string();
                         let role_val = if role == "All" { None } else { Some(role.to_string()) };
                         let role_val_for_class = role_val.clone();
-                        let role_static: Option<&'static str> = if role == "All" { None } else { Some(role) };
                         view! {
                             <button
                                 title=role_str.clone()
@@ -82,22 +70,7 @@ pub fn ChampionPicker(
                                 }
                                 on:click=move |_| set_role_filter.set(role_val.clone())
                             >
-                                {if role == "All" {
-                                    view! { <span>"All"</span> }.into_any()
-                                } else {
-                                    view! {
-                                        <img
-                                            src=role_icon_url(role)
-                                            alt=role
-                                            class=move || if role_filter.get().as_deref() == role_static {
-                                                "w-4 h-4 brightness-0"
-                                            } else {
-                                                "w-4 h-4 invert opacity-75"
-                                            }
-                                        />
-                                        <span>{role}</span>
-                                    }.into_any()
-                                }}
+                                <span>{role}</span>
                             </button>
                         }
                     }).collect_view()}

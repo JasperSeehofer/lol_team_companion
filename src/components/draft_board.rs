@@ -1,6 +1,9 @@
 use crate::components::region::{Card, ChampTile, Eyebrow};
+use crate::components::ui::{
+    DraftSide, Role, RoleLabel, RoleLabelStyle, Segment, SegmentSize, SegmentedControl, SideMarker,
+    SideText,
+};
 use crate::models::champion::Champion;
-use crate::models::draft::role_icon_url;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -50,6 +53,13 @@ pub fn DraftBoard(
     #[prop(optional)] on_role_set: Option<Callback<(usize, String)>>,
 ) -> impl IntoView {
     let (first_pick_blue, set_first_pick_blue) = signal(true);
+    let first_pick_choice = RwSignal::new("blue".to_string());
+    Effect::new(move |_| {
+        let want = if first_pick_blue.get() { "blue" } else { "red" };
+        if first_pick_choice.get_untracked() != want {
+            first_pick_choice.set(want.to_string());
+        }
+    });
     // Portraits resolve by champion name via ChampTile; the map prop is kept
     // for callers until the M3 draft rebuild.
     let _ = champion_map;
@@ -67,14 +77,14 @@ pub fn DraftBoard(
                         let is_highlighted = highlighted_slot.get() == Some(slot_idx);
                         if is_active && !filled {
                             // Empty + active phase: chalk outline
-                            "relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-elevated border-2 animate-pulse ring-2 ring-accent/40"
+                            "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-accent-soft border-2 border-dashed border-accent"
                         } else if filled && is_highlighted {
-                            "relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-surface ring-2 ring-danger"
+                            "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-surface ring-2 ring-accent"
                         } else if filled {
-                            "relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-surface hover:opacity-80"
+                            "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-surface hover:opacity-80"
                         } else {
                             // Empty default ban slot — dashed outline
-                            "relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-elevated border-2 border-dashed border-outline/50 hover:border-accent/40"
+                            "relative w-16 h-16 rounded-ctl flex items-center justify-center cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-all bg-elevated border-2 border-dashed border-outline/50 hover:border-accent/40"
                         }
                     }
                     style=move || {
@@ -141,7 +151,7 @@ pub fn DraftBoard(
                                     {if is_highlighted {
                                         view! {
                                             <button
-                                                class="absolute top-0 right-0 w-4 h-4 bg-danger text-white text-xs rounded-bl flex items-center justify-center hover:opacity-80 z-10 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                                class="absolute top-0 right-0 w-4 h-4 bg-danger-deep text-primary text-xs rounded-bl flex items-center justify-center hover:opacity-80 z-10 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                                 on:click=move |ev| {
                                                     ev.stop_propagation();
                                                     on_slot_clear.run(slot_idx);
@@ -299,12 +309,11 @@ pub fn DraftBoard(
                                         "Assign role".to_string()
                                     };
                                     let badge_class = if role_for_badge.is_some() && !is_auto {
-                                        "absolute bottom-0 right-0 w-5 h-5 bg-base/80 rounded-full flex items-center justify-center cursor-pointer z-10 border border-solid border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        "absolute bottom-0 right-0 h-5 min-w-5 px-1 bg-base/90 rounded-ctl flex items-center justify-center cursor-pointer z-10 border border-solid border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     } else {
-                                        "absolute bottom-0 right-0 w-5 h-5 bg-base/80 rounded-full flex items-center justify-center cursor-pointer z-10 opacity-50 border border-dashed border-outline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                        "absolute bottom-0 right-0 h-5 min-w-5 px-1 bg-base/90 rounded-ctl flex items-center justify-center cursor-pointer z-10 opacity-50 border border-dashed border-outline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     };
-                                    let icon_url_opt = role_for_badge.as_deref().map(role_icon_url).unwrap_or("").to_string();
-                                    let role_label = role_for_badge.clone().unwrap_or_default();
+                                    let badge_role = role_for_badge.as_deref().and_then(Role::parse);
                                     view! {
                                         <button
                                             class=badge_class
@@ -317,10 +326,9 @@ pub fn DraftBoard(
                                                 });
                                             }
                                         >
-                                            {if !icon_url_opt.is_empty() {
-                                                view! { <img src=icon_url_opt class="w-4 h-4" alt=role_label /> }.into_any()
-                                            } else {
-                                                view! { <span class="text-caption text-dimmed">"?"</span> }.into_any()
+                                            {match badge_role {
+                                                Some(r) => view! { <RoleLabel role=r /> }.into_any(),
+                                                None => view! { <span class="text-caption text-muted">"?"</span> }.into_any(),
                                             }}
                                         </button>
                                         // Popover (5 role buttons in a row)
@@ -339,8 +347,8 @@ pub fn DraftBoard(
                                                         class="absolute bottom-full mb-1 right-0 z-50 bg-surface border border-divider rounded-xl p-2 shadow-lg flex gap-1"
                                                         on:click=move |ev| ev.stop_propagation()
                                                     >
-                                                        {roles_list.iter().map(|&(r, label)| {
-                                                            let icon = role_icon_url(r);
+                                                        {roles_list.iter().map(|&(r, _label)| {
+                                                            let role_mark = Role::parse(r);
                                                             let is_current = role_for_popover.as_deref() == Some(r);
                                                             let r_string = r.to_string();
                                                             view! {
@@ -359,8 +367,7 @@ pub fn DraftBoard(
                                                                         role_popover_open.set(None);
                                                                     }
                                                                 >
-                                                                    <img src=icon class="w-6 h-6" alt=r />
-                                                                    <span class="text-caption text-muted capitalize">{label}</span>
+                                                                    {role_mark.map(|rm| view! { <RoleLabel role=rm style=RoleLabelStyle::Boxed /> })}
                                                                 </button>
                                                             }
                                                         }).collect_view()}
@@ -375,7 +382,7 @@ pub fn DraftBoard(
                                 {if is_highlighted {
                                     view! {
                                         <button
-                                            class="absolute top-0 right-0 w-4 h-4 bg-danger text-white text-xs rounded-bl flex items-center justify-center hover:opacity-80 z-10 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                            class="absolute top-0 right-0 w-4 h-4 bg-danger-deep text-primary text-xs rounded-bl flex items-center justify-center hover:opacity-80 z-10 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                             on:click=move |ev| {
                                                 ev.stop_propagation();
                                                 on_slot_clear.run(slot_idx);
@@ -393,22 +400,12 @@ pub fn DraftBoard(
                             let roles = ra.get();
                             roles.get(slot_idx).cloned().flatten()
                         });
-                        let placeholder_role_icon = role_for_empty
-                            .as_deref()
-                            .map(role_icon_url)
-                            .unwrap_or("");
+                        let placeholder_role = role_for_empty.as_deref().and_then(Role::parse);
                         view! {
                             <div class="flex items-center justify-between px-2 h-full w-full gap-2">
-                                {if !placeholder_role_icon.is_empty() {
-                                    view! {
-                                        <img
-                                            src=placeholder_role_icon
-                                            alt=""
-                                            class="w-5 h-5 opacity-50 flex-shrink-0"
-                                        />
-                                    }.into_any()
-                                } else {
-                                    view! { <span class="w-5 h-5 flex-shrink-0"></span> }.into_any()
+                                {match placeholder_role {
+                                    Some(r) => view! { <RoleLabel role=r /> }.into_any(),
+                                    None => view! { <span class="w-5 h-5 flex-shrink-0"></span> }.into_any(),
                                 }}
                                 <span class="text-dimmed text-xs font-mono uppercase tracking-[0.14em] flex-1 truncate">
                                     {label}
@@ -429,12 +426,12 @@ pub fn DraftBoard(
         <div class="grid grid-cols-[14rem_8rem_14rem] gap-x-4 gap-y-3">
 
             // Row: side headers (circle = blue, square = red)
-            <h3 class="flex items-center justify-center gap-2 text-label font-semibold text-primary">
-                <span class="size-2.5 rounded-full bg-side-blue" aria-hidden="true"></span>"Blue side"
+            <h3 class="flex items-center justify-center font-semibold">
+                <SideMarker side=DraftSide::Blue text=SideText::Long />
             </h3>
             <div></div>
-            <h3 class="flex items-center justify-center gap-2 text-label font-semibold text-primary">
-                <span class="size-2.5 rounded-[1px] bg-side-red" aria-hidden="true"></span>"Red side"
+            <h3 class="flex items-center justify-center font-semibold">
+                <SideMarker side=DraftSide::Red text=SideText::Long />
             </h3>
 
             // Row: Phase 1 bans + first-pick toggle
@@ -444,19 +441,16 @@ pub fn DraftBoard(
                 {render_ban_slot(4)}
             </div>
             <div class="flex items-center justify-center">
-                <div class="flex flex-col items-center gap-1">
-                    <span class="text-dimmed text-caption font-mono uppercase tracking-[0.18em]">"First pick"</span>
-                    <button
-                        class="relative w-11 h-6 rounded-full bg-elevated border border-outline/50 hover:border-accent/40 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                        title="Toggle first pick side"
-                        on:click=move |_| set_first_pick_blue.update(|v| *v = !*v)
-                    >
-                        <span class=move || if first_pick_blue.get() {
-                            "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-info transition-all duration-300"
-                        } else {
-                            "absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-danger transition-all duration-300"
-                        }></span>
-                    </button>
+                <div class="flex flex-col items-center gap-1.5">
+                    <span class="eyebrow">"First pick"</span>
+                    <SegmentedControl
+                        id="first-pick"
+                        label="First pick side"
+                        options=vec![Segment::new("blue", "Blue"), Segment::new("red", "Red")]
+                        value=first_pick_choice
+                        size=SegmentSize::Sm
+                        on_change=Callback::new(move |v: String| set_first_pick_blue.set(v == "blue"))
+                    />
                 </div>
             </div>
             <div class="flex gap-2 justify-start">

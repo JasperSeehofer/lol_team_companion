@@ -67,18 +67,6 @@ pub fn guess_role_from_tags(tags: &[String]) -> &'static str {
     "mid" // fallback
 }
 
-/// Community Dragon SVG URL for a lane role icon.
-pub fn role_icon_url(role: &str) -> &'static str {
-    match role {
-        "top" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-top.svg",
-        "jungle" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-jungle.svg",
-        "mid" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-middle.svg",
-        "bot" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-bottom.svg",
-        "support" => "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-shared-components/global/default/svg/position-utility.svg",
-        _ => "",
-    }
-}
-
 /// Returns the most common tag from a list. On tie, returns the first tag
 /// that appears with the maximum count (preserves list position as tiebreak).
 pub fn most_common_tag(tags: &[impl AsRef<str>]) -> Option<String> {
