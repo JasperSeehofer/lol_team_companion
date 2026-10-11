@@ -14,6 +14,15 @@ test("team: create a new team", async ({ authedPage }) => {
 
   await navigateTo(page, "/team/roster");
 
+  // New users start in solo mode, where /team/roster shows a "Switch to Team
+  // Mode" gate instead of the create form. Switch first (the page reloads).
+  const switchBtn = page.locator('button:has-text("Switch to Team Mode")');
+  if (await switchBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await switchBtn.click();
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+  }
+
   // Fill team name input
   const teamNameInput = page.locator('input[name="name"]');
   await expect(teamNameInput).toBeVisible({ timeout: 5000 });

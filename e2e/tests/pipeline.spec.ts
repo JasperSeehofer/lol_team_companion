@@ -13,27 +13,14 @@ import { test, expect } from "./fixtures";
 import { captureErrors, filterRealErrors, navigateTo } from "./helpers";
 
 test("full pipeline: draft with picks → game plan prefill → save → source draft roundtrip", async ({
-  authedPage,
+  teamPage,
 }) => {
-  const page = authedPage;
+  // --- 1. Team: the teamPage fixture registers, switches to team mode and
+  // creates a team (new users start in solo mode, where the roster page
+  // shows a mode gate instead of the create form).
+  const page = teamPage;
   const timestamp = Date.now();
   const errors = captureErrors(page);
-
-  // --- 1. Create team ---
-  await navigateTo(page, "/team/roster");
-
-  const teamNameInput = page.locator('input[name="name"]');
-  if (await teamNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await teamNameInput.fill(`PipeTeam_${timestamp}`);
-    const regionSelect = page.locator('select[name="region"]');
-    if (await regionSelect.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await regionSelect.selectOption("NA");
-    }
-    await page.click('button:has-text("Create Team")');
-    await page.waitForURL("**/team/dashboard", { timeout: 15000 });
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
-  }
 
   // --- 2. Create draft with champion picks ---
   await navigateTo(page, "/draft");

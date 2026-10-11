@@ -42,8 +42,10 @@ test("post-game: draft_id param loads without crash", async ({ teamPage }) => {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1000);
 
-  // Page should render (h1 visible)
-  await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
+  // Page should render. The page has no h1 (its title comes from the legacy
+  // SectionHead primitive, which renders a styled div), so check the page
+  // container instead.
+  await expect(page.locator('[data-feedback-label="Post game"]')).toBeVisible({ timeout: 5000 });
 
   // No WASM panics
   const panics = filterRealErrors(errors).filter((e) =>

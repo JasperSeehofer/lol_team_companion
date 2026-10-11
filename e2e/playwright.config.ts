@@ -8,6 +8,11 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 5_000 },
   fullyParallel: false, // sequential — shares one dev server session
+  // One worker: files used to run two at a time against the same dev server,
+  // and with the large debug WASM bundle that made page loads and the
+  // register redirect time out now and then (the "flaky" audit-draft and
+  // pages failures).
+  workers: 1,
   retries: 0,
   reporter: "list",
 
