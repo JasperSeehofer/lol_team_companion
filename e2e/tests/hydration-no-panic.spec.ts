@@ -130,7 +130,7 @@ test("stale theme cookie is ignored", async ({ authedPage }) => {
 //
 // Default modes (src/pages/draft.rs::resolve_mode): /draft = carousel,
 // /solo = constellation. We click a non-default mode so the toggle produces
-// an observable `aria-pressed` change.
+// an observable `aria-checked` change on the segmented control.
 
 test("mode-toggle observable on /draft", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
@@ -139,7 +139,7 @@ test("mode-toggle observable on /draft", async ({ authedPage }) => {
   await authedPage.waitForTimeout(1500);
   await setMode(authedPage, "war-table");
   await expect(
-    authedPage.locator('button[aria-pressed="true"]:has-text("War table")')
+    authedPage.locator('[data-segmented="page-mode"] [role="radio"][aria-checked="true"]:text-is("Table")')
   ).toBeVisible({ timeout: 2000 });
   expect(errors, `Panic during /draft mode-toggle: ${errors.join("\n")}`).toEqual([]);
 });
@@ -151,7 +151,7 @@ test("mode-toggle observable on /solo", async ({ authedPage }) => {
   await authedPage.waitForTimeout(1500);
   await setMode(authedPage, "journal");
   await expect(
-    authedPage.locator('button[aria-pressed="true"]:has-text("Journal")')
+    authedPage.locator('[data-segmented="page-mode"] [role="radio"][aria-checked="true"]:text-is("Journal")')
   ).toBeVisible({ timeout: 2000 });
   expect(errors, `Panic during /solo mode-toggle: ${errors.join("\n")}`).toEqual([]);
 });

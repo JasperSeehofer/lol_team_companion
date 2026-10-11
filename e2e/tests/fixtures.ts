@@ -178,11 +178,12 @@ export const test = base.extend<Fixtures>({
 export { expect };
 
 /**
- * Set the mode for the current page by clicking a ModeToggle button.
+ * Set the mode for the current page by clicking a ModeToggle segment
+ * (a SegmentedControl: `role="radio"` buttons with `aria-checked`).
  *
  * Labels (components/region/controls.rs ModeToggle callers):
  *
- * Draft:   carousel→"Carousel", war-table→"War table", ledger→"Ledger"
+ * Draft:   carousel→"Carousel", war-table→"Table", ledger→"Ledger"
  * Solo:    constellation→"Overview", forge→"Rank", journal→"Journal"
  *
  * @param page - Playwright Page
@@ -195,7 +196,7 @@ export async function setMode(
   // Mapping from canonical mode key to its button label.
   const LABEL_MAP: Record<string, string[]> = {
     "carousel": ["Carousel"],
-    "war-table": ["War table"],
+    "war-table": ["Table"],
     "ledger": ["Ledger"],
     "constellation": ["Overview"],
     "forge": ["Rank"],
@@ -209,7 +210,9 @@ export async function setMode(
   ];
 
   // Build a CSS selector that matches any candidate label (exact text match)
-  const selector = candidates.map(label => `button[aria-pressed]:has-text("${label}")`).join(", ");
+  const selector = candidates
+    .map((label) => `[data-segmented="page-mode"] button[role="radio"]:text-is("${label}")`)
+    .join(", ");
   await page.click(selector, { timeout: 10000 });
   await page.waitForTimeout(500);
 }
