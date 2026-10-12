@@ -69,7 +69,7 @@ description: WASM safety, browser testing gotchas, and tooling patterns for lol_
 
 47. **No `style-file` next to `tailwind-input-file`** — `input.css` starts with `@import "tailwindcss"`, which only the Tailwind CLI understands. When `Cargo.toml` also listed it as `style-file`, cargo-leptos shipped the raw import and the browser requested `/pkg/tailwindcss` (404 on every page). Keep only `tailwind-input-file`. `smoke.spec.ts` asserts there is no `/pkg/` 404.
 
-48. **E2e auth fixture registers and lands on `/solo`** — Registration requires `?invite=...` (otherwise it redirects to `/closed-beta`), auto-logs in and hard-navigates to `/solo` because new users start in solo mode. Login goes to `/solo`, or `/team/dashboard` when the user's mode is `team`. The `authedPage` fixture waits for `**/solo`; `teamPage` then creates a team via `/team/roster`.
+48. **E2e auth fixture registers and lands on Home (`/`)** — Registration requires `?invite=...` (otherwise it redirects to `/closed-beta`), auto-logs in and hard-navigates to `/`; login does the same. The `authedPage` fixture waits for the pathname `/` (`waitForHome`), not a glob (`**/` matches every URL); `teamPage` then creates a team via `/team/roster`. Fixture users carry the worker index (`TEST_WORKER_INDEX`) so parallel workers never register the same name. A full run registers about 170 users from 127.0.0.1, a third of the hourly registration budget at `RATE_LIMIT_MULTIPLIER=100`: restart the server between back-to-back full runs.
 
 53. **`just` may not be installed** — `just` is a dev dependency. Fall back to running cargo/npx commands directly if `just` is not on PATH.
 
