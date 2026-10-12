@@ -24,15 +24,20 @@ struct DbUser {
     riot_region: Option<String>,
     #[serde(default)]
     is_admin: Option<bool>,
+    #[serde(default)]
+    admin_promoted_at: Option<surrealdb::types::Datetime>,
 }
 
 impl From<DbUser> for AppUser {
     fn from(u: DbUser) -> Self {
         let admin_flag = u.is_admin.unwrap_or(false);
+        let admin_promoted = u.admin_promoted_at.is_some();
         AppUser {
             auth_hash: session_auth_hash_for(&u.password_hash),
-            is_admin: crate::server::config::get().grants_admin(admin_flag, &u.email),
+            is_admin: admin_promoted
+                || crate::server::config::get().grants_admin(admin_flag, &u.email),
             admin_flag,
+            admin_promoted,
             id: u.id.to_sql(),
             username: u.username,
             email: u.email,
@@ -53,11 +58,15 @@ pub struct AppUser {
     pub riot_puuid: Option<String>,
     pub riot_summoner_name: Option<String>,
     pub riot_region: Option<String>,
-    /// Effective admin status: the stored flag AND a current `ADMIN_EMAILS`
-    /// listing, so removing an address revokes access on the next request.
+    /// Effective admin status: promoted with the promote command, or the
+    /// stored flag AND a current `ADMIN_EMAILS` listing, so removing an
+    /// address revokes access on the next request.
     pub is_admin: bool,
     /// The raw `user.is_admin` flag as stored (see `authz::sync_admin_flag`).
     pub(crate) admin_flag: bool,
+    /// Promoted with the promote command (`user.admin_promoted_at` is set):
+    /// admin regardless of `ADMIN_EMAILS` until revoked with the command.
+    pub(crate) admin_promoted: bool,
     auth_hash: Vec<u8>,
 }
 

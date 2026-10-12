@@ -34,6 +34,10 @@ DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 -- this field existed stay valid on UPDATE; ADMIN_EMAILS promotes at login.
 -- Migration 3 backfills NONE to false and tightens it to bool DEFAULT false.
 DEFINE FIELD IF NOT EXISTS is_admin ON user TYPE option<bool>;
+-- M9: set by the promote command (`cargo run --features ssr --bin promote`):
+-- an admin that does not depend on an ADMIN_EMAILS listing. NONE = not
+-- promoted that way.
+DEFINE FIELD IF NOT EXISTS admin_promoted_at ON user TYPE option<datetime>;
 
 -- M6: lowercase username for case-insensitive uniqueness. Migration 2
 -- backfills it, tightens it to string and adds the unique index

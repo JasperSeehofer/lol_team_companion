@@ -57,6 +57,13 @@ cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec
 # Idempotent; prints every login and a 25-use invite code. --dry-run shows the plan.
 cargo run --features ssr --bin seed
 
+# Make an existing account an admin, or take it back (STOP THE SERVER FIRST).
+# Promoted accounts are admins without an ADMIN_EMAILS listing. The server
+# binary runs the same command: `lol_team_companion promote <email>`.
+cargo run --features ssr --bin promote -- someone@example.com
+cargo run --features ssr --bin promote -- --revoke someone@example.com
+cargo run --features ssr --bin promote -- --list
+
 # Register + sign in over plain HTTP against a running server (CI runs it on the image)
 ./scripts/smoke_signin.sh http://127.0.0.1:3020
 
@@ -103,7 +110,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes and 8 distinct characters (`openssl rand -hex 32`). **Required outside dev**; in dev a random key is used per run | none |
 | `CLOSED_BETA` | `false` disables the invite gate. **Honoured only in dev**; production always requires an invite | gate on |
 | `COOKIE_SECURE` | `Secure` flag on the session cookie | `true` outside dev, `false` in dev |
-| `ADMIN_EMAILS` | Comma-separated emails that are admins (`user.is_admin`). Listed addresses are promoted when they sign in or register; **removing an address revokes admin** (immediately for access checks, and the stored flag is cleared at that user's next sign-in). There is no email verification, so register the admin account first (with the bootstrap invite), then list it | empty |
+| `ADMIN_EMAILS` | Comma-separated emails that are admins (`user.is_admin`). Listed addresses are promoted when they sign in or register; **removing an address revokes admin** (immediately for access checks, and the stored flag is cleared at that user's next sign-in). There is no email verification, so register the admin account first (with the bootstrap invite), then list it. The `promote` command (Commands) makes an account admin without a listing, until `--revoke` | empty |
 | `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs); uses 1 to 1,000,000 | unset / `1` |
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities, 1 to 1,000 (e2e uses `100`; warned about outside dev) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy; `compose.yaml` forces it on) | `false` |

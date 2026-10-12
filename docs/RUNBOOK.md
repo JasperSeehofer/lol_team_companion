@@ -271,6 +271,17 @@ Announce it ("you will need to sign in again").
 
 **Admins:** add or remove addresses in `ADMIN_EMAILS` and `docker compose up -d app`. Removal revokes admin at once for access checks.
 
+Or, without touching `.env`, promote an account that is already registered (owner decision: there is no email provider in Release 1). The command opens the database directly, so the app must be stopped (SurrealKV allows one process):
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps app /app/lol_team_companion promote someone@example.com
+docker compose run --rm --no-deps app /app/lol_team_companion promote --list
+docker compose start app
+```
+
+`promote --revoke someone@example.com` takes it back (an address still in `ADMIN_EMAILS` is promoted again at its next sign-in, so remove it there too). A promoted account is an admin from its next request; no sign-in needed. In development: `cargo run --features ssr --bin promote -- <email>` with the dev server stopped.
+
 **Bucket credentials and crypt passphrases:** rotate the access key in the provider console and in `deploy/backup.env`. Changing the crypt passphrases makes old backups unreadable with the new remote: keep the old passphrases until the last old backup has aged out (30 days), or start a new bucket path.
 
 ## 9. Failure recovery

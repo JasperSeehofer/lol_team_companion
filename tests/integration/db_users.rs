@@ -47,3 +47,35 @@ async fn test_get_nonexistent_user_returns_none() {
     let result = db::get_user_team_id(&db, "user:nonexistent").await.unwrap();
     assert!(result.is_none());
 }
+
+#[tokio::test]
+async fn the_promote_command_promotes_lists_and_revokes() {
+    let db = common::test_db().await;
+    let id = db::create_user(&db, "ada".into(), "ada@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    db::create_user(&db, "bob".into(), "bob@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    assert!(db::list_admins(&db).await.unwrap().is_empty());
+
+    // The address is matched case-insensitively, like sign-in.
+    let (pid, name) = db::set_admin_promotion(&db, " Ada@Example.com ", true)
+        .await
+        .unwrap();
+    assert_eq!((pid.as_str(), name.as_str()), (id.as_str(), "ada"));
+    assert_eq!(
+        db::list_admins(&db).await.unwrap(),
+        vec![("ada@example.com".to_string(), "ada".to_string(), true)]
+    );
+
+    db::set_admin_promotion(&db, "ada@example.com", false)
+        .await
+        .unwrap();
+    assert!(db::list_admins(&db).await.unwrap().is_empty());
+
+    match db::set_admin_promotion(&db, "nobody@example.com", true).await {
+        Err(db::DbError::NotFound) => {}
+        other => panic!("expected NotFound, got {other:?}"),
+    }
+}

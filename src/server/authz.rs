@@ -199,11 +199,12 @@ pub async fn require_team_leader(
 }
 
 /// Make the stored admin flag match `ADMIN_EMAILS`: promote listed users,
-/// demote users whose address was removed. Called at login and registration;
-/// failures are logged, never fatal. (Access itself never depends on this
-/// running: `AppUser::is_admin` also requires a current listing.)
+/// demote users whose address was removed (unless the promote command made
+/// them admin). Called at login and registration; failures are logged, never
+/// fatal. (Access itself never depends on this running: `AppUser::is_admin`
+/// also requires a current listing or a promotion.)
 pub async fn sync_admin_flag(db: &Surreal<Db>, user: &AppUser) {
-    let listed = crate::server::config::get().is_admin_email(&user.email);
+    let listed = user.admin_promoted || crate::server::config::get().is_admin_email(&user.email);
     if listed == user.admin_flag {
         return;
     }

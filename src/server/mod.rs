@@ -9,6 +9,7 @@ pub mod db;
 pub mod graph;
 pub mod images;
 pub mod migrations;
+pub mod promote;
 pub mod rate_limit;
 pub mod riot;
 pub mod sand_table;

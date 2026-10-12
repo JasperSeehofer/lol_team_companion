@@ -166,6 +166,14 @@ async fn main() {
     // Load .env file (if present)
     dotenvy::dotenv().ok();
 
+    // `lol_team_companion promote ...`: the admin command (server::promote),
+    // so the container image can run it without a second binary. It opens
+    // the database itself; the server must be stopped.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("promote") {
+        std::process::exit(lol_team_companion::server::promote::run(&args[1..]).await);
+    }
+
     // Logging. An invalid RUST_LOG is reported, not silently replaced.
     let filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
         Ok(f) => f,

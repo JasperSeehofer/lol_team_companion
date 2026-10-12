@@ -443,6 +443,52 @@ pub async fn set_user_admin(db: &Surreal<Db>, user_id: &str, is_admin: bool) -> 
     Ok(())
 }
 
+/// The promote command (`src/bin/promote.rs`): make the account with this
+/// email an admin that does not depend on `ADMIN_EMAILS`, or revoke that.
+/// Returns the account's (id, username). Revoking clears the flag too; an
+/// address still listed in `ADMIN_EMAILS` is promoted again at its next
+/// sign-in.
+pub async fn set_admin_promotion(
+    db: &Surreal<Db>,
+    email: &str,
+    promote: bool,
+) -> DbResult<(String, String)> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        id: RecordId,
+        username: String,
+    }
+    let q = if promote {
+        "UPDATE user SET is_admin = true, admin_promoted_at = time::now() WHERE email = $email RETURN id, username"
+    } else {
+        "UPDATE user SET is_admin = false, admin_promoted_at = NONE WHERE email = $email RETURN id, username"
+    };
+    let mut r = db.query(q).bind(("email", normalize_email(email))).await?;
+    let rows: Vec<Row> = r.take(0)?;
+    rows.into_iter()
+        .next()
+        .map(|row| (row.id.to_sql(), row.username))
+        .ok_or(DbError::NotFound)
+}
+
+/// (email, username, promoted with the command) of every stored admin.
+pub async fn list_admins(db: &Surreal<Db>) -> DbResult<Vec<(String, String, bool)>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        email: String,
+        username: String,
+        promoted: bool,
+    }
+    let mut r = db
+        .query("SELECT email, username, admin_promoted_at != NONE AS promoted FROM user WHERE is_admin = true OR admin_promoted_at != NONE ORDER BY email")
+        .await?;
+    let rows: Vec<Row> = r.take(0).unwrap_or_default();
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.email, r.username, r.promoted))
+        .collect())
+}
+
 // ---------------------------------------------------------------------------
 // Invites (closed-beta gate)
 // ---------------------------------------------------------------------------
