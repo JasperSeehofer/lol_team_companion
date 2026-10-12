@@ -44,6 +44,10 @@ pub struct DraftAction {
     /// Lane role assignment (top/jungle/mid/bot/support)
     #[serde(default)]
     pub role: Option<String>,
+    /// The role was guessed (from the champion's class or the trait table),
+    /// not set by a person. Drafts saved before M4 read as confirmed.
+    #[serde(default)]
+    pub role_guessed: bool,
 }
 
 /// Best-effort role guess from Data Dragon champion tags.
@@ -161,6 +165,7 @@ mod tests {
             order: 0,
             comment: None,
             role: None,
+            role_guessed: false,
         };
         let json = serde_json::to_string(&a).unwrap();
         let back: DraftAction = serde_json::from_str(&json).unwrap();
@@ -178,6 +183,7 @@ mod tests {
             order: 6,
             comment: None,
             role: Some("bot".into()),
+            role_guessed: false,
         };
         let json = serde_json::to_string(&a).unwrap();
         let back: DraftAction = serde_json::from_str(&json).unwrap();
@@ -303,6 +309,7 @@ mod tests {
                 order: 1,
                 comment: Some("strong ADC pick".into()),
                 role: None,
+                role_guessed: false,
             }],
             children: vec![],
         };

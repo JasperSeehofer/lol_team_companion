@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M4: Draft Graph, stage B (the canvas)
+
+#### Added
+- The Draft Graph view now opens with a force-directed graph of the pick being decided: your locked picks pinned on the left and theirs on the right (one row per role, blue circles and red squares), the top candidates floating between them, pulled toward the picks they work with and pushed away from the ones that beat them. Fit is drawn as elevation: a spot height ("▲ 84") and one contour ring for every 10 fit from 50. Lines say what kind of relation it is (solid synergy, dashed counter with an arrow at the one that loses, dotted when weak or working against), their width how strong, their colour whose pick it is; a legend under the graph explains every mark, and the grid references (A to H, 1 to 5) let you say "Thresh, D3" on voice.
+- The graph, the ranked list and the Why panel follow one focus: focus a candidate anywhere and its connections light up while the rest fades; click one of the locked picks to see every candidate related to it. A line under the graph says the same in words ("Thresh, fit 87, at D3: synergy with Jinx, Vi and Orianna; beats Sejuani").
+- The graph works from the keyboard as one stop: arrow keys go through the candidates in rank order, Enter picks, Escape goes back to the board. With the mouse, click focuses, double-click picks, and you can drag a candidate (the layout settles again).
+- The layout settles in well under a second and then stays still; with reduced motion turned on, the settled picture appears at once. On phones the graph is square and shows the top 12.
+
+#### Fixed
+- The side marker in the draft page's header now follows the side switch.
+- When the graph ranks the other side's pick, your draft's composition tags (teamfight, scaling, ...) no longer count for their candidates.
+- Two team members who met as opponents in the same game no longer count as a pair "together in your games".
+- A quick second pick from the graph (before the ranking for the next slot arrived) no longer replaces the champion just picked.
+- The ranked list says when a candidate's traits are low confidence, not only the Why panel.
+
+### Milestone M4: Draft Graph, stage A (the model)
+
+#### Added
+- The draft page has a Draft Graph view beside the board (switch "Picker | Draft Graph"). For the pick being decided it ranks the candidates by fit (0 to 100, from a neutral 50) and says why: synergy with your locked picks, counters against theirs, how the pick fits the draft's composition and what the comp still lacks, and whether its power curve matches the comp's plan, in that order of weight, plus the player's champion pool. Every point has a reason a coach can read and argue with; there is no win probability.
+- A "Why this pick" panel for the focused candidate: fit by part, the reasons grouped by where they come from (the trait rules, your team's notes with their author, your own games with the number of games, scouting, the player's pool), and "Argue with it", which opens a team note prefilled with the pair.
+- Team notes on pairs ("X works with Y because ...", "X beats / loses to Y because ...", slight, clear or strong): every member sees them, the ranking uses them with your name on the reason, and they can be removed with Undo.
+- A comp profile per side (damage mix, engage, front line, crowd control, wave clear, when it is strongest) with the change the focused candidate would make.
+- The ranked list works from the keyboard: arrow keys move the focus (the Why panel follows), Enter or a double click picks into the current slot, Escape goes back to the board.
+- Admins can review and edit the champion trait table on `/admin/traits` (search, "defaults only", "edited", "low confidence"; who edited when; reset to the shipped default). Everyone else gets the 404 page.
+- The trait table ships with a kit-based default row for every champion (what the abilities structurally do, nothing patch-specific), each marked as a default until reviewed; champions the defaults do not know yet get neutral values marked as low confidence.
+- Your own games count as evidence for pairs and lane matchups once there are at least 5, always shown with the number of games, and only ever strengthening or weakening a reason that already exists.
+
+#### Changed
+- A role the page guesses for a pick is now stored as a guess and drawn as uncertain on the board (dashed underline and "?", read as "role guessed"); choosing a role confirms it. Guesses use the champion's roles from the trait table, preferring roles your side has not filled yet. Drafts saved earlier show their roles as confirmed.
+- Seeded demo pools use the champion pool page's tiers.
+
+#### Fixed
+- Signing in or registering before the page has finished loading no longer leaves you signed in but stuck on the form.
+- Closing a view that contains a form field no longer breaks the page (a field could read its own state after it was gone).
+
 ### Milestone M3: Strategy pages onto the system
 
 #### Added

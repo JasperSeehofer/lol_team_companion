@@ -927,6 +927,138 @@ async fn series_is_isolated_between_teams() {
 }
 
 // ---------------------------------------------------------------------------
+// Cross-tenant: Draft Graph team relations and team games
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn team_relation_is_isolated_between_teams() {
+    use lol_team_companion::models::graph::{NewRelation, RelationKind};
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let rel = db::create_team_relation(
+        &db,
+        &t.team1,
+        &t.a,
+        "alice",
+        NewRelation {
+            a: "Jinx".into(),
+            b: "Thresh".into(),
+            kind: RelationKind::Synergy,
+            weight: 2,
+            reason: "lantern saves Jinx".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(db::list_team_relations(&db, &t.team2)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_not_found(
+        db::delete_team_relation(&db, &t.team2, &rel).await,
+        "B deletes A's relation",
+    );
+    let mine = db::list_team_relations(&db, &t.team1).await.unwrap();
+    assert_eq!(mine.len(), 1);
+    assert_eq!(mine[0].author_name, "alice");
+    assert_eq!(mine[0].reason, "lantern saves Jinx");
+    assert_eq!(mine[0].team_id, t.team1);
+
+    // Shape rules hold on the DB path too (weight, same champion).
+    for bad in [
+        NewRelation {
+            a: "Jinx".into(),
+            b: "Jinx".into(),
+            kind: RelationKind::Synergy,
+            weight: 2,
+            reason: "same".into(),
+        },
+        NewRelation {
+            a: "Jinx".into(),
+            b: "Lulu".into(),
+            kind: RelationKind::Counter,
+            weight: 9,
+            reason: "weight".into(),
+        },
+    ] {
+        assert!(matches!(
+            db::create_team_relation(&db, &t.team1, &t.a, "alice", bad).await,
+            Err(DbError::Invalid(_))
+        ));
+    }
+    // Values are bound, not formatted into the query.
+    db::create_team_relation(
+        &db,
+        &t.team1,
+        &t.a,
+        "alice",
+        NewRelation {
+            a: "Ahri'); DELETE team_relation; --".into(),
+            b: "Zed".into(),
+            kind: RelationKind::Counter,
+            weight: 1,
+            reason: "x'); DELETE user; --".into(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        db::list_team_relations(&db, &t.team1).await.unwrap().len(),
+        2
+    );
+
+    db::delete_team_relation(&db, &t.team1, &rel).await.unwrap();
+    assert_eq!(
+        db::list_team_relations(&db, &t.team1).await.unwrap().len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn team_games_and_pools_are_isolated_between_teams() {
+    use lol_team_companion::server::riot::MatchData;
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let m = |id: &str| MatchData {
+        match_id: id.into(),
+        queue_id: 420,
+        game_duration: 1800,
+        game_end_epoch_ms: None,
+        champion: "Ahri".into(),
+        kills: 0,
+        deaths: 0,
+        assists: 0,
+        cs: 0,
+        vision_score: 0,
+        damage: 0,
+        win: true,
+    };
+    db::store_matches(&db, &t.a, vec![m("EUW1_100"), m("EUW1_101")])
+        .await
+        .unwrap();
+    db::add_to_champion_pool(&db, &t.a, "Ahri".into(), "mid".into())
+        .await
+        .unwrap();
+    let pools = db::team_pool_members(&db, &t.team1).await.unwrap();
+    assert_eq!(pools.len(), 1);
+    assert_eq!(pools[0].user_id, t.a);
+    assert_eq!(pools[0].username, "alice");
+    assert_eq!(
+        pools[0].entries,
+        vec![("Ahri".to_string(), "comfort".to_string())]
+    );
+    let theirs = db::team_pool_members(&db, &t.team2).await.unwrap();
+    assert_eq!(theirs.len(), 1, "only bob");
+    assert_eq!(theirs[0].user_id, t.b);
+    assert!(theirs[0].entries.is_empty());
+    let mine = db::team_game_rows(&db, &t.team1).await.unwrap();
+    assert_eq!(mine.len(), 2);
+    assert!(mine.iter().all(|r| r.user_id == t.a));
+    assert!(db::team_game_rows(&db, &t.team2).await.unwrap().is_empty());
+}
+
+// ---------------------------------------------------------------------------
 // Injection regression
 // ---------------------------------------------------------------------------
 

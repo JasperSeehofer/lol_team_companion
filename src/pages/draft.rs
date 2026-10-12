@@ -25,6 +25,7 @@ use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction
 use crate::models::opponent::Opponent;
 use crate::models::series::Series;
 use crate::models::team::Team;
+use crate::pages::draft_graph::{DraftGraphPanel, GraphInputs, GraphPick};
 use crate::pages::game_plan::check_draft_has_game_plan;
 use crate::pages::navigate::{go, navigator, replace_url};
 use leptos::prelude::*;
@@ -573,6 +574,7 @@ fn build_actions(
     slots: Vec<Option<String>>,
     slot_comments: &[Option<String>],
     roles: &[Option<String>],
+    guessed: &[bool],
 ) -> Vec<DraftAction> {
     slots
         .into_iter()
@@ -589,6 +591,7 @@ fn build_actions(
                     order: i as i32,
                     comment: slot_comments.get(i).cloned().flatten(),
                     role: roles.get(i).cloned().flatten(),
+                    role_guessed: guessed.get(i).copied().unwrap_or(false),
                 }
             })
         })
@@ -761,6 +764,8 @@ const PICKER_ID: &str = "draft-picker";
 struct Snapshot {
     slots: Vec<Option<String>>,
     roles: Vec<Option<String>>,
+    /// Per slot: the role was guessed, not set by a person.
+    guessed: Vec<bool>,
     notes: Vec<Option<String>>,
     name: String,
     opponent: String,
@@ -828,6 +833,7 @@ impl Editor {
         Snapshot {
             slots: self.slots.get_untracked(),
             roles: self.roles.get_untracked(),
+            guessed: self.guessed.get_untracked(),
             notes: self.notes.get_untracked(),
             name: self.name.get_untracked(),
             opponent: self.opponent.get_untracked(),
@@ -848,6 +854,7 @@ impl Editor {
         Snapshot {
             slots: self.slots.get(),
             roles: self.roles.get(),
+            guessed: self.guessed.get(),
             notes: self.notes.get(),
             name: self.name.get(),
             opponent: self.opponent.get(),
@@ -867,7 +874,7 @@ impl Editor {
         let next = s.slots.iter().position(|c| c.is_none());
         self.slots.set(s.slots);
         self.roles.set(s.roles);
-        self.guessed.set(vec![false; 20]);
+        self.guessed.set(s.guessed);
         self.notes.set(s.notes);
         self.active.set(next);
         self.name.set(s.name);
@@ -887,6 +894,7 @@ impl Editor {
         Snapshot {
             slots: vec![None; 20],
             roles: vec![None; 20],
+            guessed: vec![false; 20],
             notes: vec![None; 20],
             name: String::new(),
             opponent: String::new(),
@@ -911,6 +919,7 @@ impl Editor {
             if o < 20 {
                 s.slots[o] = Some(a.champion.clone());
                 s.roles[o] = a.role.clone();
+                s.guessed[o] = a.role.is_some() && a.role_guessed;
                 s.notes[o] = a.comment.clone();
             }
         }
@@ -931,7 +940,13 @@ impl Editor {
     /// Put a champion in a slot (by display name). A champion already on
     /// the board is refused. Picks get a role guessed from the class unless
     /// one is set. The lit slot moves to the next empty one.
-    fn fill(&self, slot: usize, champion: String, champs: &[Champion]) -> bool {
+    fn fill(
+        &self,
+        slot: usize,
+        champion: String,
+        champs: &[Champion],
+        trait_roles: &HashMap<String, Vec<Role>>,
+    ) -> bool {
         if slot >= 20 {
             return false;
         }
@@ -942,11 +957,12 @@ impl Editor {
             return false;
         }
         self.slots.update(|s| s[slot] = Some(champion.clone()));
-        if slot_meta(slot).1 == "pick" && self.roles.with_untracked(|r| r[slot].is_none()) {
-            let guess = champs
-                .iter()
-                .find(|c| c.name == champion || c.id == champion)
-                .map(|c| guess_role_from_tags(&c.tags).to_string());
+        let unset = self.roles.with_untracked(|r| r[slot].is_none())
+            || self.guessed.with_untracked(|g| g[slot]);
+        if slot_meta(slot).1 == "pick" && unset {
+            let guess = self
+                .roles
+                .with_untracked(|roles| guess_role(slot, &champion, champs, trait_roles, roles));
             if let Some(g) = guess {
                 self.roles.update(|r| r[slot] = Some(g));
                 self.guessed.update(|g| g[slot] = true);
@@ -959,21 +975,80 @@ impl Editor {
         true
     }
 
-    /// Empty a slot; returns what was there (champion, role, note) for undo.
-    fn clear(&self, slot: usize) -> Option<(String, Option<String>, Option<String>)> {
-        let champ = self
+    /// Empty a slot; returns what was there for undo. A guessed role goes
+    /// with the champion; a role a person set stays on the slot.
+    fn clear(&self, slot: usize) -> Option<Cleared> {
+        let champion = self
             .slots
             .with_untracked(|s| s.get(slot).cloned().flatten())?;
         let role = self.roles.with_untracked(|r| r[slot].clone());
+        let guessed = self.guessed.with_untracked(|g| g[slot]);
         let note = self.notes.with_untracked(|n| n[slot].clone());
         self.slots.update(|s| s[slot] = None);
-        if self.guessed.with_untracked(|g| g[slot]) {
+        if guessed {
             self.roles.update(|r| r[slot] = None);
+            self.guessed.update(|g| g[slot] = false);
         }
         self.notes.update(|n| n[slot] = None);
         self.active.set(Some(slot));
-        Some((champ, role, note))
+        Some(Cleared {
+            champion,
+            role,
+            guessed,
+            note,
+        })
     }
+
+    /// Put back what [`Editor::clear`] took out.
+    fn restore_slot(&self, slot: usize, c: Cleared) {
+        self.slots.update(|s| s[slot] = Some(c.champion));
+        self.roles.update(|r| r[slot] = c.role);
+        self.guessed.update(|g| g[slot] = c.guessed);
+        self.notes.update(|n| n[slot] = c.note);
+        let next = self
+            .slots
+            .with_untracked(|s| s.iter().position(|c| c.is_none()));
+        self.active.set(next);
+    }
+}
+
+/// What a cleared slot held (for Undo).
+#[derive(Clone, Debug)]
+struct Cleared {
+    champion: String,
+    role: Option<String>,
+    guessed: bool,
+    note: Option<String>,
+}
+
+/// A role for a pick nobody has set: the first of the champion's roles in
+/// the trait table that its side has not filled yet (else its main role),
+/// falling back to a guess from the champion's class. Always a guess.
+fn guess_role(
+    slot: usize,
+    champion: &str,
+    champs: &[Champion],
+    trait_roles: &HashMap<String, Vec<Role>>,
+    roles: &[Option<String>],
+) -> Option<String> {
+    let side = TOURNAMENT_ORDER.get(slot)?.side;
+    let taken: Vec<Role> = crate::components::ui::pick_slots(side)
+        .into_iter()
+        .filter(|s| *s != slot)
+        .filter_map(|s| roles.get(s).cloned().flatten())
+        .filter_map(|r| Role::parse(&r))
+        .collect();
+    let champ = champs
+        .iter()
+        .find(|c| c.name == champion || c.id == champion);
+    let listed = trait_roles
+        .get(champion)
+        .or_else(|| champ.and_then(|c| trait_roles.get(&c.id)));
+    if let Some(list) = listed.filter(|l| !l.is_empty()) {
+        let r = list.iter().find(|r| !taken.contains(r)).unwrap_or(&list[0]);
+        return Some(r.key().to_string());
+    }
+    champ.map(|c| guess_role_from_tags(&c.tags).to_string())
 }
 
 /// The arguments `save_draft`/`update_draft` take, built from a snapshot.
@@ -997,7 +1072,7 @@ fn non_empty(s: String) -> Option<String> {
 
 impl SaveArgs {
     fn from(s: &Snapshot) -> Self {
-        let actions = build_actions(s.slots.clone(), &s.notes, &s.roles);
+        let actions = build_actions(s.slots.clone(), &s.notes, &s.roles, &s.guessed);
         let series_id = non_empty(s.series_id.clone());
         let game = series_id.as_ref().and_then(|_| s.game.parse::<i32>().ok());
         Self {
@@ -1391,6 +1466,23 @@ fn DraftEditor(
         });
     });
 
+    // Roles per champion from the trait table (for guessing a pick's role).
+    let trait_roles: RwSignal<HashMap<String, Vec<Role>>> = RwSignal::new(HashMap::new());
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            if let Ok(rows) = crate::pages::draft_graph::trait_roles().await {
+                let mut map = HashMap::with_capacity(rows.len() * 2);
+                for (id, name, roles) in rows {
+                    map.insert(name, roles.clone());
+                    map.insert(id, roles);
+                }
+                trait_roles.set(map);
+            }
+        });
+    });
+    // Picker or Draft Graph beside the board.
+    let view_mode = RwSignal::new("picker".to_string());
+
     // Board callbacks.
     let unavailable = Signal::derive(move || {
         let mut used: Vec<String> = ed.slots.get().into_iter().flatten().collect();
@@ -1410,7 +1502,7 @@ fn DraftEditor(
             )));
             return;
         }
-        champs.with_value(|list| ed.fill(slot, display, list));
+        trait_roles.with_untracked(|tr| champs.with_value(|list| ed.fill(slot, display, list, tr)));
     });
     let on_pick = Callback::new(move |c: Champion| {
         if let Some(slot) = ed.active.get_untracked() {
@@ -1419,23 +1511,19 @@ fn DraftEditor(
     });
     let on_select = Callback::new(move |slot: usize| ed.active.set(Some(slot)));
     let on_open = Callback::new(move |_slot: usize| {
-        focus_id(&crate::components::champion_picker::picker_input_id(
-            PICKER_ID,
-        ));
+        if view_mode.get_untracked() == "graph" {
+            focus_id(&crate::pages::draft_graph::candidate_dom_id(0));
+        } else {
+            focus_id(&crate::components::champion_picker::picker_input_id(
+                PICKER_ID,
+            ));
+        }
     });
     let on_clear = Callback::new(move |slot: usize| {
-        if let Some((champ, role, note)) = ed.clear(slot) {
+        if let Some(cleared) = ed.clear(slot) {
             let label = TOURNAMENT_ORDER[slot].describe();
-            let champ_for_undo = champ.clone();
-            let undo = Callback::new(move |_| {
-                ed.slots.update(|s| s[slot] = Some(champ_for_undo.clone()));
-                ed.roles.update(|r| r[slot] = role.clone());
-                ed.notes.update(|n| n[slot] = note.clone());
-                let next = ed
-                    .slots
-                    .with_untracked(|s| s.iter().position(|c| c.is_none()));
-                ed.active.set(next);
-            });
+            let champ = cleared.champion.clone();
+            let undo = Callback::new(move |_| ed.restore_slot(slot, cleared.clone()));
             toast.push.run(
                 Toast::info(format!("Cleared {champ} from {label}")).with_action("Undo", undo),
             );
@@ -1446,6 +1534,53 @@ fn DraftEditor(
         focus_id(&slot_dom_id(BOARD_ID, slot));
     });
     let on_drop = Callback::new(move |(slot, name): (usize, String)| fill.run((slot, name)));
+    // A pick from the Draft Graph: the champion, and the role the graph
+    // ranked it for (guessed unless the user chose the role there). A role
+    // a person set on the slot stays.
+    let on_graph_pick = Callback::new(move |p: GraphPick| {
+        let before = ed.snapshot();
+        fill.run((p.slot, p.name.clone()));
+        let placed = ed
+            .slots
+            .with_untracked(|s| s[p.slot].as_deref() == Some(p.name.as_str()));
+        if !placed {
+            return;
+        }
+        let person_set = before.roles[p.slot].is_some() && !before.guessed[p.slot];
+        if let (Some(r), false) = (p.role, person_set) {
+            ed.roles.update(|x| x[p.slot] = Some(r.key().to_string()));
+            ed.guessed.update(|g| g[p.slot] = p.role_guessed);
+        }
+        let label = TOURNAMENT_ORDER[p.slot].describe();
+        let undo = Callback::new(move |_| {
+            let mut back = ed.snapshot();
+            back.slots[p.slot] = before.slots[p.slot].clone();
+            back.roles[p.slot] = before.roles[p.slot].clone();
+            back.guessed[p.slot] = before.guessed[p.slot];
+            back.notes[p.slot] = before.notes[p.slot].clone();
+            let active = Some(p.slot);
+            ed.restore(back);
+            ed.active.set(active);
+        });
+        toast.push.run(
+            Toast::success(format!("Picked {} for {label}", p.name)).with_action("Undo", undo),
+        );
+    });
+    let graph_inputs = GraphInputs {
+        slots: ed.slots,
+        roles: ed.roles,
+        guessed: ed.guessed,
+        active: ed.active,
+        side: ed.side,
+        tags: ed.tags,
+        opponent: Signal::derive(move || {
+            let v = ed.opponent.get();
+            opponents
+                .with_value(|l| l.iter().any(|o| o.id.as_deref() == Some(v.as_str())))
+                .then_some(v)
+        }),
+        unavailable: Signal::derive(move || cx.fearless_used.get()),
+    };
 
     // Pool warnings for our picks.
     let warnings = Memo::new(move |_| {
@@ -1491,6 +1626,7 @@ fn DraftEditor(
     };
     let save_state = cx.save_state;
     let has_champs = !champ_list.is_empty();
+    let champ_list_sv = StoredValue::new(champ_list);
 
     view! {
         <PageHeader
@@ -1498,7 +1634,7 @@ fn DraftEditor(
             eyebrow="Draft"
             meta=move || view! {
                 {move || opp_name.get().map(|o| view! { <span>"vs " {o}</span> })}
-                <SideMarker side=our_side.get() text=SideText::Long />
+                {move || view! { <SideMarker side=our_side.get() text=SideText::Long /> }}
                 <span data-testid="draft-save-state" class="text-muted">
                     {move || match save_state.get() {
                         SaveState::New => "Not saved yet",
@@ -1537,7 +1673,11 @@ fn DraftEditor(
         // Board, picker and the side rail.
         <section
             aria-labelledby="draft-board-heading"
-            class="grid grid-cols-1 gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)_17rem]"
+            class=move || if view_mode.get() == "graph" {
+                "grid grid-cols-1 gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]"
+            } else {
+                "grid grid-cols-1 gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)_17rem]"
+            }
         >
             <h2 id="draft-board-heading" class="sr-only">"Board"</h2>
             <div class="flex min-w-0 flex-col gap-4">
@@ -1546,6 +1686,7 @@ fn DraftEditor(
                     label="Draft board"
                     champions=ed.slots
                     roles=ed.roles
+                    guessed=ed.guessed
                     notes=ed.notes
                     warnings=Signal::derive(move || warnings.get())
                     current=ed.active
@@ -1559,28 +1700,52 @@ fn DraftEditor(
                 />
                 <SlotInspector ed=ed on_clear=on_clear />
             </div>
-            <div class="min-w-0">
-                {if has_champs {
-                    view! {
-                        <ChampionPicker
-                            id=PICKER_ID
-                            champions=champ_list
-                            unavailable=unavailable
-                            on_select=on_pick
-                            on_escape=on_escape
-                            label=picker_label
-                            enabled=Signal::derive(move || ed.active.get().is_some())
-                        />
-                    }.into_any()
-                } else {
-                    view! {
-                        <Callout tone=CalloutTone::Danger title="Champions did not load">
-                            "The champion list comes from the server's cache. Reload the page; if it stays empty, the server could not reach Data Dragon."
-                        </Callout>
-                    }.into_any()
+            <div class="flex min-w-0 flex-col gap-4">
+                <div class="overflow-x-auto">
+                    <SegmentedControl
+                        id="draft-view"
+                        label="Beside the board"
+                        options=vec![
+                            Segment::new("picker", "Picker"),
+                            Segment::new("graph", "Draft Graph"),
+                        ]
+                        value=view_mode
+                        size=SegmentSize::Sm
+                    />
+                </div>
+                {move || {
+                    if !has_champs {
+                        return view! {
+                            <Callout tone=CalloutTone::Danger title="Champions did not load">
+                                "The champion list comes from the server's cache. Reload the page; if it stays empty, the server could not reach Data Dragon."
+                            </Callout>
+                        }.into_any();
+                    }
+                    if view_mode.get() == "graph" {
+                        view! {
+                            <DraftGraphPanel
+                                inputs=graph_inputs
+                                champions=champs
+                                on_pick=on_graph_pick
+                                on_escape=Callback::new(move |_| on_escape.run(()))
+                            />
+                        }.into_any()
+                    } else {
+                        view! {
+                            <ChampionPicker
+                                id=PICKER_ID
+                                champions=champ_list_sv.get_value()
+                                unavailable=unavailable
+                                on_select=on_pick
+                                on_escape=on_escape
+                                label=picker_label
+                                enabled=Signal::derive(move || ed.active.get().is_some())
+                            />
+                        }.into_any()
+                    }
                 }}
             </div>
-            <div class="min-w-0 lg:col-span-2 xl:col-span-1">
+            <div class=move || if view_mode.get() == "graph" { "min-w-0 lg:col-span-2" } else { "min-w-0 lg:col-span-2 xl:col-span-1" }>
                 <DraftRail ed=ed opponents=opponents pools=pools champs=champs fill=fill />
             </div>
         </section>
@@ -1650,7 +1815,7 @@ fn SlotInspector(ed: Editor, on_clear: Callback<usize>) -> impl IntoView {
                         <div class="flex flex-col gap-1.5">
                             <span class="text-label font-medium text-secondary" id="slot-role-label">
                                 "Role"
-                                {guessed.then(|| view! { <span class="font-normal text-muted">" (guessed from the class)"</span> })}
+                                {guessed.then(|| view! { <span class="font-normal text-muted" data-testid="slot-role-guessed">" (guessed; choose one to confirm it)"</span> })}
                             </span>
                             <div class="overflow-x-auto">
                                 <SegmentedControl

@@ -677,6 +677,7 @@ mod tests {
             order,
             comment: None,
             role: None,
+            role_guessed: false,
         }
     }
 

@@ -53,6 +53,7 @@ fn action(champion: &str, order: i32) -> DraftAction {
         order,
         comment: None,
         role: None,
+        role_guessed: false,
     }
 }
 

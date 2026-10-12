@@ -29,7 +29,7 @@ Companion is the team's field survey of the Rift and of every opponent. The map 
 
 - **Canvases** (Sand Table map, Draft Graph, map insets) carry a coordinate frame, a legend and, at most, a faint contour or grid texture.
 - **Everything else** is plain type on hairlines: Match Day's prep list, action items, tables, settings, the community strip. No textures, no compass roses, no parchment.
-- **Surveyor's notes** (the coach's annotations, with a leader line on a canvas) are set in serif italic. The serif appears nowhere else, so italic serif always means "a person wrote this here".
+- **Surveyor's notes** (the coach's annotations, with a leader line on a canvas) are set in serif italic. The serif appears nowhere else, so italic serif always means "a person wrote this here". The one exception off a canvas (owner's decision, M4): team notes quoted in the Draft Graph's text twin (the Why panel and the team's notes on pairs), which are also a person's words.
 - **Dossiers** for opponents carry a "last surveyed" date and the evidence behind each finding.
 - A compass rose or scale bar appears at most once per page, and only where distance means something (the Sand Table).
 
@@ -141,7 +141,7 @@ The unit test `components::ui::tokens::tests::design_md_contrast_pairs_meet_thei
 | **Familjen Grotesk** | Display: page titles, section titles, tab labels, the next prep step | 600 (500 to 700 available) | `font-display`. Never below 16px. |
 | **Public Sans** | UI and text: everything else | 400, 500, 600 | `font-sans`, set on `body`. Italic exists for emphasis in prose only. |
 | **JetBrains Mono** | Figures, coordinates, overlines, keycaps, timers | 400, 500, 600 | `font-mono`, `figures` utility. |
-| **Source Serif 4 italic** | Surveyor's notes (annotations on canvases, the coach's note on a moment) | 400 | `note` utility. Nowhere else. |
+| **Source Serif 4 italic** | Surveyor's notes (annotations on canvases, the coach's note on a moment) and team notes quoted in the Draft Graph (its Why panel and the team's notes on pairs: the graph's text twin) | 400 | `note` utility. Nowhere else: italic serif always means "a person on the team wrote this". |
 
 Self-hosted woff2 in `public/fonts/` (latin and latin-ext files per style, split with `unicode-range`), `font-display: swap`, the two critical files (Public Sans and Familjen Grotesk latin) preloaded in the shell. Licences: `public/fonts/LICENSES.md` (all OFL 1.1). Fallback stacks: system UI sans, `ui-monospace`, Georgia.
 
@@ -242,7 +242,7 @@ Domain primitives shipped early (owner's decisions):
 
 | Primitive | Props | A11y contract |
 |---|---|---|
-| `DraftBoard` | `id`, `label`, `champions: Signal<Vec<Option<String>>>` (index = order - 1), `roles`, `notes`, `warnings`, `current: Signal<Option<usize>>`, `blue_team`, `red_team`, `on_select`, `on_open`, `on_clear`, `on_drop`, `hints` (keycap legend), `format: DraftFormat` | `role="grid"` named by `label`: a header row, the ban row and five pick rows of `role="gridcell"` slots, one Tab stop (roving tabindex). Each slot's name says its step, rotation, champion, role, note and state ("Red pick 2, rotation 2: Syndra, Mid"); the current step has `aria-current="step"`; the step counter is a polite live region. Read-only without `on_select`. Full specification in section 6.5. |
+| `DraftBoard` | `id`, `label`, `champions: Signal<Vec<Option<String>>>` (index = order - 1), `roles`, `guessed` (per slot: the role is a guess), `notes`, `warnings`, `current: Signal<Option<usize>>`, `blue_team`, `red_team`, `on_select`, `on_open`, `on_clear`, `on_drop`, `hints` (keycap legend), `format: DraftFormat` | `role="grid"` named by `label`: a header row, the ban row and five pick rows of `role="gridcell"` slots, one Tab stop (roving tabindex). Each slot's name says its step, rotation, champion, role, note and state ("Red pick 2, rotation 2: Syndra, Mid"); the current step has `aria-current="step"`; the step counter is a polite live region. Read-only without `on_select`. Full specification in section 6.5. |
 | `PrepSequence` | `label`, `steps: Vec<PrepStep {title, detail?, status?, state: PrepState {Done, Next, Todo, Attention}, href?, action?}>` | Ordered list; status in words; the next step has `aria-current="step"`, a larger display title and a real link to where it is done. The Match Day "what to do next" pattern from direction B, translated into quiet type. |
 
 The older feedback components became batch 2 primitives or shims for them (section 6.4).
@@ -271,7 +271,7 @@ The older feedback components became batch 2 primitives or shims for them (secti
 |---|---|---|---|
 | `ChampionAvatar` | `name` (display name or Data Dragon id), `size: AvatarSize {Xs 20, Sm 24, Md 32 (default), Lg 40, Xl 56}`, `shape: AvatarShape {Square (3px, default), Round}`, `side: Option<DraftSide>` (overrides shape: blue round, red square, with the side colour), `state: AvatarState {Normal, Banned, Dimmed}`, `decorative` | An `<img>` from `/img/champion/{name}/icon` only (never a third party), alt text = the name ("Azir", or "Azir, banned"); `decorative` empties the alt when the name is written next to it. A two-letter monogram (`monogram()`: "Lee Sin" LS, "Azir" Az) sits underneath while the image loads and stays when it is missing (404 or failed before hydration), hidden from screen readers. Banned adds a strike and the word, not only grey. Fixed size, `loading="lazy"`. | Champion art everywhere (lists square, tokens round). Pages still using raw `<img>` move onto it in M3/M5. |
 | `UserAvatar` | `name`, `size`, `label?` | The initial in a round token. Decorative unless `label` is set (then `role="img"` with that name). | The nav account menu, roster, comments. |
-| `RoleLabel` | `role: Role {Top, Jungle, Mid, Bot, Support}` (`Role::parse` takes every stored spelling: jgl, middle, adc, utility...), `style: RoleLabelStyle {Plain, Boxed, Active}` | Mono caps TOP, JGL, MID, BOT, SUP; the letters are `aria-hidden` and the word ("Jungle") is read. Text, so it scales and never breaks. | Every role mark. Role icons from CommunityDragon are gone; nothing else draws a role. |
+| `RoleLabel` | `role: Role {Top, Jungle, Mid, Bot, Support}` (`Role::parse` takes every stored spelling: jgl, middle, adc, utility...; `Role::key` is the stored spelling), `style: RoleLabelStyle {Plain, Boxed, Active}`, `guessed` | Mono caps TOP, JGL, MID, BOT, SUP; the letters are `aria-hidden` and the word ("Jungle") is read. Text, so it scales and never breaks. A `guessed` role (inferred, not set by a person) is drawn as uncertain, a dashed underline and a "?" (`data-role-guessed`), and read as "Jungle, role guessed". | Every role mark. Role icons from CommunityDragon are gone; nothing else draws a role. |
 | `SideMarker` | `side: DraftSide`, `text: SideText {None, Short "Blue", Long "Blue side"}` | Blue circle, red square in the matched side colours; the shape is decorative, the side is always in text (visible or visually hidden). | Side headers and labels. Side colours appear nowhere else. |
 | `ResultGlyph` | `result: GameResult {Win, Loss}` (`GameResult::from_win`), `size: GlyphSize {Sm 20, Md 24}`, `word` | `role="img"` named "Win"/"Loss"; filled teal W, hollow neutral L, never the side colours. `word` writes the word instead of the letter. | Results in history, stats, dashboards (`Badge` W/L tones remain for inline pills). |
 | `StatReadout` | `label`, `value`, `unit?`, `delta: Option<Delta {value, trend: Trend {Up, Down, Flat}, sentiment: Sentiment {Good, Bad, Neutral}, against}>`, `size: ReadoutSize {Sm 14, Md 24, Lg 32}`, `slots` (characters reserved), `empty_reason?` | A `<dl>`: label `<dt>` (eyebrow), figure `<dd>` (mono, tabular). The change is text with its direction in words for screen readers ("up 4.2 vs last 10"); the arrow is decorative; colour follows good/bad, never direction or side. No data shows an em dash and the reason. | Headline numbers (win rate, KDA, gold at 15). Not for tables (`Table` numeric cells). |
@@ -292,7 +292,7 @@ There is one draft view, the tournament board, used by the draft page, the tree 
 
 - **Layout.** Two columns, blue left and red right; each column is that team's final draft. The column header names the side (circle or square plus the word) and the team. At the top, five bans per side grouped 3 + 2 by ban rotation (B R B R B R, then R B R B); below, five picks per side in pick order, bracketed by pick rotation: B1 · R1 R2 · B2 B3 · R3 · R4 · B4 B5 · R5. Blue pick 1 carries a quiet "First pick" caption while empty.
 - **State.** Only the step being decided is lit (chalk dashed edge on `accent-soft`); filled slots sit on `ink-1` with an outline, empty ones are dashed. A step counter above the board says "Pick 7 of 10 · Red to pick" (or "Draft complete", or "12 of 20 steps decided" for a partly filled saved draft).
-- **Slots.** A pick slot shows the champion avatar, the name, the role (`RoleLabel`) and an optional note or warning (with the "!" glyph) under the name. Ban slots are small squares with the avatar struck through.
+- **Slots.** A pick slot shows the champion avatar, the name, the role (`RoleLabel`; a guessed role is drawn as uncertain, "MID?" with a dashed underline, and the slot reads "Mid (role guessed)") and an optional note or warning (with the "!" glyph) under the name. Ban slots are small squares with the avatar struck through. Roles are guessed only for picks nobody has set a role on: the champion's roles from the trait table, preferring roles its side has not filled, else its class; choosing a role in the slot details confirms it, and the guess flag is stored (`draft_action.role_guessed`).
 - **Size.** The compact board fits beside the picker at 1280 px without scrolling; on phones the columns stay side by side with smaller ban squares, and the picker stacks under the board.
 - **Keys** (legend under the board when `hints` is set):
 
@@ -316,6 +316,94 @@ Pointer: click a slot to choose it, click a champion to fill the current step, d
 - **Next step links.** Records link forward along the loop: a draft offers "Prep a game plan" and "Review this game", a plan "Start the review" (already linked), a review with action item lines creates the items and links to them.
 - **Honest emptiness.** Every list, panel and sub-section without data shows an `EmptyState` saying what will appear and how; nothing renders invented numbers. A guess is labelled as one.
 - **Focus after a change.** When a row moves (completed, restored, saved), focus follows it to its new place.
+
+### 6.7 Draft Graph, stage A: the ranked list, Why panel and comp profile (M4)
+
+The Draft Graph lives in the draft page as a switchable view next to the board, which stays the primary thing. A `SegmentedControl` above the column beside the board switches between **Picker** and **Draft Graph**. In the graph view the column widens over the intel rail's place at 1280 (the rail moves below the board row), and inside it a container query puts the ranked list and the Why panel side by side from 42rem; on phones they stack (list, Why, comp profile). The view is mounted only while selected, so a hidden graph does no work. Stage B put the force-directed canvas at the top of the same panel (section 6.8); this section is its text twin, which DESIGN principle 9 requires and which works fully without the canvas.
+
+**Fit.** Every candidate gets a fit from 0 to 100. It starts at a neutral 50; four parts move it, in the owner's priority order, by at most half their weight: synergy (weight 40, ±20 points), counters (30, ±15), playstyle fit (20, ±10), power spikes (10, ±5); then the slot player's pool adds −8 to +6 (comfort +6, match ready +4, scrim ready +2, practicing 0, to practise −2, not in the pool −8). The word is always "fit", never a percentage or a chance to win, and the panel says "fit 78 of 100, from a neutral 50".
+
+**Ranked list** (`data-graph-list`): a `role="listbox"` named after the slot ("Candidates for Blue pick 3"), top 10 with "Show all 30". Each option is one ruled row: rank (mono, muted), the champion's square avatar, name, `RoleLabel` (guessed unless the user chose the role above the list), the pool standing in words ("Comfort · Oskar Lind", or "Not in Oskar Lind's pool" in the warning tone), "Traits: low confidence" when the candidate's trait row is marked so, the fit as a mono figure, and the two strongest reasons, each with a short line in the canvas language: **solid** for synergy, playstyle and timing, **dashed** for counters, **dotted** for anything that works against the pick. A `LegendBlock` ("Reason lines") under the list explains the lines. The focused row is `ink-2` with a chalk outline (selection). Keys (Keycap legend under the list): Up/Down move the focus (roving tabindex, one Tab stop; Home/End), the Why panel follows the focus, Enter or a double click picks into the current slot, Escape returns to the board on the current step; Enter on the board in graph mode moves focus into the list. A click focuses (so a pointer user reads the Why panel before deciding), and the Why panel's "Pick" button picks. A pick shows a toast with Undo.
+
+Above the list: the status line (a polite live region: "30 candidates for Blue pick 3 · Top, Mid or Support (open roles)") and a role `SegmentedControl` ("Open roles", or one role: then the role is chosen, not guessed). Ban steps and a complete draft show an `EmptyState` that says what the graph ranks; an enemy step ranks for their side and says so in an info `Callout` (pools apply to our picks only).
+
+**Why panel** (`data-graph-why`, an `h3` "Why Leona"): avatar, fit, a secondary "Pick Leona" button with its keycap and a quiet "Argue with it: add a team note" (prefilled with the candidate and the champion of its strongest pair reason, and the relation that reason states). Then the fit by part as a two-column list ("Synergy (weight 40) +17 of ±20"), then every reason grouped by source under eyebrow headings, in this order: **Trait rules** (the rule's sentence, its id and weight in mono: "syn.engage_burst · weight 3"), **Team notes** (the note quoted in the serif `note` style, "team note by Linnea Voss on Leona and Jinx · weight 3", Remove), **Your games** ("Thresh and Jinx together in 7 of your games, 5 won", "n=7, corroborates +1"), **Scouting** ("Answers Malphite, which their support Nova has played (opponent dossier)") and **Player pool**. A last caption says when the candidate's trait row is still a shipped default or low confidence.
+
+**Comp profile** (`data-graph-profile`, `h3`): two columns, the ranked side and the other side (`SideMarker` headers), as small `StatReadout`s: AD / AP (physical and magic shares, mixed counts half to each), Engage and Front line and Wave clear (of 10: each champion adds 0 to 2), Crowd control (of 15: 0 to 3 each), and Strongest (the curve most picks share: Early, Mid, Late or Even). The ranked side's readouts carry the change the focused candidate makes ("↑ +2 if Leona"), good-toned when it fills a gap (no engage yet, little front line, slow wave clear, little crowd control), neutral otherwise.
+
+**Team notes on pairs** (`data-graph-team-notes`): below, the team's notes newest first ("Jinx works with Thresh", the reason in the serif note style, strength, author, date, Remove with Undo), or an `EmptyState` that says what a note does. "Add what you know" (quiet, in the panel header; team members only) opens a `Dialog`: champion, relation (`SegmentedControl` works with / beats / loses to), other champion, strength (Slight / Clear / Strong), and a required one-sentence reason (200 characters).
+
+**What the ranking stands on** (`data-graph-notes`), one caption under the panel: "Built from the trait rules (173 rows still shipped defaults, 6 low confidence), 2 team notes, your stored games (0 so far; evidence shows from 5 games), the opponent dossier. Fit is explained, not a chance to win."
+
+**Trait vocabulary** (the model behind the rules; `models::graph`, stored as these keys, edited on `/admin/traits`):
+
+| Field | Values |
+|---|---|
+| roles | top, jungle, mid, bot, support (one or more; the first is the main role) |
+| damage type | physical, magic, mixed, true-heavy |
+| damage profile | burst, sustained, poke, hybrid |
+| range | melee, short (ranged under 525 or a mixed kit), long (525 and up, or artillery) |
+| engage | none, conditional, hard |
+| disengage, peel, front line | none, some, strong |
+| crowd control | none, light, medium, heavy |
+| wave clear | weak, OK, strong |
+| scaling | early, mid, late, flat |
+| mobility | low, medium, high |
+| playstyles | poke, dive, pick, split-push, teamfight, protect the carry, skirmish, siege, front to back, wombo (zero or more) |
+| confidence | normal, low (neutral values where the kit was unclear) |
+
+`/admin/traits` follows the page patterns: `PageHeader` with counts (champions, shipped defaults, edited, low confidence), a search field and a `SegmentedControl` filter (All, Defaults only, Edited, Low confidence), a sticky-header `Table` that scrolls inside its own region on phones, and an edit `Dialog` (Lg) with `Checkbox` roles and playstyles, `Select` for damage type and profile, a `SegmentedControl` per scale, "Reviewed for patch 16.20.1", and "Reset to default" for edited rows.
+
+### 6.8 Draft Graph, stage B: the canvas (M4)
+
+The force-directed picture of the same `GraphResult`, at the top of the Draft Graph panel, above the ranked list and the Why panel. Component: `DraftGraphCanvas` (`src/components/graph_canvas.rs`); layout: `src/components/graph_layout.rs` (plain Rust, no JS library, unit-tested). Both twins and the Why panel share the panel's `focused` signal (a champion id), so a focus anywhere is a focus everywhere.
+
+**Frame.** A `CanvasFrame` with grid references A to H by 1 to 5 and the faint grid texture; 16:10 from `sm`, square on phones. The layout space is 800 by 500 units, one grid cell per 100 units, so every position reads as a grid reference ("Thresh, D3"). The caption names the slot and says the ranked list below is the same ranking in words. A `LegendBlock` ("Graph legend", columns) sits under the canvas.
+
+**Nodes.** The ranked side's locked picks are pinned in column A, the other side's in column H, one row per role (Top row 1 to Support row 5; picks without a role fill the free rows in pick order): blue circles and red squares in the side colours with the champion's monogram, the name beside them when the canvas is at least 480 px wide. Open roles of the ranked side are dashed "?" ghosts in their row ("Support open"). Candidates (the top 24, the top 12 under 520 px) are round tokens with a monogram, free to move in columns B to G.
+
+**Fit as elevation.** Each candidate carries a spot height ("▲84") and one contour ring for every 10 fit from 50 (fit 84: rings at 50, 60, 70, 80; under 50: none). The rings are slightly offset ellipses, so the picture reads as terrain rather than targets. Higher fit also means a stronger pull to the middle, so the summits sit near the centre and weak candidates drift outward. The spot height is text, so elevation is never shape alone.
+
+**Edges** join a candidate to the locked picks it relates to (`GraphResult.edges`). Line style is the relation: **solid** synergy, **dashed** counter with an arrowhead at the champion that loses, **dotted** for a weak relation (under 1.5) or a synergy that works against the candidate. Width is strength (1.5 to 4.5 px). Colour is the side of the locked pick, nothing else.
+
+**Forces** (what the positions mean, said in the legend and here): a candidate is pulled toward the picks it has synergy with (rest 190 units, stiffer when stronger) and, more weakly, toward an enemy pick it beats (rest 230); it is pushed away from a pick that beats it or works against it (inside 520 units); nodes repel at short range and never overlap (collision radius = the outer contour ring); a gentle pull to the middle grows with fit. The layout is deterministic: start positions come from the rank (a golden-angle spiral) or from the champion's place in the previous layout, so the same draft opened fresh draws the same picture, and a champion that stays a candidate stays near its last place (positions then depend on the path the draft took; fit and rank never do).
+
+**Focus.** The focused candidate has a chalk ring (the accent: focus and selection only), its name and "▲ 84" in chalk under it, drawn on top of everything. Its one-hop neighbourhood lights: its edges in side colours at full width and the picks they reach; every other node, edge and ring fades to the rule tone (no opacity over text, faded labels stay in `muted`, 6.9:1). Faded edges show only the strong relations (1.5 and up) as hairlines. Clicking a locked pick lights the candidates related to it instead ("Jinx (your pick, at A4): 23 of the drawn candidates relate to it").
+
+**Interaction.**
+
+| Input | On the canvas |
+|---|---|
+| Tab | The canvas is one tab stop (`role="group"`, `aria-roledescription="graph canvas"`, described by the status line and the key legend) |
+| Arrow keys | Next / previous candidate by rank (Right and Down forward, Left and Up back, wrapping); the list and the Why panel follow |
+| Home / End | First / last drawn candidate |
+| Enter | Pick the focused candidate into the current slot (the picker's path; toast with Undo) |
+| Escape | Back to the board, on the current step |
+| Click | Focus a candidate (or light a locked pick's candidates; click the empty ground to clear) |
+| Double-click | Pick |
+| Drag | Move a candidate; the rest re-settles around it, and on release it settles back to where its relations put it |
+
+The status line under the canvas (`data-graph-canvas-status`) says what the focus means in words: "Thresh, fit 87, at D3 (1 of 24): synergy with Jinx, Vi and Orianna; beats Sejuani, Kai'Sa and Renekton." It is a polite live region while the canvas has focus and silent otherwise (the list announces its own options). Every node also has an SVG `<title>`; nothing lives only on hover. A focus on the canvas below the list's top 10 opens the whole list, so the text twin always shows the focused row. The other way round, a candidate focused in the list below the ones drawn on the canvas lights nothing there, and the status line says so ("Sona (rank 27) is below the 24 candidates drawn here; the list below has it.").
+
+**Motion.** The layout animates once per draft change, a few ticks per frame, then freezes: no perpetual motion, nothing loops. Under `prefers-reduced-motion: reduce` the simulation runs to the end synchronously and the settled layout is drawn directly; a drag then jumps instead of gliding.
+
+**Performance** (budget from the M4 brief, measured 11 October 2026):
+
+| Measure | Budget | Measured |
+|---|---|---|
+| Nodes | at most 60 | 31 at 1280 px (7 picks + 24 candidates), 19 at 400 px |
+| Tick (layout step) | under 8 ms | natively 0.05 ms per tick for 32 nodes and 41 springs (debug build, `tick_cost_is_far_inside_the_budget`); in headless Chromium with the debug WASM build: mean 0.04 ms, worst 0.5 to 0.8 ms |
+| Settle | under 1.5 s on a laptop | 150 ticks, 6 per frame: 0.4 s at 60 Hz; measured 0.53 to 0.84 s in the container's headless Chromium (its frames come every 30 to 45 ms); reduced motion 7 to 9 ms in one go |
+| DOM | nodes reused, no re-creation per tick | the SVG is built once per result (and again only when a resize changes how many candidates fit); each frame writes one position signal that updates `transform` and the edges' `d` in place |
+| Hidden view | no layout work | the panel (and so the canvas) is mounted only in graph mode; unmounting disposes the signals and the frame loop stops; the browser pauses frames in hidden tabs |
+| Bundle | WASM grows less than 150 KB gzipped | +66 KB gzipped (2,273,468 to 2,341,037 bytes; +284 KB uncompressed): the release WASM (`wasm-release` profile, opt-level z, LTO) with custom sections stripped, gzip -9, before (4e85c76) and after the canvas, both without wasm-bindgen and wasm-opt |
+| Server | recompute only on draft changes | the panel asks again 250 ms after the draft stops changing (stage A); the canvas recomputes the layout only when the result changes |
+
+The page exposes the last run as attributes on `[data-graph-canvas]`: `data-sim-state` (running, settled), `data-sim-mode` (animated, instant), `data-sim-ticks`, `data-sim-nodes`, `data-sim-settle-ms`, `data-sim-tick-max-ms`, `data-sim-tick-mean-ms`, `data-sim-frame-max-ms`; `draft-graph.spec.ts` asserts the budget from them.
+
+**DOM hooks.** `[data-graph-canvas-wrap]`, `[data-graph-canvas]`, `[data-node=candidate|pin][data-champion][data-name][data-fit][data-light=focused|lit|normal|faded]`, `[data-edge="{candidate}-{pick}"]` (lit layer), `[data-graph-canvas-status]`, `#graph-canvas-keys`.
+
+**Not yet.** The tree drafter does not show the graph: its nodes store no roles and no side, so a pick from the graph would lose its role and the ranking would not know whose turn it is; that needs a role and side column on tree nodes first. Edge labels (a short rule name on the focused edges, as direction C sketched) are left out: the Why panel says the full sentence next to the canvas.
 
 ## 7. Champion images
 

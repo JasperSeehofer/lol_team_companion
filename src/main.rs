@@ -92,6 +92,11 @@ async fn main() {
     // Data Dragon: load the stored copy, refresh from the network, then keep
     // refreshing every 6 hours. Champion names are normalised against it.
     lol_team_companion::server::data_dragon::init(&surreal_db).await;
+    // Draft Graph trait table: shipped defaults for missing champions, then
+    // into memory. A failure leaves the graph empty, never the server down.
+    if let Err(e) = lol_team_companion::server::graph::traits::sync(&surreal_db).await {
+        tracing::error!("champion traits: sync failed: {e}");
+    }
     if let Err(e) = db::migrate_champion_names(&surreal_db).await {
         tracing::warn!("Champion name normalisation failed: {e}");
     }

@@ -75,6 +75,11 @@ fn route_commands(is_admin: bool) -> Vec<Command> {
     if is_admin {
         out.push(Command::go("Invites", "/admin/invites").hint("Admin"));
         out.push(
+            Command::go("Champion traits", "/admin/traits")
+                .hint("Admin")
+                .keywords("draft graph kit trait table"),
+        );
+        out.push(
             Command::go("Design system", "/design")
                 .hint("Admin")
                 .keywords("gallery primitives tokens"),
@@ -416,6 +421,7 @@ pub fn Nav() -> impl IntoView {
                                         // Admin links only for admins; the pages check on the server too.
                                         if u.is_admin {
                                             items.push(MenuItem::link("invites", "Invites", "/admin/invites"));
+                                            items.push(MenuItem::link("traits", "Champion traits", "/admin/traits"));
                                             items.push(MenuItem::link("design", "Design system", "/design"));
                                         }
                                         items.push(MenuItem::new("sign-out", "Sign out").danger());

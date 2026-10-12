@@ -3,6 +3,8 @@ pub mod champion_autocomplete;
 pub mod champion_picker;
 pub mod draft_board;
 pub mod footer;
+pub mod graph_canvas;
+pub mod graph_layout;
 pub mod icon;
 pub mod nav;
 pub mod region;

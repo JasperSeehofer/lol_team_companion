@@ -1366,6 +1366,7 @@ struct ActionRow {
     ord: i64,
     comment: Option<String>,
     role: Option<String>,
+    role_guessed: bool,
 }
 
 fn action_rows(actions: Vec<DraftAction>) -> Vec<ActionRow> {
@@ -1377,6 +1378,7 @@ fn action_rows(actions: Vec<DraftAction>) -> Vec<ActionRow> {
             champion: a.champion,
             ord: a.order as i64,
             comment: a.comment,
+            role_guessed: a.role.is_some() && a.role_guessed,
             role: a.role,
         })
         .collect()
@@ -1433,6 +1435,8 @@ struct DbDraftAction {
     comment: Option<String>,
     #[serde(default)]
     role: Option<String>,
+    #[serde(default)]
+    role_guessed: Option<bool>,
 }
 
 impl From<DbDraftAction> for DraftAction {
@@ -1446,6 +1450,7 @@ impl From<DbDraftAction> for DraftAction {
             order: a.order,
             comment: a.comment,
             role: a.role,
+            role_guessed: a.role_guessed.unwrap_or(false),
         }
     }
 }
@@ -1473,7 +1478,7 @@ pub async fn save_draft(
         .query(
             "BEGIN TRANSACTION; \
              LET $d = (CREATE ONLY draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number); \
-             FOR $a IN $actions { CREATE draft_action SET draft = $d.id, phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role; }; \
+             FOR $a IN $actions { CREATE draft_action SET draft = $d.id, phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role, role_guessed = $a.role_guessed; }; \
              RETURN { id: $d.id }; \
              COMMIT TRANSACTION;",
         )
@@ -1552,7 +1557,7 @@ pub async fn update_draft(
             "BEGIN TRANSACTION; \
              UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number=$game_number; \
              DELETE draft_action WHERE draft = type::record('draft', $draft_key); \
-             FOR $a IN $actions { CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role; }; \
+             FOR $a IN $actions { CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role, role_guessed = $a.role_guessed; }; \
              COMMIT TRANSACTION;",
         )
         .bind(("draft_key", record_key(draft_id, "draft")))
@@ -1725,6 +1730,7 @@ pub async fn get_tree_nodes(
                 order: a.order,
                 comment: a.comment,
                 role: None,
+                role_guessed: false,
             });
     }
 
@@ -6235,6 +6241,479 @@ pub async fn delete_personal_learning(db: &Surreal<Db>, user_id: &str, id: &str)
         .await?
         .check()?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Draft Graph (M4): champion traits (global), team relations and the team's
+// games as graph evidence (team-scoped)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbChampionTrait {
+    champion: String,
+    roles: Vec<String>,
+    damage_type: String,
+    damage_profile: String,
+    range_class: String,
+    engage: String,
+    disengage: String,
+    peel: String,
+    frontline: String,
+    cc: String,
+    wave_clear: String,
+    scaling: String,
+    mobility: String,
+    styles: Vec<String>,
+    confidence: String,
+    source: String,
+    edited_by_name: Option<String>,
+    edited_at: Option<Datetime>,
+    reviewed_for_patch: Option<String>,
+}
+
+impl DbChampionTrait {
+    /// The shared model; `None` (and a warning) for a row outside the
+    /// vocabulary, which the schema's assertions should make impossible.
+    fn into_record(self) -> Option<crate::models::graph::TraitRecord> {
+        use crate::models::graph::*;
+        fn all<T>(raw: &[String], parse: impl Fn(&str) -> Option<T>) -> Option<Vec<T>> {
+            raw.iter().map(|s| parse(s)).collect()
+        }
+        let traits = ChampionTraits {
+            champion: self.champion.clone(),
+            roles: all(&self.roles, |s| {
+                Role::ALL.iter().copied().find(|r| r.key() == s)
+            })?,
+            damage_type: DamageType::parse(&self.damage_type)?,
+            damage_profile: DamageProfile::parse(&self.damage_profile)?,
+            range: RangeClass::parse(&self.range_class)?,
+            engage: Engage::parse(&self.engage)?,
+            disengage: Strength::parse(&self.disengage)?,
+            peel: Strength::parse(&self.peel)?,
+            frontline: Strength::parse(&self.frontline)?,
+            cc: CrowdControl::parse(&self.cc)?,
+            wave_clear: WaveClear::parse(&self.wave_clear)?,
+            scaling: Scaling::parse(&self.scaling)?,
+            mobility: Mobility::parse(&self.mobility)?,
+            styles: all(&self.styles, Playstyle::parse)?,
+            confidence: Confidence::parse(&self.confidence)?,
+        };
+        Some(TraitRecord {
+            name: self.champion,
+            traits,
+            source: TraitSource::parse(&self.source)?,
+            edited_by: self.edited_by_name,
+            edited_at: opt_dt(self.edited_at),
+            reviewed_for_patch: self.reviewed_for_patch,
+        })
+    }
+}
+
+/// A trait row as bound into a query (enum keys as strings).
+#[derive(Debug, Clone, serde::Serialize, SurrealValue)]
+struct TraitRow {
+    champion: String,
+    roles: Vec<String>,
+    damage_type: String,
+    damage_profile: String,
+    range_class: String,
+    engage: String,
+    disengage: String,
+    peel: String,
+    frontline: String,
+    cc: String,
+    wave_clear: String,
+    scaling: String,
+    mobility: String,
+    styles: Vec<String>,
+    confidence: String,
+}
+
+impl From<&crate::models::graph::ChampionTraits> for TraitRow {
+    fn from(t: &crate::models::graph::ChampionTraits) -> Self {
+        TraitRow {
+            champion: t.champion.clone(),
+            roles: t.roles.iter().map(|r| r.key().to_string()).collect(),
+            damage_type: t.damage_type.key().into(),
+            damage_profile: t.damage_profile.key().into(),
+            range_class: t.range.key().into(),
+            engage: t.engage.key().into(),
+            disengage: t.disengage.key().into(),
+            peel: t.peel.key().into(),
+            frontline: t.frontline.key().into(),
+            cc: t.cc.key().into(),
+            wave_clear: t.wave_clear.key().into(),
+            scaling: t.scaling.key().into(),
+            mobility: t.mobility.key().into(),
+            styles: t.styles.iter().map(|s| s.key().to_string()).collect(),
+            confidence: t.confidence.key().into(),
+        }
+    }
+}
+
+/// Every champion trait row (global table), in champion id order.
+pub async fn list_champion_traits(
+    db: &Surreal<Db>,
+) -> DbResult<Vec<crate::models::graph::TraitRecord>> {
+    let mut r = db
+        .query("SELECT * FROM champion_trait ORDER BY champion ASC")
+        .await?;
+    let rows: Vec<DbChampionTrait> = r.take(0)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let id = row.champion.clone();
+            let rec = row.into_record();
+            if rec.is_none() {
+                tracing::warn!(champion = %id, "champion_trait row outside the vocabulary; skipped");
+            }
+            rec
+        })
+        .collect())
+}
+
+/// Write shipped default rows (create or replace), all in one transaction.
+/// The caller (`graph::traits::sync`) passes only rows that are missing or
+/// still `default`; this function re-checks that so a maintainer's edit is
+/// never overwritten, even by a race.
+pub async fn write_default_traits(
+    db: &Surreal<Db>,
+    rows: Vec<crate::models::graph::ChampionTraits>,
+) -> DbResult<()> {
+    for t in &rows {
+        t.validate().map_err(DbError::Invalid)?;
+    }
+    let rows: Vec<TraitRow> = rows.iter().map(TraitRow::from).collect();
+    let r = db
+        .query(
+            "BEGIN TRANSACTION; \
+             FOR $r IN $rows { \
+                LET $cur = (SELECT VALUE source FROM type::record('champion_trait', $r.champion))[0]; \
+                IF $cur = NONE OR $cur = 'default' { \
+                    UPSERT type::record('champion_trait', $r.champion) CONTENT { \
+                        champion: $r.champion, roles: $r.roles, damage_type: $r.damage_type, \
+                        damage_profile: $r.damage_profile, range_class: $r.range_class, \
+                        engage: $r.engage, disengage: $r.disengage, peel: $r.peel, \
+                        frontline: $r.frontline, cc: $r.cc, wave_clear: $r.wave_clear, \
+                        scaling: $r.scaling, mobility: $r.mobility, styles: $r.styles, \
+                        confidence: $r.confidence, source: 'default', edited_by: NONE, \
+                        edited_by_name: NONE, edited_at: NONE, reviewed_for_patch: NONE \
+                    }; \
+                }; \
+             }; \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("rows", rows))
+        .await?;
+    check_tx(r)?;
+    Ok(())
+}
+
+/// A maintainer's edit of one champion's row (admin only; the server
+/// function checks the role). The row must exist. Marks it `maintainer`,
+/// records who and when, and the patch it was reviewed for (or clears it).
+pub async fn save_champion_traits(
+    db: &Surreal<Db>,
+    traits: &crate::models::graph::ChampionTraits,
+    editor_id: &str,
+    editor_name: &str,
+    reviewed_for_patch: Option<String>,
+) -> DbResult<()> {
+    traits.validate().map_err(DbError::Invalid)?;
+    let row = TraitRow::from(traits);
+    let mut r = db
+        .query(
+            "UPDATE type::record('champion_trait', $r.champion) SET \
+                roles = $r.roles, damage_type = $r.damage_type, damage_profile = $r.damage_profile, \
+                range_class = $r.range_class, engage = $r.engage, disengage = $r.disengage, \
+                peel = $r.peel, frontline = $r.frontline, cc = $r.cc, wave_clear = $r.wave_clear, \
+                scaling = $r.scaling, mobility = $r.mobility, styles = $r.styles, \
+                confidence = $r.confidence, source = 'maintainer', \
+                edited_by = type::record('user', $editor), edited_by_name = $editor_name, \
+                edited_at = time::now(), reviewed_for_patch = $patch \
+             RETURN champion",
+        )
+        .bind(("r", row))
+        .bind(("editor", record_key(editor_id, "user")))
+        .bind(("editor_name", editor_name.to_string()))
+        .bind(("patch", reviewed_for_patch))
+        .await?
+        .check()?;
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Back {
+        #[allow(dead_code)]
+        champion: String,
+    }
+    let back: Vec<Back> = r.take(0).unwrap_or_default();
+    if back.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// Put one champion's row back to the shipped default (admin only).
+pub async fn reset_champion_traits(
+    db: &Surreal<Db>,
+    default: &crate::models::graph::ChampionTraits,
+) -> DbResult<()> {
+    let row = TraitRow::from(default);
+    let mut r = db
+        .query(
+            "UPDATE type::record('champion_trait', $r.champion) CONTENT { \
+                champion: $r.champion, roles: $r.roles, damage_type: $r.damage_type, \
+                damage_profile: $r.damage_profile, range_class: $r.range_class, \
+                engage: $r.engage, disengage: $r.disengage, peel: $r.peel, \
+                frontline: $r.frontline, cc: $r.cc, wave_clear: $r.wave_clear, \
+                scaling: $r.scaling, mobility: $r.mobility, styles: $r.styles, \
+                confidence: $r.confidence, source: 'default', edited_by: NONE, \
+                edited_by_name: NONE, edited_at: NONE, reviewed_for_patch: NONE \
+             } RETURN champion",
+        )
+        .bind(("r", row))
+        .await?
+        .check()?;
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Back {
+        #[allow(dead_code)]
+        champion: String,
+    }
+    let back: Vec<Back> = r.take(0).unwrap_or_default();
+    if back.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbTeamRelation {
+    id: RecordId,
+    team: RecordId,
+    a: String,
+    b: String,
+    kind: String,
+    weight: i64,
+    reason: String,
+    author: RecordId,
+    author_name: String,
+    created_at: Option<Datetime>,
+}
+
+impl DbTeamRelation {
+    fn into_model(self) -> Option<crate::models::graph::TeamRelation> {
+        Some(crate::models::graph::TeamRelation {
+            id: Some(self.id.to_sql()),
+            team_id: self.team.to_sql(),
+            a: self.a,
+            b: self.b,
+            kind: crate::models::graph::RelationKind::parse(&self.kind)?,
+            weight: u8::try_from(self.weight).ok()?,
+            reason: self.reason,
+            author_id: self.author.to_sql(),
+            author_name: self.author_name,
+            created_at: opt_dt(self.created_at),
+        })
+    }
+}
+
+/// Record what a team knows about a pair. Champion ids must already be
+/// resolved by the caller; the relation is checked again here.
+pub async fn create_team_relation(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    author_name: &str,
+    relation: crate::models::graph::NewRelation,
+) -> DbResult<String> {
+    let rel = relation.normalised().map_err(DbError::Invalid)?;
+    let mut r = db
+        .query(
+            "CREATE team_relation SET team = type::record('team', $team_key), a = $a, b = $b, \
+             kind = $kind, weight = $weight, reason = $reason, \
+             author = type::record('user', $user_key), author_name = $author_name",
+        )
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("author_name", author_name.to_string()))
+        .bind(("a", rel.a))
+        .bind(("b", rel.b))
+        .bind(("kind", rel.kind.key().to_string()))
+        .bind(("weight", rel.weight as i64))
+        .bind(("reason", rel.reason))
+        .await?
+        .check()?;
+    let row: Option<IdRecord> = r.take(0)?;
+    row.map(|r| r.id.to_sql())
+        .ok_or_else(|| DbError::Other("Failed to create team relation".into()))
+}
+
+/// The team's relations, newest first.
+pub async fn list_team_relations(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<crate::models::graph::TeamRelation>> {
+    let mut r = db
+        .query("SELECT * FROM team_relation WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbTeamRelation> = r.take(0)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let id = row.id.to_sql();
+            let rel = row.into_model();
+            if rel.is_none() {
+                tracing::warn!(relation = %id, "team_relation row outside the vocabulary; skipped");
+            }
+            rel
+        })
+        .collect())
+}
+
+/// Delete one of the team's relations (any member may, like team notes).
+pub async fn delete_team_relation(
+    db: &Surreal<Db>,
+    team_id: &str,
+    relation_id: &str,
+) -> DbResult<()> {
+    ensure_team_record(db, "team_relation", relation_id, team_id).await?;
+    db.query("DELETE type::record('team_relation', $key)")
+        .bind(("key", record_key(relation_id, "team_relation")))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// A team member with their champion pool, for the Draft Graph.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PoolMember {
+    pub user_id: String,
+    pub username: String,
+    /// Roster role as stored ("top", "sub", "unassigned", ...).
+    pub role: String,
+    pub roster_type: String,
+    /// (champion as stored, tier).
+    pub entries: Vec<(String, String)>,
+}
+
+/// The team's members and every member's pool entries, in one round trip.
+pub async fn team_pool_members(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<PoolMember>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Member {
+        user: RecordId,
+        username: Option<String>,
+        role: String,
+        roster_type: String,
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        user: RecordId,
+        champion: String,
+        tier: String,
+    }
+    let mut r = db
+        .query("LET $m = (SELECT user, user.username AS username, role, roster_type FROM team_member WHERE team = type::record('team', $team_key)); \
+                RETURN $m; \
+                SELECT user, champion, tier FROM champion_pool WHERE user IN $m.user")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let members: Vec<Member> = r.take(1)?;
+    let rows: Vec<Row> = r.take(2)?;
+    Ok(members
+        .into_iter()
+        .map(|m| {
+            let id = m.user.to_sql();
+            let entries = rows
+                .iter()
+                .filter(|r| r.user.to_sql() == id)
+                .map(|r| (r.champion.clone(), r.tier.clone()))
+                .collect();
+            PoolMember {
+                user_id: id,
+                username: m.username.unwrap_or_default(),
+                role: m.role,
+                roster_type: m.roster_type,
+                entries,
+            }
+        })
+        .collect())
+}
+
+/// One stored game of a team member, as the graph's match evidence reads it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TeamGameRow {
+    /// The `match` record (games played together share it).
+    pub match_key: String,
+    pub riot_match_id: String,
+    pub user_id: String,
+    /// As Riot reports it (resolve to a Data Dragon id before use).
+    pub champion: String,
+    pub win: bool,
+}
+
+/// The current members' stored games (`player_match`), newest first, at
+/// most 2,000 rows.
+pub async fn team_game_rows(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamGameRow>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        match_ref: Option<RecordId>,
+        riot_match_id: Option<String>,
+        user: RecordId,
+        champion: String,
+        win: bool,
+        #[allow(dead_code)]
+        game_end: Option<Datetime>,
+    }
+    // `match` is aliased: the SurrealValue derive reads field names as
+    // written, not serde renames.
+    let mut r = db
+        .query("LET $users = (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)); \
+                SELECT match AS match_ref, match.match_id AS riot_match_id, user, champion, win, match.game_end AS game_end FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT 2000")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<Row> = r.take(1)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            Some(TeamGameRow {
+                match_key: row.match_ref?.to_sql(),
+                riot_match_id: row.riot_match_id.unwrap_or_default(),
+                user_id: row.user.to_sql(),
+                champion: row.champion,
+                win: row.win,
+            })
+        })
+        .collect())
+}
+
+/// Cached participant lists (all ten players) for the given Riot match
+/// ids, where the match detail has been fetched before. Match details are
+/// public Riot data shared by every team; callers pass only ids from their
+/// own team's games.
+pub async fn match_participants(
+    db: &Surreal<Db>,
+    riot_match_ids: Vec<String>,
+) -> DbResult<Vec<(String, Vec<crate::models::match_data::MatchParticipant>)>> {
+    if riot_match_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        match_id: String,
+        participants_json: String,
+    }
+    let mut r = db
+        .query("SELECT match_id, participants_json FROM match_detail WHERE match_id IN $ids")
+        .bind(("ids", riot_match_ids))
+        .await?;
+    let rows: Vec<Row> = r.take(0).unwrap_or_default();
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            serde_json::from_str(&row.participants_json)
+                .ok()
+                .map(|p| (row.match_id, p))
+        })
+        .collect())
 }
 
 #[cfg(test)]

@@ -30,6 +30,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             order: 0,
             comment: None,
             role: None,
+            role_guessed: false,
         },
         DraftAction {
             id: None,
@@ -40,6 +41,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             order: 1,
             comment: Some("strong ADC".into()),
             role: None,
+            role_guessed: false,
         },
     ]
 }

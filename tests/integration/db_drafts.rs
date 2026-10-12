@@ -29,6 +29,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             order: 0,
             comment: None,
             role: None,
+            role_guessed: false,
         },
         DraftAction {
             id: None,
@@ -39,6 +40,7 @@ fn sample_actions(draft_id: &str) -> Vec<DraftAction> {
             order: 1,
             comment: Some("strong ADC".into()),
             role: None,
+            role_guessed: false,
         },
     ]
 }
@@ -114,6 +116,7 @@ async fn test_update_draft_replaces_actions() {
         order: 0,
         comment: None,
         role: None,
+        role_guessed: false,
     }];
 
     db::update_draft(
@@ -229,4 +232,51 @@ async fn test_delete_draft() {
 
     let drafts = db::list_drafts(&db, &team_id).await.unwrap();
     assert!(drafts.is_empty(), "draft should be deleted");
+}
+
+/// M4: a guessed role is stored as guessed and reads back that way; a
+/// confirmed role stays confirmed; a guess without a role is dropped.
+#[tokio::test]
+async fn guessed_roles_round_trip() {
+    let db = common::test_db().await;
+    let (user_id, team_id, _) = setup(&db).await;
+    let mut actions = sample_actions("placeholder");
+    actions[1].role = Some("bot".into());
+    actions[1].role_guessed = true;
+    actions.push(DraftAction {
+        id: None,
+        draft_id: String::new(),
+        phase: "pick_Pick 2".into(),
+        side: "blue".into(),
+        champion: "Thresh".into(),
+        order: 9,
+        comment: None,
+        role: Some("support".into()),
+        role_guessed: false,
+    });
+    actions[0].role_guessed = true; // a ban with no role: not a guess
+    db::save_draft(
+        &db,
+        &team_id,
+        &user_id,
+        "Guesses".into(),
+        None,
+        None,
+        vec![],
+        actions,
+        None,
+        "blue".into(),
+        vec![],
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let d = &db::list_drafts(&db, &team_id).await.unwrap()[0];
+    let by = |c: &str| d.actions.iter().find(|a| a.champion == c).unwrap();
+    assert!(by("Jinx").role_guessed);
+    assert!(!by("Thresh").role_guessed);
+    assert!(!by("Azir").role_guessed);
 }

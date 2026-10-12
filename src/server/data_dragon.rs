@@ -478,8 +478,14 @@ pub fn spawn_refresh_task(db: Arc<Surreal<Db>>) {
         interval.tick().await; // the first tick fires immediately; init already refreshed
         loop {
             interval.tick().await;
-            if let Err(e) = refresh(&db).await {
-                tracing::warn!("Data Dragon refresh failed: {e}");
+            match refresh(&db).await {
+                // A new patch can add a champion: give it a trait row.
+                Ok(_) => {
+                    if let Err(e) = crate::server::graph::traits::sync(&db).await {
+                        tracing::warn!("champion traits: sync after refresh failed: {e}");
+                    }
+                }
+                Err(e) => tracing::warn!("Data Dragon refresh failed: {e}"),
             }
         }
     });

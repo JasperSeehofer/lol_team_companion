@@ -1,0 +1,197 @@
+# Champion trait defaults: the maintainer's starting opinion, kit-based.
+# One row per Data Dragon champion id. Every row loads as source "default"
+# until the maintainer edits it on /admin/traits (edits live in the
+# database and are never overwritten by this file). Nothing here is
+# patch-specific or a balance number: each value says what a champion's
+# abilities structurally do. When unsure, the neutral value and
+# confidence "low".
+#
+# Vocabulary (docs/DESIGN.md "Draft Graph", models::graph):
+# roles          top|jungle|mid|bot|support (one or more, "|"-separated, most played first)
+# damage_type    physical|magic|mixed|true_heavy
+# damage_profile burst|sustained|poke|hybrid
+# range          melee|short|long        (short: ranged under 525; long: 525 and up, or artillery)
+# engage         none|conditional|hard
+# disengage      none|some|strong
+# peel           none|some|strong
+# frontline      none|some|strong
+# cc             none|light|medium|heavy
+# wave_clear     weak|ok|strong
+# scaling        early|mid|late|flat
+# mobility       low|medium|high
+# styles         poke|dive|pick|split_push|teamfight|protect_the_carry|skirmish|siege|front_to_back|wombo (zero or more)
+# confidence     normal|low
+champion,roles,damage_type,damage_profile,range,engage,disengage,peel,frontline,cc,wave_clear,scaling,mobility,styles,confidence
+Aatrox,top,physical,sustained,melee,conditional,none,none,some,medium,ok,mid,medium,skirmish|teamfight|dive,normal
+Ahri,mid,magic,burst,long,conditional,none,some,none,light,ok,mid,high,pick|skirmish,normal
+Akali,mid|top,magic,burst,melee,none,none,none,none,none,ok,mid,high,dive|skirmish|pick,normal
+Akshan,mid|top,physical,hybrid,short,none,none,none,none,none,ok,mid,high,pick|skirmish|split_push,normal
+Alistar,support,magic,sustained,melee,hard,strong,strong,strong,heavy,weak,early,medium,teamfight|wombo|pick|dive,normal
+Ambessa,top,physical,hybrid,melee,conditional,none,none,some,medium,ok,mid,high,dive|skirmish|split_push,low
+Amumu,jungle|support,magic,hybrid,melee,hard,some,some,strong,heavy,ok,mid,medium,teamfight|wombo|dive,normal
+Anivia,mid,magic,sustained,long,none,strong,some,none,medium,strong,late,low,teamfight|siege,normal
+Annie,mid|support,magic,burst,long,conditional,some,some,none,medium,strong,mid,low,wombo|teamfight|pick,normal
+Aphelios,bot,physical,sustained,long,none,some,none,none,light,strong,late,low,teamfight|front_to_back,normal
+Ashe,bot|support,physical,sustained,long,conditional,some,some,none,medium,ok,mid,low,pick|teamfight|front_to_back,normal
+AurelionSol,mid,magic,sustained,long,conditional,none,none,none,medium,strong,late,high,teamfight|siege,normal
+Aurora,mid|top,magic,burst,long,conditional,some,none,none,medium,ok,mid,high,skirmish|pick,low
+Azir,mid,magic,sustained,long,conditional,strong,strong,none,medium,strong,late,medium,siege|teamfight|poke,normal
+Bard,support,magic,hybrid,long,conditional,some,some,none,medium,weak,mid,high,pick|skirmish,normal
+Belveth,jungle,physical,sustained,melee,none,none,none,some,light,ok,late,high,skirmish|split_push|dive,normal
+Blitzcrank,support,magic,burst,short,hard,some,some,some,heavy,weak,early,medium,pick,normal
+Brand,support|mid,magic,sustained,long,none,none,some,none,light,strong,mid,low,teamfight|poke|wombo,normal
+Braum,support,magic,sustained,melee,conditional,strong,strong,strong,medium,weak,mid,medium,protect_the_carry|front_to_back,normal
+Briar,jungle,physical,sustained,melee,conditional,none,none,some,medium,ok,early,high,dive|skirmish,normal
+Caitlyn,bot,physical,sustained,long,none,some,some,none,light,ok,mid,medium,siege|poke,normal
+Camille,top,true_heavy,burst,melee,conditional,none,none,some,medium,ok,mid,high,split_push|pick|dive,normal
+Cassiopeia,mid,magic,sustained,long,conditional,some,some,none,medium,strong,late,low,teamfight,normal
+Chogath,top|mid,magic,sustained,melee,conditional,some,some,strong,medium,ok,late,low,teamfight|front_to_back,normal
+Corki,mid,mixed,poke,long,none,none,none,none,none,strong,mid,medium,poke|siege,normal
+Darius,top,physical,sustained,melee,conditional,none,some,some,medium,ok,early,low,skirmish|split_push|teamfight,normal
+Diana,jungle|mid,magic,burst,melee,hard,none,none,some,medium,strong,mid,medium,dive|wombo|teamfight,normal
+DrMundo,top|jungle,mixed,sustained,melee,none,none,none,strong,light,ok,late,low,front_to_back|split_push,normal
+Draven,bot,physical,sustained,long,none,some,none,none,light,ok,early,medium,skirmish,normal
+Ekko,mid|jungle,magic,burst,melee,conditional,some,none,none,medium,ok,mid,high,dive|skirmish|pick,normal
+Elise,jungle,magic,burst,short,conditional,none,none,none,light,ok,early,medium,pick|dive|skirmish,normal
+Evelynn,jungle,magic,burst,melee,none,none,none,none,light,ok,mid,high,pick,normal
+Ezreal,bot,mixed,poke,long,none,none,none,none,none,ok,mid,high,poke|siege,normal
+Fiddlesticks,jungle|support,magic,burst,short,hard,some,some,none,medium,strong,mid,medium,wombo|teamfight|pick,normal
+Fiora,top,true_heavy,sustained,melee,none,none,none,none,light,ok,late,high,split_push|skirmish,normal
+Fizz,mid,magic,burst,melee,conditional,none,none,none,light,ok,mid,high,pick|dive,normal
+Galio,mid|support,magic,hybrid,melee,hard,some,strong,some,heavy,ok,mid,medium,teamfight|wombo|dive,normal
+Gangplank,top,physical,burst,short,none,some,none,none,light,strong,late,low,split_push|teamfight,normal
+Garen,top,physical,sustained,melee,none,none,none,some,light,ok,mid,medium,split_push|skirmish,normal
+Gnar,top,physical,hybrid,short,conditional,some,some,some,medium,ok,mid,medium,teamfight|wombo|skirmish,normal
+Gragas,jungle|top|support|mid,magic,burst,melee,hard,strong,strong,some,medium,ok,mid,medium,pick|teamfight|wombo,normal
+Graves,jungle,physical,burst,short,none,none,none,some,light,strong,mid,medium,skirmish,normal
+Gwen,top|jungle,magic,sustained,melee,none,none,none,some,light,ok,late,medium,split_push|skirmish,normal
+Hecarim,jungle,physical,hybrid,melee,hard,none,none,some,medium,strong,mid,high,dive|teamfight,normal
+Heimerdinger,mid|top|support,magic,sustained,long,none,some,some,none,light,strong,mid,low,siege|poke,normal
+Hwei,mid|support,magic,poke,long,conditional,some,some,none,medium,strong,mid,low,poke|siege|pick,normal
+Illaoi,top,physical,sustained,melee,none,none,none,some,light,strong,mid,low,split_push|teamfight,normal
+Irelia,top|mid,physical,sustained,melee,conditional,none,none,some,medium,ok,mid,high,skirmish|dive,normal
+Ivern,jungle,magic,hybrid,short,none,some,strong,some,medium,ok,mid,medium,protect_the_carry,normal
+Janna,support,magic,sustained,long,none,strong,strong,none,medium,weak,flat,medium,protect_the_carry|front_to_back,normal
+JarvanIV,jungle|top,physical,burst,melee,hard,none,none,some,medium,ok,early,medium,dive|teamfight|wombo,normal
+Jax,top|jungle,mixed,sustained,melee,conditional,none,none,some,light,ok,late,medium,split_push|skirmish,normal
+Jayce,top|mid,physical,poke,short,none,some,some,none,light,ok,early,medium,poke|siege,normal
+Jhin,bot,physical,hybrid,long,none,some,none,none,light,ok,mid,low,poke|pick|siege,normal
+Jinx,bot,physical,sustained,long,none,some,none,none,light,strong,late,low,teamfight|front_to_back|siege,normal
+KSante,top,physical,sustained,melee,conditional,some,some,strong,medium,ok,mid,medium,front_to_back|skirmish|dive,normal
+Kaisa,bot,mixed,burst,long,none,none,none,none,none,ok,mid,high,dive|skirmish,normal
+Kalista,bot,physical,sustained,long,conditional,some,some,none,light,ok,early,high,skirmish|pick,normal
+Karma,support|mid|top,magic,poke,long,none,strong,strong,none,light,ok,early,medium,poke|protect_the_carry,normal
+Karthus,jungle|mid,magic,sustained,long,none,some,none,none,light,strong,late,low,teamfight|siege,normal
+Kassadin,mid,magic,burst,melee,none,none,none,none,light,ok,late,high,pick|dive,normal
+Katarina,mid,magic,burst,melee,none,none,none,none,none,ok,mid,high,skirmish,normal
+Kayle,top,mixed,sustained,short,none,none,some,none,light,strong,late,low,split_push|teamfight,normal
+Kayn,jungle,physical,hybrid,melee,conditional,none,none,some,light,ok,mid,high,dive|pick|skirmish,normal
+Kennen,top|mid,magic,burst,long,hard,none,none,none,heavy,ok,mid,medium,wombo|teamfight|poke,normal
+Khazix,jungle,physical,burst,melee,none,none,none,none,light,ok,mid,high,pick|skirmish,normal
+Kindred,jungle,physical,sustained,short,none,some,some,none,light,ok,late,medium,skirmish,normal
+Kled,top,physical,hybrid,melee,hard,none,none,some,light,ok,early,high,dive|skirmish,normal
+KogMaw,bot,mixed,sustained,long,none,none,none,none,light,strong,late,low,front_to_back,normal
+Leblanc,mid,magic,burst,long,none,none,none,none,light,ok,mid,high,pick|skirmish,normal
+LeeSin,jungle,physical,burst,melee,conditional,some,some,some,light,ok,early,high,pick|skirmish|dive,normal
+Leona,support,magic,hybrid,melee,hard,none,some,strong,heavy,weak,early,medium,dive|teamfight|pick|wombo,normal
+Lillia,jungle|top,magic,sustained,short,conditional,some,some,none,medium,strong,mid,high,teamfight|skirmish|wombo,normal
+Lissandra,mid|support,magic,burst,long,hard,some,strong,none,heavy,ok,mid,medium,teamfight|wombo|pick,normal
+Locke,mid,physical,burst,melee,none,none,none,none,none,ok,mid,medium,,low
+Lucian,bot|mid,physical,burst,short,none,none,none,none,none,ok,early,high,skirmish,normal
+Lulu,support|mid,magic,sustained,long,none,strong,strong,none,medium,ok,mid,low,protect_the_carry,normal
+Lux,support|mid,magic,poke,long,none,some,some,none,medium,strong,mid,low,poke|pick|siege,normal
+Malphite,top|support|mid,magic,burst,melee,hard,none,some,strong,heavy,ok,mid,low,wombo|teamfight|front_to_back,normal
+Malzahar,mid|support,magic,sustained,long,conditional,some,some,none,medium,strong,mid,low,pick|teamfight,normal
+Maokai,support|jungle|top,magic,sustained,melee,hard,some,strong,strong,heavy,ok,mid,medium,teamfight|front_to_back|wombo,normal
+MasterYi,jungle,physical,sustained,melee,none,none,none,none,none,ok,late,high,skirmish|split_push,normal
+Mel,mid|support,magic,poke,long,none,some,some,none,light,strong,mid,medium,poke|siege|pick,low
+Milio,support,magic,sustained,long,none,strong,strong,none,light,weak,mid,medium,protect_the_carry|front_to_back,normal
+MissFortune,bot,physical,hybrid,long,none,none,none,none,light,strong,mid,medium,teamfight|wombo|siege,normal
+MonkeyKing,top|jungle,physical,burst,melee,hard,none,none,some,medium,ok,mid,medium,wombo|teamfight|dive,normal
+Mordekaiser,top,magic,sustained,melee,conditional,none,none,some,light,strong,mid,low,skirmish|split_push,normal
+Morgana,support|mid|jungle,magic,sustained,long,conditional,some,strong,none,medium,strong,mid,low,pick|protect_the_carry,normal
+Naafiri,mid,physical,burst,melee,none,none,none,none,none,ok,early,high,pick|skirmish|dive,normal
+Nami,support,magic,poke,long,conditional,some,some,none,medium,weak,mid,low,protect_the_carry|teamfight,normal
+Nasus,top,physical,sustained,melee,none,none,some,strong,light,ok,late,low,split_push,normal
+Nautilus,support|jungle|top,magic,burst,melee,hard,some,some,strong,heavy,weak,early,low,pick|dive|teamfight,normal
+Neeko,mid|support,magic,burst,long,hard,some,some,none,heavy,strong,mid,low,wombo|teamfight|pick,normal
+Nidalee,jungle,magic,poke,long,none,none,none,none,none,ok,early,high,poke|skirmish,normal
+Nilah,bot,physical,sustained,melee,conditional,none,none,none,light,ok,late,high,skirmish|wombo,normal
+Nocturne,jungle,physical,burst,melee,hard,none,none,none,light,ok,mid,high,dive|pick,normal
+Nunu,jungle,magic,burst,melee,hard,none,none,some,medium,ok,early,high,pick|teamfight,normal
+Olaf,top|jungle,physical,sustained,melee,none,none,none,some,light,ok,early,medium,dive|skirmish,normal
+Orianna,mid,magic,hybrid,long,conditional,some,some,none,medium,strong,mid,low,teamfight|wombo|protect_the_carry,normal
+Ornn,top,mixed,sustained,melee,hard,some,some,strong,heavy,ok,mid,low,teamfight|front_to_back|wombo,normal
+Pantheon,top|mid|support|jungle,physical,burst,melee,conditional,none,some,some,light,ok,early,medium,pick|dive|skirmish,normal
+Poppy,top|jungle|support,physical,burst,melee,conditional,strong,strong,strong,medium,ok,mid,medium,pick|front_to_back,normal
+Pyke,support,physical,burst,melee,hard,none,none,none,medium,weak,early,high,pick|skirmish,normal
+Qiyana,mid|jungle,physical,burst,melee,hard,none,none,none,medium,ok,mid,high,wombo|pick|skirmish,normal
+Quinn,top,physical,burst,long,none,some,none,none,light,ok,early,high,split_push|pick,normal
+Rakan,support,magic,burst,short,hard,some,some,none,heavy,weak,mid,high,wombo|dive|teamfight|pick,normal
+Rammus,jungle,magic,sustained,melee,hard,none,some,strong,heavy,ok,mid,high,dive|pick|teamfight,normal
+RekSai,jungle,physical,burst,melee,conditional,none,none,some,light,ok,early,high,skirmish|pick,normal
+Rell,support,magic,hybrid,melee,hard,some,some,strong,heavy,weak,early,medium,wombo|teamfight|dive,normal
+Renata,support,magic,sustained,long,conditional,strong,strong,none,medium,weak,mid,low,protect_the_carry|teamfight,normal
+Renekton,top,physical,burst,melee,conditional,none,none,some,light,ok,early,medium,dive|skirmish,normal
+Rengar,jungle|top,physical,burst,melee,none,none,none,none,light,ok,mid,high,pick,normal
+Riven,top,physical,burst,melee,conditional,none,none,some,medium,ok,mid,high,skirmish|dive|split_push,normal
+Rumble,top|mid|jungle,magic,sustained,melee,conditional,some,none,some,light,strong,mid,medium,teamfight|wombo|skirmish,normal
+Ryze,mid|top,magic,sustained,long,conditional,some,some,none,light,strong,late,low,skirmish|siege,normal
+Samira,bot,physical,burst,short,none,none,none,none,none,ok,mid,high,wombo|dive|skirmish,normal
+Sejuani,jungle|top,magic,sustained,melee,hard,none,some,strong,heavy,ok,mid,medium,teamfight|dive|front_to_back,normal
+Senna,support|bot,physical,poke,long,none,some,some,none,light,ok,late,low,poke|siege,normal
+Seraphine,support|mid|bot,magic,hybrid,long,conditional,some,some,none,medium,strong,mid,low,teamfight|poke,normal
+Sett,top|support,physical,burst,melee,hard,none,some,some,medium,ok,early,low,teamfight|skirmish|dive,normal
+Shaco,jungle|support,mixed,burst,melee,none,some,none,none,light,ok,early,high,pick,normal
+Shen,top|support,mixed,sustained,melee,conditional,some,strong,strong,light,ok,mid,medium,split_push|protect_the_carry|pick,normal
+Shyvana,jungle|top,mixed,sustained,melee,conditional,none,none,some,light,strong,mid,medium,split_push|teamfight,normal
+Singed,top,magic,sustained,melee,conditional,some,some,strong,light,ok,mid,medium,split_push,normal
+Sion,top,physical,sustained,melee,hard,none,some,strong,heavy,strong,late,low,teamfight|front_to_back|split_push,normal
+Sivir,bot,physical,sustained,short,conditional,some,none,none,none,strong,mid,medium,siege|teamfight,normal
+Skarner,jungle|top,physical,sustained,melee,hard,none,some,strong,heavy,ok,mid,medium,pick|dive|teamfight,normal
+Smolder,bot|mid,physical,sustained,long,none,none,none,none,light,strong,late,medium,poke|siege|teamfight,normal
+Sona,support,magic,poke,long,conditional,some,some,none,medium,weak,late,medium,teamfight|wombo|poke,normal
+Soraka,support,magic,poke,long,none,some,strong,none,light,weak,mid,low,protect_the_carry|siege,normal
+Swain,support|mid|bot,magic,sustained,long,conditional,some,some,some,medium,strong,mid,low,teamfight|pick,normal
+Sylas,mid|jungle|top,magic,burst,melee,conditional,none,none,none,light,ok,mid,medium,skirmish|dive,normal
+Syndra,mid,magic,burst,long,none,strong,some,none,medium,strong,mid,low,pick|poke,normal
+TahmKench,support|top,magic,sustained,melee,conditional,some,strong,strong,medium,weak,mid,medium,protect_the_carry|front_to_back,normal
+Taliyah,mid|jungle,magic,burst,long,conditional,strong,some,none,medium,strong,mid,medium,pick|skirmish,normal
+Talon,mid|jungle,physical,burst,melee,none,none,none,none,light,ok,early,high,pick|skirmish,normal
+Taric,support,magic,sustained,melee,conditional,some,strong,some,medium,weak,mid,low,front_to_back|protect_the_carry|dive,normal
+Teemo,top|support,magic,sustained,short,none,some,none,none,light,ok,mid,medium,split_push|poke,normal
+Thresh,support,magic,hybrid,short,hard,strong,strong,some,heavy,weak,mid,low,pick|teamfight|protect_the_carry,normal
+Tristana,bot|mid,physical,burst,long,none,some,some,none,light,strong,late,high,siege|skirmish,normal
+Trundle,jungle|top,physical,sustained,melee,conditional,some,some,some,light,ok,mid,low,split_push|skirmish,normal
+Tryndamere,top,physical,sustained,melee,none,none,none,none,light,ok,late,medium,split_push,normal
+TwistedFate,mid,magic,hybrid,long,conditional,some,some,none,light,strong,mid,medium,pick|siege,normal
+Twitch,bot|jungle,physical,sustained,long,none,none,none,none,light,ok,late,medium,teamfight|pick,normal
+Udyr,jungle|top,mixed,sustained,melee,none,none,none,some,light,ok,mid,medium,skirmish|dive,normal
+Urgot,top,physical,sustained,short,conditional,none,none,some,medium,strong,mid,low,teamfight|skirmish,normal
+Varus,bot|mid,physical,poke,long,conditional,some,some,none,medium,strong,mid,low,poke|siege|pick,normal
+Vayne,bot|top,true_heavy,sustained,long,none,some,none,none,light,weak,late,medium,skirmish|split_push,normal
+Veigar,mid,magic,burst,long,none,strong,some,none,medium,ok,late,low,pick|teamfight,normal
+Velkoz,mid|support,magic,poke,long,none,some,none,none,light,strong,mid,low,poke|siege,normal
+Vex,mid,magic,burst,long,conditional,some,some,none,medium,strong,mid,medium,pick|teamfight,normal
+Vi,jungle,physical,burst,melee,hard,none,none,some,medium,ok,early,medium,pick|dive,normal
+Viego,jungle,physical,hybrid,melee,none,none,none,none,light,ok,mid,high,skirmish|dive,normal
+Viktor,mid,magic,hybrid,long,none,some,some,none,light,strong,late,low,teamfight|siege|poke,normal
+Vladimir,mid|top,magic,sustained,short,none,none,none,none,none,ok,late,medium,teamfight|skirmish,normal
+Volibear,top|jungle,mixed,sustained,melee,conditional,none,none,some,light,ok,early,medium,dive|skirmish,normal
+Warwick,jungle|top,mixed,sustained,melee,hard,none,some,some,medium,ok,early,high,dive|skirmish|pick,normal
+Xayah,bot,physical,sustained,long,none,some,none,none,light,ok,mid,low,teamfight|skirmish,normal
+Xerath,mid|support,magic,poke,long,none,some,some,none,light,strong,mid,low,poke|siege,normal
+XinZhao,jungle,physical,hybrid,melee,conditional,some,some,some,medium,ok,early,medium,dive|skirmish,normal
+Yasuo,mid|top|bot,physical,sustained,melee,conditional,some,some,none,light,strong,mid,high,wombo|skirmish|split_push,normal
+Yone,top|mid,mixed,sustained,melee,hard,none,none,none,medium,strong,mid,high,wombo|dive|skirmish,normal
+Yorick,top,physical,sustained,melee,none,none,none,some,light,strong,mid,low,split_push|siege,normal
+Yunara,bot,physical,sustained,long,none,none,none,none,none,ok,mid,low,,low
+Yuumi,support,magic,poke,long,none,some,strong,none,light,weak,late,medium,protect_the_carry,normal
+Zaahen,top,physical,sustained,melee,none,none,none,none,none,ok,mid,medium,,low
+Zac,jungle|top|support,magic,sustained,melee,hard,some,some,strong,heavy,ok,mid,medium,dive|teamfight|wombo,normal
+Zed,mid|jungle,physical,burst,melee,none,none,none,none,light,ok,mid,high,pick|split_push,normal
+Zeri,bot,physical,sustained,short,none,none,none,none,light,ok,late,high,skirmish|teamfight,normal
+Ziggs,mid|bot,magic,poke,long,none,some,some,none,light,strong,mid,low,siege|poke,normal
+Zilean,support|mid,magic,poke,long,conditional,some,strong,none,medium,ok,late,medium,protect_the_carry|pick,normal
+Zoe,mid|support,magic,burst,long,none,some,some,none,light,ok,mid,medium,pick|poke,normal
+Zyra,support|mid,magic,poke,long,conditional,some,some,none,medium,strong,mid,low,teamfight|poke|wombo,normal

@@ -330,6 +330,7 @@ fn slot_label(
     slot: usize,
     champion: Option<&str>,
     role: Option<&str>,
+    role_guessed: bool,
     note: Option<&str>,
     warning: Option<&str>,
     current: bool,
@@ -358,6 +359,9 @@ fn slot_label(
     }
     if let Some(r) = role.and_then(Role::parse) {
         l.push_str(&format!(", {}", r.label()));
+        if role_guessed {
+            l.push_str(" (role guessed)");
+        }
     }
     if current {
         l.push_str(if champion.is_some() {
@@ -408,6 +412,10 @@ pub fn DraftBoard(
     /// Role per slot (picks), any stored spelling.
     #[prop(optional, into)]
     roles: Signal<Vec<Option<String>>>,
+    /// Per slot: the role was guessed, not set by a person (drawn as
+    /// uncertain, read as "role guessed").
+    #[prop(optional, into)]
+    guessed: Signal<Vec<bool>>,
     /// A short note per slot (pick rationale), shown under the name.
     #[prop(optional, into)]
     notes: Signal<Vec<Option<String>>>,
@@ -489,6 +497,7 @@ pub fn DraftBoard(
                 slot,
                 champ.get().as_deref(),
                 at(&roles, slot).as_deref(),
+                guessed.with(|g| g.get(slot).copied().unwrap_or(false)),
                 at(&notes, slot).as_deref(),
                 at(&warnings, slot).as_deref(),
                 is_current.get(),
@@ -530,6 +539,7 @@ pub fn DraftBoard(
                 };
             }
             let role = at(&roles, slot).as_deref().and_then(Role::parse);
+            let role_guessed = guessed.with(|g| g.get(slot).copied().unwrap_or(false));
             let note = at(&notes, slot);
             let warning = at(&warnings, slot);
             let lit = is_current.get();
@@ -577,7 +587,7 @@ pub fn DraftBoard(
                     {title}
                     {caption}
                 </span>
-                {role.map(|r| view! { <RoleLabel role=r /> })}
+                {role.map(|r| view! { <RoleLabel role=r guessed=role_guessed /> })}
             }
             .into_any()
         };
@@ -769,7 +779,7 @@ pub fn DraftBoard(
                 {pick_row(4)}
             </div>
             <p class="px-5 text-caption text-muted">
-                "Brackets group the picks a side makes in one turn; the numbers give the turn order."
+                "Brackets group the picks a side makes in one turn; the numbers give the turn order. A role with \u{201c}?\u{201d} was guessed: choose the slot to confirm it."
             </p>
             {hints.then(|| view! {
                 <p class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 text-caption text-muted" data-draft-keys="">
@@ -923,16 +933,20 @@ mod tests {
     #[test]
     fn slot_names_say_everything() {
         assert_eq!(
-            slot_label(6, None, None, None, None, true),
+            slot_label(6, None, None, false, None, None, true),
             "Blue pick 1, first pick, rotation 1, selecting now"
         );
         assert_eq!(
-            slot_label(8, Some("Syndra"), Some("mid"), None, None, false),
+            slot_label(8, Some("Syndra"), Some("mid"), false, None, None, false),
             "Red pick 2, rotation 2: Syndra, Mid"
         );
         assert_eq!(
-            slot_label(12, None, None, None, None, false),
+            slot_label(12, None, None, false, None, None, false),
             "Red ban 4, second rotation: empty"
+        );
+        assert_eq!(
+            slot_label(8, Some("Syndra"), Some("mid"), true, None, None, false),
+            "Red pick 2, rotation 2: Syndra, Mid (role guessed)"
         );
     }
 }
