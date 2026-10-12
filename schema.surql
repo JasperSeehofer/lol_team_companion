@@ -692,6 +692,9 @@ DEFINE FIELD IF NOT EXISTS month ON ledger_month TYPE string
   ASSERT string::matches($value, '^[0-9]{4}-(0[1-9]|1[0-2])$');
 DEFINE FIELD IF NOT EXISTS support_cents ON ledger_month TYPE int DEFAULT 0
   ASSERT $value >= 0 AND $value <= 100000000;
+-- Support is recorded gross; the payment platform's fees are a cost line
+-- (polish pass; migration 14 backfills 0 and makes it an int).
+DEFINE FIELD IF NOT EXISTS payment_fees_cents ON ledger_month TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS hosting_cents ON ledger_month TYPE int DEFAULT 0
   ASSERT $value >= 0 AND $value <= 100000000;
 DEFINE FIELD IF NOT EXISTS domain_cents ON ledger_month TYPE int DEFAULT 0

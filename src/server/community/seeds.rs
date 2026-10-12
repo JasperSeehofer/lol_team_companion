@@ -157,7 +157,7 @@ pub fn texts() -> Vec<SeedText> {
         ),
         (
             TEXT_LEDGER_LABELS,
-            "Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support",
+            "Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support\nPayment fees",
         ),
         (
             TEXT_SPLIT_LEGEND,

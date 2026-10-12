@@ -632,7 +632,12 @@ pub const MAX_CENTS: i64 = 100_000_000;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LedgerMonth {
     pub month: String,
+    /// What supporters paid, gross (before the payment platform's fees;
+    /// owner's decision, 12 Oct 2026).
     pub support_cents: i64,
+    /// The payment platform's fees: a running cost like hosting.
+    #[serde(default)]
+    pub payment_fees_cents: i64,
     pub hosting_cents: i64,
     pub domain_cents: i64,
     pub ai_tokens_cents: i64,
@@ -648,7 +653,11 @@ pub struct LedgerMonth {
 
 impl LedgerMonth {
     pub fn costs_cents(&self) -> i64 {
-        self.hosting_cents + self.domain_cents + self.ai_tokens_cents + self.other_cents
+        self.payment_fees_cents
+            + self.hosting_cents
+            + self.domain_cents
+            + self.ai_tokens_cents
+            + self.other_cents
     }
     pub fn to_maintainer_cents(&self) -> i64 {
         to_maintainer_cents(self.support_cents, self.costs_cents())
@@ -751,6 +760,8 @@ pub struct LedgerInput {
     pub is_new: bool,
     pub month: String,
     pub support: String,
+    #[serde(default)]
+    pub payment_fees: String,
     pub hosting: String,
     pub domain: String,
     pub ai_tokens: String,
@@ -779,6 +790,7 @@ pub fn validate_ledger(input: &LedgerInput, current_month: &str) -> Result<Ledge
     Ok(LedgerMonth {
         month,
         support_cents: parse_euros(&input.support)?,
+        payment_fees_cents: parse_euros(&input.payment_fees)?,
         hosting_cents: parse_euros(&input.hosting)?,
         domain_cents: parse_euros(&input.domain)?,
         ai_tokens_cents: parse_euros(&input.ai_tokens)?,
@@ -796,7 +808,9 @@ pub fn validate_ledger(input: &LedgerInput, current_month: &str) -> Result<Ledge
 /// The money policy shown under "How support is used" (paragraphs separated
 /// by a blank line).
 pub const TEXT_MONEY_POLICY: &str = "money_policy";
-/// The public ledger labels, one per line, in [`LEDGER_LABEL_ORDER`].
+/// The public ledger labels, one per line, in the order of [`LedgerLabels`]
+/// (the payment-fees label came last, in the polish pass, so texts approved
+/// before it only gained a line).
 pub const TEXT_LEDGER_LABELS: &str = "ledger_labels";
 /// Caption above the ledger table explaining the split bar.
 pub const TEXT_SPLIT_LEGEND: &str = "ledger_split_legend";
@@ -853,12 +867,13 @@ pub struct LedgerLabels {
     pub costs: String,
     pub to_maintainer: String,
     pub not_covered: String,
+    pub payment_fees: String,
 }
 
-pub const LEDGER_LABEL_COUNT: usize = 8;
+pub const LEDGER_LABEL_COUNT: usize = 9;
 
 impl LedgerLabels {
-    /// Exactly eight non-empty lines.
+    /// Exactly nine non-empty lines.
     pub fn parse(body: &str) -> Option<LedgerLabels> {
         let lines: Vec<String> = body
             .lines()
@@ -879,6 +894,7 @@ impl LedgerLabels {
             costs: next(),
             to_maintainer: next(),
             not_covered: next(),
+            payment_fees: next(),
         })
     }
 }
@@ -902,7 +918,7 @@ pub fn validate_site_text(slug: &str, body: &str) -> Result<String, String> {
         return Err("That text is too long (up to 3,000 characters).".into());
     }
     if slug == TEXT_LEDGER_LABELS && LedgerLabels::parse(&body).is_none() {
-        return Err("Write exactly eight labels, one per line, each up to 40 characters.".into());
+        return Err("Write exactly nine labels, one per line, each up to 40 characters.".into());
     }
     let hits = forbidden_money_words(&body);
     if !hits.is_empty() {
@@ -1335,11 +1351,14 @@ mod tests {
     }
 
     #[test]
-    fn ledger_labels_need_eight_lines() {
-        let body = "Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support";
+    fn ledger_labels_need_nine_lines() {
+        let body = "Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support\nPayment fees";
         let l = LedgerLabels::parse(body).unwrap();
         assert_eq!(l.ai_tokens, "AI tokens");
         assert_eq!(l.not_covered, "Not covered by support");
+        assert_eq!(l.payment_fees, "Payment fees");
+        // A text approved before the payment-fees line no longer parses.
+        assert!(LedgerLabels::parse(body.trim_end_matches("\nPayment fees")).is_none());
         assert!(LedgerLabels::parse("a\nb").is_none());
         assert!(validate_site_text(TEXT_LEDGER_LABELS, "a\nb").is_err());
         assert!(validate_site_text("nope", "x").is_err());

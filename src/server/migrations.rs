@@ -145,6 +145,23 @@ pub const MIGRATIONS: &[Migration] = &[
              DEFINE FIELD OVERWRITE guidance_enabled ON user TYPE bool DEFAULT true;",
         ),
     },
+    Migration {
+        version: 14,
+        name: "ledger_payment_fees",
+        // Polish pass (owner: support is shown gross): payment fees become a
+        // cost line. Old months get 0 fees. A ledger-labels text with the
+        // old eight lines gains "Payment fees" as its ninth and goes back
+        // behind the approval switch (a changed money text needs approval).
+        step: Step::Surql(
+            "UPDATE ledger_month SET payment_fees_cents = 0 WHERE payment_fees_cents = NONE; \
+             DEFINE FIELD OVERWRITE payment_fees_cents ON ledger_month TYPE int DEFAULT 0 \
+               ASSERT $value >= 0 AND $value <= 100000000; \
+             UPDATE site_text SET body = string::concat(body, '\\nPayment fees'), \
+                 approved = false, approved_by = NONE, approved_at = NONE, updated_at = time::now() \
+               WHERE slug = 'ledger_labels' \
+                 AND array::len(array::filter(string::split(body, '\\n'), |$l| string::trim($l) != '')) = 8;",
+        ),
+    },
 ];
 
 const BUG_REPORT_STATUSES_V2: &str = "\

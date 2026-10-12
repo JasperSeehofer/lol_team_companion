@@ -194,12 +194,13 @@ fn MonthTable(
             let not_covered_label = labels.not_covered.clone();
             let label = month_label(&m.month);
             let to_m = m.to_maintainer_cents();
-            let (support, hosting, domain, ai, other) = (m.support_cents, m.hosting_cents, m.domain_cents, m.ai_tokens_cents, m.other_cents);
+            let (support, fees, hosting, domain, ai, other) = (m.support_cents, m.payment_fees_cents, m.hosting_cents, m.domain_cents, m.ai_tokens_cents, m.other_cents);
             view! {
                 <tbody class=move || { if i >= 12 && !show_all.get() { "hidden" } else { "" } }>
                     <Tr>
                         <Td header=true>{label}</Td>
                         <Td numeric=true>{format_euros(support)}</Td>
+                        <Td numeric=true>{format_euros(fees)}</Td>
                         <Td numeric=true>{format_euros(hosting)}</Td>
                         <Td numeric=true>{format_euros(domain)}</Td>
                         <Td numeric=true>{format_euros(ai)}</Td>
@@ -221,7 +222,7 @@ fn MonthTable(
                     </Tr>
                     {caption.then(|| view! {
                         <tr>
-                            <td colspan="9" class="px-3 pb-3 text-caption text-muted">
+                            <td colspan="10" class="px-3 pb-3 text-caption text-muted">
                                 {other_label.map(|o| view! { <span class="mr-3">{format!("Other: {o}")}</span> })}
                                 {(short > 0).then(|| ncn.map(|t| view! { <span class="mr-3">{t}</span> }))}
                                 {note.map(|n| view! { <span class="mr-3">{n}</span> })}
@@ -239,6 +240,7 @@ fn MonthTable(
                 <tr>
                     <Th>"Month"</Th>
                     <Th numeric=true>{labels.support.clone()}</Th>
+                    <Th numeric=true>{labels.payment_fees.clone()}</Th>
                     <Th numeric=true>{labels.hosting.clone()}</Th>
                     <Th numeric=true>{labels.domain.clone()}</Th>
                     <Th numeric=true>{labels.ai_tokens.clone()}</Th>
