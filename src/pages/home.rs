@@ -53,9 +53,15 @@ pub async fn get_home() -> Result<Home, ServerFnError> {
     };
     let team_id = team.id.clone().unwrap_or_default();
 
-    let next = db::next_scheduled_match(&db, &team_id)
+    let mut next = db::next_scheduled_match(&db, &team_id)
         .await
         .map_err(authz::server_err)?;
+    // "Read by N of M" counts current members only (people who left keep
+    // their mark in the row).
+    if let Some(m) = next.as_mut() {
+        m.brief_read_by
+            .retain(|u| members.iter().any(|mem| &mem.user_id == u));
+    }
 
     let mut brief = None;
     let mut facts = db::MatchPrepFacts::default();

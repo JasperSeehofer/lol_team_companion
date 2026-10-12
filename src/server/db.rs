@@ -3140,6 +3140,7 @@ pub async fn delete_opponent(db: &Surreal<Db>, team_id: &str, opponent_id: &str)
         .query(
             "BEGIN TRANSACTION; \
              DELETE opponent_player WHERE opponent = type::record('opponent', $opp_key); \
+             UPDATE scheduled_match SET opponent = NONE, brief_read_by = [] WHERE opponent = type::record('opponent', $opp_key); \
              DELETE type::record('opponent', $opp_key); \
              COMMIT TRANSACTION;",
         )
@@ -7351,7 +7352,10 @@ pub async fn save_scheduled_match(
     match input.id {
         Some(id) => {
             ensure_team_record(db, "scheduled_match", &id, team_id).await?;
-            db.query("UPDATE type::record('scheduled_match', $key) SET starts_at = <datetime>$starts, kind = $kind, format = $format, opponent = IF $opp_key = NONE { NONE } ELSE { type::record('opponent', $opp_key) }, notes = $notes, updated_at = time::now()")
+            // A different opponent is a different brief: who read the old
+            // one has not read this one.
+            db.query("LET $opp = IF $opp_key = NONE { NONE } ELSE { type::record('opponent', $opp_key) }; \
+                      UPDATE type::record('scheduled_match', $key) SET brief_read_by = IF opponent = $opp { brief_read_by } ELSE { [] }, starts_at = <datetime>$starts, kind = $kind, format = $format, opponent = $opp, notes = $notes, updated_at = time::now()")
                 .bind(("key", record_key(&id, "scheduled_match")))
                 .bind(("starts", starts.to_rfc3339()))
                 .bind(("kind", input.kind))

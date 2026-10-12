@@ -492,3 +492,64 @@ async fn team_match_rows_carry_their_match_id() {
         .unwrap()
         .is_empty());
 }
+
+#[tokio::test]
+async fn a_new_opponent_or_a_deleted_dossier_resets_the_brief() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let x = db::create_opponent(&db, &t.team1, "Rooks".into(), None)
+        .await
+        .unwrap();
+    let y = db::create_opponent(&db, &t.team1, "Owls".into(), None)
+        .await
+        .unwrap();
+    let id = db::save_scheduled_match(&db, &t.team1, &t.a, input(in_hours(5), Some(x.clone())))
+        .await
+        .unwrap();
+    db::set_brief_read(&db, &t.team1, &id, &t.a, true)
+        .await
+        .unwrap();
+
+    // Same opponent, new time: the read mark stays.
+    let mut same = input(in_hours(6), Some(x.clone()));
+    same.id = Some(id.clone());
+    db::save_scheduled_match(&db, &t.team1, &t.a, same)
+        .await
+        .unwrap();
+    let next = db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.brief_read_by, vec![t.a.clone()]);
+
+    // Another opponent: nobody has read that brief yet.
+    let mut other = input(in_hours(6), Some(y.clone()));
+    other.id = Some(id.clone());
+    db::save_scheduled_match(&db, &t.team1, &t.a, other)
+        .await
+        .unwrap();
+    let next = db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.opponent_id.as_deref(), Some(y.as_str()));
+    assert!(next.brief_read_by.is_empty());
+
+    // Deleting the dossier clears the match's opponent instead of leaving
+    // a link to a deleted record (the match stays editable).
+    db::set_brief_read(&db, &t.team1, &id, &t.a, true)
+        .await
+        .unwrap();
+    db::delete_opponent(&db, &t.team1, &y).await.unwrap();
+    let next = db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(next.opponent_id.is_none());
+    assert!(next.brief_read_by.is_empty());
+    let mut edit = input(in_hours(7), None);
+    edit.id = Some(id.clone());
+    db::save_scheduled_match(&db, &t.team1, &t.a, edit)
+        .await
+        .unwrap();
+}
