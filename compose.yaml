@@ -41,6 +41,11 @@ services:
       # The app port is not published; every request comes through Caddy,
       # which overwrites X-Forwarded-For with the real client address.
       TRUST_FORWARDED_FOR: "true"
+      # SurrealKV sizes its block cache as (memory limit / 2 - 1 GiB), which
+      # is its 16 MiB minimum under the 1.5 GB limit below; give it 256 MiB.
+      # (surrealdb-core 3.0.2 kvs/surrealkv/cnf.rs; CI logged 7.3 GB on an
+      # unlimited 16 GB runner.)
+      SURREAL_SURREALKV_BLOCK_CACHE_CAPACITY: "268435456"
     volumes:
       - data:/data
     expose:
