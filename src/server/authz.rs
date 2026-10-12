@@ -205,34 +205,68 @@ pub fn riot() -> Result<Arc<crate::server::riot::RiotClient>, ServerFnError> {
 
 /// The signed-in user, if any. A signed-in request also records the visit
 /// (`user.last_seen_at`, at most once an hour per user; see
-/// [`last_seen_due`]).
+/// [`last_seen_due`]), except on public pages (share links, legal and
+/// sign-in pages, changelog, transparency; `counts_as_visit`).
 pub async fn optional_user() -> Result<Option<AppUser>, ServerFnError> {
     let auth: AuthSession = leptos_axum::extract()
         .await
         .map_err(|e| internal_error("extract auth session", e))?;
     if let Some(u) = &auth.user {
-        if last_seen_due(&u.id, std::time::Instant::now()) {
-            if let Some(db) = crate::server::db::shared() {
-                if let Err(e) = crate::server::db::touch_last_seen(&db, &u.id).await {
-                    tracing::warn!(user = %u.id, error = %e, "could not record the visit");
-                }
+        let counts = visit_page()
+            .as_deref()
+            .is_some_and(crate::models::guidance::counts_as_visit);
+        if counts && last_seen_due(&u.id, std::time::Instant::now()) {
+            let written = match crate::server::db::shared() {
+                Some(db) => crate::server::db::touch_last_seen(&db, &u.id)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string()),
+                None => Err("no database handle".to_string()),
+            };
+            if let Err(e) = written {
+                // Try again on the next request rather than in an hour.
+                forget_seen(&u.id);
+                tracing::warn!(user = %u.id, error = %e, "could not record the visit");
             }
         }
     }
     Ok(auth.user)
 }
 
+/// The page this request belongs to: the request path for a server-rendered
+/// page, or the same-origin `Referer` path for a server function call from
+/// the browser (`/api/...`). `None` when it cannot be told.
+fn visit_page() -> Option<String> {
+    let parts = use_context::<axum::http::request::Parts>()?;
+    let path = parts.uri.path();
+    if !path.starts_with("/api/") {
+        return Some(path.to_string());
+    }
+    let referer = parts.headers.get(axum::http::header::REFERER)?.to_str().ok()?;
+    let uri: axum::http::Uri = referer.parse().ok()?;
+    Some(uri.path().to_string())
+}
+
+fn seen_map() -> &'static std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>> {
+    static SEEN: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+    > = std::sync::OnceLock::new();
+    SEEN.get_or_init(Default::default)
+}
+
+/// Forget the in-memory "written" mark (the write failed).
+fn forget_seen(user_id: &str) {
+    seen_map()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(user_id);
+}
+
 /// Whether this process should write the user's visit now: the first
 /// signed-in request, then once an hour (the database query checks the hour
 /// too, across restarts). Kept in memory so most requests cost nothing.
 pub fn last_seen_due(user_id: &str, now: std::time::Instant) -> bool {
-    use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
-    static SEEN: OnceLock<Mutex<HashMap<String, std::time::Instant>>> = OnceLock::new();
-    let mut map = SEEN
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
+    let mut map = seen_map().lock().unwrap_or_else(|p| p.into_inner());
     last_seen_due_in(&mut map, user_id, now)
 }
 

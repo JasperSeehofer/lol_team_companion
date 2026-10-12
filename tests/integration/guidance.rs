@@ -341,4 +341,18 @@ async fn visits_count_for_the_returning_rule() {
         pick_nudge(true, &f, &[], None).unwrap().kind,
         NudgeKind::Returning
     );
+
+    // M10 review: a request of the same page load reads before the visit is
+    // written (another request is writing it). last_seen_at (yesterday) is
+    // then the previous visit, not the older prev_seen_at.
+    sql(
+        &db,
+        "UPDATE $u SET last_seen_at = time::now() - 1d, prev_seen_at = time::now() - 21d;",
+        &a,
+        &team,
+    )
+    .await;
+    let f = g::nudge_facts(&db, &a, &team, Utc::now()).await.unwrap();
+    assert!(f.prev_seen.is_some_and(|t| Utc::now() - t < Duration::days(2)));
+    assert!(pick_nudge(true, &f, &[], None).is_none_or(|n| n.kind != NudgeKind::Returning));
 }

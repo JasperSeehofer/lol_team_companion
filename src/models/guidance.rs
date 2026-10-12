@@ -189,6 +189,19 @@ pub fn is_quiet_path(path: &str) -> bool {
         || path == "/closed-beta"
 }
 
+/// Whether a signed-in load of `path` counts as a visit for "Picking up
+/// again?" (`user.last_seen_at`). Public pages do not: share links, legal
+/// and sign-in pages, the closed-beta page, changelog and transparency
+/// (M10 review).
+pub fn counts_as_visit(path: &str) -> bool {
+    !(path.starts_with("/s/")
+        || path.starts_with("/legal/")
+        || path.starts_with("/auth/")
+        || path == "/closed-beta"
+        || path == "/changelog"
+        || path == "/transparency")
+}
+
 /// The one page hint for `path`: the first active hint that lives there.
 /// An introduction on the page wins over hints (never more than one).
 pub fn page_hint(state: &GuidanceState, path: &str) -> Option<Hint> {
@@ -842,6 +855,23 @@ mod tests {
         assert!(is_returning(&f));
         f.account_created = Some(at("2026-10-10T00:00:00Z"));
         assert!(!is_returning(&f));
+    }
+
+    #[test]
+    fn public_pages_do_not_count_as_visits() {
+        for p in ["/", "/draft", "/team/dashboard", "/profile", "/admin/invites"] {
+            assert!(counts_as_visit(p), "{p}");
+        }
+        for p in [
+            "/s/abc",
+            "/legal/terms",
+            "/auth/register",
+            "/closed-beta",
+            "/changelog",
+            "/transparency",
+        ] {
+            assert!(!counts_as_visit(p), "{p}");
+        }
     }
 
     /// Reading counts (polish pass): a member who opened the app a day ago
