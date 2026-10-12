@@ -390,7 +390,7 @@ fn BugReportWidgetInner(
         <Show when=move || matches!(widget_state.get(), WidgetState::Editing) fallback=|| ()>
             <div
                 class="fixed inset-0 z-50 flex items-center justify-center p-6"
-                style="background-color: var(--color-overlay-strong);"
+                style="background-color: var(--color-scrim);"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Report a bug or wishlist item"
