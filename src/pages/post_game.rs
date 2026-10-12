@@ -500,11 +500,41 @@ pub fn PostGamePage() -> impl IntoView {
             }
             return;
         }
-        if let Some(pid) = q.get("plan_id") {
-            ed.plan_id.set(pid);
+        // Seed only ids of the team's own plans and drafts (M5 review: an
+        // unknown id used to be seeded and the save then failed). Wait for
+        // the lists; an unknown id is dropped with a note.
+        let plan_q = q.get("plan_id");
+        let draft_q = q.get("draft_id");
+        let plan_list = plan_q.as_ref().map(|_| plans.get());
+        let draft_list = draft_q.as_ref().map(|_| drafts.get());
+        if matches!(plan_list, Some(None)) || matches!(draft_list, Some(None)) {
+            return; // still loading; the effect runs again when they arrive
         }
-        if let Some(did) = q.get("draft_id") {
-            ed.draft_id.set(did);
+        let mut unknown = false;
+        if let (Some(pid), Some(Some(list))) = (plan_q, plan_list) {
+            let known = list
+                .map(|l| l.iter().any(|p| p.id.as_deref() == Some(pid.as_str())))
+                .unwrap_or(false);
+            if known {
+                ed.plan_id.set(pid);
+            } else {
+                unknown = true;
+            }
+        }
+        if let (Some(did), Some(Some(list))) = (draft_q, draft_list) {
+            let known = list
+                .map(|l| l.iter().any(|d| d.id.as_deref() == Some(did.as_str())))
+                .unwrap_or(false);
+            if known {
+                ed.draft_id.set(did);
+            } else {
+                unknown = true;
+            }
+        }
+        if unknown {
+            toast.push.run(Toast::error(
+                "The link pointed at a plan or draft that is not your team's; the review starts without it.",
+            ));
         }
         opened.set_value(true);
     });

@@ -198,7 +198,7 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
     let Some(team_id) = ctx.team().await? else {
         return Ok(Vec::new());
     };
-    let rows = db::get_team_match_stats(&ctx.db, &team_id)
+    let rows = db::get_team_match_stats_limit(&ctx.db, &team_id, 25)
         .await
         .map_err(authz::server_err)?;
     let mut seen = std::collections::HashSet::new();

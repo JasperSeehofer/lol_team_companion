@@ -2108,6 +2108,16 @@ pub async fn store_matches_with_synced_by(
 /// Get team stats with player details, joining match + player_match.
 /// Returns all player_match entries for team members, enriched with match date.
 pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamMatchRow>> {
+    get_team_match_stats_limit(db, team_id, 200).await
+}
+
+/// [`get_team_match_stats`], newest first, at most `limit` rows (the team
+/// page needs five distinct games: at most five members per game).
+pub async fn get_team_match_stats_limit(
+    db: &Surreal<Db>,
+    team_id: &str,
+    limit: i64,
+) -> DbResult<Vec<TeamMatchRow>> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // All player_match records for team members, enriched via the match link.
@@ -2115,8 +2125,9 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
     // subquery for every row (see the Draft Graph budget in ARCHITECTURE.md).
     let mut result = db
         .query("LET $users = (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)); \
-                SELECT id, match AS match_ref, user, champion, kills, deaths, assists, cs, vision_score, damage, win, match.match_id AS riot_match_id, match.queue_id AS queue_id, match.game_duration AS game_duration, match.game_end AS game_end, user.username AS username FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT 200")
+                SELECT id, match AS match_ref, user, champion, kills, deaths, assists, cs, vision_score, damage, win, match.match_id AS riot_match_id, match.queue_id AS queue_id, match.game_duration AS game_duration, match.game_end AS game_end, user.username AS username FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT $limit")
         .bind(("team_key", team_key))
+        .bind(("limit", limit))
         .await?;
     let rows: Vec<DbTeamMatchRow> = result.take(1).unwrap_or_default();
     Ok(rows.into_iter().map(TeamMatchRow::from).collect())
@@ -7561,12 +7572,28 @@ pub async fn get_post_game_learning(
 /// Counts for the phone menu and the command bar.
 #[derive(Clone, Debug, Default)]
 pub struct TeamCounts {
+    /// The team's name (the phone menu's heading).
+    pub name: String,
     pub opponents: usize,
     pub drafts: usize,
     pub plans: usize,
     pub open_items: usize,
     pub members: usize,
     pub reviews: usize,
+}
+
+/// How many personal learnings the user has (a count, not the rows).
+pub async fn count_personal_learnings(db: &Surreal<Db>, user_id: &str) -> DbResult<usize> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Count {
+        n: i64,
+    }
+    let mut r = db
+        .query("SELECT count() AS n FROM personal_learning WHERE user = type::record('user', $user_key) GROUP ALL")
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let row: Option<Count> = r.take(0)?;
+    Ok(row.map(|c| c.n.max(0) as usize).unwrap_or(0))
 }
 
 pub async fn team_counts(db: &Surreal<Db>, team_id: &str) -> DbResult<TeamCounts> {
@@ -7582,15 +7609,18 @@ pub async fn team_counts(db: &Surreal<Db>, team_id: &str) -> DbResult<TeamCounts
              SELECT count() AS n FROM game_plan WHERE team = $t GROUP ALL; \
              SELECT count() AS n FROM action_item WHERE team = $t AND status IN ['open', 'in_progress'] GROUP ALL; \
              SELECT count() AS n FROM team_member WHERE team = $t GROUP ALL; \
-             SELECT count() AS n FROM post_game_learning WHERE team = $t GROUP ALL;",
+             SELECT count() AS n FROM post_game_learning WHERE team = $t GROUP ALL; \
+             SELECT VALUE name FROM ONLY $t;",
         )
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
+    let name: Option<String> = r.take(7).unwrap_or_default();
     let mut n = |i: usize| -> usize {
         let row: Option<Count> = r.take(i).unwrap_or_default();
         row.map(|c| c.n.max(0) as usize).unwrap_or(0)
     };
     Ok(TeamCounts {
+        name: name.unwrap_or_default(),
         opponents: n(1),
         drafts: n(2),
         plans: n(3),
