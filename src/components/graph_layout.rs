@@ -581,6 +581,7 @@ mod tests {
             role_guessed: true,
             parts: Vec::new(),
             reasons: Vec::new(),
+            reasons_complete: true,
             pool: None,
             adds: CompProfile::default(),
             trait_default: true,

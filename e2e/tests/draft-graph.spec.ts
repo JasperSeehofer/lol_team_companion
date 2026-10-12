@@ -47,10 +47,22 @@ test("graph: ranked list and Why panel for the current pick, no third-party load
     const u = r.url();
     if (!u.startsWith(base) && !u.startsWith("data:")) foreign.push(u);
   });
+  // Payload (polish pass): only the top 8 and the focused candidate carry
+  // every reason; the rest load on focus.
+  const payloads: number[] = [];
+  page.on("response", async (r) => {
+    if (/\/api\/graph_candidates\d+/.test(r.url())) {
+      const body = await r.body().catch(() => Buffer.alloc(0));
+      payloads.push(body.length);
+    }
+  });
   await midDraft(page);
   await openGraph(page);
 
   await expect(page.locator("[data-graph-status]")).toContainText("candidates for Blue pick 2");
+  await expect.poll(() => payloads.length).toBeGreaterThan(0);
+  console.log(`graph_candidates payload bytes: ${JSON.stringify(payloads)}`);
+  expect(Math.max(...payloads)).toBeLessThan(80_000);
   const options = page.locator("[data-graph-list] [role=option]");
   expect(await options.count()).toBeGreaterThanOrEqual(5);
   // Best first, fit 0 to 100, every option shows a role.
@@ -101,6 +113,26 @@ test("graph: keyboard focus moves the Why panel, Enter picks with a guessed role
   await options.first().focus();
   await page.keyboard.press("Escape");
   await expect(page.locator(draftSlot(10))).toBeFocused();
+});
+
+test("graph: a candidate below the top 8 gets every reason when focused", async ({ teamPage }) => {
+  const page = teamPage;
+  const asked: string[] = [];
+  page.on("request", (r) => {
+    if (/\/api\/graph_candidate_reasons\d+/.test(r.url())) asked.push(r.url());
+  });
+  await midDraft(page);
+  await openGraph(page);
+  await page.getByRole("button", { name: /Show all/ }).click();
+  const options = page.locator("[data-graph-list] [role=option]");
+  expect(await options.count()).toBeGreaterThan(12);
+  const row = options.nth(12);
+  const name = ((await row.locator("span.truncate").first().textContent()) ?? "").trim();
+  await row.click();
+  await expect(page.locator("#graph-why-heading")).toHaveText(`Why ${name}`);
+  // Trimmed reasons are fetched once; the panel then has them all.
+  await expect(page.locator("[data-graph-why-loading]")).toHaveCount(0, { timeout: 10000 });
+  console.log(`graph_candidate_reasons requests: ${asked.length}`);
 });
 
 test("graph: a second quick pick never overwrites the slot of an older ranking", async ({
@@ -193,6 +225,13 @@ test("canvas: agrees with the ranked list, keyboard pick, inside the budget, no 
   await openGraph(page);
   const sim = await settledCanvas(page);
   console.log(`draft graph canvas: ${JSON.stringify(sim)}`);
+  // Lines only for the focus: no faint web of every relation (polish pass).
+  await expect(page.locator('[data-graph-canvas] [data-layer="edges"]')).toHaveCount(0);
+  const focusedId = await page.locator("[data-graph-list] [role=option]").first().getAttribute("data-candidate");
+  const visibleEdges = await page
+    .locator('[data-graph-canvas] [data-layer="lit-edges"] path[visibility="visible"]')
+    .evaluateAll((els) => els.map((e) => e.getAttribute("data-edge") ?? ""));
+  for (const e of visibleEdges) expect(e.startsWith(`${focusedId}-`)).toBe(true);
   expect(sim.mode).toBe("animated");
   // DESIGN.md 6.8 budget: settles in under 1.5 s, every tick under 8 ms.
   expect(sim.settleMs).toBeLessThan(1500);

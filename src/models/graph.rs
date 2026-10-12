@@ -442,6 +442,10 @@ pub struct DraftState {
     pub unavailable: Vec<String>,
     /// A role the user chose for the current slot; `None` = infer it.
     pub role: Option<Role>,
+    /// The candidate focused in the panel when the ranking was asked for:
+    /// it keeps its full reasons like the top [`FULL_REASONS`] (polish pass).
+    #[serde(default)]
+    pub focus: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -529,23 +533,30 @@ impl ReasonSource {
     }
 }
 
-/// One sentence of explanation.
+/// One sentence of explanation. Empty optional fields are left out of
+/// the JSON (polish pass: payload).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Reason {
     pub component: Component,
     pub source: ReasonSource,
     /// Rule id for rule reasons ("syn.engage_burst").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rule_id: Option<String>,
     /// The sentence a coach reads ("Malphite starts fights that Syndra's
     /// burst finishes"). For a team note: the note's reason as written.
     pub text: String,
     /// The other champion of the pair (id), when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub with: Option<String>,
     /// Team note: who wrote it, and the note's id (for "remove").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_id: Option<String>,
     /// Match data: games and wins behind the number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub games: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wins: Option<u32>,
     /// Signed strength on the relation scale (1 to 3 per relation;
     /// negative works against the candidate).
@@ -678,8 +689,12 @@ pub struct Candidate {
     pub role_guessed: bool,
     /// The four weighted parts plus the pool modifier, in priority order.
     pub parts: Vec<FitPart>,
-    /// Every reason, strongest first.
+    /// Every reason, strongest first; for a candidate below the top
+    /// [`FULL_REASONS`] (and not focused) only the two strongest outside the
+    /// pool, with `reasons_complete` false: the panel loads the rest on focus.
     pub reasons: Vec<Reason>,
+    #[serde(default = "complete")]
+    pub reasons_complete: bool,
     /// Our side only.
     pub pool: Option<PoolStatus>,
     /// What it adds to its side's profile.
@@ -792,6 +807,37 @@ pub fn tier_label(tier: &str) -> &'static str {
 
 /// Candidates returned (the canvas draws at most 24 of them).
 pub const MAX_CANDIDATES: usize = 30;
+
+/// Candidates sent with every reason; the others carry their two strongest
+/// (what the ranked list shows) until focused (polish pass: payload).
+pub const FULL_REASONS: usize = 8;
+
+fn complete() -> bool {
+    true
+}
+
+/// Keep every reason only for the top [`FULL_REASONS`] candidates and the
+/// focused one; the rest keep the two strongest reasons outside the pool
+/// (the ranked list's line) and are marked incomplete.
+pub fn trim_reasons(result: &mut GraphResult, focus: Option<&str>) {
+    for (i, c) in result.candidates.iter_mut().enumerate() {
+        if i < FULL_REASONS || focus == Some(c.champion.as_str()) {
+            continue;
+        }
+        let before = c.reasons.len();
+        let kept: Vec<Reason> = c
+            .reasons
+            .iter()
+            .filter(|r| r.component != Component::Pool)
+            .take(2)
+            .cloned()
+            .collect();
+        if kept.len() < before {
+            c.reasons = kept;
+            c.reasons_complete = false;
+        }
+    }
+}
 /// Candidates the canvas may draw (stage B).
 pub const CANVAS_CANDIDATES: usize = 24;
 /// Games below which match evidence is not shown.

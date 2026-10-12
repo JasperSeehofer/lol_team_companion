@@ -24,8 +24,12 @@
 //!   its sample either way.
 //!
 //! Full scale: synergy 3 per locked pick of the side (a strong relation with
-//! every pick), counters 3 per locked pick of the other side (both at least
-//! 3), playstyle 3, power spikes 1. Every point has a [`Reason`].
+//! every pick), counters 3 per locked pick of the other side, playstyle 3,
+//! power spikes 1. Synergy and counters count at least
+//! [`MIN_SCALE_PICKS`] picks (polish pass): with one locked pick a strong
+//! relation moves the part a third of the way, so early in a draft one link
+//! cannot fill it and candidates do not tie at the top. Every point has a
+//! [`Reason`].
 //!
 //! The ranking is a pure function of the trait table, the draft state and
 //! the team's knowledge, so it is deterministic and unit-tested.
@@ -74,6 +78,9 @@ pub struct TeamKnowledge<'a> {
 /// Full scale per locked pick for synergy and counters, in relation
 /// strength (one strong relation with each pick).
 const PER_PICK_SCALE: f32 = 3.0;
+/// Synergy and counters are scaled as if the side had at least this many
+/// locked picks: full scale = 3 x max(picks, 3).
+pub const MIN_SCALE_PICKS: usize = 3;
 /// Full scale of the other parts.
 const PLAYSTYLE_SCALE: f32 = 3.0;
 const TIMING_SCALE: f32 = 1.0;
@@ -521,8 +528,8 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
     let own_profile = CompProfile::sum(own_traits.iter().copied());
     let enemy_profile = CompProfile::sum(enemy.iter().map(|i| &table.rows[*i].traits));
     let n_own = own.len();
-    let synergy_scale = PER_PICK_SCALE * n_own.max(1) as f32;
-    let counter_scale = PER_PICK_SCALE * enemy.len().max(1) as f32;
+    let synergy_scale = PER_PICK_SCALE * n_own.max(MIN_SCALE_PICKS) as f32;
+    let counter_scale = PER_PICK_SCALE * enemy.len().max(MIN_SCALE_PICKS) as f32;
 
     // The comp's plan: the draft's tags first, else the picks' curve. The
     // tags are our plan, so an enemy step ranks without them.
@@ -874,6 +881,7 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
                 role_guessed: !role_chosen,
                 parts,
                 reasons,
+                reasons_complete: true,
                 pool,
                 adds: CompProfile::of(t),
                 trait_default: rec.source == TraitSource::Default,
@@ -970,6 +978,7 @@ mod tests {
             opponent_id: None,
             unavailable: vec![],
             role: None,
+            focus: None,
         }
     }
 
@@ -1032,6 +1041,178 @@ mod tests {
         assert_eq!(r.locked.len(), 4);
         assert_eq!(r.own.picks, 2);
         assert_eq!(r.enemy.picks, 2);
+    }
+
+    /// A small deterministic generator (xorshift64) for the fuzz test.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    fn part(c: &Candidate, component: Component) -> i32 {
+        c.parts
+            .iter()
+            .find(|p| p.component == component)
+            .map(|p| p.points)
+            .unwrap_or(0)
+    }
+
+    /// 300 seeded random drafts: fit stays in 0..=100, every part inside
+    /// its band and explained, the ranking is deterministic, and early in a
+    /// draft (fewer than three locked picks on a side) synergy and counters
+    /// move at most picks / 3 of their band: one strong link cannot fill
+    /// them (polish pass).
+    #[test]
+    fn fuzzed_drafts_stay_bounded_explained_deterministic_and_scaled() {
+        let t = table();
+        let ev = nobody();
+        let ids: Vec<String> = t.rows.iter().map(|r| r.traits.champion.clone()).collect();
+        let mut rng = Rng(0x5eed_1234_abcd_0001);
+        let mut ranked = 0;
+        for round in 0..300 {
+            let filled = rng.below(20);
+            let mut slots = vec![None; 20];
+            let mut used = HashSet::new();
+            for s in slots.iter_mut().take(filled) {
+                loop {
+                    let c = ids[rng.below(ids.len())].clone();
+                    if used.insert(c.clone()) {
+                        *s = Some(c);
+                        break;
+                    }
+                }
+            }
+            let state = DraftState {
+                slots,
+                roles: vec![None; 20],
+                roles_guessed: vec![false; 20],
+                current: Some(filled),
+                our_side: if rng.below(2) == 0 { "blue" } else { "red" }.into(),
+                tags: vec![],
+                opponent_id: None,
+                unavailable: vec![],
+                role: None,
+                focus: None,
+            };
+            let k = knowledge(&[], &[], &ev, &[]);
+            let a = rank(&t, &state, &k);
+            assert_eq!(a, rank(&t, &state, &k), "round {round}: not deterministic");
+            if a.target.is_none() {
+                continue;
+            }
+            ranked += 1;
+            let own = a.locked.iter().filter(|n| n.own).count();
+            let other = a.locked.len() - own;
+            for c in &a.candidates {
+                assert!(c.fit <= 100, "round {round}: {} fit {}", c.champion, c.fit);
+                for p in &c.parts {
+                    assert!(
+                        p.points.abs() <= p.band,
+                        "round {round}: {:?} out of band",
+                        p
+                    );
+                    if p.points != 0 {
+                        assert!(
+                            c.reasons.iter().any(|r| r.component == p.component),
+                            "round {round}: {} {:?} unexplained",
+                            c.champion,
+                            p.component
+                        );
+                    }
+                }
+                if own < MIN_SCALE_PICKS {
+                    let cap = (20.0 * own as f32 / 3.0).round() as i32;
+                    let syn = part(c, Component::Synergy);
+                    assert!(
+                        syn.abs() <= cap,
+                        "round {round}: synergy {syn} with {own} picks"
+                    );
+                }
+                if other < MIN_SCALE_PICKS {
+                    let cap = (15.0 * other as f32 / 3.0).round() as i32;
+                    let ctr = part(c, Component::Counter);
+                    assert!(
+                        ctr.abs() <= cap,
+                        "round {round}: counters {ctr} with {other} picks"
+                    );
+                }
+            }
+        }
+        assert!(ranked > 100, "only {ranked} rounds had a pick to rank");
+    }
+
+    /// With one locked pick per side, a single strong relation no longer
+    /// fills synergy: the top of the list does not tie on a full part.
+    #[test]
+    fn one_link_early_in_a_draft_does_not_fill_a_part() {
+        let t = table();
+        let ev = nobody();
+        let mut slots = vec![None; 20];
+        slots[6] = Some("Jinx".to_string());
+        slots[7] = Some("Syndra".to_string());
+        let state = DraftState {
+            slots,
+            roles: vec![None; 20],
+            roles_guessed: vec![false; 20],
+            current: Some(8),
+            our_side: "red".into(),
+            tags: vec![],
+            opponent_id: None,
+            unavailable: vec![],
+            role: None,
+            focus: None,
+        };
+        let r = rank(&t, &state, &knowledge(&[], &[], &ev, &[]));
+        assert!(r.target.is_some());
+        for c in &r.candidates {
+            assert!(
+                part(c, Component::Synergy).abs() < 20,
+                "{} fills synergy",
+                c.champion
+            );
+            assert!(
+                part(c, Component::Counter).abs() < 15,
+                "{} fills counters",
+                c.champion
+            );
+        }
+    }
+
+    /// Only the top eight and the focused candidate carry every reason; the
+    /// rest keep the two the list shows. Prints the payload both ways.
+    #[test]
+    fn trimmed_reasons_shrink_the_payload() {
+        let t = table();
+        let ev = nobody();
+        let mut r = rank(&t, &fixture(), &knowledge(&[], &[], &ev, &[]));
+        assert!(r.candidates.len() > crate::models::graph::FULL_REASONS + 2);
+        let full = r.clone();
+        let focus = r.candidates[20].champion.clone();
+        let before = serde_json::to_vec(&r).unwrap().len();
+        crate::models::graph::trim_reasons(&mut r, Some(&focus));
+        let after = serde_json::to_vec(&r).unwrap().len();
+        eprintln!("graph payload (fixture): {before} bytes with every reason, {after} trimmed");
+        assert!(after < before);
+        for (i, (c, f)) in r.candidates.iter().zip(&full.candidates).enumerate() {
+            if i < crate::models::graph::FULL_REASONS || c.champion == focus {
+                assert_eq!(c, f, "top {i} or the focus keeps everything");
+                assert!(c.reasons_complete);
+            } else {
+                assert!(c.reasons.len() <= 2);
+                assert!(c.reasons.iter().all(|x| x.component != Component::Pool));
+                assert_eq!(c.fit, f.fit, "trimming never changes fit");
+            }
+        }
     }
 
     #[test]

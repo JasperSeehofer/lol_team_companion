@@ -712,7 +712,7 @@ pub fn DraftGraphCanvas(
         ),
         LegendEntry::new(
             Swatch::Anchor(SwatchInk::Accent),
-            "Focused candidate; its one-hop neighbours stay lit",
+            "Focused candidate: only its lines are drawn, and the picks they reach stay lit",
         ),
     ];
 
@@ -787,20 +787,8 @@ pub fn DraftGraphCanvas(
                                     </g>
                                 }
                             }).collect_view();
-                            // Outside the focus only the strong relations stay, faint.
-                            let base_edges = edges.iter().filter(|e| e.edge.strength.abs() >= WEAK).map(|e| {
-                                let (style, _) = edge_style(&e.edge);
-                                let (a, b) = (e.free, e.pinned);
-                                view! {
-                                    <path
-                                        d=move || { let g = geo.get(); let (x1, y1, x2, y2) = trimmed(px(a), px(b), g.node_r, g.pin_r); format!("M{x1:.1} {y1:.1}L{x2:.1} {y2:.1}") }
-                                        class="fill-none stroke-rule"
-                                        stroke-width="1"
-                                        stroke-dasharray=dash(style)
-                                        stroke-linecap="round"
-                                    />
-                                }
-                            }).collect_view();
+                            // Edges are drawn for the focus only (the focused candidate's, or a
+                            // focused locked pick's): no faint web of every relation (polish pass).
                             let lit_edges = edges.iter().cloned().enumerate().map(|(k, e)| {
                                 let (style, arrow) = edge_style(&e.edge);
                                 let width = format!("{:.2}", edge_width(&e.edge));
@@ -847,7 +835,6 @@ pub fn DraftGraphCanvas(
                             let labels = nodes.into_iter().map(|n| draw_label(n, px, geo, node_light)).collect_view();
                             view! {
                                 <g data-layer="contours" class="pointer-events-none">{contours}</g>
-                                <g data-layer="edges" class="pointer-events-none">{base_edges}</g>
                                 <g data-layer="open-roles" class="pointer-events-none">{ghosts}</g>
                                 <g data-layer="lit-edges" class="pointer-events-none">{lit_edges}</g>
                                 <g data-layer="nodes">{node_views}</g>
