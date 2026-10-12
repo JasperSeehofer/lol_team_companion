@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions will follow semantic versioning once releases start.
 
-From M7 on, every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`. The app shows this file on /changelog.
+Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`. Dates before M7 were filled in from the git history (the commit that first wrote each entry). The app shows this file on /changelog.
 
 ## [Unreleased]
 
@@ -14,15 +14,22 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - The bug-report button is rebuilt: point at the part of the page (or skip that step), choose Bug or Wishlist, and send. It sits above the footer and never covers the page.
 - What next (`/what-next`): ideas the maintainer is considering, planning, building and has shipped, ordered by votes. One vote per idea, and you can take it back.
 - Changelog (`/changelog`, public): this file, newest first, with the game patches the app detected.
-- Transparency page (`/transparency`, public): how support is used and, month by month, what came in, what running Companion cost and what went to the maintainer. It shows only wording the owner has approved.
+- Transparency page (`/transparency`, public). It stays empty until the owner has approved its wording and published a month.
 - Short survey questions, at most one a week and only right after something you did; dismiss any of them, or turn them off on your profile.
-- Admin area (`/admin`): bug triage, surveys with approval of the exact wording, What next ideas with a publish step, the monthly ledger, and the public texts about money, each recording who changed what and when.
+- Admin area (`/admin`): bug triage, surveys with approval of the exact wording, What next ideas with a publish step, the monthly ledger and its public texts, each recording who changed what and when.
 
 #### Changed
 - The account menu has one "Admin" entry for admins (it replaces the separate admin links) and "Your reports" for everyone. The footer, the command bar and the phone menu link the community pages.
 - The privacy page lists bug-report triage data, votes and survey answers.
 
-### Milestone M5: Remaining pages, navigation, mobile
+#### Fixed
+- Clicking "Report a bug" twice, or following a menu link while choosing the part of the page, no longer leaves the page in select mode or breaks later clicks.
+- "Add month" on the ledger admin page no longer overwrites a month that already exists; change it with Edit instead.
+- A survey question shown again after its wording changed now records the answer against the wording the person actually saw.
+- Screen readers now announce a new survey question and the thank-you line.
+- Every changelog entry now has a date.
+
+### Milestone M5: Remaining pages, navigation, mobile (2026-10-12)
 
 #### Added
 - Match Day: signed in with a team, Home walks the team through the next scrim or match. Set it with date and time (in your own time zone), opponent, format and notes; the page then shows a preparation sequence built from your own records (read the opponent brief, draft plans against them, a game plan from those drafts, open action items, and the review after the game), with the one step to do now and a link to where it is done. Beside it: the opponent brief with when the dossier was last surveyed and who on the team has read it, open action items, the last review's lesson, form over your last five reviewed games, and the current patch. Without a match it says how to start; on a phone it is a read-only summary in the same order.
@@ -63,7 +70,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - The standalone solo dashboard (now My games and your profile; its address redirects), and the parked analytics and team builder pages (their addresses redirect to Team games and Draft).
 - An invented "14 days" log retention on the privacy page; the operator's details and the legal sections are marked placeholders until they are filled in.
 
-### Milestone M4: Draft Graph, stage B (the canvas)
+### Milestone M4: Draft Graph, stage B (the canvas) (2026-10-11)
 
 #### Added
 - The Draft Graph view now opens with a force-directed graph of the pick being decided: your locked picks pinned on the left and theirs on the right (one row per role, blue circles and red squares), the top candidates floating between them, pulled toward the picks they work with and pushed away from the ones that beat them. Fit is drawn as elevation: a spot height ("▲ 84") and one contour ring for every 10 fit from 50. Lines say what kind of relation it is (solid synergy, dashed counter with an arrow at the one that loses, dotted when weak or working against), their width how strong, their colour whose pick it is; a legend under the graph explains every mark, and the grid references (A to H, 1 to 5) let you say "Thresh, D3" on voice.
@@ -78,7 +85,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - A quick second pick from the graph (before the ranking for the next slot arrived) no longer replaces the champion just picked.
 - The ranked list says when a candidate's traits are low confidence, not only the Why panel.
 
-### Milestone M4: Draft Graph, stage A (the model)
+### Milestone M4: Draft Graph, stage A (the model) (2026-10-11)
 
 #### Added
 - The draft page has a Draft Graph view beside the board (switch "Picker | Draft Graph"). For the pick being decided it ranks the candidates by fit (0 to 100, from a neutral 50) and says why: synergy with your locked picks, counters against theirs, how the pick fits the draft's composition and what the comp still lacks, and whether its power curve matches the comp's plan, in that order of weight, plus the player's champion pool. Every point has a reason a coach can read and argue with; there is no win probability.
@@ -98,7 +105,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - Signing in or registering before the page has finished loading no longer leaves you signed in but stuck on the form.
 - Closing a view that contains a form field no longer breaks the page (a field could read its own state after it was gone).
 
-### Milestone M3: Strategy pages onto the system
+### Milestone M3: Strategy pages onto the system (2026-10-11)
 
 #### Added
 - Action items have an optional due day; overdue items are flagged, and the header counts what is open, in progress, done and overdue.
@@ -129,7 +136,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - The draft page's carousel, table and ledger views and its first-pick toggle (blue picks first in a tournament draft).
 - The privacy page no longer lists a theme preference among the stored data.
 
-### M2 review fixes
+### M2 review fixes (2026-10-11)
 
 #### Fixed
 - Sign-in and registration no longer clear an email or password that your browser filled in (or that you typed) while the page was still loading.
@@ -138,7 +145,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - Champion pictures for multi-word names such as Nunu & Willump load again where the older picture component is still used.
 - A short outage of the image source no longer leaves champion pictures missing until the next patch; the image routes are also rate limited per visitor.
 
-### Milestone M2: Design system foundation (stage B)
+### Milestone M2: Design system foundation (stage B) (2026-10-11)
 
 #### Added
 - A command bar: press Ctrl+K (Cmd+K on a Mac), or use "Go to" in the navigation, type a few letters and press Enter to jump to any page. Commands for drafting and Match Day arrive with those pages.
@@ -157,7 +164,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - The per-user theme setting stored in the database (there is one theme); a migration removes the stored values.
 - The "resource read outside Suspense" warning from the bug-report button on every page load.
 
-### Milestone M2: Design system foundation (stage A)
+### Milestone M2: Design system foundation (stage A) (2026-10-11)
 
 #### Added
 - A new visual language, "Survey": a dark green-slate ground in tonal layers, one chalk accent for focus, selection and the next action, matched blue and red side colours, win and loss on their own colours, and plain, precise type. Every text and control colour meets WCAG AA contrast.
@@ -175,7 +182,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - The heraldic ornaments, the painted background images, gradients, glows and blur, emoji icons and the leftover second theme.
 - The theme card on the profile page, which pointed at a switch that no longer exists.
 
-### Milestone M6: Data layer and integrations
+### Milestone M6: Data layer and integrations (2026-10-11)
 
 #### Added
 - Riot routing follows each player's region from their profile (and the team's region for team syncs and opponent scouting) instead of always using EUW. The profile only accepts the listed regions.
@@ -200,7 +207,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 - When Riot was busy, a match sync also started the one-minute pause, so the suggested retry was refused.
 - Accounts from before M1 whose email addresses differed only by case could no longer sign in when none of them was stored in lowercase; the oldest of them can sign in again.
 
-### Milestone M1: Security hardening
+### Milestone M1: Security hardening (2026-10-11)
 
 #### Added
 - Invite codes are checked on the server. Registering needs a valid code; each code has a use limit, an optional expiry and can be disabled.
@@ -227,7 +234,7 @@ From M7 on, every milestone heading carries its date: `### Milestone M7: Title (
 #### Removed
 - The unused Leaguepedia pro-play scraper.
 
-### Milestone M0: Reset and safety net
+### Milestone M0: Reset and safety net (2026-10-11)
 
 #### Added
 - Site footer on every page with Riot Games' legal disclaimer and links to the legal pages.

@@ -288,9 +288,9 @@ mod tests {
                 "{} has no items",
                 entry.title
             );
-            if let Some(d) = &entry.date {
-                assert!(is_date(d));
-            }
+            // Every entry is dated (M7 review: earlier ones backfilled from git).
+            let d = entry.date.as_deref();
+            assert!(d.is_some_and(is_date), "{} has no date", entry.title);
         }
         assert!(entry_exists(
             "milestone-m5-remaining-pages-navigation-mobile"
