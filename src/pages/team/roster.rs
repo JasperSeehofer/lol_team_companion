@@ -73,6 +73,9 @@ pub fn RosterPage() -> impl IntoView {
         }
     });
     let team = Resource::new(|| (), |_| get_team_dashboard());
+    // Created before any Suspense, so server and browser agree on them.
+    let requests = Resource::new(|| (), |_| get_pending_requests());
+    let teams = Resource::new(|| (), |_| list_teams());
     view! {
         <PageShell width=PageWidth::Standard attr:data-feedback-label="Roster">
             <Suspense fallback=|| view! {
@@ -83,8 +86,8 @@ pub fn RosterPage() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     match team.await {
-                        Ok(Some((t, members, me))) => view! { <MemberRoster team=t members=members me=me /> }.into_any(),
-                        Ok(None) => view! { <NoTeamRoster /> }.into_any(),
+                        Ok(Some((t, members, me))) => view! { <MemberRoster team=t members=members me=me requests=requests /> }.into_any(),
+                        Ok(None) => view! { <NoTeamRoster teams=teams /> }.into_any(),
                         Err(_) => view! {
                             <PageHeader title="Roster" />
                             <EmptyState title="The roster did not load" message="The server did not answer. Reload the page in a moment." />
@@ -98,10 +101,14 @@ pub fn RosterPage() -> impl IntoView {
 
 /// A member's view: the roster by place and how new players join.
 #[component]
-fn MemberRoster(team: Team, members: Vec<TeamMember>, me: String) -> impl IntoView {
+fn MemberRoster(
+    team: Team,
+    members: Vec<TeamMember>,
+    me: String,
+    requests: Resource<Result<Vec<crate::models::user::JoinRequest>, ServerFnError>>,
+) -> impl IntoView {
     let is_leader = team.created_by == me;
     let groups = group_roster(&members);
-    let requests = Resource::new(|| (), |_| get_pending_requests());
     let place_word = |m: &TeamMember| -> &'static str {
         match m.roster_type.as_str() {
             "starter" => "Starting five",
@@ -191,14 +198,13 @@ fn MemberRoster(team: Team, members: Vec<TeamMember>, me: String) -> impl IntoVi
 
 /// No team yet: create one, or ask to join one.
 #[component]
-fn NoTeamRoster() -> impl IntoView {
+fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let name = RwSignal::new(String::new());
     let region = RwSignal::new("EUW".to_string());
     let create_error = RwSignal::new(None::<String>);
     let creating = RwSignal::new(false);
     let query = RwSignal::new(String::new());
-    let teams = Resource::new(|| (), |_| list_teams());
     let requested = RwSignal::new(Vec::<String>::new());
 
     let create = Callback::new(move |_| {

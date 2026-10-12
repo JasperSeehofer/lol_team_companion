@@ -346,19 +346,14 @@ fn is_current(path: &str, current: &str) -> bool {
 /// per group under a visible heading; the current page has
 /// `aria-current="page"`. Counts are plain text after the page name.
 #[component]
-fn PhoneMenu(open: RwSignal<bool>, is_admin: bool, username: String) -> impl IntoView {
+fn PhoneMenu(
+    open: RwSignal<bool>,
+    is_admin: bool,
+    username: String,
+    counts: Resource<Option<NavCounts>>,
+) -> impl IntoView {
     let location = use_location();
     let username = StoredValue::new(username);
-    let counts = Resource::new(
-        move || open.get(),
-        |o| async move {
-            if o {
-                get_nav_counts().await.ok()
-            } else {
-                None
-            }
-        },
-    );
     let count_for = move |path: &str, c: &NavCounts| -> Option<AnyView> {
         let text = match path {
             "/" => {
@@ -454,6 +449,19 @@ pub fn Nav() -> impl IntoView {
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
     let notifications = Resource::new(|| (), |_| get_notifications());
+    // Created here, not inside the user's Suspense: a resource created after
+    // an await would get a different id on the server and in the browser and
+    // shift every resource of the page during hydration.
+    let counts = Resource::new(
+        move || menu_open.get(),
+        |o| async move {
+            if o {
+                get_nav_counts().await.ok()
+            } else {
+                None
+            }
+        },
+    );
 
     Effect::new(move || {
         if let Some(Ok(())) = logout_action.value().get() {
@@ -498,6 +506,8 @@ pub fn Nav() -> impl IntoView {
                         "Companion"
                     </A>
 
+                    // The user is a resource: read it inside a Suspense.
+                    <Suspense fallback=|| ()>
                     <Show when=move || signed_in.get()>
                         <nav class="hidden md:flex items-center gap-5" aria-label="Primary">
                             {HUBS.iter().map(|(key, label, href)| {
@@ -514,6 +524,7 @@ pub fn Nav() -> impl IntoView {
                             }).collect_view()}
                         </nav>
                     </Show>
+                    </Suspense>
 
                     <div class="flex-1" />
 
@@ -674,7 +685,7 @@ pub fn Nav() -> impl IntoView {
                                             >
                                                 "Menu"
                                             </button>
-                                            <PhoneMenu open=menu_open is_admin=u.is_admin username=name.clone() />
+                                            <PhoneMenu open=menu_open is_admin=u.is_admin username=name.clone() counts=counts />
                                         }.into_any()
                                     }
                                     _ => view! {
@@ -690,6 +701,7 @@ pub fn Nav() -> impl IntoView {
                 </div>
 
                 // Sub-navigation for the current hub (desktop; phones use the menu).
+                <Suspense fallback=|| ()>
                 {move || {
                     let hub = active_hub.get();
                     if hub.is_empty() || hub == "today" || !signed_in.get() {
@@ -712,6 +724,7 @@ pub fn Nav() -> impl IntoView {
                         </nav>
                     }.into_any()
                 }}
+                </Suspense>
             </div>
         </header>
 

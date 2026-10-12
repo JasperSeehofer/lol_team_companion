@@ -241,6 +241,17 @@ pub fn MyGamesPage() -> impl IntoView {
         }
     });
     let data = Resource::new(|| (), |_| get_my_games());
+    // Every resource is created here, before any Suspense, so the server and
+    // the browser register them in the same order.
+    let lp_window = RwSignal::new("30d".to_string());
+    let trends_window = RwSignal::new("30d".to_string());
+    let res = MyResources {
+        lp_window,
+        history: Resource::new(move || lp_window.get(), get_my_lp_history),
+        trends_window,
+        trends: Resource::new(move || trends_window.get(), get_my_champion_trends),
+        goals: Resource::new(|| (), |_| get_my_goals()),
+    };
     let syncing = RwSignal::new(false);
     let sync = Callback::new(move |_| {
         syncing.set(true);
@@ -276,7 +287,13 @@ pub fn MyGamesPage() -> impl IntoView {
                     </Suspense>
                 }
                 actions=move || view! {
-                    <Button variant=ButtonVariant::Primary on_click=sync loading=syncing attr:data-testid="sync-my-games">"Sync my games"</Button>
+                    // Disabled until there is something to sync with (read in a Suspense).
+                    <Suspense fallback=|| ()>
+                        {move || data.get().map(|r| {
+                            let ready = r.map(|d| d.has_puuid && d.riot_configured).unwrap_or(false);
+                            view! { <Button variant=ButtonVariant::Primary on_click=sync loading=syncing disabled=!ready attr:data-testid="sync-my-games">"Sync my games"</Button> }
+                        })}
+                    </Suspense>
                 }
             />
             <p class="-mt-3 mb-6 max-w-prose text-caption text-muted">
@@ -285,15 +302,25 @@ pub fn MyGamesPage() -> impl IntoView {
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading your games"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || data.get().map(|r| match r {
                     Err(_) => view! { <Callout tone=CalloutTone::Danger>"Your games did not load. Reload the page in a moment."</Callout> }.into_any(),
-                    Ok(d) => view! { <MyGamesBody data=d /> }.into_any(),
+                    Ok(d) => view! { <MyGamesBody data=d res=res /> }.into_any(),
                 })}
             </Suspense>
         </PageShell>
     }
 }
 
+/// The page's resources (see `MyGamesPage`).
+#[derive(Clone, Copy)]
+struct MyResources {
+    lp_window: RwSignal<String>,
+    history: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
+    trends_window: RwSignal<String>,
+    trends: Resource<Result<Vec<ChampionTrend>, ServerFnError>>,
+    goals: Resource<Result<GoalProgressPayload, ServerFnError>>,
+}
+
 #[component]
-fn MyGamesBody(data: MyGames) -> impl IntoView {
+fn MyGamesBody(data: MyGames, res: MyResources) -> impl IntoView {
     let notice = if !data.riot_configured {
         Some(view! { <Callout tone=CalloutTone::Info title="Riot features are off">"This server has no Riot API key, so games cannot be synced. Games stored earlier still show."</Callout> }.into_any())
     } else if !data.has_puuid {
@@ -310,12 +337,12 @@ fn MyGamesBody(data: MyGames) -> impl IntoView {
         <div class="grid gap-x-12 gap-y-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
             <div class="flex min-w-0 flex-col gap-12">
                 <RecentGames matches=data.matches.clone() />
-                <LpHistory />
-                <ChampionTrends />
+                <LpHistory window=res.lp_window history=res.history />
+                <ChampionTrends window=res.trends_window trends=res.trends />
             </div>
             <div class="flex min-w-0 flex-col gap-12">
                 <Standing ranked=data.ranked.clone() />
-                <Goals />
+                <Goals goals=res.goals />
             </div>
         </div>
     }
@@ -432,9 +459,10 @@ pub fn lp_points(snaps: &[RankedSnapshot]) -> Vec<(f32, f32)> {
 }
 
 #[component]
-fn LpHistory() -> impl IntoView {
-    let window = RwSignal::new("30d".to_string());
-    let history = Resource::new(move || window.get(), get_my_lp_history);
+fn LpHistory(
+    window: RwSignal<String>,
+    history: Resource<Result<Vec<RankedSnapshot>, ServerFnError>>,
+) -> impl IntoView {
     view! {
         <section aria-labelledby="lp-h" data-lp-history>
             <SectionHeader
@@ -500,9 +528,10 @@ fn LpHistory() -> impl IntoView {
 }
 
 #[component]
-fn ChampionTrends() -> impl IntoView {
-    let window = RwSignal::new("30d".to_string());
-    let trends = Resource::new(move || window.get(), get_my_champion_trends);
+fn ChampionTrends(
+    window: RwSignal<String>,
+    trends: Resource<Result<Vec<ChampionTrend>, ServerFnError>>,
+) -> impl IntoView {
     view! {
         <section aria-labelledby="trends-h" data-champion-trends>
             <SectionHeader
@@ -558,9 +587,8 @@ fn ChampionTrends() -> impl IntoView {
 /// Personal goals: a rank to reach, CS per minute and deaths per game, each
 /// measured over the last ranked Solo/Duo games (from five games on).
 #[component]
-fn Goals() -> impl IntoView {
+fn Goals(goals: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let goals = Resource::new(|| (), |_| get_my_goals());
     let tier_options: Vec<SelectOption> = TIERS
         .iter()
         .map(|t| SelectOption::new(*t, tier_word(t)))

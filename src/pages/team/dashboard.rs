@@ -396,6 +396,15 @@ fn member_actions(m: &TeamMember, is_self: bool) -> Vec<MenuItem> {
     items
 }
 
+/// The team page's resources (see `TeamDashboard`).
+#[derive(Clone, Copy)]
+struct TeamResources {
+    requests: Resource<Result<Vec<JoinRequest>, ServerFnError>>,
+    notes: Resource<Result<Vec<TeamNote>, ServerFnError>>,
+    games: Resource<Result<Vec<RecentMatch>, ServerFnError>>,
+    gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>,
+}
+
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
@@ -408,7 +417,18 @@ pub fn TeamDashboard() -> impl IntoView {
         }
     });
     let team = Resource::new(|| (), |_| get_team_dashboard());
-    let reload = Callback::new(move |_| team.refetch());
+    // Every resource of the page is created here, before any Suspense, so
+    // the server and the browser register them in the same order.
+    let res = TeamResources {
+        requests: Resource::new(|| (), |_| get_pending_requests()),
+        notes: Resource::new(|| (), |_| get_all_team_notes()),
+        games: Resource::new(|| (), |_| get_recent_team_matches()),
+        gaps: Resource::new(|| (), |_| get_pool_gap_panel()),
+    };
+    let reload = Callback::new(move |_| {
+        team.refetch();
+        res.requests.refetch();
+    });
 
     view! {
         <PageShell attr:data-feedback-label="Team">
@@ -420,7 +440,7 @@ pub fn TeamDashboard() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     match team.await {
-                        Ok(Some((t, members, me))) => view! { <TeamView team=t members=members me=me reload=reload /> }.into_any(),
+                        Ok(Some((t, members, me))) => view! { <TeamView team=t members=members me=me reload=reload res=res /> }.into_any(),
                         Ok(None) => view! {
                             <PageHeader title="Team" />
                             <NoTeamState />
@@ -442,6 +462,7 @@ fn TeamView(
     members: Vec<TeamMember>,
     me: String,
     reload: Callback<()>,
+    res: TeamResources,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let is_leader = team.created_by == me;
@@ -553,6 +574,12 @@ fn TeamView(
                                 align=MenuAlign::End
                                 variant=ButtonVariant::Quiet
                                 size=ButtonSize::Sm
+                                trigger=move || view! {
+                                    <span>"Actions"</span>
+                                    <svg class="size-3.5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                }
                                 on_select=Callback::new(move |a: String| on_action.run((uid.clone(), uname.clone(), a)))
                             />
                         })}
@@ -624,12 +651,12 @@ fn TeamView(
                     {group_list("Coaches", "coaches", groups.coaches.clone(), "No coach on the roster yet.")}
                     {(!unplaced.is_empty()).then(|| group_list("Not placed yet", "unplaced", unplaced.clone(), ""))}
                 </section>
-                <RecentGames />
-                <PoolGaps />
+                <RecentGames games=res.games />
+                <PoolGaps gaps=res.gaps />
             </div>
             <div class="flex min-w-0 flex-col gap-12">
-                {is_leader.then(|| view! { <JoinRequests reload=reload /> })}
-                <TeamNotes />
+                {is_leader.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
+                <TeamNotes notes=res.notes />
             </div>
         </div>
         {is_leader.then(|| view! { <EditTeam open=edit_open name=team.name.clone() team_region=team.region.clone() reload=reload /> })}
@@ -705,9 +732,11 @@ fn EditTeam(
 }
 
 #[component]
-fn JoinRequests(reload: Callback<()>) -> impl IntoView {
+fn JoinRequests(
+    reload: Callback<()>,
+    requests: Resource<Result<Vec<JoinRequest>, ServerFnError>>,
+) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let requests = Resource::new(|| (), |_| get_pending_requests());
     let answer = Callback::new(move |(id, name, accept): (String, String, bool)| {
         leptos::task::spawn_local(async move {
             match handle_join_request(id, accept).await {
@@ -763,9 +792,8 @@ fn JoinRequests(reload: Callback<()>) -> impl IntoView {
 /// Team notes: open to every member, edits and deletes undoable from the
 /// toast (the server keeps the replaced text and soft-deletes for a day).
 #[component]
-fn TeamNotes() -> impl IntoView {
+fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let notes = Resource::new(|| (), |_| get_all_team_notes());
     let draft = RwSignal::new(String::new());
     let editing = RwSignal::new(None::<String>);
     let edit_text = RwSignal::new(String::new());
@@ -912,8 +940,7 @@ fn TeamNotes() -> impl IntoView {
 }
 
 #[component]
-fn RecentGames() -> impl IntoView {
-    let games = Resource::new(|| (), |_| get_recent_team_matches());
+fn RecentGames(games: Resource<Result<Vec<RecentMatch>, ServerFnError>>) -> impl IntoView {
     view! {
         <section aria-labelledby="games-h" data-recent-games>
             <SectionHeader
@@ -955,8 +982,7 @@ fn RecentGames() -> impl IntoView {
 }
 
 #[component]
-fn PoolGaps() -> impl IntoView {
-    let gaps = Resource::new(|| (), |_| get_pool_gap_panel());
+fn PoolGaps(gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>) -> impl IntoView {
     view! {
         <section aria-labelledby="gaps-h" data-pool-gaps>
             <SectionHeader
