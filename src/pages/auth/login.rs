@@ -55,14 +55,9 @@ pub async fn login_action(email: String, password: String) -> Result<String, Ser
     authz::sync_admin_flag(&db, &user).await;
     auth.login(&user).await.map_err(authz::server_err)?;
 
-    let mode = db::get_user_mode(&db, &user.id)
-        .await
-        .unwrap_or_else(|_| "solo".to_string());
-    let dest = if mode == "team" {
-        "/team/dashboard".to_string()
-    } else {
-        "/solo".to_string()
-    };
+    // Everyone lands on Home: Match Day for team members, the start page
+    // (create or join a team, personal pages) for everyone else.
+    let dest = "/".to_string();
     // A form submitted before hydration posts here directly; without the
     // redirect it would land back on the sign-in page (signed in, but
     // stuck). A hydrated submit still navigates in the Effect below.

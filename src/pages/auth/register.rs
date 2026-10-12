@@ -102,10 +102,10 @@ pub async fn register_action(
         Err(e) => tracing::warn!("auto-login lookup failed: {e}"),
     }
 
-    // New users default to solo mode (D-03). Redirect on the server too, so a
-    // form submitted before hydration still lands on /solo.
-    leptos_axum::redirect("/solo");
-    Ok("/solo".to_string())
+    // New users land on Home (no team yet: create or join one). Redirect on
+    // the server too, so a form submitted before hydration still lands there.
+    leptos_axum::redirect("/");
+    Ok("/".to_string())
 }
 
 #[component]

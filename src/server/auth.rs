@@ -23,9 +23,6 @@ struct DbUser {
     riot_summoner_name: Option<String>,
     mode: Option<String>,
     riot_region: Option<String>,
-    draft_mode: Option<String>,
-    team_dashboard_mode: Option<String>,
-    solo_mode: Option<String>,
     #[serde(default)]
     is_admin: Option<bool>,
 }
@@ -44,9 +41,6 @@ impl From<DbUser> for AppUser {
             riot_summoner_name: u.riot_summoner_name,
             mode: u.mode.unwrap_or_else(|| "solo".to_string()),
             riot_region: u.riot_region,
-            draft_mode: u.draft_mode.unwrap_or_else(|| "auto".to_string()),
-            team_dashboard_mode: u.team_dashboard_mode.unwrap_or_else(|| "auto".to_string()),
-            solo_mode: u.solo_mode.unwrap_or_else(|| "auto".to_string()),
         }
     }
 }
@@ -62,9 +56,6 @@ pub struct AppUser {
     pub riot_summoner_name: Option<String>,
     pub mode: String,
     pub riot_region: Option<String>,
-    pub draft_mode: String,
-    pub team_dashboard_mode: String,
-    pub solo_mode: String,
     /// Effective admin status: the stored flag AND a current `ADMIN_EMAILS`
     /// listing, so removing an address revokes access on the next request.
     pub is_admin: bool,

@@ -432,7 +432,6 @@ fn surveyed_line(surveyed: Option<&str>, stale: bool) -> String {
 #[component]
 pub fn OpponentsPage() -> impl IntoView {
     let user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-    let solo = RwSignal::new(false);
     Effect::new(move || match user.get() {
         Some(Ok(None)) =>
         {
@@ -441,7 +440,6 @@ pub fn OpponentsPage() -> impl IntoView {
                 let _ = window.location().set_href("/auth/login");
             }
         }
-        Some(Ok(Some(u))) => solo.set(u.mode == "solo"),
         _ => {}
     });
 
@@ -458,6 +456,14 @@ pub fn OpponentsPage() -> impl IntoView {
         },
     );
     let selected = RwSignal::new(None::<String>);
+    // `?opponent_id=` (from Match Day's brief) opens that dossier.
+    Effect::new(move |_| {
+        if let Some(id) = params.read().get("opponent_id").filter(|i| !i.is_empty()) {
+            if selected.get_untracked().is_none() {
+                selected.set(Some(id));
+            }
+        }
+    });
     let detail = Resource::new(
         move || selected.get(),
         |id| async move {
@@ -502,26 +508,7 @@ pub fn OpponentsPage() -> impl IntoView {
                     <Button on_click=Callback::new(move |_| creating.set(true)) attr:data-testid="new-opponent">"New opponent"</Button>
                 }
             />
-            {move || if solo.get() {
-                view! {
-                    <EmptyState
-                        title="Opponents are a team feature"
-                        level=HeadingLevel::H2
-                        message="Scouting dossiers belong to a team. Switch to team mode to see and edit your team's opponents."
-                        action=move || view! {
-                            <Button on_click=Callback::new(move |_| {
-                                leptos::task::spawn_local(async move {
-                                    let _ = crate::components::nav::set_user_mode("team".to_string()).await;
-                                    #[cfg(feature = "hydrate")]
-                                    if let Some(window) = web_sys::window() {
-                                        let _ = window.location().reload();
-                                    }
-                                });
-                            })>"Switch to team mode"</Button>
-                        }
-                    />
-                }.into_any()
-            } else {
+            {move || {
                 view! {
                     <div class="grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
                         <section aria-labelledby="dossiers-heading" class="flex min-w-0 flex-col gap-3">

@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    components::{Route, Router, Routes},
+    components::{Redirect, Route, Router, Routes},
     path, SsrMode,
 };
 
@@ -14,7 +14,6 @@ use crate::pages::{
     action_items::ActionItemsPage,
     admin::invites::AdminInvitesPage,
     admin::traits::AdminTraitsPage,
-    analytics::AnalyticsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
     closed_beta::ClosedBetaPage,
@@ -24,14 +23,13 @@ use crate::pages::{
     home::HomePage,
     legal::{datenschutz::DatenschutzPage, impressum::ImpressumPage},
     match_detail::MatchDetailPage,
+    me::MyGamesPage,
     opponents::OpponentsPage,
     personal_learnings::{NewLearningPage, PersonalLearningsPage},
     post_game::PostGamePage,
     profile::ProfilePage,
-    solo_dashboard::SoloDashboardPage,
     stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
-    team_builder::TeamBuilderPage,
     tree_drafter::TreeDrafterPage,
 };
 
@@ -89,17 +87,18 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/tree-drafter") view=TreeDrafterPage />
                         <Route path=path!("/stats") view=StatsPage />
                         <Route path=path!("/champion-pool") view=ChampionPoolPage />
-                        <Route path=path!("/team-builder") view=TeamBuilderPage />
+                        // Parked pages and the old solo dashboard: plain redirects.
+                        <Route path=path!("/team-builder") view=|| view! { <Redirect path="/draft" /> } />
                         <Route path=path!("/game-plan") view=GamePlanPage />
                         <Route path=path!("/post-game") view=PostGamePage />
                         <Route path=path!("/opponents") view=OpponentsPage />
                         <Route path=path!("/action-items") view=ActionItemsPage />
-                        <Route path=path!("/analytics") view=AnalyticsPage />
-                        <Route path=path!("/solo") view=SoloDashboardPage />
+                        <Route path=path!("/analytics") view=|| view! { <Redirect path="/stats" /> } />
+                        <Route path=path!("/solo") view=|| view! { <Redirect path="/me" /> } />
+                        <Route path=path!("/me") view=MyGamesPage />
                         <Route path=path!("/match/:id") view=MatchDetailPage />
                         <Route path=path!("/personal-learnings") view=PersonalLearningsPage />
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />
-                        // Phase 17 plan 17-01 stubs (filled by plan 06)
                         <Route path=path!("/closed-beta") view=ClosedBetaPage />
                         <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/traits") view=AdminTraitsPage ssr=SsrMode::Async />
@@ -108,12 +107,10 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
                     </Routes>
                 </main>
-                <SiteFooter />
-                // Floating bug-report widget (Phase 17 visual stub;
-                // Phase 18 wires submit-to-DB). Self-gates on auth +
-                // pathname so it never shows on /, /auth/*,
-                // /closed-beta, /legal/* per UI-SPEC line 590.
+                // The bug-report button docks above the footer (it self-gates
+                // on auth and on public paths).
                 <BugReportWidget />
+                <SiteFooter />
             </ToastProvider>
         </Router>
     }
