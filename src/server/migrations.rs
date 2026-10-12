@@ -100,7 +100,129 @@ pub const MIGRATIONS: &[Migration] = &[
         // M2 left one theme; the per-user theme field is dead data.
         step: Step::Surql("REMOVE FIELD IF EXISTS theme ON user; UPDATE user UNSET theme;"),
     },
+    Migration {
+        version: 8,
+        name: "roster_places",
+        step: Step::Surql(ROSTER_PLACES),
+    },
+    Migration {
+        version: 9,
+        name: "normalise_pool_roles",
+        step: Step::Rust(|db| Box::pin(normalise_pool_roles(db))),
+    },
 ];
+
+/// M5: one spelling per position, a real place for every member (starting
+/// five, substitutes, coaches, or not placed yet), the per-page view
+/// preferences of views that no longer exist dropped, and links to deleted
+/// drafts replaced by a "draft deleted" mark.
+///
+/// Before: `role` held positions in mixed spellings plus "coach", "sub" and
+/// "unassigned"; `roster_type` was "starter" or "sub" (everyone not starting,
+/// shown as the bench). Now a non-starter with a position becomes a
+/// substitute (the old bench), one without a position is "member" (not
+/// placed yet), and coaches get their own place.
+const ROSTER_PLACES: &str = "\
+    UPDATE team_member SET role = string::lowercase(string::trim(role)); \
+    UPDATE team_member SET role = 'jungle' WHERE role IN ['jgl', 'jg', 'jungler']; \
+    UPDATE team_member SET role = 'mid' WHERE role IN ['middle']; \
+    UPDATE team_member SET role = 'bot' WHERE role IN ['bottom', 'adc', 'carry', 'marksman']; \
+    UPDATE team_member SET role = 'support' WHERE role IN ['sup', 'supp', 'utility']; \
+    UPDATE team_member SET roster_type = 'coach', role = 'unassigned' WHERE role = 'coach'; \
+    UPDATE team_member SET role = 'unassigned' \
+        WHERE role NOT IN ['top', 'jungle', 'mid', 'bot', 'support', 'unassigned']; \
+    UPDATE team_member SET roster_type = 'member' WHERE roster_type = 'starter' AND role = 'unassigned'; \
+    UPDATE team_member SET roster_type = 'substitute' \
+        WHERE roster_type NOT IN ['starter', 'coach'] AND role != 'unassigned'; \
+    UPDATE team_member SET roster_type = 'member' \
+        WHERE roster_type NOT IN ['starter', 'coach', 'substitute']; \
+    DEFINE FIELD OVERWRITE role ON team_member TYPE string DEFAULT 'unassigned' \
+        ASSERT $value IN ['top', 'jungle', 'mid', 'bot', 'support', 'unassigned']; \
+    DEFINE FIELD OVERWRITE roster_type ON team_member TYPE string DEFAULT 'member' \
+        ASSERT $value IN ['starter', 'substitute', 'coach', 'member']; \
+    REMOVE FIELD IF EXISTS draft_mode ON user; \
+    REMOVE FIELD IF EXISTS team_dashboard_mode ON user; \
+    REMOVE FIELD IF EXISTS solo_mode ON user; \
+    UPDATE user UNSET draft_mode, team_dashboard_mode, solo_mode; \
+    UPDATE game_plan SET draft = NONE, draft_deleted = true \
+        WHERE draft != NONE AND !record::exists(draft); \
+    UPDATE post_game_learning SET draft_id = NONE, draft_deleted = true \
+        WHERE draft_id != NONE AND !record::exists(draft_id);";
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct PoolRoleRow {
+    id: RecordId,
+    user: RecordId,
+    champion: String,
+    role: String,
+    #[allow(dead_code)]
+    created_at: Option<surrealdb::types::Datetime>,
+}
+
+/// M5: champion pool and champion note roles in one spelling (`Role::key`:
+/// top, jungle, mid, bot, support). Pool rows that become duplicates (the
+/// same champion stored once as "ADC" and once as "bot") keep the oldest row.
+/// Roles no spelling maps are left as they are. Idempotent: rows already in
+/// the stored spelling are skipped.
+async fn normalise_pool_roles(db: &Surreal<Db>) -> DbResult<()> {
+    use crate::components::ui::Role;
+
+    let mut r = db
+        .query("SELECT id, user, champion, role, created_at FROM champion_pool ORDER BY created_at ASC, id ASC")
+        .await?;
+    let rows: Vec<PoolRoleRow> = r.take(0)?;
+    let mut seen: BTreeSet<(String, String, String)> = BTreeSet::new();
+    let (mut renamed, mut removed) = (0usize, 0usize);
+    for row in &rows {
+        let Some(role) = Role::parse(&row.role) else {
+            continue;
+        };
+        let key = (
+            row.user.to_sql(),
+            row.champion.to_lowercase(),
+            role.key().to_string(),
+        );
+        let id_key = record_key(&row.id.to_sql(), "champion_pool");
+        if !seen.insert(key) {
+            db.query("DELETE type::record('champion_pool', $key)")
+                .bind(("key", id_key))
+                .await?
+                .check()?;
+            removed += 1;
+        } else if row.role != role.key() {
+            db.query("UPDATE type::record('champion_pool', $key) SET role = $role")
+                .bind(("key", id_key))
+                .bind(("role", role.key().to_string()))
+                .await?
+                .check()?;
+            renamed += 1;
+        }
+    }
+
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct NoteRole {
+        id: RecordId,
+        role: String,
+    }
+    let mut r = db.query("SELECT id, role FROM champion_note").await?;
+    let notes: Vec<NoteRole> = r.take(0)?;
+    for n in notes {
+        if let Some(role) = Role::parse(&n.role) {
+            if n.role != role.key() {
+                db.query("UPDATE type::record('champion_note', $key) SET role = $role")
+                    .bind(("key", record_key(&n.id.to_sql(), "champion_note")))
+                    .bind(("role", role.key().to_string()))
+                    .await?
+                    .check()?;
+                renamed += 1;
+            }
+        }
+    }
+    if renamed > 0 || removed > 0 {
+        tracing::info!(renamed, removed, "pool and note roles normalised");
+    }
+    Ok(())
+}
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct AppliedRow {

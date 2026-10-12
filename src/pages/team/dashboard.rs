@@ -351,7 +351,7 @@ pub async fn edit_team_note(note_id: String, content: String) -> Result<(), Serv
     let authz::Ctx { db, user } = authz::authed().await?;
     let team_id = authz::require_team(&db, &user).await?;
 
-    db::update_team_note(&db, &team_id, &note_id, content)
+    db::update_team_note(&db, &team_id, &note_id, content, &user.username)
         .await
         .map_err(authz::server_err)
 }

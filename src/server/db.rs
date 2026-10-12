@@ -987,7 +987,7 @@ pub async fn create_team(
         .query(
             "BEGIN TRANSACTION; \
              LET $t = (CREATE ONLY team SET name = $name, region = $region, created_by = type::record('user', $user_key)); \
-             CREATE team_member SET team = $t.id, user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'; \
+             CREATE team_member SET team = $t.id, user = type::record('user', $user_key), role = 'unassigned', roster_type = 'member'; \
              RETURN { id: $t.id }; \
              COMMIT TRANSACTION;",
         )
@@ -1083,7 +1083,7 @@ pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResu
         ));
     }
     // The unique index on team_member.user rejects a second team.
-    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'sub'")
+    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'member'")
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
         .await?
@@ -1273,7 +1273,7 @@ pub async fn respond_to_join_request(
                  IF array::len($flipped) = 0 { THROW 'JOIN_NOT_PENDING' }; \
                  IF array::len((SELECT id FROM team_member WHERE user = type::record('user', $user_key))) > 0 \
                      { THROW 'JOIN_ALREADY_MEMBER' }; \
-                 CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'; \
+                 CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'member'; \
                  COMMIT TRANSACTION;",
             )
             .bind(("req_key", req_key))
@@ -1326,10 +1326,14 @@ pub async fn assign_to_slot(
 ) -> DbResult<()> {
     // Bench the current starter for that role and promote this member in one
     // transaction, so a role never ends up with two starters or none.
+    if crate::components::ui::Role::parse(role).map(|r| r.key()) != Some(role) {
+        return Err(DbError::Invalid("Unknown position".into()));
+    }
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             UPDATE team_member SET roster_type = 'sub' WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter'; \
+             IF array::len((SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key))) = 0 { THROW 'NOT_MEMBER' }; \
+             UPDATE team_member SET roster_type = 'substitute' WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter'; \
              UPDATE team_member SET role = $role, roster_type = 'starter' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key); \
              COMMIT TRANSACTION;",
         )
@@ -1337,18 +1341,61 @@ pub async fn assign_to_slot(
         .bind(("user_key", record_key(user_id, "user")))
         .bind(("role", role.to_string()))
         .await?;
-    check_tx(response)?;
-    Ok(())
+    match check_tx(response) {
+        Err(e) if thrown_tag(&e).as_deref() == Some("NOT_MEMBER") => Err(DbError::NotFound),
+        other => other.map(|_| ()),
+    }
 }
 
+/// Take a starter out of the starting five onto the bench (substitute).
 pub async fn remove_from_slot(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<()> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE team_member SET roster_type = 'sub' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
-        .bind(("team_key", team_key))
-        .bind(("user_key", user_key))
-        .await?
-        .check()?;
+    set_member_place(db, team_id, user_id, RosterPlace::Substitute).await
+}
+
+/// Where a member stands on the roster, outside the starting five (starting
+/// is `assign_to_slot`, which needs a position).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RosterPlace {
+    /// Benched: plays when needed, not in the starting five.
+    Substitute,
+    Coach,
+    /// Not placed yet (new members).
+    Member,
+}
+
+impl RosterPlace {
+    pub fn key(self) -> &'static str {
+        match self {
+            RosterPlace::Substitute => "substitute",
+            RosterPlace::Coach => "coach",
+            RosterPlace::Member => "member",
+        }
+    }
+}
+
+/// Move a member of `team_id` to a place outside the starting five. A coach
+/// keeps no position; a substitute keeps theirs (their usual position).
+pub async fn set_member_place(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    place: RosterPlace,
+) -> DbResult<()> {
+    let query = if place == RosterPlace::Coach {
+        "UPDATE team_member SET roster_type = $place, role = 'unassigned' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) RETURN id"
+    } else {
+        "UPDATE team_member SET roster_type = $place WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) RETURN id"
+    };
+    let mut r = db
+        .query(query)
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("place", place.key().to_string()))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
     Ok(())
 }
 
@@ -3847,6 +3894,9 @@ struct DbTeamNote {
     content: String,
     pinned: bool,
     created_at: Option<Datetime>,
+    edited_at: Option<Datetime>,
+    edited_by_name: Option<String>,
+    previous_content: Option<String>,
 }
 
 impl From<DbTeamNote> for TeamNote {
@@ -3859,8 +3909,30 @@ impl From<DbTeamNote> for TeamNote {
             content: n.content,
             pinned: n.pinned,
             created_at: opt_dt(n.created_at),
+            edited_at: opt_dt(n.edited_at),
+            edited_by_name: n.edited_by_name,
+            can_undo_edit: n.previous_content.is_some(),
         }
     }
+}
+
+const TEAM_NOTE_FIELDS: &str =
+    "id, team, author, author_name, content, pinned, created_at, edited_at, edited_by_name, previous_content";
+
+/// Longest team note, in characters.
+pub const TEAM_NOTE_MAX: usize = 4000;
+
+fn checked_note(content: String) -> DbResult<String> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Err(DbError::Invalid("A note needs some text.".into()));
+    }
+    if trimmed.chars().count() > TEAM_NOTE_MAX {
+        return Err(DbError::Invalid(format!(
+            "Notes are at most {TEAM_NOTE_MAX} characters."
+        )));
+    }
+    Ok(trimmed.to_string())
 }
 
 pub async fn create_team_note(
@@ -3870,13 +3942,11 @@ pub async fn create_team_note(
     username: &str,
     content: String,
 ) -> DbResult<String> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-
+    let content = checked_note(content)?;
     let mut response = db
         .query("CREATE team_note SET team = type::record('team', $team_key), author = type::record('user', $user_key), author_name = $author_name, content = $content")
-        .bind(("team_key", team_key))
-        .bind(("user_key", user_key))
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
         .bind(("author_name", username.to_string()))
         .bind(("content", content))
         .await?;
@@ -3888,12 +3958,12 @@ pub async fn create_team_note(
     }
 }
 
+/// The team's notes, pinned first, newest first. Deleted notes (kept a day
+/// for Undo) are left out.
 pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-
     let mut response = db
-        .query("SELECT * FROM team_note WHERE team = type::record('team', $team_key) ORDER BY pinned DESC, created_at DESC")
-        .bind(("team_key", team_key))
+        .query(format!("SELECT {TEAM_NOTE_FIELDS} FROM team_note WHERE team = type::record('team', $team_key) AND deleted_at = NONE ORDER BY pinned DESC, created_at DESC"))
+        .bind(("team_key", record_key(team_id, "team")))
         .await?;
 
     let rows: Vec<DbTeamNote> = response.take(0).unwrap_or_default();
@@ -3901,31 +3971,51 @@ pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Te
 }
 
 pub async fn list_pinned_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-
     let mut response = db
-        .query("SELECT * FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true ORDER BY created_at DESC")
-        .bind(("team_key", team_key))
+        .query(format!("SELECT {TEAM_NOTE_FIELDS} FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true AND deleted_at = NONE ORDER BY created_at DESC"))
+        .bind(("team_key", record_key(team_id, "team")))
         .await?;
 
     let rows: Vec<DbTeamNote> = response.take(0).unwrap_or_default();
     Ok(rows.into_iter().map(TeamNote::from).collect())
 }
 
+/// Replace a note's text (any member may). The text it replaces is kept so
+/// the edit can be undone (`undo_team_note_edit`).
 pub async fn update_team_note(
     db: &Surreal<Db>,
     team_id: &str,
     note_id: &str,
     content: String,
+    editor_name: &str,
 ) -> DbResult<()> {
-    ensure_team_record(db, "team_note", note_id, team_id).await?;
-    let note_key = record_key(note_id, "team_note");
-
-    db.query("UPDATE type::record('team_note', $note_key) SET content = $content")
-        .bind(("note_key", note_key))
+    let content = checked_note(content)?;
+    let mut r = db
+        .query("UPDATE type::record('team_note', $note_key) SET previous_content = content, content = $content, edited_at = time::now(), edited_by_name = $editor WHERE team = type::record('team', $team_key) AND deleted_at = NONE RETURN id")
+        .bind(("note_key", record_key(note_id, "team_note")))
+        .bind(("team_key", record_key(team_id, "team")))
         .bind(("content", content))
-        .await?
-        .check()?;
+        .bind(("editor", editor_name.to_string()))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// Put back the text the last edit replaced. Only one step: the restored
+/// text cannot be undone again.
+pub async fn undo_team_note_edit(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
+    let mut r = db
+        .query("UPDATE type::record('team_note', $note_key) SET content = previous_content, previous_content = NONE WHERE team = type::record('team', $team_key) AND previous_content != NONE AND deleted_at = NONE RETURN id")
+        .bind(("note_key", record_key(note_id, "team_note")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
     Ok(())
 }
 
@@ -3946,14 +4036,35 @@ pub async fn toggle_pin_team_note(
     Ok(())
 }
 
+/// How long a deleted note can be restored.
+const NOTE_UNDO_WINDOW: &str = "1d";
+
+/// Delete a note so that it can still be restored for a day
+/// (`restore_team_note`). Notes deleted longer ago are purged here.
 pub async fn delete_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
     ensure_team_record(db, "team_note", note_id, team_id).await?;
-    let note_key = record_key(note_id, "team_note");
+    db.query(format!(
+        "UPDATE type::record('team_note', $note_key) SET deleted_at = time::now(); \
+         DELETE team_note WHERE team = type::record('team', $team_key) AND deleted_at != NONE AND deleted_at < time::now() - {NOTE_UNDO_WINDOW};"
+    ))
+    .bind(("note_key", record_key(note_id, "team_note")))
+    .bind(("team_key", record_key(team_id, "team")))
+    .await?
+    .check()?;
+    Ok(())
+}
 
-    db.query("DELETE type::record('team_note', $note_key)")
-        .bind(("note_key", note_key))
-        .await?
-        .check()?;
+/// Bring back a note deleted within the last day.
+pub async fn restore_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
+    let mut r = db
+        .query("UPDATE type::record('team_note', $note_key) SET deleted_at = NONE WHERE team = type::record('team', $team_key) AND deleted_at != NONE RETURN id")
+        .bind(("note_key", record_key(note_id, "team_note")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
     Ok(())
 }
 

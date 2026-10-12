@@ -522,8 +522,12 @@ async fn team_note_is_isolated_between_teams() {
         .unwrap();
 
     assert_not_found(
-        db::update_team_note(&db, &t.team2, &note, "hacked".into()).await,
+        db::update_team_note(&db, &t.team2, &note, "hacked".into(), "bob").await,
         "B edits A's note",
+    );
+    assert_not_found(
+        db::undo_team_note_edit(&db, &t.team2, &note).await,
+        "B undoes an edit of A's note",
     );
     assert_not_found(
         db::toggle_pin_team_note(&db, &t.team2, &note, true).await,
@@ -538,7 +542,7 @@ async fn team_note_is_isolated_between_teams() {
     assert_eq!(notes[0].content, "secret plan");
     assert!(!notes[0].pinned);
 
-    db::update_team_note(&db, &t.team1, &note, "new plan".into())
+    db::update_team_note(&db, &t.team1, &note, "new plan".into(), "alice")
         .await
         .unwrap();
     db::toggle_pin_team_note(&db, &t.team1, &note, true)
@@ -548,6 +552,48 @@ async fn team_note_is_isolated_between_teams() {
     assert_eq!(notes[0].content, "new plan");
     assert!(notes[0].pinned);
     db::delete_team_note(&db, &t.team1, &note).await.unwrap();
+    assert_not_found(
+        db::restore_team_note(&db, &t.team2, &note).await,
+        "B restores A's deleted note",
+    );
+    assert!(db::list_team_notes(&db, &t.team1).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn team_note_edits_and_deletes_can_be_undone() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let note = db::create_team_note(&db, &t.team1, &t.a, "alice", "first".into())
+        .await
+        .unwrap();
+    // Nothing to undo before an edit.
+    assert_not_found(
+        db::undo_team_note_edit(&db, &t.team1, &note).await,
+        "undo without an edit",
+    );
+    db::update_team_note(&db, &t.team1, &note, "second".into(), "bob")
+        .await
+        .unwrap();
+    let n = &db::list_team_notes(&db, &t.team1).await.unwrap()[0];
+    assert_eq!(n.content, "second");
+    assert_eq!(n.edited_by_name.as_deref(), Some("bob"));
+    assert!(n.can_undo_edit);
+    db::undo_team_note_edit(&db, &t.team1, &note).await.unwrap();
+    let n = &db::list_team_notes(&db, &t.team1).await.unwrap()[0];
+    assert_eq!(n.content, "first");
+    assert!(!n.can_undo_edit);
+
+    db::delete_team_note(&db, &t.team1, &note).await.unwrap();
+    assert!(db::list_team_notes(&db, &t.team1).await.unwrap().is_empty());
+    db::restore_team_note(&db, &t.team1, &note).await.unwrap();
+    let notes = db::list_team_notes(&db, &t.team1).await.unwrap();
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].content, "first");
+    // A blank note is refused.
+    assert!(matches!(
+        db::update_team_note(&db, &t.team1, &note, "   ".into(), "bob").await,
+        Err(db::DbError::Invalid(_))
+    ));
 }
 
 // ---------------------------------------------------------------------------

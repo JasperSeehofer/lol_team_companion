@@ -420,3 +420,123 @@ async fn the_user_theme_field_is_dropped() {
     let v: Value = r.take(0).unwrap();
     assert!(!format!("{v:?}").contains("demacia"));
 }
+
+#[tokio::test]
+async fn roster_places_roles_and_dead_links_are_migrated() {
+    let db = baseline_only().await;
+    // The pre-M5 shape: per-page view preferences on users, mixed role
+    // spellings, "sub" for everyone not starting, a plan and a review whose
+    // draft was deleted, and pool roles in several spellings.
+    db.query(
+        "DEFINE FIELD draft_mode ON user TYPE string DEFAULT 'auto'; \
+         DEFINE FIELD solo_mode ON user TYPE string DEFAULT 'auto'; \
+         DEFINE FIELD team_dashboard_mode ON user TYPE string DEFAULT 'auto'; \
+         CREATE user:lead SET username = 'Lead', email = 'lead@example.com', password_hash = 'h', draft_mode = 'war-table'; \
+         CREATE user:a SET username = 'A', email = 'a@example.com', password_hash = 'h'; \
+         CREATE user:b SET username = 'B', email = 'b@example.com', password_hash = 'h'; \
+         CREATE user:c SET username = 'C', email = 'c@example.com', password_hash = 'h'; \
+         CREATE user:d SET username = 'D', email = 'd@example.com', password_hash = 'h'; \
+         CREATE team:t SET name = 'T', region = 'EUW', created_by = user:lead; \
+         CREATE team_member:lead SET team = team:t, user = user:lead, role = 'unassigned', roster_type = 'sub'; \
+         CREATE team_member:a SET team = team:t, user = user:a, role = 'ADC', roster_type = 'starter'; \
+         CREATE team_member:b SET team = team:t, user = user:b, role = 'Jungle', roster_type = 'sub'; \
+         CREATE team_member:c SET team = team:t, user = user:c, role = 'coach', roster_type = 'sub'; \
+         CREATE team_member:d SET team = team:t, user = user:d, role = 'sub'; \
+         CREATE draft:kept SET name = 'Kept', team = team:t, created_by = user:lead; \
+         CREATE game_plan:dead SET team = team:t, draft = draft:gone, win_conditions = [], objective_priority = [], teamfight_strategy = ''; \
+         CREATE game_plan:live SET team = team:t, draft = draft:kept, win_conditions = [], objective_priority = [], teamfight_strategy = ''; \
+         CREATE post_game_learning:dead SET team = team:t, draft_id = draft:gone, what_went_well = [], improvements = [], action_items = [], created_by = user:lead; \
+         CREATE champion_pool:p1 SET user = user:a, champion = 'Jinx', role = 'ADC', created_at = d'2026-01-01T00:00:00Z'; \
+         CREATE champion_pool:p2 SET user = user:a, champion = 'Jinx', role = 'bot', created_at = d'2026-02-01T00:00:00Z'; \
+         CREATE champion_pool:p3 SET user = user:a, champion = 'Lee Sin', role = 'jgl'; \
+         CREATE champion_note:n1 SET user = user:a, champion = 'Jinx', role = 'Bottom', note_type = 'tip', title = 't';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+
+    migrations::run(&db).await.unwrap();
+
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Place {
+        role: String,
+        roster_type: String,
+    }
+    let place = |key: &'static str| {
+        let db = db.clone();
+        async move {
+            let mut r = db
+                .query("SELECT role, roster_type FROM type::record('team_member', $k)")
+                .bind(("k", key))
+                .await
+                .unwrap();
+            let p: Option<Place> = r.take(0).unwrap();
+            let p = p.unwrap();
+            (p.roster_type, p.role)
+        }
+    };
+    assert_eq!(place("lead").await, ("member".into(), "unassigned".into()));
+    assert_eq!(place("a").await, ("starter".into(), "bot".into()));
+    assert_eq!(place("b").await, ("substitute".into(), "jungle".into()));
+    assert_eq!(place("c").await, ("coach".into(), "unassigned".into()));
+    assert_eq!(place("d").await, ("member".into(), "unassigned".into()));
+
+    // The fields are tightened: an unknown place is refused.
+    assert!(db
+        .query("UPDATE team_member:a SET roster_type = 'sub'")
+        .await
+        .unwrap()
+        .check()
+        .is_err());
+
+    // The view preferences are gone.
+    let info = info_for_table(&db, "user").await;
+    assert!(!info.contains("draft_mode"), "{info}");
+    assert!(!info.contains("solo_mode"), "{info}");
+    assert!(!info.contains("team_dashboard_mode"), "{info}");
+
+    // Dead draft links became marks; live links stay.
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Link {
+        draft: Option<surrealdb::types::RecordId>,
+        draft_deleted: Option<bool>,
+    }
+    let mut r = db
+        .query("SELECT draft, draft_deleted FROM game_plan:dead; SELECT draft, draft_deleted FROM game_plan:live; SELECT draft_id AS draft, draft_deleted FROM post_game_learning:dead;")
+        .await
+        .unwrap();
+    let dead: Option<Link> = r.take(0).unwrap();
+    let live: Option<Link> = r.take(1).unwrap();
+    let review: Option<Link> = r.take(2).unwrap();
+    let (dead, live, review) = (dead.unwrap(), live.unwrap(), review.unwrap());
+    assert!(dead.draft.is_none() && dead.draft_deleted == Some(true));
+    assert!(live.draft.is_some() && live.draft_deleted.is_none());
+    assert!(review.draft.is_none() && review.draft_deleted == Some(true));
+
+    // Pool roles in one spelling, the duplicate Jinx gone (oldest kept).
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Pool {
+        id: surrealdb::types::RecordId,
+        role: String,
+    }
+    let mut r = db
+        .query("SELECT id, role FROM champion_pool ORDER BY id; SELECT VALUE role FROM champion_note:n1;")
+        .await
+        .unwrap();
+    let pool: Vec<Pool> = r.take(0).unwrap();
+    let note_role: Option<String> = r.take(1).unwrap();
+    use surrealdb::types::ToSql;
+    let pool: Vec<(String, String)> = pool.into_iter().map(|p| (p.id.to_sql(), p.role)).collect();
+    assert_eq!(
+        pool,
+        vec![
+            ("champion_pool:p1".to_string(), "bot".to_string()),
+            ("champion_pool:p3".to_string(), "jungle".to_string()),
+        ]
+    );
+    assert_eq!(note_role.as_deref(), Some("bot"));
+
+    // Running again changes nothing.
+    assert!(migrations::run(&db).await.unwrap().is_empty());
+}

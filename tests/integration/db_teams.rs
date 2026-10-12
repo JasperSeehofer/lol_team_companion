@@ -154,7 +154,10 @@ async fn test_assign_to_slot_bumps_existing_starter() {
     let u3_member = members.iter().find(|m| m.username == "slot_u3");
 
     if let (Some(u2m), Some(u3m)) = (u2_member, u3_member) {
-        assert_eq!(u2m.roster_type, "sub", "u2 should be bumped to sub");
+        assert_eq!(
+            u2m.roster_type, "substitute",
+            "u2 should be benched as a substitute"
+        );
         assert_eq!(u3m.roster_type, "starter", "u3 should be starter");
         assert_eq!(u3m.role, "mid");
     } else {
@@ -183,7 +186,78 @@ async fn test_remove_from_slot() {
     let player_member = members.iter().find(|m| m.username == "remove_slot_player");
     assert_eq!(
         player_member.map(|m| m.roster_type.as_str()),
-        Some("sub"),
-        "player should be sub after removal"
+        Some("substitute"),
+        "player should be on the bench after removal"
     );
+}
+
+#[tokio::test]
+async fn new_members_are_unplaced_and_the_leader_places_them() {
+    let db = common::test_db().await;
+    let owner = make_user(&db, "place_owner").await;
+    let player = make_user(&db, "place_player").await;
+    let outsider = make_user(&db, "place_outsider").await;
+    let team_id = db::create_team(&db, &owner, "Iota".into(), "EUW".into())
+        .await
+        .unwrap();
+    db::join_team(&db, &player, &team_id).await.unwrap();
+    let member = |members: &[lol_team_companion::models::user::TeamMember], name: &str| {
+        members
+            .iter()
+            .find(|m| m.username == name)
+            .map(|m| (m.roster_type.clone(), m.role.clone()))
+    };
+    let (_, members) = db::get_user_team_with_members(&db, &owner)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        member(&members, "place_player"),
+        Some(("member".into(), "unassigned".into()))
+    );
+    assert_eq!(
+        member(&members, "place_owner"),
+        Some(("member".into(), "unassigned".into()))
+    );
+
+    // Start, bench (keeps the position), make coach (drops it).
+    db::assign_to_slot(&db, &team_id, &player, "jungle")
+        .await
+        .unwrap();
+    db::set_member_place(&db, &team_id, &player, db::RosterPlace::Substitute)
+        .await
+        .unwrap();
+    let (_, members) = db::get_user_team_with_members(&db, &owner)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        member(&members, "place_player"),
+        Some(("substitute".into(), "jungle".into()))
+    );
+    db::set_member_place(&db, &team_id, &player, db::RosterPlace::Coach)
+        .await
+        .unwrap();
+    let (_, members) = db::get_user_team_with_members(&db, &owner)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        member(&members, "place_player"),
+        Some(("coach".into(), "unassigned".into()))
+    );
+
+    // Only real positions start; outsiders cannot be placed.
+    assert!(matches!(
+        db::assign_to_slot(&db, &team_id, &player, "coach").await,
+        Err(db::DbError::Invalid(_))
+    ));
+    assert!(matches!(
+        db::assign_to_slot(&db, &team_id, &outsider, "top").await,
+        Err(db::DbError::NotFound)
+    ));
+    assert!(matches!(
+        db::set_member_place(&db, &team_id, &outsider, db::RosterPlace::Substitute).await,
+        Err(db::DbError::NotFound)
+    ));
 }
