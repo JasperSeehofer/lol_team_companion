@@ -133,7 +133,7 @@ Check the forwarded address once: sign in from your own connection with a wrong 
 
 The runtime image is `debian:trixie-slim` with `ca-certificates`, `libssl3t64` (the binary links OpenSSL through native-tls), `tini` and `curl`, a non-root user (uid 10001), the stripped binary and `target/site` (WASM, JS, CSS, fonts). `schema.surql` is compiled into the binary.
 
-**Time and memory:** measured in CI (GitHub's 4 vCPU / 16 GB runner): a cold build takes about 20 minutes (image 231 MB uncompressed: stripped server binary 127 MB, release WASM 8.2 MB before compression, CSS 70 KB). Expect longer on a 2 vCPU VM, and peak memory of several GB during linking and the WASM LTO (not measured; add swap when building on a 4 GB VM). A rebuild after a source change, with the cache mounts warm, recompiles only the crate. The cache lives in BuildKit on the build host; reclaim space with `docker builder prune --filter type=exec.cachemount` when the disk fills.
+**Time and memory:** measured in CI (GitHub's 4 vCPU / 16 GB runner): a cold build takes about 20 minutes (image 231 MB uncompressed: stripped server binary 127 MB, release WASM 8.2 MB before compression, CSS 70 KB). Expect longer on a 2 vCPU VM, and peak memory of several GB during linking and the WASM LTO (not measured; add swap when building on a 4 GB VM). A rebuild after a source change, with the cache mounts warm, recompiles only the crate (CI: about 9 minutes, most of it the release link and the WASM LTO). The cache lives in BuildKit on the build host; reclaim space with `docker builder prune --filter type=exec.cachemount` when the disk fills.
 
 **Building elsewhere** (recommended for a 4 GB VM): build on a workstation or CI, then copy the image without a registry:
 
@@ -325,7 +325,7 @@ The thirteen checks from the M8 preparation, with where each one is proven. "CI"
 |---|---|---|---|
 | 1 | Files in place, scripts executable, `.gitignore` covers `deploy/backup.env`, `.previous-tag`, `restore-drills.log`, `restore-*/` | repo | done |
 | 2 | ShellCheck clean; backup/restore harness passes (14 checks: stop/start order, restart on failure, no half backups, upload through an rclone crypt remote, download-and-compare, retention keeps the newest 7, fetch + sha256 + extract, drill pass and fail, cleanup) | CI `scripts`, dev | passing |
-| 3 | Image builds with BuildKit; time and size recorded; cache mounts reused | CI `image` | passing: cold build about 20 min, image 231 MB uncompressed: stripped server binary 127 MB, release WASM 8.2 MB before compression, CSS 70 KB |
+| 3 | Image builds with BuildKit; time and size recorded; cache mounts reused | CI `image` | passing: cold build about 20 min, warm about 9 min, image 231 MB uncompressed: stripped server binary 127 MB, release WASM 8.2 MB before compression, CSS 70 KB |
 | 4 | Image contents: uid 10001, `pkg/` with `.wasm`/`.js`/`.css`, fonts, no missing shared libraries | CI `image` ("Inspect the image") | passing |
 | 5 | Runs bare in production mode, read-only root, no capabilities; `/healthz`; Docker health check healthy; Playwright smoke, hydration, auth, legal and account specs against the release build; sign-in over HTTP | CI `image` | passing |
 | 6 | Compose stack: HTTPS, security headers, zstd for `/pkg/*.wasm`, the "restarting" page while the app is stopped | CI validates `compose.yaml` and the Caddyfile (`caddy validate`); the live checks need a domain | VM, on first deploy (section 2.5) |
