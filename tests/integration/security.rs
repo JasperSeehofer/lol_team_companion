@@ -1885,3 +1885,63 @@ async fn team_invites_stay_inside_their_team() {
     db::disable_team_invite(&db, &t.team1, &id).await.unwrap();
     assert!(db::list_team_invites(&db, &t.team1).await.unwrap()[0].disabled);
 }
+
+/// M10 review: redeeming a team code only ever puts the redeeming account
+/// into the code's own team (never another team, never another account),
+/// a team member cannot redeem at all, and recording a visit touches only
+/// the account it names.
+#[tokio::test]
+async fn team_codes_redeem_into_their_own_team_and_visits_stay_per_user() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let soon = Some(chrono::Utc::now() + chrono::Duration::days(3));
+    db::create_team_invite(&db, &t.a, &t.team1, "T1-ONLY".into(), 3, soon, None, None)
+        .await
+        .unwrap();
+    // Bob leads team 2: refused, no use taken, still in team 2.
+    assert!(matches!(
+        db::redeem_team_invite(&db, &t.b, "T1-ONLY").await,
+        Err(DbError::Invalid(_))
+    ));
+    assert_eq!(
+        db::list_team_invites(&db, &t.team1).await.unwrap()[0].uses,
+        0
+    );
+    assert_eq!(
+        db::get_user_team_id(&db, &t.b).await.unwrap().as_deref(),
+        Some(t.team2.as_str())
+    );
+    // Carol (no team) joins team 1 with it; nobody else moves.
+    let carol = db::create_user(&db, "carol".into(), "carol@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let joined = db::redeem_team_invite(&db, &carol, "T1-ONLY").await.unwrap();
+    assert_eq!(joined, t.team1);
+    assert_eq!(
+        db::get_user_team_id(&db, &carol).await.unwrap().as_deref(),
+        Some(t.team1.as_str())
+    );
+    assert_eq!(
+        db::get_user_team_id(&db, &t.b).await.unwrap().as_deref(),
+        Some(t.team2.as_str())
+    );
+    // A plain (global) code never joins a team.
+    db::create_invite(&db, None, "PLAIN-1".into(), 5, None, None)
+        .await
+        .unwrap();
+    let dave = db::create_user(&db, "dave".into(), "dave@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    assert!(db::redeem_team_invite(&db, &dave, "PLAIN-1").await.is_err());
+    assert_eq!(db::get_user_team_id(&db, &dave).await.unwrap(), None);
+
+    // Visits: Alice's write leaves Bob's fields alone.
+    assert!(db::touch_last_seen(&db, &t.a).await.unwrap());
+    let mut r = db
+        .query("SELECT VALUE last_seen_at FROM type::record('user', $k)")
+        .bind(("k", t.b.trim_start_matches("user:").to_string()))
+        .await
+        .unwrap();
+    let bob_seen: Vec<Option<surrealdb::types::Datetime>> = r.take(0).unwrap();
+    assert_eq!(bob_seen, vec![None]);
+}
