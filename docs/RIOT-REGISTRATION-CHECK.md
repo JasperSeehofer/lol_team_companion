@@ -19,7 +19,7 @@ All calls go through one server-side client (`src/server/riot.rs`, riven 2.x). T
 | API | Method (riven) | Endpoint | Used for | Requests | Where |
 |---|---|---|---|---|---|
 | ACCOUNT-V1 | `account_v1().get_by_riot_id` | `/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` | Link a player's own Riot ID on the profile; look up an opponent's player for a dossier | 1 per lookup | `profile.rs`, `opponents.rs` |
-| MATCH-V5 | `match_v5().get_match_ids_by_puuid` (count 20, optional queue) | `/lol/match/v5/matches/by-puuid/{puuid}/ids` | Recent games of the team's own players; recent games of a scouted opponent | 1 per sync | `me.rs`, `stats.rs`, `opponents.rs` |
+| MATCH-V5 | `match_v5().get_match_ids_by_puuid` (count 20, optional queue) | `/lol/match/v5/matches/by-puuid/{puuid}/ids` | Recent games of the team's own players (also offered when a review is started); recent games of a scouted opponent | 1 per sync | `me.rs`, `stats.rs`, `post_game.rs`, `opponents.rs` |
 | MATCH-V5 | `match_v5().get_match` | `/lol/match/v5/matches/{matchId}` | Stats of each listed game; the full scoreboard of one game | up to 20 per sync, 1 per opened game | same, `match_detail.rs` |
 | MATCH-V5 | `match_v5().get_timeline` | `/lol/match/v5/matches/{matchId}/timeline` | Kills, objectives and structures for the review of one game (Sand Table frames: storage only, no UI yet) | 1 per opened game | `match_detail.rs` |
 | LEAGUE-V4 | `league_v4().get_league_entries_by_puuid` | `/lol/league/v4/entries/by-puuid/{puuid}` | Ranked standing of the signed-in player | 1 per sync | `me.rs` |

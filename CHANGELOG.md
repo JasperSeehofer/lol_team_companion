@@ -27,6 +27,9 @@ Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`
 - Opening a review with a link to a draft or plan that is not your team's starts the review without it, instead of failing when you save.
 - The phone menu no longer shows old counts after a failed load.
 - An older version of the app started on a database from a newer version now stops before it changes anything.
+- Leaving a share page for Home brings back Sign in and Request access without a reload.
+- The team page lists five recent games even when a large roster played the same games together.
+- Deleting an account no longer clears action items or note editor names in other teams that use the same name.
 
 ### Milestone M7: Community and transparency loop (2026-10-12)
 

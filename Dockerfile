@@ -22,10 +22,10 @@
 # the same host only recompiles this crate. Cache mounts are not exported with
 # the image; see docs/RUNBOOK.md "Building the image" for CI caching.
 #
-# Expected size (estimate, not yet measured): debian trixie-slim ~80 MB, runtime
-# packages ~15 MB, stripped server binary 50-110 MB (embedded SurrealDB),
-# site 5-10 MB (release WASM with opt-level z + LTO, CSS, JS, 340 KB fonts).
-# Total roughly 150-220 MB uncompressed, 60-90 MB compressed.
+# Measured in CI (M8): about 232 MB uncompressed: debian trixie-slim plus
+# runtime packages, the stripped server binary (127 MB, embedded SurrealDB)
+# and the site (release WASM 8.2 MB before compression, CSS 70 KB, JS, fonts).
+# Cold build about 20 min on a 4 vCPU runner, about 9 min with warm mounts.
 
 ARG RUST_VERSION=1.99.0
 ARG DEBIAN_SUITE=trixie

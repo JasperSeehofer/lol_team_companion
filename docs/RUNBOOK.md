@@ -103,17 +103,18 @@ docker compose ps                    # app becomes "healthy" within ~90 s
 curl -fsS https://$COMPANION_DOMAIN/healthz   # {"db":"ok","status":"ok"}
 ```
 
-Then the sign-in smoke test over HTTPS with the bootstrap invite (it registers a throwaway account, so run it before the invite is used up or with a second code): `INVITE_CODE=<code> ./scripts/smoke_signin.sh https://$COMPANION_DOMAIN`.
+Do **not** run `scripts/smoke_signin.sh` with the bootstrap invite now: it registers a throwaway account, which uses up the single use of `BOOTSTRAP_INVITE_CODE` (`MAX_USES=1`) and leaves no way to register the admin. The sign-in check over HTTPS comes right after the admin registration (2.6 step 2).
 
 Check the forwarded address once: sign in from your own connection with a wrong password, and look for your address (not Caddy's `172.x` address) being rate-limited after a few attempts. If every user shared one bucket, the login lockout would hit everyone at once.
 
 ### 2.6 Admin, invites, cleanup
 
 1. Open `https://<host>/auth/register?invite=<BOOTSTRAP_INVITE_CODE>` and register the admin account.
-2. Put that email into `ADMIN_EMAILS` and remove `BOOTSTRAP_INVITE_CODE` from `.env`, then `docker compose up -d app` (recreates the container with the new environment).
-3. Sign out and in: the nav shows the admin entry; `/admin/invites` works. Mint invite codes there for the first teams.
-4. Register the restore-drill account (`scripts/restore-drill.md`).
-5. Run a backup by hand and a drill (sections 5 and 6) before inviting anyone.
+2. Sign-in smoke test over HTTPS with that account, without registering anything (start the line with a space so the shell history does not keep the password): ` SKIP_REGISTER=1 SMOKE_EMAIL=<admin email> SMOKE_PASSWORD='<password>' ./scripts/smoke_signin.sh https://$COMPANION_DOMAIN` ends with `PASSED`.
+3. Put that email into `ADMIN_EMAILS` and remove `BOOTSTRAP_INVITE_CODE` from `.env`, then `docker compose up -d app` (recreates the container with the new environment).
+4. Sign out and in: the nav shows the admin entry; `/admin/invites` works. Mint invite codes there for the first teams.
+5. Register the restore-drill account (`scripts/restore-drill.md`).
+6. Run a backup by hand and a drill (sections 5 and 6) before inviting anyone.
 
 ### 2.7 Monitoring (minimal)
 
@@ -173,7 +174,7 @@ Read `CHANGELOG.md` for the release before updating. If it mentions a new migrat
 **Rollback:**
 
 - **No migration in between:** set `COMPANION_TAG` back to `.previous-tag` and `docker compose up -d`.
-- **The new version applied a migration:** the old image refuses the database ("the database records migration N, which this build does not know"). Restore the pre-update backup with the old image (section 6, `restore.sh apply <id>-pre-update` after switching `COMPANION_TAG` back). Data written since the update is lost, so decide quickly and announce it. The old image refuses the newer database before it writes anything (the version check runs before the `schema.surql` baseline since M8), so a restart loop does no harm, but it is downtime.
+- **The new version applied a migration:** the old image refuses the database ("the database records migration N, which this build does not know"). Restore the pre-update backup with the old image: set `COMPANION_TAG` back to `.previous-tag`, run `docker compose up -d app` (the container is recreated from the old image, which refuses the database and restarts in a loop; `restore.sh apply` restarts the container it finds, so it must already be the old one), then `restore.sh apply <id>-pre-update` (section 6). Data written since the update is lost, so decide quickly and announce it. The old image refuses the newer database before it writes anything (the version check runs before the `schema.surql` baseline since M8), so a restart loop does no harm, but it is downtime.
 
 Clean up old images now and then: `docker image ls companion` and `docker image rm companion:<old>` (keep the current and previous tag).
 
@@ -236,7 +237,7 @@ sudo -E ./scripts/restore.sh drill <id>   # optional but recommended: proves the
 sudo -E ./scripts/restore.sh apply <id>   # asks you to type the id
 ```
 
-`apply` downloads and verifies the backup, stops the app, moves the current `db/` and `inbox/` to `/data/pre-restore-<timestamp>/` inside the volume, copies the backup in, fixes ownership (uid 10001), starts the app and waits for "healthy". The old data stays until you delete it (the script prints the command). Restore with the image that made the backup or a newer one.
+`apply` downloads and verifies the backup, stops the app, copies the backup into the volume next to the live data (`db.restoring`, owned by uid 10001), moves the current `db/` and `inbox/` to `/data/pre-restore-<timestamp>/`, renames the copy into place, starts the app and waits for "healthy". If anything fails after the stop, the script starts the app again on whatever is in place (a failed copy leaves the old data untouched). The old data stays until you delete it (the script prints the command); delete it within 30 days, because the privacy page promises that deleted data leaves the backups within 30 days and this copy is one. Restore with the image that made the backup or a newer one.
 
 **New VM:** sections 2.1 to 2.4, build or load the image, `docker compose up -d app` once so the volume exists, then `restore.sh apply`, then start the rest. Point DNS at the new VM.
 
