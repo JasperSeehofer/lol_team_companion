@@ -5079,34 +5079,8 @@ pub struct DraftOutcomeData {
 }
 
 // ---------------------------------------------------------------------------
-// Solo Mode: User mode + region
+// User region
 // ---------------------------------------------------------------------------
-
-pub async fn get_user_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct ModeRecord {
-        mode: Option<String>,
-    }
-    let mut result = db
-        .query("SELECT mode FROM type::record('user', $user_key)")
-        .bind(("user_key", user_key))
-        .await?;
-    let row: Option<ModeRecord> = result.take(0)?;
-    Ok(row
-        .and_then(|r| r.mode)
-        .unwrap_or_else(|| "solo".to_string()))
-}
-
-pub async fn set_user_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE type::record('user', $user_key) SET mode = $mode")
-        .bind(("user_key", user_key))
-        .bind(("mode", mode.to_string()))
-        .await?
-        .check()?;
-    Ok(())
-}
 
 pub async fn set_user_region(db: &Surreal<Db>, user_id: &str, region: &str) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
@@ -7168,23 +7142,6 @@ mod tests {
     // ----- Solo mode DB function stubs (Phase 12) -----
     // These require a live SurrealDB instance. Marked #[ignore] for unit test runs.
     // Run with: cargo test --features ssr --lib -- db::tests --ignored (when DB available)
-
-    #[tokio::test]
-    #[ignore = "requires SurrealDB instance"]
-    async fn test_get_user_mode_defaults_to_solo() {
-        // Setup: create user without explicit mode field
-        // Assert: get_user_mode returns "solo"
-        todo!("Promote to integration test when linker OOM is resolved");
-    }
-
-    #[tokio::test]
-    #[ignore = "requires SurrealDB instance"]
-    async fn test_set_and_get_user_mode_round_trip() {
-        // Setup: create user, set_user_mode to "team"
-        // Assert: get_user_mode returns "team"
-        // Set back to "solo", assert returns "solo"
-        todo!("Promote to integration test when linker OOM is resolved");
-    }
 
     #[tokio::test]
     #[ignore = "requires SurrealDB instance"]

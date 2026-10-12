@@ -116,8 +116,7 @@ const ENSURE_TOMBSTONE: &str = "UPSERT user:former_member SET \
      username_lc = 'former member (account deleted, tombstone)', \
      email = 'former-member.invalid', \
      password_hash = '!', \
-     is_admin = false, \
-     mode = 'solo';";
+     is_admin = false;";
 
 /// Delete one team and everything it owns (inside a transaction; `$t` is
 /// the team record).

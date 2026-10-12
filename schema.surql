@@ -20,7 +20,6 @@ DEFINE FIELD IF NOT EXISTS riot_puuid ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS riot_summoner_name ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON user TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
-DEFINE FIELD IF NOT EXISTS mode ON user TYPE string DEFAULT 'solo';
 DEFINE FIELD IF NOT EXISTS riot_region ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 -- user.theme (Demacia/Pandemonium) was removed by migration 7 (drop_user_theme):
@@ -28,7 +27,8 @@ DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 
 -- user.draft_mode, team_dashboard_mode and solo_mode (per-page view
 -- preferences of views that no longer exist) were removed by migration 8.
--- user.mode stays stored for compatibility; since M5 nothing gates on it.
+-- user.mode (the old Solo/Team workspace switch) was removed by migration 12
+-- (drop_user_mode): nothing has read it since M5.
 
 -- M1: admin flag. option<bool> (NONE = not admin) so users created before
 -- this field existed stay valid on UPDATE; ADMIN_EMAILS promotes at login.

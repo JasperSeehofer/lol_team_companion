@@ -480,6 +480,35 @@ async fn the_user_theme_field_is_dropped() {
 }
 
 #[tokio::test]
+async fn the_user_mode_field_is_dropped() {
+    let db = baseline_only().await;
+    // The pre-M9 shape: every user carried the old Solo/Team switch.
+    db.query(
+        "DEFINE FIELD mode ON user TYPE string DEFAULT 'solo'; \
+         CREATE user:moded SET username = 'Mo', email = 'mo@example.com', password_hash = 'h', mode = 'team';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    assert!(info_for_table(&db, "user").await.contains("mode"));
+
+    migrations::run(&db).await.unwrap();
+
+    let info = info_for_table(&db, "user").await;
+    assert!(
+        !info.contains(" mode ON"),
+        "the field definition is gone: {info}"
+    );
+    let mut r = db.query("SELECT VALUE mode FROM user:moded").await.unwrap();
+    let v: Value = r.take(0).unwrap();
+    assert!(
+        !format!("{v:?}").contains("team"),
+        "the value is gone: {v:?}"
+    );
+}
+
+#[tokio::test]
 async fn roster_places_roles_and_dead_links_are_migrated() {
     let db = baseline_only().await;
     // The pre-M5 shape: per-page view preferences on users, mixed role

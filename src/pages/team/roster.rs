@@ -34,8 +34,6 @@ pub async fn create_team(name: String, region: String) -> Result<(), ServerFnErr
     db::create_team(&db, &user.id, name, region)
         .await
         .map_err(authz::server_err)?;
-    // Compatibility: older clients read the stored mode.
-    let _ = db::set_user_mode(&db, &user.id, "team").await;
     redirect("/team/dashboard");
     Ok(())
 }

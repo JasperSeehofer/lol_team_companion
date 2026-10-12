@@ -19,23 +19,6 @@ use crate::models::user::JoinRequest;
 use crate::pages::profile::{get_current_user, Logout};
 use crate::pages::team::dashboard::handle_join_request;
 
-/// Kept for stored `user.mode` compatibility (the seed tool and older
-/// clients write it); nothing gates on the mode since M5.
-#[server]
-pub async fn set_user_mode(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    if mode != "solo" && mode != "team" {
-        return Err(ServerFnError::new("Unknown mode"));
-    }
-    let authz::Ctx { db, user } = authz::authed().await?;
-    db::set_user_mode(&db, &user.id, &mode)
-        .await
-        .map_err(authz::server_err)?;
-    Ok(())
-}
-
 /// A page in the navigation.
 #[derive(Clone, Copy, Debug)]
 pub struct NavPage {

@@ -102,7 +102,7 @@ Code: `server/community/` (`changelog.rs` parser, `surveys.rs` delivery rules, `
 
 - Usernames are unique case-insensitively through `user.username_lc` (unique index); emails are stored lowercase and looked up with `email = $email` (unique index). `create_user` / `update_username` rely on the indexes and map their violations to the friendly messages. They run under `invariant_lock`: on SurrealKV a unique index alone did not stop two concurrent writes of the same key (one could report success and be lost).
 
-Users have a stored `mode` (`solo` or `team`), kept for compatibility; since M5 nothing gates on it. Sign-in and registration land on Home (`/`): Match Day for team members, a start page (create or join a team, personal pages) for everyone else.
+The old per-user `mode` (`solo` or `team`) was dropped by migration 12 (`drop_user_mode`, M9); nothing had read it since M5. Sign-in and registration land on Home (`/`): Match Day for team members, a start page (create or join a team, personal pages) for everyone else.
 
 **Roster places (M5).** `team_member.roster_type` is the member's place: `starter` (in the starting five; `role` is the position, one starter per position), `substitute` (benched; keeps their usual position), `coach` (no position) or `member` (joined, not placed yet: new members and team creators). `role` is `top`, `jungle`, `mid`, `bot`, `support` or `unassigned`. The leader places members (`db::assign_to_slot` starts a member and benches the starter it replaces in one transaction; `db::set_member_place` benches, makes coach or unplaces). Access does not depend on the place: substitutes and coaches see everything members see.
 

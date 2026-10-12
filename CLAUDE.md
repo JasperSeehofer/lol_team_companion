@@ -225,7 +225,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 | `/solo`, `/analytics`, `/team-builder` | Axum redirects (307) to `/me`, `/stats`, `/draft` (the solo dashboard was folded into the personal layer; the parked pages were deleted) | No |
 | anything else | NotFound (HTTP 404) | No |
 
-Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Sign-in and registration redirect on the server (so a submit before hydration still lands) and, once hydrated, hard-navigate to `/` (Home: Match Day with a team, a start page without). `user.mode` is still stored but nothing reads it. Redirect old addresses in axum (`main.rs`), never with a server-rendered Leptos `<Redirect>`: its 302 leaked into later static-file responses on the same worker thread.
+Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Sign-in and registration redirect on the server (so a submit before hydration still lands) and, once hydrated, hard-navigate to `/` (Home: Match Day with a team, a start page without). The old `user.mode` field was dropped by migration 12. Redirect old addresses in axum (`main.rs`), never with a server-rendered Leptos `<Redirect>`: its 302 leaked into later static-file responses on the same worker thread.
 
 ## Security model (M1, extended through M8)
 

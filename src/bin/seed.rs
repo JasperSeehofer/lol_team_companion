@@ -512,9 +512,6 @@ async fn create_team(
             .await
             .map_err(|e| e.to_string())?;
     }
-    db::set_user_mode(db, &members[0], "team")
-        .await
-        .map_err(|e| e.to_string())?;
     println!("Created team {} with {} players.", spec.name, members.len());
     Ok(SeededTeam {
         name: spec.name,
