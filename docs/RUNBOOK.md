@@ -1,8 +1,8 @@
 # Runbook
 
-How to run Team Companion in production: one small VM, Docker Compose, Caddy for HTTPS, nightly backups to S3-compatible object storage with 30-day retention (MISSION section 4). The owner holds the VM, the domain, the Riot key and the bucket; nothing here adds a paid service beyond those.
+How to run Team Companion in production: one small VM, Docker Compose, Caddy for HTTPS, nightly encrypted backups with 30-day retention (MISSION section 4) to the owner's Hetzner Storage Box over SFTP (S3-compatible object storage works too, section 5.2). The owner holds the VM, the domain, the Riot key, the Storage Box and a second server for monitoring (section 2.7); nothing here adds a paid service beyond those.
 
-Files: `Dockerfile`, `.dockerignore`, `compose.yaml`, `deploy/Caddyfile`, `deploy/env.production.example`, `deploy/backup.env.example`, `deploy/backup/{Dockerfile,entrypoint.sh}`, `scripts/backup.sh`, `scripts/restore.sh`, `scripts/restore-drill.md`, `scripts/smoke_signin.sh`. What is verified where: section 12.
+Files: `Dockerfile`, `.dockerignore`, `compose.yaml`, `deploy/Caddyfile`, `deploy/env.production.example`, `deploy/backup.env.example`, `deploy/backup/{Dockerfile,entrypoint.sh}`, `scripts/backup.sh`, `scripts/restore.sh`, `scripts/restore-drill.md`, `scripts/smoke_signin.sh`, and for the monitoring server `scripts/healthcheck-remote.sh` and `scripts/backup-watch.sh`. What is verified where: section 12.
 
 ## Contents
 
@@ -10,7 +10,7 @@ Files: `Dockerfile`, `.dockerignore`, `compose.yaml`, `deploy/Caddyfile`, `deplo
 2. First deploy
 3. Building the image
 4. Updates and rollback
-5. Backups
+5. Backups (5.1 Hetzner Storage Box, 5.2 trade-offs)
 6. Restore
 7. Logs
 8. Secrets and keys
@@ -92,7 +92,7 @@ Do not set `APP_ENV`, `CLOSED_BETA`, `COOKIE_SECURE`, `RATE_LIMIT_MULTIPLIER` or
 
 The server validates every variable at startup (`src/server/config.rs`): a malformed value (`TRUST_FORWARDED_FOR=ture`, `RATE_LIMIT_MULTIPLIER=1O`, a placeholder `SESSION_SECRET`, a non-https `SUPPORT_URL`) stops it with every error listed in `docker compose logs app`; risky values (the e2e settings, an empty `ADMIN_EMAILS`, a stray `GITHUB_TOKEN`, a misspelt variable name) are warnings at the top of the log. Read them after every `.env` change.
 
-Fill in `deploy/backup.env`: bucket endpoint and keys, and two crypt passphrases (run `rclone obscure '<passphrase>'` for each and paste the output). Store the plain passphrases in the password manager: without them no backup can be decrypted.
+Fill in `deploy/backup.env`: block A with the Storage Box sub-account (section 5.1), and two crypt passphrases (run `rclone obscure '<passphrase>'` for each and paste the output). Store the plain passphrases and the sub-account password in the password manager: without the passphrases no backup can be decrypted.
 
 ### 2.5 Build and start
 
@@ -120,10 +120,81 @@ Check the forwarded address once: sign in from your own connection with a wrong 
 
 ### 2.7 Monitoring (minimal)
 
-- **Uptime:** an external HTTP check on `https://app.team-companion.eu/healthz` every 1 to 5 minutes, alerting by email (any free uptime service; owner's choice, MISSION "ask first" for external services). `/healthz` answers 503 when the database query fails.
-- **Backups:** `HEALTHCHECK_PING_URL` in `deploy/backup.env` (a dead-man's switch that alerts when no successful backup arrived for a day). Without it, read the backup log weekly (section 7).
-- **Disk:** alert at 80 % (provider monitoring, or a cron line: `df --output=pcent / | tail -1`).
+Monitoring runs from the owner's **other Hetzner server**, so it notices when this VM is down, and needs no external service. Both scripts are plain bash (with `curl`, and `rclone` or `ssh` for the backup check) and mail through `mail` or `sendmail` if the server has one (for example `apt install bsd-mailx` with a relay, or any MTA); without a mailer they only exit non-zero, and cron mails their output when `MAILTO` is set.
+
+```bash
+# on the monitoring server
+sudo mkdir -p /opt/companion-watch && cd /opt/companion-watch
+curl -fsSLO https://raw.githubusercontent.com/JasperSeehofer/lol_team_companion/main/scripts/healthcheck-remote.sh
+curl -fsSLO https://raw.githubusercontent.com/JasperSeehofer/lol_team_companion/main/scripts/backup-watch.sh
+chmod +x healthcheck-remote.sh backup-watch.sh
+./healthcheck-remote.sh                 # "ok: https://app.team-companion.eu/healthz"
+```
+
+(or copy the two files from a checkout with `scp`.)
+
+- **Uptime:** `scripts/healthcheck-remote.sh` asks `https://app.team-companion.eu/healthz` (10 s timeout) and fails on anything but HTTP 200 with `"status":"ok"` (`/healthz` answers 503 when the database query fails). With `ALERT_EMAIL` set it mails once after `FAILS_BEFORE_ALERT` (2) failed checks in a row and once when the site answers again; the count lives in `STATE_FILE` (`~/.local/state/companion-healthcheck.state`).
+- **Backups (dead-man's switch):** `scripts/backup-watch.sh` alerts when the newest backup is older than `MAX_AGE_HOURS` (36: one missed night plus slack), or when it cannot find one. Two ways to look:
+  - `remote` (recommended): lists the raw Storage Box folder with `rclone` and takes the newest file time. Use a second, **read-only** sub-account on the same directory (section 5.1) and no crypt settings: file names are encrypted on the box, modification times are not, so the monitoring server holds no passphrase and cannot delete anything. `RCLONE_CONFIG_WATCH_TYPE=sftp`, `_HOST`, `_PORT=23`, `_USER`, `_PASS` (obscured), `_DISABLE_HASHCHECK=true`, and `WATCH_REMOTE=watch:companion-backups`.
+  - `log`: reads `docker compose logs backup` on the VM over SSH (`WATCH_SSH=<user>@37.27.20.30`; the key must be allowed to run that command) and takes the last `backup <id> done` line, which `backup.sh` writes only after the upload was downloaded again and verified. This also catches an upload that failed its verification; `remote` would count that upload.
+- `HEALTHCHECK_PING_URL` in `deploy/backup.env` stays available for an external dead-man's switch (owner's choice, MISSION "ask first").
+- **Disk:** alert at 80 % (provider monitoring, or a cron line on the VM: `df --output=pcent / | tail -1`).
 - **Certificates:** Caddy renews by itself; the uptime check catches a failure.
+
+**cron** (`crontab -e` on the monitoring server; cron's `PATH` lacks `/usr/sbin`, the scripts look for `/usr/sbin/sendmail` themselves):
+
+```cron
+MAILTO=""
+ALERT_EMAIL=info@team-companion.eu
+# every 5 minutes; one mail when it goes down, one when it is back
+*/5 * * * * /opt/companion-watch/healthcheck-remote.sh >> /var/log/companion-healthcheck.log 2>&1
+# twice a day, after the 02:30 UTC backup and again in the evening
+15 7,19 * * * . /opt/companion-watch/watch.env && /opt/companion-watch/backup-watch.sh remote >> /var/log/companion-backup-watch.log 2>&1
+```
+
+with `/opt/companion-watch/watch.env` (chmod 600) holding `export RCLONE_CONFIG_WATCH_...` lines and `export WATCH_REMOTE=watch:companion-backups`. cron's times follow the server's time zone; check it with `timedatectl`.
+
+**systemd timers** instead of cron:
+
+```ini
+# /etc/systemd/system/companion-healthcheck.service
+[Unit]
+Description=Team Companion uptime check
+[Service]
+Type=oneshot
+Environment=ALERT_EMAIL=info@team-companion.eu
+Environment=STATE_FILE=/var/lib/companion-watch/healthcheck.state
+ExecStart=/opt/companion-watch/healthcheck-remote.sh
+
+# /etc/systemd/system/companion-healthcheck.timer
+[Unit]
+Description=Team Companion uptime check every 5 minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+
+# /etc/systemd/system/companion-backup-watch.service
+[Unit]
+Description=Team Companion backup age check
+[Service]
+Type=oneshot
+Environment=ALERT_EMAIL=info@team-companion.eu
+EnvironmentFile=/opt/companion-watch/watch.systemd.env
+ExecStart=/opt/companion-watch/backup-watch.sh remote
+
+# /etc/systemd/system/companion-backup-watch.timer
+[Unit]
+Description=Team Companion backup age check twice a day
+[Timer]
+OnCalendar=*-*-* 07,19:15:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+`watch.systemd.env` holds the same settings as `watch.env` without `export`. Then `sudo mkdir -p /var/lib/companion-watch && sudo systemctl daemon-reload && sudo systemctl enable --now companion-healthcheck.timer companion-backup-watch.timer`; `systemctl list-timers 'companion-*'` shows the next runs and `journalctl -u companion-healthcheck` the results. Test the alert path once: `HEALTH_URL=https://app.team-companion.eu/nope FAILS_BEFORE_ALERT=1 STATE_FILE=/tmp/hc-test ALERT_EMAIL=<you> ./healthcheck-remote.sh` must mail "Team Companion is DOWN".
 
 ## 3. Building the image
 
@@ -184,7 +255,7 @@ Clean up old images now and then: `docker image ls companion` and `docker image 
 
 ## 5. Backups
 
-**What:** a cold copy of `/data/db` (SurrealKV) and `/data/inbox`, as `companion-<UTC timestamp>.tar.zst` with a `.sha256` and a `manifest.json` (image, revision, sizes, downtime), uploaded through an rclone crypt remote to `<bucket>/companion/<id>/`.
+**What:** a cold copy of `/data/db` (SurrealKV) and `/data/inbox`, as `companion-<UTC timestamp>.tar.zst` with a `.sha256` and a `manifest.json` (image, revision, sizes, downtime), uploaded through an rclone crypt remote to `companion-backups/companion/<id>/` on the Storage Box (names and contents encrypted; section 5.1).
 
 **When:** daily at `BACKUP_AT` (UTC, default 02:30) by the `backup` sidecar, plus before every update.
 
@@ -223,9 +294,38 @@ WantedBy=timers.target
 
 **Check:** `docker compose logs --since 48h backup` shows `backup <id> done: ... downtime Ns`. `docker compose run --rm backup rclone lsf "$RCLONE_REMOTE/companion"` (with the env from `deploy/backup.env`) lists the remote copies.
 
-**Retention:** after each successful upload the script deletes remote backups older than `RETENTION_DAYS` (30) but always keeps the newest `KEEP_MIN` (7), so a month of failed runs cannot erase the last good ones. Optionally add a bucket lifecycle rule as a backstop, set longer than the script's window (for example 45 days), and object lock or versioning if the provider offers it, so a compromised VM cannot delete old backups. The staging volume keeps only the latest local copy.
+**Retention:** after each successful upload the script deletes remote backups older than `RETENTION_DAYS` (30) but always keeps the newest `KEEP_MIN` (7), so a month of failed runs cannot erase the last good ones. The staging volume keeps only the latest local copy. On S3-compatible storage, optionally add a lifecycle rule as a backstop (longer than the script's window, for example 45 days) and object lock or versioning; a Storage Box has neither (section 5.1, trade-offs).
 
 **Personal data:** backups contain emails, password hashes and team data, encrypted client-side by rclone crypt. Deleted accounts disappear from backups after at most 30 days; the privacy page must say so.
+
+### 5.1 Hetzner Storage Box (this deployment)
+
+The backups go to the owner's Storage Box over SFTP (port 23), with rclone's crypt remote on top: the box only ever sees encrypted file names and contents (backups hold emails and password hashes). Nothing in `backup.sh` or `restore.sh` is specific to S3 or SFTP: they use `rclone mkdir`, `lsf`, `copy`, `cat` and `purge`, which behave the same on both, and the harness runs the full backup, retention and fetch over an SFTP server (section 12, item 2).
+
+**Set up** (Hetzner Console, the Storage Box's page; the wording of the console may differ slightly):
+
+1. Settings: turn on **SSH support** and **External reachability** (the VM reaches the box over the internet).
+2. Sub-accounts: create one for the backups with its own **base directory** (for example `companion`), SSH support and external reachability on, **not** read-only. Its login is `u123456-subN` and its host `u123456-subN.your-storagebox.de`. It sees only that directory, so the rest of the box stays out of reach of the VM.
+3. Create a second sub-account on the same base directory, **read-only**, for the backup watcher on the monitoring server (section 2.7).
+4. Write block A of `deploy/backup.env`: host, `PORT=23`, user, and the password obscured: `docker compose run --rm --no-deps backup rclone obscure '<password>'` (or `rclone obscure` anywhere). Keep `RCLONE_CONFIG_OFFSITECRYPT_REMOTE=offsite:companion-backups`: a folder inside the sub-account's directory.
+5. Optional, instead of the password: an SSH key. `mkdir -p deploy/backup-ssh && ssh-keygen -t ed25519 -N '' -f deploy/backup-ssh/id_ed25519`, add the public key to the sub-account as Hetzner's Storage Box documentation describes (for example `ssh-copy-id -p 23 -s -i deploy/backup-ssh/id_ed25519 u123456-subN@u123456-subN.your-storagebox.de`), set `RCLONE_CONFIG_OFFSITE_KEY_FILE=/config/ssh/id_ed25519`, leave `PASS` empty, and uncomment the `./deploy/backup-ssh:/config/ssh:ro` volume of the `backup` service in `compose.yaml`.
+6. Pin the host key (recommended; rclone otherwise accepts any host key): `ssh-keyscan -p 23 u123456-subN.your-storagebox.de > deploy/backup-ssh/known_hosts`, compare the fingerprints (`ssh-keygen -lf deploy/backup-ssh/known_hosts`) with the ones Hetzner publishes, set `RCLONE_CONFIG_OFFSITE_KNOWN_HOSTS_FILE=/config/ssh/known_hosts` and mount the directory as in step 5.
+7. Test: `docker compose run --rm backup rclone lsd offsite:` (lists the sub-account's directory), then `docker compose run --rm backup now` must end with "remote copy verified".
+
+`DISABLE_HASHCHECK=true` stops rclone from probing the box's restricted shell for hash commands (crypt never uses remote hashes; `backup.sh` downloads the archive again and compares its own sha256). `RCLONE_TRANSFERS=2` and `RCLONE_CHECKERS=4` keep the number of simultaneous connections low: Storage Boxes limit connections per account (check the current number in Hetzner's documentation).
+
+**Location:** the privacy page says the backups are kept at "Hetzner Online GmbH, Falkenstein (Germany)". Storage Boxes exist in more than one location; if this box is elsewhere (for example Helsinki), change the "Backups" sentence in `src/pages/legal/datenschutz.rs` before launch.
+
+### 5.2 Trade-offs: Storage Box versus S3 object storage
+
+| | Storage Box (SFTP) | S3-compatible object storage |
+|---|---|---|
+| Encryption | rclone crypt on the VM (same) | rclone crypt on the VM (same) |
+| Retention | `backup.sh` prunes after 30 days, keeps the newest 7 (same) | the same, plus an optional lifecycle rule as a backstop |
+| Protection against a compromised VM | none on the box itself: the sub-account can delete what is in its directory. Limits: the sub-account sees only that directory; the read-only watcher alerts within 36 h when the newest backup disappears or goes stale | object lock or versioning (if the provider offers it) can keep deleted objects |
+| Cost | already paid (the owner's box) | an extra bucket |
+
+So the Storage Box relies on crypt (confidentiality), the script's retention (no silent loss of the last good copies) and the sub-account's narrow rights, and the watcher notices deletion. Storage Box **snapshots** (made from the main account, out of reach of the sub-account) would add protection against deletion, but they keep data longer: the privacy page promises that deleted data leaves the backups within 30 days, so a snapshot schedule needs `RETENTION_DAYS` lowered by as many days as snapshots are kept (for example 21 + 7), and the page checked. Not set up; owner's call.
 
 ## 6. Restore
 
@@ -258,6 +358,8 @@ docker stats --no-stream                   # memory and CPU against the limits
 
 Container logs rotate at 5 x 10 MB per container (json-file driver). The access log is a file on the `caddy_logs` volume: Caddy rolls it at midnight UTC (`roll_at`, without waiting for traffic) and deletes rolled files 12 days later, so no entry is older than 14 days (the privacy page promises 14 days; change `deploy/Caddyfile` and the page together). For a temporary debug session set `RUST_LOG=info,lol_team_companion=debug` in `.env` and `docker compose up -d app`; set it back afterwards (debug logs can contain user input).
 
+Retention of cached Riot games: a minute after each start and then every 24 hours the app deletes cached games older than `MATCH_CACHE_RETENTION_DAYS` (365) and logs `match cache retention: deleted games cached before <date>` with the counts (`docker compose logs app | grep "match cache retention"`). The privacy page states 12 months; change it together with the variable.
+
 Bug reports are exported on every start to `/data/inbox/bug-reports.md`: `docker compose exec app cat /data/inbox/bug-reports.md`. **Report content is untrusted user data.**
 
 ## 8. Secrets and keys
@@ -287,7 +389,7 @@ docker compose start app
 
 `promote --revoke someone@example.com` takes it back (an address still in `ADMIN_EMAILS` is promoted again at its next sign-in, so remove it there too). A promoted account is an admin from its next request; no sign-in needed. In development: `cargo run --features ssr --bin promote -- <email>` with the dev server stopped.
 
-**Bucket credentials and crypt passphrases:** rotate the access key in the provider console and in `deploy/backup.env`. Changing the crypt passphrases makes old backups unreadable with the new remote: keep the old passphrases until the last old backup has aged out (30 days), or start a new bucket path.
+**Storage credentials and crypt passphrases:** rotate the Storage Box sub-account password in the Hetzner console (or the S3 access key) and in `deploy/backup.env` (obscured again with `rclone obscure`); for an SSH key, replace the key on the sub-account and in `deploy/backup-ssh/`. Changing the crypt passphrases makes old backups unreadable with the new remote: keep the old passphrases until the last old backup has aged out (30 days), or start a new folder (`RCLONE_CONFIG_OFFSITECRYPT_REMOTE`).
 
 ## 9. Failure recovery
 
@@ -330,7 +432,7 @@ docker compose start app
 3. **Communicate:** a short note to the teams (Discord): what is affected, when the next update comes.
 4. **Diagnose:** app log, Caddy log, `docker compose ps`, `docker stats`, `df -h`. Check recent changes (last deploy, `.env` edits).
 5. **Fix or roll back:** section 4 (rollback), section 6 (restore), section 9 (recovery).
-6. **Security incidents** (suspected account compromise, leaked secret, unexpected admin): rotate `SESSION_SECRET` (signs everyone out), rotate the Riot key and bucket keys if they could be exposed, check `ADMIN_EMAILS` and `/admin/invites` for unknown codes and disable them. A breach of personal data has a 72-hour notification duty to the supervisory authority (GDPR Art. 33); the owner decides and reports.
+6. **Security incidents** (suspected account compromise, leaked secret, unexpected admin): rotate `SESSION_SECRET` (signs everyone out), rotate the Riot key and the Storage Box password or key if they could be exposed, check `ADMIN_EMAILS` and `/admin/invites` for unknown codes and disable them. A breach of personal data has a 72-hour notification duty to the supervisory authority (GDPR Art. 33); the owner decides and reports.
 7. **Verify:** `/healthz`, sign in, open a draft and a game plan, check the next backup runs.
 8. **Write it down:** what happened, impact, timeline, cause, what changes. Add an entry to `CHANGELOG.md` if users noticed.
 
@@ -341,13 +443,13 @@ The thirteen checks from the M8 preparation, with where each one is proven. "CI"
 | # | Check | Where | State (M8) |
 |---|---|---|---|
 | 1 | Files in place, scripts executable, `.gitignore` covers `deploy/backup.env`, `.previous-tag`, `restore-drills.log`, `restore-*/` | repo | done |
-| 2 | ShellCheck clean; backup/restore harness passes (14 checks: stop/start order, restart on failure, no half backups, upload through an rclone crypt remote, download-and-compare, retention keeps the newest 7, fetch + sha256 + extract, drill pass and fail, cleanup) | CI `scripts`, dev | passing |
+| 2 | ShellCheck clean; ops harness passes (40 checks: stop/start order, restart on failure, no half backups, upload through an rclone crypt remote, download-and-compare, retention keeps the newest 7, fetch + sha256 + extract, drill pass and fail, cleanup; the same backup, retention and fetch over SFTP (`rclone serve sftp` as the Storage Box) with only encrypted names on the server; `healthcheck-remote.sh` ok/fail/timeout and one mail per state change; `backup-watch.sh` fresh/stale/empty storage and fresh/old/unreadable log) | CI `scripts`, dev | passing |
 | 3 | Image builds with BuildKit; time and size recorded; cache mounts reused | CI `image` | passing: cold build about 20 min, warm about 9 min, image 231 MB uncompressed: stripped server binary 127 MB, release WASM 8.2 MB before compression, CSS 70 KB |
 | 4 | Image contents: uid 10001, `pkg/` with `.wasm`/`.js`/`.css`, fonts, no missing shared libraries | CI `image` ("Inspect the image") | passing |
 | 5 | Runs bare in production mode, read-only root, no capabilities; `/healthz`; Docker health check healthy; Playwright smoke, hydration, auth, legal and account specs against the release build; sign-in over HTTP | CI `image` | passing |
 | 6 | Compose stack: HTTPS, security headers, zstd for `/pkg/*.wasm`, the "restarting" page while the app is stopped | CI validates `compose.yaml` and the Caddyfile (`caddy validate`); the live checks need a domain | VM, on first deploy (section 2.5) |
 | 7 | Rate limiting sees client addresses through Caddy, not Caddy's | needs the stack | VM (section 2.5) |
-| 8 | `docker compose run --rm backup now` ends with "remote copy verified"; the nightly loop fires | needs the bucket | VM (sections 5 and 2.6) |
+| 8 | `docker compose run --rm backup now` ends with "remote copy verified"; the nightly loop fires | needs the Storage Box | VM (sections 5, 5.1 and 2.6) |
 | 9 | Restore drill against a real backup (`DRILL PASSED`, "authenticated read ok"); the drill's sign-in check matches the real responses | the sign-in check is the same request sequence as `scripts/smoke_signin.sh`, which CI runs against the image | VM (`scripts/restore-drill.md`) |
 | 10 | `restore.sh apply` rehearsal | needs a stack | VM or staging, before launch |
 | 11 | Typed config: a typo stops the server with every error listed; the CI environment starts with warnings only | unit tests in `config.rs`; dev (the debug binary in production mode with `TRUST_FORWARDED_FOR=ture`, `RATE_LIMIT_MULTIPLIER=1O`, a bad `ADMIN_EMAILS`: four errors, no start) | done |

@@ -11,7 +11,7 @@ A backup counts only once it has been restored. This drill restores a backup int
 1. Create the drill account in production: register `drill@<your-domain>` with an invite code, a long random password, no team, never an admin. Store the password in the password manager next to the rclone crypt passphrases.
 2. On the machine that runs the drill: Docker, `rclone` (1.6x or newer), `curl`, `zstd`, `tar`.
 3. The image: on the VM it is already there. Elsewhere, build it from the git revision in the backup's `manifest.json` (`image_revision`), or copy it: `docker save companion:<tag> | ssh other-host docker load`.
-4. A `deploy/backup.env` with the same `RCLONE_CONFIG_*` values (read-only bucket credentials are enough for a drill).
+4. A `deploy/backup.env` with the same `RCLONE_CONFIG_*` values (read-only credentials are enough for a drill: on the Storage Box, the read-only watcher sub-account of RUNBOOK 5.1 with the crypt passphrases).
 
 ## Run it
 
