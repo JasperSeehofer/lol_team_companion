@@ -141,7 +141,8 @@ pub async fn get_home() -> Result<Home, ServerFnError> {
         .map(|p| PatchLine {
             version: p.new_version,
             since: p.detected_at,
-        });
+        })
+        .filter(|p| p.is_news(chrono::Utc::now()));
     let opponents = db::list_opponents(&db, &team_id)
         .await
         .map_err(authz::server_err)?
@@ -384,7 +385,7 @@ pub fn HomePage() -> impl IntoView {
         }>
             {move || Suspend::new(async move {
                 match home.await {
-                    Ok(Home::SignedOut) => view! { <Landing /> }.into_any(),
+                    Ok(Home::SignedOut) => view! { <AccountDeletedNote /> <Landing /> }.into_any(),
                     Ok(Home::NoTeam { username }) => view! { <NoTeamHome username=username /> }.into_any(),
                     Ok(Home::Team(md)) => view! { <MatchDayView md=*md on_change=Callback::new(move |_| home.refetch()) /> }.into_any(),
                     Err(_) => view! {
@@ -401,6 +402,23 @@ pub fn HomePage() -> impl IntoView {
 
 /// Signed in without a team: where Match Day comes from, and the personal
 /// pages that work already.
+/// After "Delete my account" the profile page sends the browser to
+/// `/?account=deleted`; say plainly that it happened.
+#[component]
+fn AccountDeletedNote() -> impl IntoView {
+    let query = leptos_router::hooks::use_query_map();
+    let deleted = move || query.read().get("account").as_deref() == Some("deleted");
+    view! {
+        <Show when=deleted>
+            <div class="mx-auto max-w-5xl px-4 pt-8 sm:px-8" data-testid="account-deleted">
+                <crate::components::ui::Callout tone=crate::components::ui::CalloutTone::Success title="Your account was deleted">
+                    "Your personal data is gone and you are signed out everywhere. Backups drop it within 30 days."
+                </crate::components::ui::Callout>
+            </div>
+        </Show>
+    }
+}
+
 #[component]
 fn NoTeamHome(username: String) -> impl IntoView {
     view! {
