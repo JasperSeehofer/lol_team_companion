@@ -320,6 +320,9 @@ pub fn SharePage() -> impl IntoView {
     let token = move || params.read().get("token").unwrap_or_default();
     let shared = Resource::new(token, get_shared);
     view! {
+        // A shared link is for the people it was sent to: keep it out of
+        // search engines.
+        <leptos_meta::Meta name="robots" content="noindex, nofollow" />
         <PageShell width=PageWidth::Reading attr:data-shared-page>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading the shared page"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || shared.get().map(|r| match r {
@@ -343,7 +346,7 @@ fn SharedBody(shared: Shared) -> impl IntoView {
     let expiry = shared.expires_at.clone();
     let note = move || {
         view! {
-            <p class="mb-8 text-caption text-muted" data-shared-note>
+            <p class="mb-8 mt-10 text-caption text-muted" data-shared-note>
                 "Read-only. Shared with a link that expires " <LocalTime iso=expiry.clone() style=TimeStyle::When /> "."
             </p>
         }
