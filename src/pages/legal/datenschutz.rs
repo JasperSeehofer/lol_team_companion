@@ -33,7 +33,7 @@ pub const STORED: &[(&str, &[&str])] = &[
         "Your team",
         &[
             "The team's name and region, its members with their place on the roster (starting five, substitute, coach) and position, and join requests with their status.",
-            "What the team writes: drafts with picks and bans, draft trees, game plans and checklists, reviews, action items (text, owner, due day), team notes (with the text before the last edit, and deleted notes for one day, so they can be restored), notes on champion pairs, and the next match (time, opponent, notes, who marked the brief read).",
+            "What the team writes: drafts with picks and bans, series of drafts (best-of sets), draft trees, ban priority lists, game plans with checklists and checklist templates, reviews, action items (text, owner, due day), Sand Table boards with their saved versions, team notes (with the text before the last edit, and deleted notes for one day, so they can be restored), notes on champion pairs, and the next match (time, opponent, notes, who marked the brief read).",
             "Opponent dossiers: player names, Riot IDs and Riot account ids, champions seen, mastery and role data read from Riot, and your notes.",
             "Share links: a random token, what it opens, who made it, when it expires, and whether it was revoked.",
         ],
@@ -50,6 +50,7 @@ pub const STORED: &[(&str, &[&str])] = &[
             "Your recent games: champion, kills, deaths, assists, CS, vision score, damage and the result.",
             "For a game you open: the public match data of all ten players and its timeline.",
             "Snapshots of your ranked standing (tier, division, LP, wins, losses).",
+            "Game replays a team imports for the Sand Table: the per-minute positions and the events of all ten players, with their Riot account ids.",
         ],
     ),
     (
@@ -126,41 +127,86 @@ pub fn DatenschutzPage() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
+    /// Tables whose rows the page above describes.
+    const LISTED: &[&str] = &[
+        "user",
+        "sessions",
+        "invite",
+        "team",
+        "team_member",
+        "join_request",
+        "draft",
+        "draft_action",
+        "series",
+        "draft_tree",
+        "draft_tree_node",
+        "tree_node_action",
+        "ban_priority",
+        "game_plan",
+        "checklist_template",
+        "checklist_instance",
+        "post_game_learning",
+        "action_item",
+        "board",
+        "board_version",
+        "team_note",
+        "team_relation",
+        "scheduled_match",
+        "opponent",
+        "opponent_player",
+        "share_link",
+        "champion_pool",
+        "champion_note",
+        "personal_learning",
+        "personal_goal",
+        "match",
+        "player_match",
+        "match_detail",
+        "match_timeline_event",
+        "replay",
+        "replay_frame",
+        "replay_event",
+        "ranked_snapshot",
+        "bug_report",
+    ];
+    /// Tables that hold nothing about a person or a team: migration
+    /// bookkeeping, the champion data cache, patch changes and the shipped
+    /// champion traits.
+    const NOT_PERSONAL: &[&str] = &[
+        "schema_migration",
+        "ddragon_cache",
+        "patch_change",
+        "champion_trait",
+    ];
+
+    fn schema_tables() -> Vec<String> {
+        include_str!("../../../schema.surql")
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("DEFINE TABLE IF NOT EXISTS "))
+            .filter_map(|rest| rest.split_whitespace().next())
+            .map(|t| t.trim_end_matches(';').to_string())
+            .collect()
+    }
+
     #[test]
     fn the_listed_tables_exist() {
-        let schema = include_str!("../../../schema.surql");
-        for table in [
-            "user",
-            "sessions",
-            "invite",
-            "team",
-            "team_member",
-            "join_request",
-            "draft",
-            "draft_tree",
-            "game_plan",
-            "checklist_instance",
-            "post_game_learning",
-            "action_item",
-            "team_note",
-            "team_relation",
-            "scheduled_match",
-            "opponent",
-            "opponent_player",
-            "share_link",
-            "champion_pool",
-            "champion_note",
-            "personal_learning",
-            "personal_goal",
-            "player_match",
-            "match_detail",
-            "match_timeline_event",
-            "ranked_snapshot",
-            "bug_report",
-        ] {
+        let tables = schema_tables();
+        for t in LISTED.iter().chain(NOT_PERSONAL) {
             assert!(
-                schema.contains(&format!("DEFINE TABLE IF NOT EXISTS {table} ")),
-                "{table} is listed on the privacy page but not in the schema"
+                tables.iter().any(|s| s == t),
+                "{t} is named for the privacy page but is not in the schema"
+            );
+        }
+    }
+
+    /// A new table must be described on the privacy page (and added to
+    /// `LISTED`) or be marked as holding no personal or team data.
+    #[test]
+    fn every_table_is_accounted_for() {
+        for t in schema_tables() {
+            assert!(
+                LISTED.contains(&t.as_str()) || NOT_PERSONAL.contains(&t.as_str()),
+                "table {t} is not described on the privacy page"
             );
         }
     }
