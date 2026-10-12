@@ -745,6 +745,10 @@ pub fn cents_to_input(cents: i64) -> String {
 /// The admin's month form (amounts as typed), sent as JSON.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LedgerInput {
+    /// Sent by "Add month": refuse a month that already has a row instead
+    /// of overwriting it (edits go through the row's Edit button).
+    #[serde(default)]
+    pub is_new: bool,
     pub month: String,
     pub support: String,
     pub hosting: String,

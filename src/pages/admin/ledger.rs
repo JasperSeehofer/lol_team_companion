@@ -39,7 +39,7 @@ pub async fn admin_save_ledger_month(month_json: String) -> Result<bool, ServerF
     let input: LedgerInput = serde_json::from_str(&month_json).map_err(authz::server_err)?;
     let current = chrono::Utc::now().format("%Y-%m").to_string();
     let m = validate_ledger(&input, &current).map_err(ServerFnError::new)?;
-    let revision = store::admin_save_ledger_month(&db, &admin.id, &m)
+    let revision = store::admin_save_ledger_month(&db, &admin.id, &m, input.is_new)
         .await
         .map_err(authz::server_err)?;
     tracing::info!(admin = %admin.id, month = %m.month, revision, "ledger month saved");
@@ -132,6 +132,7 @@ impl Form {
     }
     fn input(&self) -> LedgerInput {
         LedgerInput {
+            is_new: self.editing.get_untracked().is_none(),
             month: self.month.get_untracked(),
             support: self.support.get_untracked(),
             hosting: self.hosting.get_untracked(),

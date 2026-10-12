@@ -886,7 +886,18 @@ pub async fn get_pending_survey(
 
     let id = match surveys::select(&rows, now, path) {
         surveys::Delivery::Nothing => return Ok(None),
-        surveys::Delivery::Again(id) => id,
+        surveys::Delivery::Again(id) => {
+            // Shown again with the survey's current wording (it may have
+            // been edited and re-approved since): record that wording.
+            db.query(
+                "UPDATE type::record('survey_prompt', $k) SET answer_hash = survey.wording_hash \
+                 WHERE state = 'shown'",
+            )
+            .bind(("k", record_key(&id, "survey_prompt")))
+            .await?
+            .check()?;
+            id
+        }
         surveys::Delivery::Show(id) => {
             db.query(
                 "UPDATE type::record('survey_prompt', $k) SET state = 'shown', shown_at = time::now(), \
@@ -921,6 +932,8 @@ pub async fn get_pending_survey(
 #[derive(Debug, Deserialize, SurrealValue)]
 struct DbOwnPrompt {
     state: String,
+    answer_hash: Option<String>,
+    wording_hash: Option<String>,
     survey_status: Option<String>,
     kind: Option<String>,
     choices: Option<Vec<String>>,
@@ -929,7 +942,8 @@ struct DbOwnPrompt {
 async fn own_prompt(db: &Surreal<Db>, user_id: &str, prompt_id: &str) -> DbResult<DbOwnPrompt> {
     let mut r = db
         .query(
-            "SELECT state, survey.status AS survey_status, survey.kind AS kind, survey.choices AS choices \
+            "SELECT state, answer_hash, survey.wording_hash AS wording_hash, survey.status AS survey_status, \
+                 survey.kind AS kind, survey.choices AS choices \
              FROM type::record('survey_prompt', $k) WHERE user = type::record('user', $u)",
         )
         .bind(("k", record_key(prompt_id, "survey_prompt")))
@@ -953,7 +967,9 @@ pub async fn answer_survey(
             "You already answered this question.".into(),
         ));
     }
-    if p.survey_status.as_deref() != Some("live") {
+    // Closed, paused, or reworded since this person was shown it (their
+    // answer would be counted against wording they never saw).
+    if p.survey_status.as_deref() != Some("live") || p.answer_hash != p.wording_hash {
         return Err(DbError::Invalid(
             "This question has closed. Thanks anyway.".into(),
         ));
@@ -1437,11 +1453,13 @@ struct PubState {
 }
 
 /// Insert or update a (validated) month. A month that was ever public is
-/// marked revised. Returns whether it was a revision.
+/// marked revised. With `create_only` ("Add month") an existing month is
+/// refused rather than overwritten. Returns whether it was a revision.
 pub async fn admin_save_ledger_month(
     db: &Surreal<Db>,
     admin_id: &str,
     m: &LedgerMonth,
+    create_only: bool,
 ) -> DbResult<bool> {
     let _guard = invariant_lock().await;
     let mut r = db
@@ -1449,6 +1467,11 @@ pub async fn admin_save_ledger_month(
         .bind(("month", m.month.clone()))
         .await?;
     let existing: Option<PubState> = r.take(0)?;
+    if create_only && existing.is_some() {
+        return Err(DbError::Invalid(
+            "That month is already in the ledger. Use Edit on its row to change it.".into(),
+        ));
+    }
     let revision = existing
         .as_ref()
         .is_some_and(|e| e.published || e.published_at.is_some());

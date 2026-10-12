@@ -592,6 +592,64 @@ async fn delivery_answer_and_weekly_cap() {
 }
 
 #[tokio::test]
+async fn answers_count_against_the_wording_that_was_shown() {
+    // M7 review: a prompt shown with wording A, then reworded to B and
+    // re-approved, is shown again with B and its answer is counted under B;
+    // a band still showing A cannot answer once the wording changed.
+    let db = common::test_db().await;
+    let admin = user(&db, "admin").await;
+    let a = user(&db, "alice").await;
+    let s = live_survey(&db, &admin, "review_saved", "single_choice").await;
+    store::note_trigger(&db, &a, SurveyTrigger::ReviewSaved, "")
+        .await
+        .unwrap();
+    let shown = store::get_pending_survey(&db, &a, "/post-game")
+        .await
+        .unwrap()
+        .unwrap();
+    let reworded = SurveyInput {
+        id: Some(s.clone()),
+        question: "Reworded question?".into(),
+        kind: "single_choice".into(),
+        choices_text: "Yes\nNo\nNot sure".into(),
+        trigger: "review_saved".into(),
+        ..Default::default()
+    };
+    store::admin_save_survey(&db, &admin, &reworded)
+        .await
+        .unwrap();
+    let hash = hash_of(&db, &s).await;
+    store::admin_approve_survey(&db, &admin, &s, &hash)
+        .await
+        .unwrap();
+    store::admin_set_survey_status(&db, &admin, &s, SurveyStatus::Live)
+        .await
+        .unwrap();
+    // The old band (wording A) is refused...
+    assert!(matches!(
+        store::answer_survey(&db, &a, &shown.prompt_id, &SurveyAnswer::Choice(0)).await,
+        Err(DbError::Invalid(_))
+    ));
+    // ...until the prompt is delivered again with the new wording.
+    let again = store::get_pending_survey(&db, &a, "/")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.prompt_id, shown.prompt_id);
+    assert_eq!(again.question, "Reworded question?");
+    store::answer_survey(&db, &a, &again.prompt_id, &SurveyAnswer::Choice(2))
+        .await
+        .unwrap();
+    let results = store::admin_survey_results(&db, &s).await.unwrap();
+    assert_eq!(results.versions.len(), 1);
+    assert_eq!(results.versions[0].hash, hash);
+    assert_eq!(
+        results.versions[0].choice_counts[2],
+        ("Not sure".to_string(), 1)
+    );
+}
+
+#[tokio::test]
 async fn prompts_are_private_to_their_user() {
     let db = common::test_db().await;
     let admin = user(&db, "admin").await;
@@ -780,7 +838,7 @@ async fn ledger_drafts_stay_private_until_published() {
     let db = common::test_db().await;
     let admin = user(&db, "admin").await;
     assert!(
-        !store::admin_save_ledger_month(&db, &admin, &month("2026-09", "20", "5"))
+        !store::admin_save_ledger_month(&db, &admin, &month("2026-09", "20", "5"), false)
             .await
             .unwrap()
     );
@@ -795,7 +853,7 @@ async fn ledger_drafts_stay_private_until_published() {
 
     // An edit after publishing is a revision.
     assert!(
-        store::admin_save_ledger_month(&db, &admin, &month("2026-09", "20", "6"))
+        store::admin_save_ledger_month(&db, &admin, &month("2026-09", "20", "6"), false)
             .await
             .unwrap()
     );
@@ -805,6 +863,14 @@ async fn ledger_drafts_stay_private_until_published() {
     assert!(store::admin_delete_ledger_month(&db, "2026-09")
         .await
         .is_err());
+
+    // "Add month" never overwrites a month that exists (review fix).
+    assert!(matches!(
+        store::admin_save_ledger_month(&db, &admin, &month("2026-09", "999", "0"), true).await,
+        Err(DbError::Invalid(_))
+    ));
+    let public = store::list_published_ledger(&db).await.unwrap();
+    assert_eq!(public[0].support_cents, 2000);
 
     // Unpublishing is a typo fix within 24 hours only.
     db.query("UPDATE ledger_month SET published_at = time::now() - 25h")
@@ -818,10 +884,10 @@ async fn ledger_drafts_stay_private_until_published() {
     ));
 
     // One row per month; drafts can be deleted.
-    store::admin_save_ledger_month(&db, &admin, &month("2026-10", "1", "5"))
+    store::admin_save_ledger_month(&db, &admin, &month("2026-10", "1", "5"), false)
         .await
         .unwrap();
-    store::admin_save_ledger_month(&db, &admin, &month("2026-10", "2", "5"))
+    store::admin_save_ledger_month(&db, &admin, &month("2026-10", "2", "5"), false)
         .await
         .unwrap();
     assert_eq!(store::admin_list_ledger(&db).await.unwrap().len(), 2);

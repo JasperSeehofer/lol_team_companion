@@ -17,11 +17,16 @@ use crate::models::community::{SurveyAnswer, SurveyPromptView};
 /// The question to show on `path` now, if any. Signed-out callers get none.
 #[server]
 pub async fn get_pending_survey(path: String) -> Result<Option<SurveyPromptView>, ServerFnError> {
-    use crate::server::{authz, community::store};
+    use crate::server::{authz, community::store, rate_limit::Bucket};
 
     let Some(user) = authz::optional_user().await? else {
         return Ok(None);
     };
+    // Runs on every route change and takes the global invariant lock, so a
+    // client looping it gets nothing rather than slowing everyone down.
+    if authz::rate_limit_user(Bucket::SurveyCheck, &user).is_err() {
+        return Ok(None);
+    }
     let db = authz::db()?;
     // The path is only compared with a constant.
     let path: String = path.chars().take(200).collect();
@@ -104,10 +109,14 @@ pub fn SurveyPrompt() -> impl IntoView {
         });
     });
     view! {
+        // A polite live region that exists before the band appears, so a
+        // new question and the thank-you line are announced without taking
+        // focus (a region inserted together with its text is often not read).
+        <div aria-live="polite" data-survey-live>
         {move || {
             if thanks.get() {
                 return view! {
-                    <div class="border-b border-rule bg-ink-1" role="status">
+                    <div class="border-b border-rule bg-ink-1">
                         <p class="mx-auto max-w-7xl px-4 py-3 text-body text-secondary sm:px-8">"Thanks. That helps."</p>
                     </div>
                 }
@@ -131,6 +140,7 @@ pub fn SurveyPrompt() -> impl IntoView {
                 .into_any(),
             }
         }}
+        </div>
     }
 }
 

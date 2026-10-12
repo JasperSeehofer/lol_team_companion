@@ -38,6 +38,9 @@ pub enum Bucket {
     Community,
     /// Public community reads (changelog, transparency), per client IP (M7).
     PublicRead,
+    /// The survey band's check on every route change, per user (M7 review).
+    /// Over the limit the band simply shows nothing.
+    SurveyCheck,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -94,6 +97,11 @@ fn limit(bucket: Bucket) -> Limit {
         },
         // 30 votes or answers, then one every 2 s.
         Bucket::Community => Limit {
+            capacity: 30.0,
+            refill_per_sec: 0.5,
+        },
+        // 30 route changes, then one every 2 s.
+        Bucket::SurveyCheck => Limit {
             capacity: 30.0,
             refill_per_sec: 0.5,
         },
