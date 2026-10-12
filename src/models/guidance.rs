@@ -375,7 +375,7 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
         item(
             "Create or join your team",
             match &f.team_name {
-                Some(_) => "Done: the steps below count what your team has done.".to_string(),
+                Some(_) => "The steps below count what your team has done.".to_string(),
                 None => "Create a team, or use your team's invite link, or find your team and ask to join.".to_string(),
             },
             team,
