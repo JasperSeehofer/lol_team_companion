@@ -9,6 +9,11 @@ pub const PUBLIC_COMMUNITY: &[(&str, &str)] = &[
     ("Changelog", "/changelog"),
     ("Transparency", "/transparency"),
 ];
+/// The public source code (owner's decision, 12 October 2026: the
+/// repository is public). A link the visitor follows; the page loads
+/// nothing from it, and it carries no money wording.
+pub const SOURCE_URL: &str = "https://github.com/JasperSeehofer/lol_team_companion"; // lint:allow(external-url)
+
 /// Community links for signed-in users only.
 pub const MEMBER_COMMUNITY: &[(&str, &str)] =
     &[("What next", "/what-next"), ("Bug board", "/bugs")];
@@ -25,6 +30,7 @@ pub fn SiteFooter() -> impl IntoView {
                 <p class="max-w-3xl text-caption leading-relaxed text-muted" data-testid="riot-disclaimer">{RIOT_DISCLAIMER}</p>
                 <nav class="flex shrink-0 flex-wrap gap-x-5 gap-y-2 text-caption" aria-label="Community">
                     {PUBLIC_COMMUNITY.iter().map(|(l, h)| view! { <a href=*h class=link>{*l}</a> }).collect_view()}
+                    <a href=SOURCE_URL class=link rel="noopener noreferrer" data-testid="source-link">"Source"</a>
                     // Same tree on the server and in the browser (Suspend).
                     <Suspense fallback=|| ()>
                         {move || Suspend::new(async move {
@@ -45,7 +51,15 @@ pub fn SiteFooter() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{MEMBER_COMMUNITY, PUBLIC_COMMUNITY, RIOT_DISCLAIMER};
+    use super::{MEMBER_COMMUNITY, PUBLIC_COMMUNITY, RIOT_DISCLAIMER, SOURCE_URL};
+
+    /// The source link goes to the public repository itself (not a funding
+    /// page; the community test checks the footer's words).
+    #[test]
+    fn source_link_is_the_public_repository() {
+        assert!(SOURCE_URL.starts_with("https://"));
+        assert!(SOURCE_URL.ends_with("//github.com/JasperSeehofer/lol_team_companion"));
+    }
 
     #[test]
     fn community_links_never_include_support() {

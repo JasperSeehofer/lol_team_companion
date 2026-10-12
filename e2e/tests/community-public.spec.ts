@@ -56,6 +56,11 @@ test("footer lists the public community links only to signed-out visitors", asyn
   const community = page.getByRole("navigation", { name: "Community" });
   await expect(community.getByRole("link", { name: "Changelog" })).toBeVisible();
   await expect(community.getByRole("link", { name: "Transparency" })).toBeVisible();
+  // The public repository (owner's decision, 12 Oct 2026); nothing is loaded from it.
+  await expect(community.getByRole("link", { name: "Source" })).toHaveAttribute(
+    "href",
+    "https://github.com/JasperSeehofer/lol_team_companion",
+  );
   await expect(community.getByRole("link", { name: "What next" })).toHaveCount(0);
   await expect(community.getByRole("link", { name: "Bug board" })).toHaveCount(0);
 });

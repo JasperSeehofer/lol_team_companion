@@ -129,3 +129,11 @@ Decisions the owner took after the contract was agreed. Each entry is dated; lat
 - The product name is "Team Companion" (it replaces the working title "Companion" in section 4). The public address is app.team-companion.eu.
 - Using Team Companion costs nothing; support is voluntary. The support link stays off at launch. Support received is shown gross (before payment fees), and payment fees are a cost line in the transparency ledger.
 - Team-bound invites (orchestrator's call on the owner's onboarding question): a team leader can mint an invite that registers the new account straight into the team.
+
+2026-10-12 (owner's answers for the launch follow-up, 19:36 to 19:40 UTC)
+- Money: support received is shown gross (confirmed). The "AI tokens" cost line keeps its drafted wording; the owner decides later.
+- The repository is public (this settles "Repository visibility" in section 4). The changelog and transparency pages may link to https://github.com/JasperSeehofer/lol_team_companion; it is linked as a "Source" link in the footer of every page, which carries no money wording.
+- Backups go to the owner's Hetzner Storage Box over SFTP (no S3), encrypted with rclone crypt, 30-day retention as before.
+- Cached Riot match data (opened games and their timelines) is kept 12 months, then deleted by a nightly task.
+- Bug reports survive account deletion, anonymised: they move to "Former member" and lose what the reporter wrote.
+- Uptime and backup age are checked from the owner's other Hetzner server, with scripts from this repository (no external monitoring service).
