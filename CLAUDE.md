@@ -78,6 +78,10 @@ cp deploy/env.production.example .env && cp deploy/backup.env.example deploy/bac
 docker compose up -d --build
 docker compose run --rm backup now                 # one backup now (stops the app for seconds)
 sudo -E ./scripts/restore.sh drill latest          # restore drill: scripts/restore-drill.md
+
+# Monitoring from the owner's second server (no external service; RUNBOOK 2.7)
+ALERT_EMAIL=you@example.org ./scripts/healthcheck-remote.sh   # uptime: one mail down, one back
+WATCH_REMOTE=watch:companion-backups ./scripts/backup-watch.sh  # alert when the newest backup is > 36 h old
 ```
 
 `just` recipes exist for most of these (`just verify`, `just e2e`, `just smoke`); if `just` is not installed, run the commands directly.
@@ -115,11 +119,11 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities, 1 to 1,000 (e2e uses `100`; warned about outside dev) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy; `compose.yaml` forces it on) | `false` |
 | `SUPPORT_URL` | The one external support page, shown on `/transparency` once the money texts are approved; absolute `https://` URL without credentials | unset |
+| `MATCH_CACHE_RETENTION_DAYS` | Days a cached Riot game (`match_detail` with its `match_timeline_event` rows, by fetch time) is kept; a nightly task deletes older ones in batches, and `match` rows nobody's synced games use once the game is older (1 to 3,650). The privacy page states 12 months: change both together | `365` |
 | `SHUTDOWN_DRAIN_SECS` | After SIGTERM/SIGINT, how long requests in flight may finish (0 to 300) | `10` |
 | `SHUTDOWN_DB_SECS` | Then how long to wait for SurrealKV to close before exiting anyway with code 1 (0 to 60) | `5` |
 | `GITHUB_TOKEN` | Not read by the app (only by a local MCP server); warned about outside dev, never in `.env.example` | unset |
 | `E2E_INVITE_CODE` | e2e: invite code the fixtures register with (match `BOOTSTRAP_INVITE_CODE`) | `E2E-INVITE-CODE` |
-| `MATCH_CACHE_RETENTION_DAYS` | Days a cached Riot game (`match_detail` with its `match_timeline_event` rows, by fetch time) is kept; a nightly task deletes older ones in batches, and `match` rows nobody's synced games use once the game is older (1 to 3,650). The privacy page states 12 months: change both together | `365` |
 | `E2E_EXPECT_PRODUCTION` | e2e: the server under test runs in production mode (`/design` is a 404) | unset |
 | `BASE_URL` | e2e: server under test | `http://127.0.0.1:3020` |
 | `PLAYWRIGHT_BROWSERS_PATH` | e2e: browser location. In cloud sessions use `/root/.cache/pw-browsers-compat` (Playwright 1.58 expects chromium rev 1208; the hook symlinks the preinstalled 1194 build) | Playwright default |
@@ -142,7 +146,8 @@ Single crate, two compile targets. `--features ssr` builds the Axum server (Surr
 ```
 src/
 ├── main.rs              # Axum setup: AppConfig, DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth,
-│                        # /img/* images, /healthz, /account/export; graceful shutdown (drain, close the DB, exit)
+│                        # /img/* images, /healthz, /account/export, the nightly match-cache retention task;
+│                        # graceful shutdown (drain, close the DB, exit)
 ├── app.rs               # Shell, <Routes>, footer
 ├── lib.rs               # Crate root, hydrate() entry
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
@@ -196,7 +201,8 @@ public/riot.txt          # Riot verification file, served at /riot.txt (owner pa
 Dockerfile, .dockerignore, compose.yaml   # M8 container image and production stack (app, Caddy, backup)
 deploy/                  # Caddyfile, env templates, backup sidecar (Dockerfile + entrypoint)
 scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, backup.sh, restore.sh (+ restore-drill.md),
-                         # tests/ (backup/restore harness), ...
+                         # healthcheck-remote.sh, backup-watch.sh (monitoring from a second server),
+                         # tests/ (ops harness: backup/restore locally and over SFTP, monitoring), ...
 ```
 
 ## Routes
@@ -254,7 +260,7 @@ Pages redirect signed-out visitors to `/auth/login` client-side; the real enforc
 - **Sessions:** expired rows load as absent and are purged hourly; the cookie is `HttpOnly`, `SameSite=Strict` and `Secure` outside dev; the session auth hash is an HMAC of the password hash keyed with `SESSION_SECRET`.
 - **Users belong to at most one team**; `create_team` and join requests enforce it.
 - **Community loop (M7):** the community tables are global, not team-scoped; user-scoped rows (`survey_prompt`, `proposal_vote`, a reporter's `bug_report` rows) filter by `user`. No user-written text is shown to another user (the board shows admin-written titles and notes only). Nothing unapproved reaches users: surveys need an approved wording hash, money texts an approved `site_text`, proposals `published = true`. Submissions and votes are rate-limited per user (`authz::rate_limit_user`, `Bucket::Feedback` / `Community`, and `SurveyCheck` for the band's check on every route change, which answers "no question" when over the limit); public reads per IP (`PublicRead`). Migrations 10 (`bug_report_statuses_v2`) and 11 (`community_seed_content`: 17 unpublished proposals, 4 unapproved surveys, 5 unapproved money texts) belong to M7. Admin writes store `*_by`/`*_at` and log the admin id. Details in `docs/ARCHITECTURE.md` ("Community loop").
-- **Account export and deletion (M8):** both act only on the session's user (`server::account`). Deletion needs the username typed again and the password, takes `invariant_lock`, refuses a leader whose team has other members, and in one transaction deletes personal rows and moves every other `record<user>` link to the tombstone `user:former_member`; then the user's sessions are deleted. **A new `record<user>` field must be added to `account::USER_LINKS` with its treatment** (a unit test fails otherwise) and to the export if it is about the user. A `THROW` only aborts the statements after it inside `BEGIN ... COMMIT` (outside a transaction the next statement still runs).
+- **Account export and deletion (M8):** both act only on the session's user (`server::account`). Deletion needs the username typed again and the password, takes `invariant_lock`, refuses a leader whose team has other members, and in one transaction deletes personal rows and moves every other `record<user>` link to the tombstone `user:former_member`; bug reports stay anonymised (`Treatment::Anonymise`: the reporter's text, element, window size and read marker cleared, owner's decision); then the user's sessions are deleted. **A new `record<user>` field must be added to `account::USER_LINKS` with its treatment** (a unit test fails otherwise) and to the export if it is about the user. A `THROW` only aborts the statements after it inside `BEGIN ... COMMIT` (outside a transaction the next statement still runs).
 - **Guidance (M9):** `user_guidance` rows (user, key, seen_at, muted_at; unique on user and key, row id `<user key>~<key>`) and `user.guidance_enabled` are read and written only for the session's user; team facts come from the user's own membership. The browser may write only known keys (`models::guidance::is_known_key`); writes take `Bucket::Guidance`, the per-route check `Bucket::GuidanceCheck`. Migrations 12 (`drop_user_mode`) and 13 (`user_guidance`) belong to M9. Patterns and mute keys: `docs/DESIGN.md` 6.11; code: `docs/ARCHITECTURE.md` "Guidance".
 - Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/guidance.rs`, `tests/integration/community.rs` (cross-user cases), `tests/integration/account.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
 
