@@ -6156,6 +6156,103 @@ pub async fn store_match_detail(
 }
 
 // ---------------------------------------------------------------------------
+// Retention of the shared Riot match caches (M11)
+// ---------------------------------------------------------------------------
+
+/// Match details removed per transaction by [`purge_match_cache`]: each
+/// takes its timeline (a few hundred events) with it, so a batch stays a
+/// small transaction.
+pub const MATCH_CACHE_BATCH: usize = 50;
+
+/// What one [`purge_match_cache`] run deleted.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MatchCachePurge {
+    /// `match_detail` rows (one per opened game).
+    pub details: usize,
+    /// `match_timeline_event` rows of those games.
+    pub timeline_events: usize,
+    /// `match` rows no player's synced games point at any more.
+    pub matches: usize,
+}
+
+/// Delete the shared Riot match caches older than `cutoff`, in batches of
+/// `batch`:
+/// - an opened game (`match_detail`, by `fetched_at`, the time it was
+///   cached) together with its timeline events, which are only ever written
+///   in the same transaction as their detail row and read through it;
+/// - a `match` row that no `player_match` points at any more (its players
+///   deleted their accounts) once the game ended before `cutoff`. Rows a
+///   player's synced games still use stay with those games (until the
+///   account is deleted); a row without an end time is left alone.
+///
+/// Runs nightly from the server's retention task (`MATCH_CACHE_RETENTION_DAYS`).
+pub async fn purge_match_cache(
+    db: &Surreal<Db>,
+    cutoff: chrono::DateTime<chrono::Utc>,
+    batch: usize,
+) -> DbResult<MatchCachePurge> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Counts {
+        details: i64,
+        events: i64,
+    }
+    let cutoff = cutoff.to_rfc3339();
+    let batch = batch.max(1) as i64;
+    let mut total = MatchCachePurge::default();
+    loop {
+        let response = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $ids = (SELECT VALUE match_id FROM match_detail WHERE fetched_at < <datetime>$cutoff LIMIT $batch); \
+                 LET $events = (SELECT VALUE id FROM match_timeline_event WHERE match_id IN $ids); \
+                 DELETE match_timeline_event WHERE match_id IN $ids; \
+                 DELETE match_detail WHERE match_id IN $ids; \
+                 RETURN { details: array::len($ids), events: array::len($events) }; \
+                 COMMIT TRANSACTION;",
+            )
+            .bind(("cutoff", cutoff.clone()))
+            .bind(("batch", batch))
+            .await?;
+        let mut r = check_tx(response)?;
+        let counts: Option<Counts> = r.take(5)?;
+        let counts = counts.unwrap_or(Counts {
+            details: 0,
+            events: 0,
+        });
+        total.details += counts.details as usize;
+        total.timeline_events += counts.events as usize;
+        if counts.details < batch {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    loop {
+        let response = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $aged = (SELECT VALUE id FROM match WHERE game_end != NONE AND game_end < <datetime>$cutoff); \
+                 LET $used = (SELECT VALUE match FROM player_match WHERE match IN $aged); \
+                 LET $old = (SELECT VALUE id FROM match WHERE id IN array::complement($aged, $used) LIMIT $batch); \
+                 DELETE match WHERE id IN $old; \
+                 RETURN array::len($old); \
+                 COMMIT TRANSACTION;",
+            )
+            .bind(("cutoff", cutoff.clone()))
+            .bind(("batch", batch))
+            .await?;
+        let mut r = check_tx(response)?;
+        let n: Option<i64> = r.take(5)?;
+        let n = n.unwrap_or(0);
+        total.matches += n as usize;
+        if n < batch {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    Ok(total)
+}
+
+// ---------------------------------------------------------------------------
 // Sand Table storage (M6; no UI yet)
 // ---------------------------------------------------------------------------
 

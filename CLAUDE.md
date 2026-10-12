@@ -119,6 +119,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `SHUTDOWN_DB_SECS` | Then how long to wait for SurrealKV to close before exiting anyway with code 1 (0 to 60) | `5` |
 | `GITHUB_TOKEN` | Not read by the app (only by a local MCP server); warned about outside dev, never in `.env.example` | unset |
 | `E2E_INVITE_CODE` | e2e: invite code the fixtures register with (match `BOOTSTRAP_INVITE_CODE`) | `E2E-INVITE-CODE` |
+| `MATCH_CACHE_RETENTION_DAYS` | Days a cached Riot game (`match_detail` with its `match_timeline_event` rows, by fetch time) is kept; a nightly task deletes older ones in batches, and `match` rows nobody's synced games use once the game is older (1 to 3,650). The privacy page states 12 months: change both together | `365` |
 | `E2E_EXPECT_PRODUCTION` | e2e: the server under test runs in production mode (`/design` is a 404) | unset |
 | `BASE_URL` | e2e: server under test | `http://127.0.0.1:3020` |
 | `PLAYWRIGHT_BROWSERS_PATH` | e2e: browser location. In cloud sessions use `/root/.cache/pw-browsers-compat` (Playwright 1.58 expects chromium rev 1208; the hook symlinks the preinstalled 1194 build) | Playwright default |

@@ -75,6 +75,11 @@ pub const STORED: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// How long the shared Riot match caches are kept: the default of
+/// `MATCH_CACHE_RETENTION_DAYS` (365). Change the page and the variable
+/// together; a test checks the default.
+pub const MATCH_CACHE_RETENTION: &str = "Games opened on Team Companion (the public match data of all ten players and the timeline) are cached for everyone and deleted 12 months after they were fetched; a nightly task removes them. The basic record of a game (its id, queue and length) stays as long as someone's synced games use it, and is deleted 12 months after the game once nobody's do.";
+
 /// Why each kind of data is processed, and on what legal basis: (purpose,
 /// basis). Drafted defaults (orchestrator's decision in the M10 review),
 /// pending the operator's adviser; the page's callout says so.
@@ -171,7 +176,7 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <dt class="font-medium text-primary">"Hosting"</dt>
                     <dd class="text-secondary">"The server and its database run on a rented virtual machine at Hetzner Online GmbH, Helsinki (Finland)."</dd>
                     <dt class="font-medium text-primary">"Backups"</dt>
-                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept in object storage at Hetzner Online GmbH, Falkenstein (Germany)."</dd>
+                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept on a storage box at Hetzner Online GmbH, Falkenstein (Germany)."</dd>
                 </dl>
                 <p class=p>"Nothing else: no analytics service, no email service, no payment provider."</p>
             </section>
@@ -198,7 +203,8 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <li>"Your account, your own pages, synced games and ranked snapshots: until you delete your account."</li>
                     <li>"Your team's records: until the team deletes them, or the team is deleted. When you delete your account, what you wrote for the team stays with the team, shown as written by a former member."</li>
                     <li>"Deleted team notes: one day, so they can be restored. Sessions: 30 days after the last visit."</li>
-                    <li>"Bug reports: until an admin deletes them; when you delete your account, your text is removed from them."</li>
+                    <li>{MATCH_CACHE_RETENTION}</li>
+                    <li>"Bug reports: until an admin deletes them. When you delete your account, your reports stay without your name, shown as from a former member, and your text, the element you pointed at and your window size are removed from them."</li>
                     <li>"Backups: 30 days. Data you delete disappears from the backups within 30 days. If nightly backups stop working for a while, the last good copies are kept until new ones succeed, so that a working copy always exists."</li>
                 </ul>
             </section>
@@ -290,6 +296,18 @@ mod tests {
             .filter_map(|rest| rest.split_whitespace().next())
             .map(|t| t.trim_end_matches(';').to_string())
             .collect()
+    }
+
+    /// The page states the default retention of the match caches.
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn match_cache_retention_matches_the_default() {
+        assert_eq!(
+            crate::server::config::DEFAULT_MATCH_CACHE_RETENTION_DAYS,
+            365,
+            "the privacy page says 12 months"
+        );
+        assert!(super::MATCH_CACHE_RETENTION.contains("12 months after they were fetched"));
     }
 
     /// Every purpose has a stated legal basis; no placeholder is left.
