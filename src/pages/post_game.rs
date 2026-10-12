@@ -156,13 +156,16 @@ pub async fn create_review(review_json: String) -> Result<(String, usize), Serve
     let mut review: PostGameLearning =
         serde_json::from_str(&review_json).map_err(authz::server_err)?;
     review.team_id = team_id.clone();
-    review.created_by = user.id;
+    review.created_by = user.id.clone();
     check_review_links(&surreal, &team_id, &review).await?;
 
     // The review and its new action items are written in one transaction.
-    db::create_review_with_action_items(&surreal, review)
+    let created = db::create_review_with_action_items(&surreal, review)
         .await
-        .map_err(authz::server_err)
+        .map_err(authz::server_err)?;
+    // A live survey may ask about the review (M7).
+    crate::server::community::store::note_review_saved(&surreal, &user.id).await;
+    Ok(created)
 }
 
 #[server]

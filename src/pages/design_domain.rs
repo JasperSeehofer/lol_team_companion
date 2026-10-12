@@ -4,11 +4,11 @@
 use leptos::prelude::*;
 
 use crate::components::ui::{
-    Annotation, AvatarShape, AvatarSize, AvatarState, CanvasFrame, ChampionAvatar, Delta,
-    DraftSide, FrameGrid, GameResult, GlyphSize, LegendBlock, LegendEntry, LineStyle, LineWeight,
-    Moment, NotePlacement, ReadoutSize, ResultGlyph, Role, RoleLabel, RoleLabelStyle, ScaleBar,
-    Sentiment, SideMarker, SideText, StatReadout, Swatch, SwatchInk, TimelineScrub, Trend,
-    UserAvatar,
+    Annotation, AvatarShape, AvatarSize, AvatarState, BarInk, BarSegment, BarSize, CanvasFrame,
+    ChampionAvatar, Delta, DraftSide, FrameGrid, GameResult, GlyphSize, LegendBlock, LegendEntry,
+    LineStyle, LineWeight, Moment, NotePlacement, ProportionBar, ReadoutSize, ResultGlyph, Role,
+    RoleLabel, RoleLabelStyle, ScaleBar, Sentiment, SideMarker, SideText, StatReadout, Swatch,
+    SwatchInk, TimelineScrub, Trend, UserAvatar,
 };
 use crate::pages::design::{GallerySection, Sample};
 
@@ -114,6 +114,55 @@ pub fn ReadoutSection() -> impl IntoView {
                     <StatReadout label="Games" value="42" size=ReadoutSize::Sm />
                     <StatReadout label="KDA" value="" empty_reason="No games synced yet" />
                 </div>
+            </div>
+        </GallerySection>
+    }
+}
+
+#[component]
+pub fn BarSection() -> impl IntoView {
+    let row = |label: &'static str, support: i64, costs: i64| {
+        let covered = support.min(costs);
+        let remainder = (support - costs).max(0);
+        let short = (costs - support).max(0);
+        view! {
+            <div class="grid grid-cols-[8rem_minmax(0,1fr)_7rem] items-center gap-4 text-label">
+                <span class="text-secondary">{label}</span>
+                <ProportionBar max=6000 segments=vec![
+                    BarSegment::new(covered, "Costs covered", BarInk::Strong),
+                    BarSegment::new(remainder, "Remainder", BarInk::Soft),
+                    BarSegment::new(short, "Not covered", BarInk::Hollow),
+                ] />
+                <span class="figures text-right text-primary">{format!("{support} / {costs}")}</span>
+            </div>
+        }
+    };
+    view! {
+        <GallerySection id="bar" title="Proportion bar" lede="Parts of one quantity on a shared scale: three inks that differ in lightness and edge, never hue. Decorative: the figures are always written next to it.">
+            <div class="flex flex-col gap-6" data-testid="bar-demo">
+                <div class="flex flex-col gap-3">
+                    <p class="eyebrow">"Ledger rows (fixture figures, shared scale)"</p>
+                    {row("Month A", 5000, 2000)}
+                    {row("Month B", 2400, 2400)}
+                    {row("Month C", 1000, 3000)}
+                </div>
+                <div class="flex flex-col gap-3">
+                    <p class="eyebrow">"Survey answers (fixture counts), medium"</p>
+                    <div class="grid grid-cols-[8rem_minmax(0,1fr)_3rem] items-center gap-4 text-label">
+                        <span class="text-secondary">"Yes, clearly"</span>
+                        <ProportionBar max=12 size=BarSize::Md segments=vec![BarSegment::new(7, "Yes, clearly", BarInk::Strong)] />
+                        <span class="figures text-right text-primary">"7"</span>
+                        <span class="text-secondary">"Somewhat"</span>
+                        <ProportionBar max=12 size=BarSize::Md segments=vec![BarSegment::new(4, "Somewhat", BarInk::Strong)] />
+                        <span class="figures text-right text-primary">"4"</span>
+                        <span class="text-secondary">"Not really"</span>
+                        <ProportionBar max=12 size=BarSize::Md segments=vec![BarSegment::new(1, "Not really", BarInk::Strong)] />
+                        <span class="figures text-right text-primary">"1"</span>
+                    </div>
+                </div>
+                <Sample label="Empty (all zero)">
+                    <div class="w-64"><ProportionBar max=0 segments=vec![BarSegment::new(0, "Nothing", BarInk::Strong)] /></div>
+                </Sample>
             </div>
         </GallerySection>
     }

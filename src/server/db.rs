@@ -134,7 +134,7 @@ async fn ensure_owned(
 /// concurrent writes of the same unique key could both report success while
 /// only one row was kept, or both be kept (M6 review, tests
 /// `concurrent_signups_*`, `concurrent_board_saves_*`, `concurrent_joins_*`).
-async fn invariant_lock() -> tokio::sync::MutexGuard<'static, ()> {
+pub async fn invariant_lock() -> tokio::sync::MutexGuard<'static, ()> {
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     LOCK.lock().await
 }
@@ -3911,8 +3911,15 @@ pub async fn list_bug_reports(db: &Surreal<Db>, status: Option<&str>) -> DbResul
     Ok(rows.into_iter().map(BugReport::from).collect())
 }
 
-pub async fn list_open_bug_reports(db: &Surreal<Db>) -> DbResult<Vec<BugReport>> {
-    list_bug_reports(db, Some("open")).await
+/// The open queue for the inbox export: reports in `new` or `triaged`.
+pub async fn list_untriaged_bug_reports(db: &Surreal<Db>) -> DbResult<Vec<BugReport>> {
+    let mut r = db
+        .query(
+            "SELECT * FROM bug_report WHERE status IN ['new', 'triaged'] ORDER BY created_at DESC",
+        )
+        .await?;
+    let rows: Vec<DbBugReport> = r.take(0)?;
+    Ok(rows.into_iter().map(BugReport::from).collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -7215,7 +7222,7 @@ mod tests {
         .await
         .unwrap();
 
-        let reports = list_open_bug_reports(&db).await.unwrap();
+        let reports = list_untriaged_bug_reports(&db).await.unwrap();
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].category, "bug");
         assert_eq!(reports[0].page_url, "/draft");

@@ -1,4 +1,5 @@
-//! Phase 19 D-04 — server-start auto-export of open bug reports.
+//! Phase 19 D-04 — server-start auto-export of the open bug-report queue
+//! (M7: statuses `new` and `triaged`).
 //!
 //! Runs once in main.rs after init_db and before axum::serve.
 //! Writes the path passed by main.rs (default
@@ -40,7 +41,7 @@ pub async fn export_open_reports(
     if let Some(parent) = inbox_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let reports = db::list_open_bug_reports(db).await?;
+    let reports = db::list_untriaged_bug_reports(db).await?;
     let body = render_inbox(&reports);
     std::fs::write(inbox_path, body)?;
     tracing::info!(
@@ -120,8 +121,8 @@ fn render_report(r: &BugReport) -> String {
 
     let mut s = String::new();
     s.push_str(&format!(
-        "## [{}] {} — {}\n",
-        r.category, snippet, date_only
+        "## [{}] [{}] {} — {}\n",
+        r.category, r.status, snippet, date_only
     ));
     s.push_str(&format!("- URL: `{}`\n", r.page_url));
     s.push_str(&format!("- Element: `{}`\n", r.element_label));
@@ -162,7 +163,7 @@ mod tests {
             viewport_w: Some(1920),
             viewport_h: Some(1080),
             created_at: Some(created.into()),
-            status: "open".into(),
+            status: "new".into(),
         }
     }
 
@@ -209,7 +210,7 @@ mod tests {
         // The H2 line should contain only 60 x's.
         let h2_line = out.lines().find(|l| l.starts_with("## [bug]")).unwrap();
         let snippet = h2_line
-            .trim_start_matches("## [bug] ")
+            .trim_start_matches("## [bug] [new] ")
             .split(" — ")
             .next()
             .unwrap();

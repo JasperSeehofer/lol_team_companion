@@ -24,6 +24,10 @@ pub struct SecurityConfig {
     pub bootstrap_invite: Option<(String, i64)>,
     pub rate_limit_multiplier: u32,
     pub trust_forwarded_for: bool,
+    /// `SUPPORT_URL`: the one external support page (M7), shown only on
+    /// /transparency. Accepted only as an absolute `https://` URL without
+    /// credentials.
+    pub support_url: Option<String>,
 }
 
 static CONFIG: OnceLock<SecurityConfig> = OnceLock::new();
@@ -59,6 +63,25 @@ pub fn closed_beta_enabled(is_dev: bool, closed_beta_var: Option<&str>) -> bool 
         return true;
     }
     !matches!(closed_beta_var.and_then(parse_bool), Some(false))
+}
+
+/// `SUPPORT_URL` if it is an absolute `https://` URL with a host, without
+/// credentials, whitespace or control characters; otherwise `None`.
+pub fn parse_support_url(value: Option<&str>) -> Option<String> {
+    let v = value?.trim();
+    let rest = v.strip_prefix("https://")?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.split(':').next().unwrap_or("");
+    let ok = v.len() <= 500
+        && !host.is_empty()
+        && !authority.contains('@')
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        && !v
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == '"' || c == '<' || c == '>');
+    ok.then(|| v.to_string())
 }
 
 /// Parse `ADMIN_EMAILS`: comma or whitespace separated, normalised.
@@ -130,6 +153,14 @@ impl SecurityConfig {
                 .as_deref()
                 .and_then(parse_bool)
                 .unwrap_or(false),
+            support_url: {
+                let raw = env("SUPPORT_URL");
+                let url = parse_support_url(raw.as_deref());
+                if raw.is_some() && url.is_none() {
+                    tracing::warn!("SUPPORT_URL ignored: it must be an absolute https:// URL without credentials");
+                }
+                url
+            },
         })
     }
 
@@ -145,6 +176,7 @@ impl SecurityConfig {
             bootstrap_invite: None,
             rate_limit_multiplier: 1,
             trust_forwarded_for: false,
+            support_url: None,
         }
     }
 
@@ -179,6 +211,22 @@ pub fn get() -> &'static SecurityConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn support_url_must_be_plain_https() {
+        assert_eq!(
+            parse_support_url(Some(" https://ko-fi.com/companion ")),
+            Some("https://ko-fi.com/companion".into())
+        );
+        assert!(parse_support_url(Some("https://github.com/sponsors/x?tab=1")).is_some());
+        assert!(parse_support_url(Some("http://ko-fi.com/x")).is_none());
+        assert!(parse_support_url(Some("https://user:pw@ko-fi.com/x")).is_none());
+        assert!(parse_support_url(Some("https://")).is_none());
+        assert!(parse_support_url(Some("javascript:alert(1)")).is_none());
+        assert!(parse_support_url(Some("https://ko-fi.com/a b")).is_none());
+        assert!(parse_support_url(Some("https://ko-fi.com/\"x")).is_none());
+        assert!(parse_support_url(None).is_none());
+    }
 
     #[test]
     fn dev_detection() {

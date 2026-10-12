@@ -12,7 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { test, expect, type Page, type APIResponse } from "@playwright/test";
-import { authenticatePage, createTeam } from "./fixtures";
+import { authenticatePage, createTeam, signInAsAdmin } from "./fixtures";
 
 const WASM = path.resolve(__dirname, "../../target/site/pkg/lol_team_companion.wasm");
 const TIMESTAMP = Date.now();
@@ -213,4 +213,71 @@ test("a second team cannot share, list, revoke or edit the first team's M5 recor
 
   await ctxA.close();
   await ctxB.close();
+});
+
+test("users see only their own bug reports and cannot answer another user's survey", async ({
+  browser,
+}) => {
+  const admin = await (await browser.newContext()).newPage();
+  await signInAsAdmin(admin);
+  const question = `Cross-user question ${TIMESTAMP}?`;
+  const saved = await call(admin, "admin_save_survey", {
+    survey_json: JSON.stringify({
+      id: null,
+      question,
+      kind: "short_text",
+      choices_text: "",
+      scale_low_label: "",
+      scale_high_label: "",
+      trigger: "what_next_visit",
+      note: "",
+    }),
+  });
+  expect(saved.status()).toBe(200);
+  const surveyId: string = await saved.json();
+  const list = (await (await call(admin, "admin_list_surveys", {})).json()) as Array<{
+    id: string;
+    wording_hash: string;
+  }>;
+  const hash = list.find((s) => s.id === surveyId)!.wording_hash;
+  expect((await call(admin, "admin_approve_survey", { id: surveyId, wording_hash: hash })).status()).toBe(200);
+  expect((await call(admin, "admin_set_survey_status", { id: surveyId, status: "live" })).status()).toBe(200);
+  try {
+    const a = await (await browser.newContext()).newPage();
+    await authenticatePage(a);
+    const sent = await call(a, "submit_bug_report", {
+      page_url: "/draft",
+      element_label: "Draft",
+      description: `A's private report ${TIMESTAMP}`,
+      category: "bug",
+    });
+    expect(sent.status()).toBe(200);
+    const prompt = await (await call(a, "get_pending_survey", { path: "/what-next" })).json();
+    expect(prompt?.question).toBe(question);
+
+    const b = await (await browser.newContext()).newPage();
+    await authenticatePage(b);
+    const mineB = (await (await call(b, "list_my_bug_reports", {})).json()) as unknown[];
+    expect(JSON.stringify(mineB)).not.toContain(`A's private report ${TIMESTAMP}`);
+    const board = await (await call(b, "list_bug_board", {})).text();
+    expect(board).not.toContain(`A's private report ${TIMESTAMP}`);
+
+    const forged = await call(b, "answer_survey", {
+      prompt_id: prompt.prompt_id,
+      answer_json: JSON.stringify({ Text: "B was here" }),
+    });
+    expect(forged.status()).toBeGreaterThanOrEqual(400);
+    expect(await forged.text()).toContain("Not found");
+    const dismiss = await call(b, "dismiss_survey", { prompt_id: prompt.prompt_id });
+    expect(dismiss.status()).toBeGreaterThanOrEqual(400);
+
+    // A can still answer.
+    const own = await call(a, "answer_survey", {
+      prompt_id: prompt.prompt_id,
+      answer_json: JSON.stringify({ Text: "mine" }),
+    });
+    expect(own.status()).toBe(200);
+  } finally {
+    await call(admin, "admin_set_survey_status", { id: surveyId, status: "closed" });
+  }
 });

@@ -112,7 +112,7 @@ jobs:
 
       - name: Playwright smoke, hydration gate, auth and admin
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts --retries=1
 
       - name: Server log
         if: always()

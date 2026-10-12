@@ -121,6 +121,10 @@ fn clean_error(e: ServerFnError) -> String {
 #[component]
 pub fn ProfilePage() -> impl IntoView {
     let user = Resource::new(|| (), |_| get_current_user());
+    let surveys_off = Resource::new(
+        || (),
+        |_| crate::components::survey_prompt::get_survey_opt_out(),
+    );
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
             #[cfg(feature = "hydrate")]
@@ -139,7 +143,50 @@ pub fn ProfilePage() -> impl IntoView {
                     }
                 })}
             </Suspense>
+            <Suspense fallback=|| ()>
+                {move || surveys_off.get().and_then(|r| r.ok()).map(|off| view! { <SurveySettings off=off /> })}
+            </Suspense>
         </PageShell>
+    }
+}
+
+/// The survey switch (M7): on by default; off also expires waiting questions.
+#[component]
+fn SurveySettings(off: bool) -> impl IntoView {
+    use crate::components::ui::{Switch, ToastKind};
+    let toast = use_context::<ToastContext>();
+    let ask = RwSignal::new(!off);
+    let on_change = Callback::new(move |on: bool| {
+        leptos::task::spawn_local(async move {
+            match crate::components::survey_prompt::set_survey_opt_out(!on).await {
+                Ok(()) => {
+                    if let Some(t) = toast {
+                        t.show.run((
+                            ToastKind::Success,
+                            if on {
+                                "Survey questions are on."
+                            } else {
+                                "Survey questions are off."
+                            }
+                            .into(),
+                        ));
+                    }
+                }
+                Err(e) => {
+                    ask.set(!on);
+                    if let Some(t) = toast {
+                        t.show.run((ToastKind::Error, clean_error(e)));
+                    }
+                }
+            }
+        });
+    });
+    view! {
+        <section class="mt-12 scroll-mt-20" id="surveys" aria-labelledby="surveys-h">
+            <SectionHeader title="Survey questions" id="surveys-h" />
+            <Switch label="Ask me short survey questions" checked=ask on_change=on_change />
+            <p class="mt-2 text-caption text-muted">"At most one question a week, always right after something you just did. You can dismiss any question."</p>
+        </section>
     }
 }
 

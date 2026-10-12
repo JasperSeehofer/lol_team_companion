@@ -57,6 +57,15 @@ pub const STORED: &[(&str, &[&str])] = &[
         "Bug reports",
         &[
             "What you send with the bug-report button: the page, the element you pointed at, your text, the category and the window size. Open reports are also written to a file on the server for the maintainer to read.",
+            "What the team does with a report: its status, a title and a note the team writes (shown on the bug board only when the team puts it there), an internal note, which admin changed it and when, and when you last looked at your reports.",
+        ],
+    ),
+    (
+        "Community",
+        &[
+            "Your votes on What next ideas (which idea, when). Others see only how many votes an idea has, never who voted.",
+            "Survey questions you were asked: which question, when it was shown, and your answer or that you dismissed it; and whether you turned survey questions off. Admins see answers without names.",
+            "What admins write: survey questions, What next ideas, the monthly transparency figures and the texts of the transparency page, each with who changed it and when.",
         ],
     ),
 ];
@@ -168,6 +177,12 @@ mod tests {
         "replay_event",
         "ranked_snapshot",
         "bug_report",
+        "survey",
+        "survey_prompt",
+        "proposal",
+        "proposal_vote",
+        "ledger_month",
+        "site_text",
     ];
     /// Tables that hold nothing about a person or a team: migration
     /// bookkeeping, the champion data cache, patch changes and the shipped

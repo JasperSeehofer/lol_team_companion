@@ -21,6 +21,8 @@ const AUTHED_PAGES = [
   { path: "/action-items", content: /action items/i },
   { path: "/personal-learnings", content: /learnings|personal|reflections/i },
   { path: "/personal-learnings/new", content: /learning|new|happened|learned/i },
+  { path: "/bugs", content: /bug board/i },
+  { path: "/what-next", content: /what next/i },
   // /admin/invites is admin-only (404 for others): see admin-invites.spec.ts
 ];
 

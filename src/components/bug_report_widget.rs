@@ -1,36 +1,31 @@
-// Bug-report widget — Phase 17 visual anatomy + Phase 19 wired flow.
-//
-// Phase 17 (plan 17-06) shipped the floating button, modal anatomy, the
-// bug/wishlist toggle, the textarea, and the auth+pathname visibility
-// gate. Phase 19 (plan 19-02) wires:
-//   - WidgetState machine (Idle, Selecting, Editing)
-//   - Global click-capture listener that resolves the clicked element
-//     via Element::closest with the data-feedback-label attribute
-//   - Escape-key cancel listener
-//   - Real submit_bug_report server-fn call (replaces the Phase 17
-//     console.log stub) wired to db::create_bug_report from plan 19-01
-//   - Toast dispatch via the existing ToastContext on success
-//   - Symmetric listener teardown on every exit path (Esc, success,
-//     Cancel, click-outside, click-completion)
-//
-// The widget is mounted in app.rs. The visibility gate is local to
-// the component (auth + pathname), not threaded through the router.
-//
-// Dark-pattern audit (G-10): no exclamation marks, no emoji, no NPS
-// prompt, no star widget, no confirmshaming on Cancel. The single
-// toast string is "Thanks. Your report is in." (period, neutral).
+//! The bug-report widget (M7 rebuild on `components::ui`).
+//!
+//! A docked "Report a bug" button in the page flow above the footer (it
+//! never covers content, at any width) starts select mode: a hint bar at
+//! the top asks the reporter to click the part of the page the report is
+//! about (any element with `data-feedback-label`), with "Skip" for the whole
+//! page and Escape to cancel. The form is a `Dialog`: what the report is
+//! about, the type (Bug or Wishlist), the text, and "Send report". On
+//! success a toast offers "Your reports" (`/bugs?tab=mine`).
+//!
+//! Mounted in `app.rs`; it renders only for signed-in users and never on
+//! `/auth`, `/closed-beta` or `/legal`. Plain, neutral copy: no exclamation
+//! marks, no emoji, no guilt on Cancel.
 
-use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
-use crate::components::icon::Icon;
-use crate::components::ui::{ToastContext, ToastKind};
+use crate::components::ui::{
+    Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Dialog, DialogSize, Field, Keycap,
+    Segment, SegmentSize, SegmentedControl, TextField, Toast, ToastContext,
+};
 use crate::pages::profile::get_current_user;
 
-/// Pathname prefixes on which the widget should NOT render. UI-SPEC
-/// line 590 — public/auth/legal pages must not show the widget.
-const HIDDEN_PREFIXES: &[&str] = &["/auth", "/closed-beta", "/legal"];
+/// Pathname prefixes on which the widget does not render.
+pub const HIDDEN_PREFIXES: &[&str] = &["/auth", "/closed-beta", "/legal", "/s/"];
+
+/// The element label stored when no part of the page was chosen.
+pub const WHOLE_PAGE: &str = "The whole page";
 
 /// A registered global event listener, kept so it can be removed later
 /// (hydrate only; closures are not `Send`, hence `LocalStorage`).
@@ -38,16 +33,7 @@ const HIDDEN_PREFIXES: &[&str] = &["/auth", "/closed-beta", "/legal"];
 type ListenerHandle<E> =
     StoredValue<Option<wasm_bindgen::closure::Closure<dyn Fn(E)>>, leptos::prelude::LocalStorage>;
 
-/// Three-mode widget state.
-///
-/// - `Idle`        — only the floating button is visible
-/// - `Selecting`   — global click-capture listener is attached; user
-///   is targeting a tagged element
-/// - `Editing`     — modal is open with the captured element label
-///
-/// `#[allow(dead_code)]` because `Selecting` and `Editing` are only
-/// constructed inside `#[cfg(feature = "hydrate")]` blocks (the click
-/// closure transitions Selecting → Editing). SSR sees only `Idle`.
+/// `Selecting` and `Editing` are only entered from browser events.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WidgetState {
@@ -56,21 +42,8 @@ enum WidgetState {
     Editing,
 }
 
-// ---------------------------------------------------------------------------
-// Server functions (Phase 19 plan 02)
-//
-// Per leptos-patterns rule 34 these MUST be defined before the calling
-// component, and per rule 9 every SSR-only `use` statement lives INSIDE
-// the function body.
-// ---------------------------------------------------------------------------
-
-/// Persist a bug report. Defense-in-depth: the DB layer already trims +
-/// rejects empty descriptions and the schema `ASSERT` clause rejects bad
-/// categories; we duplicate both checks here so the server-fn boundary
-/// fails fast and never reaches the DB with bad input.
-///
-/// T-19-01 mitigation: category whitelist.
-/// T-19-02 mitigation: description trim + length cap (4000 chars).
+/// Persist a bug report or wish from the signed-in user. Rate limited per
+/// user (`Feedback`: 5, then one every two minutes).
 #[server]
 pub async fn submit_bug_report(
     page_url: String,
@@ -80,23 +53,43 @@ pub async fn submit_bug_report(
     viewport_w: Option<i32>,
     viewport_h: Option<i32>,
 ) -> Result<(), ServerFnError> {
+    use crate::models::community::{clean_text, MAX_BUG_DESCRIPTION};
     use crate::server::authz;
     use crate::server::db;
+    use crate::server::rate_limit::Bucket;
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
 
-    // T-19-02 server-fn guard (description hygiene).
-    let description = description.trim().to_string();
+    let description = clean_text(&description);
     if description.is_empty() {
-        return Err(ServerFnError::new("Description is required"));
+        return Err(ServerFnError::new(
+            "Please describe the problem or the wish.",
+        ));
     }
-    if description.len() > 4000 {
-        return Err(ServerFnError::new("Description exceeds 4000 characters"));
+    if description.chars().count() > MAX_BUG_DESCRIPTION {
+        return Err(ServerFnError::new("Please keep it under 4,000 characters."));
     }
-    // T-19-01 server-fn guard (category whitelist).
     if category != "bug" && category != "wishlist" {
-        return Err(ServerFnError::new("Invalid category"));
+        return Err(ServerFnError::new("Choose Bug or Wishlist."));
     }
+    let page_url: String = clean_text(&page_url).chars().take(300).collect();
+    let page_url = if page_url.starts_with('/') {
+        page_url
+    } else {
+        "/".to_string()
+    };
+    let element_label: String = clean_text(&element_label).chars().take(200).collect();
+    let element_label = if element_label.is_empty() {
+        WHOLE_PAGE.to_string()
+    } else {
+        element_label
+    };
+    let clamp = |v: Option<i32>| v.filter(|v| (1..=20_000).contains(v));
+    authz::rate_limit_user(Bucket::Feedback, &user).map_err(|_| {
+        ServerFnError::new(
+            "You sent several reports in a short time. Please wait a few minutes before sending another.",
+        )
+    })?;
 
     db::create_bug_report(
         &surreal,
@@ -105,76 +98,33 @@ pub async fn submit_bug_report(
         element_label,
         description,
         category,
-        viewport_w,
-        viewport_h,
+        clamp(viewport_w),
+        clamp(viewport_h),
     )
     .await
     .map_err(authz::server_err)
 }
 
-/// List bug reports. v1 returns Forbidden for ALL callers — no admin role
-/// field exists on the user model yet. Plan 19-03 (inbox export) writes to
-/// disk via `db::list_open_bug_reports` directly, bypassing this gate.
-// TODO Phase 22: replace with admin gate once role field exists on user
-#[server]
-pub async fn list_bug_reports(
-    _status: Option<String>,
-) -> Result<Vec<crate::models::bug_report::BugReport>, ServerFnError> {
-    // TODO Phase 22: replace with admin gate once role field exists on user
-    Err(ServerFnError::new("Forbidden"))
-}
-
+/// The widget: a docked trigger, the select-mode hint bar and the form.
+///
+/// Signed-out visitors and public paths render nothing.
 #[component]
 pub fn BugReportWidget() -> impl IntoView {
     let user = Resource::new(|| (), |_| get_current_user());
-    let widget_state = RwSignal::new(WidgetState::Idle);
-    let report_kind = RwSignal::new("bug".to_string());
-    let report_text = RwSignal::new(String::new());
-    let submit_error: RwSignal<Option<String>> = RwSignal::new(None);
-
-    // Phase 19 wires this from the click-capture closure — pre-fill is
-    // "(no element selected)" until the user clicks a tagged element.
-    let element_label = RwSignal::new("(no element selected)".to_string());
-
-    // Pathname guard — re-evaluated on each Effect tick. SSR side: the
-    // widget is wrapped behind `auth.user.is_some()` so it never SSRs
-    // for anonymous visitors.
-    let pathname = RwSignal::new(String::new());
-    Effect::new(move |_| {
-        #[cfg(feature = "hydrate")]
-        if let Some(window) = web_sys::window() {
-            if let Ok(path) = window.location().pathname() {
-                pathname.set(path);
-            }
-        }
-    });
-
-    let on_pathname_excluded = move || {
-        let p = pathname.get();
+    let location = leptos_router::hooks::use_location();
+    let excluded = move || {
+        let p = location.pathname.get();
         HIDDEN_PREFIXES.iter().any(|prefix| p.starts_with(prefix))
     };
-
-    // The signed-in check awaits the resource inside <Suspense> through
-    // `Suspend`, the pattern the nav uses in the same shell. (An earlier
-    // version put a reactive `user.get()` <Show> directly inside
-    // <Suspense>, which raced the first hydration pass and panicked; a
-    // version without <Suspense> hydrated but logged Leptos' "resource read
-    // outside <Suspense>" warning, regression spec BUG-04.) `Suspend`
-    // resolves from the value serialized by the server, so both passes
-    // render the same tree.
+    // `Suspend` resolves from the value serialized by the server, so the
+    // server and the hydrating browser render the same tree.
     view! {
         <Suspense fallback=|| ()>
             {move || Suspend::new(async move {
                 let authed = matches!(user.await, Ok(Some(_)));
                 view! {
-                    <Show when=move || authed && !on_pathname_excluded() fallback=|| ()>
-                        <BugReportWidgetInner
-                            widget_state=widget_state
-                            report_kind=report_kind
-                            report_text=report_text
-                            element_label=element_label
-                            submit_error=submit_error
-                        />
+                    <Show when=move || authed && !excluded() fallback=|| ()>
+                        <WidgetInner />
                     </Show>
                 }
             })}
@@ -183,63 +133,36 @@ pub fn BugReportWidget() -> impl IntoView {
 }
 
 #[component]
-fn BugReportWidgetInner(
-    widget_state: RwSignal<WidgetState>,
-    report_kind: RwSignal<String>,
-    report_text: RwSignal<String>,
-    element_label: RwSignal<String>,
-    submit_error: RwSignal<Option<String>>,
-) -> impl IntoView {
-    // Cloned signal access for separate closures (rule 18: clones
-    // before multiple closures). `RwSignal` is Copy, so these are just
-    // aliases for readability rather than real clones.
-    let report_kind_cls_bug = report_kind;
-    let report_kind_cls_wish = report_kind;
-    let report_kind_set_bug = report_kind;
-    let report_kind_set_wish = report_kind;
-    let report_text_set = report_text;
-    let report_text_get = report_text;
+fn WidgetInner() -> impl IntoView {
+    let state = RwSignal::new(WidgetState::Idle);
+    let dialog_open = RwSignal::new(false);
+    let kind = RwSignal::new("bug".to_string());
+    let text = RwSignal::new(String::new());
+    let label = RwSignal::new(WHOLE_PAGE.to_string());
+    let error: RwSignal<Option<String>> = RwSignal::new(None);
+    let sending = RwSignal::new(false);
+    let toast = use_context::<ToastContext>();
+    let navigate = leptos_router::hooks::use_navigate();
+    let navigate = StoredValue::new(navigate);
 
-    // Closure carriers for the global listeners. `Closure` is `!Send`,
-    // so the default `SyncStorage` parameter on `StoredValue<T>` fails
-    // the `Send + Sync` bound. Use `StoredValue::new_local()` (leptos
-    // 0.2.13 reactive_graph API) which returns
-    // `StoredValue<T, LocalStorage>` and works with `!Send` types — the
-    // canonical carrier for `wasm_bindgen::closure::Closure` (leptos
-    // rule 22 + non-Send extension).
-    //
-    // Wasm rule 43: these are only read inside #[cfg(feature = "hydrate")]
-    // blocks; suppress the SSR-build unused-variable warnings on the
-    // `let` bindings.
     #[allow(unused_variables)]
     #[cfg(feature = "hydrate")]
-    let click_capture_handle: ListenerHandle<web_sys::MouseEvent> = StoredValue::new_local(None);
+    let click_handle: ListenerHandle<web_sys::MouseEvent> = StoredValue::new_local(None);
     #[allow(unused_variables)]
     #[cfg(feature = "hydrate")]
     let esc_handle: ListenerHandle<web_sys::KeyboardEvent> = StoredValue::new_local(None);
 
-    // --- exit_select_mode (declared first so start_select_mode can call it) ---
-    //
-    // Removes both global listeners, clears the body cursor, and removes
-    // the `data-feedback-selecting` attribute from <html>. Runs on every
-    // exit path (Esc, click-completion, Submit success, Cancel,
-    // click-outside).
-    let exit_select_mode = move || {
+    // Remove both global listeners and the select-mode marks. Runs on every
+    // exit path (Escape, a captured click, Skip).
+    let exit_select = move || {
         #[cfg(feature = "hydrate")]
         {
             use wasm_bindgen::JsCast;
             if let Some(win) = web_sys::window() {
-                // Pull the click-capture closure out of the StoredValue
-                // slot and detach it. Closure's Drop frees the JS shim
-                // when the inner `cb` falls out of scope at end of the
-                // `update_value` block.
-                click_capture_handle.update_value(|slot| {
+                click_handle.update_value(|slot| {
                     if let Some(cb) = slot.take() {
-                        // Must match the add-side `capture: true` flag —
-                        // removeEventListener only detaches when capture
-                        // matches. Without this the listener stays
-                        // attached and subsequent clicks reopen the
-                        // modal even after Esc-cancel.
+                        // `capture` must match the add side, or the
+                        // listener stays attached.
                         let _ = win.remove_event_listener_with_callback_and_bool(
                             "click",
                             cb.as_ref().unchecked_ref(),
@@ -269,70 +192,95 @@ fn BugReportWidgetInner(
         }
     };
 
-    // --- start_select_mode ---
-    //
-    // Sets `widget_state` to Selecting, paints the body cursor, sets
-    // the `data-feedback-selecting` attribute on <html> (driving the
-    // CSS outline rule in input.css), and attaches a CAPTURE-phase
-    // click listener plus a keydown listener for Esc-cancel.
-    let start_select_mode = move || {
-        widget_state.set(WidgetState::Selecting);
-        submit_error.set(None);
+    // Focus goes back to the docked trigger when a report ends (sent,
+    // cancelled, or select mode left with Escape). The dialog's own focus
+    // return points at the element focused before it opened, which is
+    // often the hint bar's Skip button that no longer exists.
+    let focus_trigger = move || {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::{closure::Closure, JsCast};
+            if let Some(win) = web_sys::window() {
+                let cb = Closure::once(move || {
+                    let el = web_sys::window()
+                        .and_then(|w| w.document())
+                        .and_then(|d| {
+                            d.query_selector("[data-bug-report-dock] button")
+                                .ok()
+                                .flatten()
+                        })
+                        .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok());
+                    if let Some(el) = el {
+                        let _ = el.focus();
+                    }
+                });
+                let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    0,
+                );
+                cb.forget();
+            }
+        }
+    };
 
+    let open_form = move |about: String| {
+        exit_select();
+        label.set(about);
+        error.set(None);
+        state.set(WidgetState::Editing);
+        dialog_open.set(true);
+    };
+
+    let start_select = move || {
+        // A second click on the trigger while selecting must not register a
+        // second pair of listeners (replacing the stored closures would drop
+        // ones the browser still calls).
+        if state.get_untracked() == WidgetState::Selecting {
+            return;
+        }
+        state.set(WidgetState::Selecting);
+        error.set(None);
         #[cfg(feature = "hydrate")]
         {
             use wasm_bindgen::closure::Closure;
             use wasm_bindgen::JsCast;
-
             let Some(win) = web_sys::window() else {
                 return;
             };
             let Some(doc) = win.document() else {
                 return;
             };
-
             if let Some(body) = doc.body() {
                 let _ = body.style().set_property("cursor", "crosshair");
             }
             if let Some(el) = doc.document_element() {
                 let _ = el.set_attribute("data-feedback-selecting", "");
             }
-
-            // Click-capture closure. We attach in CAPTURE phase so we
-            // intercept before any bubble-phase `on:click` handlers
-            // attached to tagged elements.
+            // Capture phase, so the page's own handlers do not run.
             let click_cb =
                 Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
-                    let target = match ev.target() {
-                        Some(t) => t,
-                        None => return,
+                    let Some(el) = ev
+                        .target()
+                        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    else {
+                        return;
                     };
-                    let el = match target.dyn_into::<web_sys::Element>() {
-                        Ok(e) => e,
-                        Err(_) => return,
-                    };
-                    // `Element::closest` returns `Result<Option<Element>, JsValue>`
-                    // — two unwrap levels. Forgiving UX: if `Ok(None)`
-                    // (user clicked an UNTAGGED area), just return so
-                    // select-mode stays active and the user can try
-                    // again. Only commit on a tagged hit.
+                    // The hint bar's own buttons are not part of the page.
+                    if let Ok(Some(_)) = el.closest("[data-feedback-hint]") {
+                        return;
+                    }
                     let Ok(Some(tagged)) = el.closest("[data-feedback-label]") else {
                         return;
                     };
-                    // Tagged hit — swallow the event so the underlying
-                    // app does not also receive the click.
                     ev.prevent_default();
                     ev.stop_propagation();
                     ev.stop_immediate_propagation();
-
-                    let label = tagged
+                    let about = tagged
                         .get_attribute("data-feedback-label")
-                        .unwrap_or_else(|| "(unlabeled)".to_string());
-                    element_label.set(label);
-                    widget_state.set(WidgetState::Editing);
-                    exit_select_mode();
+                        .filter(|l| !l.trim().is_empty())
+                        .unwrap_or_else(|| WHOLE_PAGE.to_string());
+                    open_form(about);
                 });
-
             let opts = web_sys::AddEventListenerOptions::new();
             opts.set_capture(true);
             let _ = win.add_event_listener_with_callback_and_add_event_listener_options(
@@ -340,14 +288,13 @@ fn BugReportWidgetInner(
                 click_cb.as_ref().unchecked_ref(),
                 &opts,
             );
-            click_capture_handle.set_value(Some(click_cb));
-
-            // Esc-cancel closure. Bubble-phase is fine for keydown.
+            click_handle.set_value(Some(click_cb));
             let esc_cb = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
                 move |ev: web_sys::KeyboardEvent| {
                     if ev.key() == "Escape" {
-                        widget_state.set(WidgetState::Idle);
-                        exit_select_mode();
+                        state.set(WidgetState::Idle);
+                        exit_select();
+                        focus_trigger();
                     }
                 },
             );
@@ -357,189 +304,164 @@ fn BugReportWidgetInner(
         }
     };
 
-    // Cancel-flow shared by the Cancel button, the click-outside
-    // overlay handler, and any other "abort editing" path. Symmetric
-    // teardown: clear listeners, clear error, reset signals.
-    let cancel_editing = move || {
-        exit_select_mode();
-        submit_error.set(None);
-        widget_state.set(WidgetState::Idle);
-        report_text.set(String::new());
-        element_label.set("(no element selected)".to_string());
+    // Following a link that is not a report target (the nav, the footer)
+    // ends select mode instead of carrying it to the next page.
+    let location = leptos_router::hooks::use_location();
+    Effect::new(move |prev: Option<String>| {
+        let path = location.pathname.get();
+        if prev.as_deref().is_some_and(|p| p != path)
+            && state.get_untracked() == WidgetState::Selecting
+        {
+            state.set(WidgetState::Idle);
+            exit_select();
+        }
+        path
+    });
+
+    // Closing the dialog (Cancel, Escape, the close button) ends editing.
+    Effect::new(move |_| {
+        if !dialog_open.get() && state.get_untracked() == WidgetState::Editing {
+            state.set(WidgetState::Idle);
+            error.set(None);
+            focus_trigger();
+        }
+    });
+
+    let send = move |_| {
+        if sending.get_untracked() {
+            return;
+        }
+        error.set(None);
+        #[cfg(feature = "hydrate")]
+        let (page_url, vw, vh) = web_sys::window()
+            .map(|w| {
+                let url = w.location().pathname().ok().unwrap_or_default();
+                let size = |v: Result<wasm_bindgen::JsValue, _>| {
+                    v.ok().and_then(|v| v.as_f64()).map(|f| f as i32)
+                };
+                (url, size(w.inner_width()), size(w.inner_height()))
+            })
+            .unwrap_or_default();
+        #[cfg(not(feature = "hydrate"))]
+        let (page_url, vw, vh): (String, Option<i32>, Option<i32>) = (String::new(), None, None);
+        let (k, t, l) = (
+            kind.get_untracked(),
+            text.get_untracked(),
+            label.get_untracked(),
+        );
+        if t.trim().is_empty() {
+            error.set(Some("Please describe the problem or the wish.".into()));
+            return;
+        }
+        sending.set(true);
+        spawn_local(async move {
+            let result = submit_bug_report(page_url, l, t, k, vw, vh).await;
+            sending.set(false);
+            match result {
+                Ok(()) => {
+                    dialog_open.set(false);
+                    state.set(WidgetState::Idle);
+                    text.set(String::new());
+                    focus_trigger();
+                    if let Some(toast) = toast {
+                        toast
+                            .push
+                            .run(Toast::success("Thanks. Your report is in.").with_action(
+                                "Your reports",
+                                Callback::new(move |_| {
+                                    navigate.with_value(|n| n("/bugs?tab=mine", Default::default()))
+                                }),
+                            ));
+                    }
+                }
+                Err(e) => error.set(Some(
+                    e.to_string()
+                        .trim_start_matches("error running server function: ")
+                        .to_string(),
+                )),
+            }
+        });
     };
 
+    let placeholder = Signal::derive(move || {
+        if kind.get() == "wishlist" {
+            "What would help your team, and when would you use it?"
+        } else {
+            "What did you do, what did you expect, what happened instead?"
+        }
+    });
+
     view! {
-        // Floating button (UI-SPEC line 583). Single click enters
-        // select-mode directly — no intermediate menu, per D-08 (no
-        // multi-step nags).
-        // Docked at every width: a labelled button in the page flow, just
-        // above the footer, so it never covers content (M7 rebuilds it).
         <div class="mx-auto flex max-w-7xl justify-end px-4 pt-10 sm:px-8" data-bug-report-dock>
-            <button
-                type="button"
-                class="inline-flex h-8 items-center gap-2 rounded-ctl border border-outline bg-ink-1 px-3 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary"
-                aria-label="Report a bug or wishlist item"
-                on:click=move |_| start_select_mode()
+            <Button
+                variant=ButtonVariant::Secondary
+                size=ButtonSize::Sm
+                aria_label="Report a bug or a wish"
+                on_click=Callback::new(move |_| start_select())
             >
-                <Icon name="feather" size=16 class="text-muted" />
-                <span aria-hidden="true">"Report a bug"</span>
-            </button>
+                "Report a bug"
+            </Button>
         </div>
 
-        // Editing modal — only rendered when WidgetState::Editing.
-        <Show when=move || matches!(widget_state.get(), WidgetState::Editing) fallback=|| ()>
-            <div
-                class="fixed inset-0 z-50 flex items-center justify-center p-6"
-                style="background-color: var(--color-scrim);"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Report a bug or wishlist item"
-                on:click=move |_| cancel_editing()
-            >
-                // Inner card — stop propagation so clicking inside
-                // does not close the modal.
-                <div
-                    class="bg-ink-1 border border-rule rounded-xl p-6 shadow-overlay max-w-md w-full"
-                    on:click=|ev: ev::MouseEvent| ev.stop_propagation()
+        <Show when=move || state.get() == WidgetState::Selecting fallback=|| ()>
+            <div class="fixed inset-x-0 top-14 z-(--z-popover) mx-auto w-[min(40rem,calc(100vw-2rem))] bg-ink-1 shadow-overlay" data-feedback-hint>
+                <Callout
+                    tone=CalloutTone::Info
+                    action=move || view! {
+                        <span class="flex items-center gap-3">
+                            <Button
+                                size=ButtonSize::Sm
+                                variant=ButtonVariant::Secondary
+                                on_click=Callback::new(move |_| open_form(WHOLE_PAGE.to_string()))
+                            >
+                                "Skip"
+                            </Button>
+                            <span class="hidden items-center gap-1 text-caption text-secondary sm:flex">
+                                <Keycap keys="Esc" />
+                                " to cancel"
+                            </span>
+                        </span>
+                    }
                 >
-                    <h2 class="font-display text-xl text-primary mb-4">
-                        "Report"
-                    </h2>
-
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
-                        "Element"
-                    </div>
-                    <div class="bg-ink-2 rounded-lg p-2 text-sm text-secondary mb-4">
-                        {move || element_label.get()}
-                    </div>
-
-                    // Bug / Wishlist toggle (UI-SPEC line 600)
-                    <div class="flex gap-2 mb-4">
-                        <button
-                            type="button"
-                            class=move || if report_kind_cls_bug.get() == "bug" {
-                                "bg-accent text-accent-ink px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            } else {
-                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-rule focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            }
-                            on:click=move |_| report_kind_set_bug.set("bug".to_string())
-                        >
-                            "Bug"
-                        </button>
-                        <button
-                            type="button"
-                            class=move || if report_kind_cls_wish.get() == "wishlist" {
-                                "bg-accent text-accent-ink px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            } else {
-                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-rule focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            }
-                            on:click=move |_| report_kind_set_wish.set("wishlist".to_string())
-                        >
-                            "Wishlist"
-                        </button>
-                    </div>
-
-                    <textarea
-                        class="w-full bg-ink-2 border border-outline rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                        rows="4"
-                        placeholder="What went wrong, or what would you like?"
-                        prop:value=move || report_text_get.get()
-                        on:input=move |ev| report_text_set.set(event_target_value(&ev))
-                    />
-
-                    // Inline submit error (only rendered on server-fn failure).
-                    <Show when=move || submit_error.get().is_some() fallback=|| ()>
-                        <p class="text-sm text-danger mt-2" role="alert">
-                            {move || submit_error.get().unwrap_or_default()}
-                        </p>
-                    </Show>
-
-                    <div class="flex gap-3 justify-end mt-4">
-                        <button
-                            type="button"
-                            class="text-muted hover:text-secondary text-sm px-3 py-2 rounded-lg focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            on:click=move |_| cancel_editing()
-                        >
-                            "Cancel"
-                        </button>
-                        <button
-                            type="button"
-                            class="bg-accent text-accent-ink font-semibold rounded-lg px-4 py-2 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                            on:click=move |_| {
-                                submit_error.set(None);
-
-                                // Read viewport + pathname before
-                                // spawning the async task so we capture
-                                // values at click-time, not at
-                                // settle-time.
-                                #[cfg(feature = "hydrate")]
-                                let (page_url, vw, vh) = web_sys::window()
-                                    .map(|w| {
-                                        let url = w
-                                            .location()
-                                            .pathname()
-                                            .ok()
-                                            .unwrap_or_default();
-                                        let vw = w
-                                            .inner_width()
-                                            .ok()
-                                            .and_then(|v| v.as_f64())
-                                            .map(|f| f as i32);
-                                        let vh = w
-                                            .inner_height()
-                                            .ok()
-                                            .and_then(|v| v.as_f64())
-                                            .map(|f| f as i32);
-                                        (url, vw, vh)
-                                    })
-                                    .unwrap_or_default();
-                                #[cfg(not(feature = "hydrate"))]
-                                let (page_url, vw, vh): (String, Option<i32>, Option<i32>) =
-                                    (String::new(), None, None);
-
-                                let kind = report_kind.get_untracked();
-                                let text = report_text.get_untracked();
-                                let label = element_label.get_untracked();
-
-                                // Capture the toast context outside the
-                                // async block so the `Copy` `ToastContext`
-                                // value flows into the move closure.
-                                let toast = use_context::<ToastContext>();
-
-                                spawn_local(async move {
-                                    match submit_bug_report(
-                                        page_url, label, text, kind, vw, vh,
-                                    )
-                                    .await
-                                    {
-                                        Ok(()) => {
-                                            // Shadow `toast: Option<ToastContext>`
-                                            // with the unwrapped value so the
-                                            // canonical dispatch shape
-                                            // `toast.show.run((kind, msg))`
-                                            // appears literally (matches plan
-                                            // acceptance grep + src/pages/
-                                            // action_items.rs:220).
-                                            if let Some(toast) = toast {
-                                                toast.show.run((ToastKind::Success, "Thanks. Your report is in.".into()));
-                                            }
-                                            widget_state.set(WidgetState::Idle);
-                                            report_text.set(String::new());
-                                            element_label
-                                                .set("(no element selected)".to_string());
-                                        }
-                                        Err(e) => {
-                                            submit_error.set(Some(e.to_string()));
-                                        }
-                                    }
-                                });
-                            }
-                        >
-                            "Submit"
-                        </button>
-                    </div>
-                </div>
+                    "Click the part of the page your report is about."
+                </Callout>
             </div>
         </Show>
+
+        <Dialog
+            id="bug-report"
+            open=dialog_open
+            title="Report"
+            size=DialogSize::Md
+            dismiss_on_scrim=false
+            footer=move || view! {
+                <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| dialog_open.set(false))>"Cancel"</Button>
+                <Button variant=ButtonVariant::Primary loading=sending on_click=Callback::new(send)>"Send report"</Button>
+            }
+        >
+            <div class="flex flex-col gap-5">
+                <div>
+                    <p class="eyebrow">"About"</p>
+                    <p class="mt-1 text-body text-primary" data-testid="report-about">{move || label.get()}</p>
+                </div>
+                <SegmentedControl
+                    id="bug-report-type"
+                    label="Type"
+                    size=SegmentSize::Sm
+                    options=vec![Segment::new("bug", "Bug"), Segment::new("wishlist", "Wishlist")]
+                    value=kind
+                />
+                <Field
+                    id="bug-report-text"
+                    label="What happened, or what would you like?"
+                    hint="Please leave out passwords and other people's personal details."
+                    error=Signal::derive(move || error.get())
+                >
+                    {move || view! {
+                        <TextField value=text rows=5 maxlength=4000 placeholder=placeholder.get() />
+                    }}
+                </Field>
+            </div>
+        </Dialog>
     }
 }

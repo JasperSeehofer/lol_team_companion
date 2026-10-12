@@ -19,6 +19,7 @@
 //! Names are ordinary player handles; champion picks are real champions.
 
 use std::{env, time::Duration};
+use surrealdb::types::SurrealValue;
 use surrealdb::{engine::local::Db, Surreal};
 
 use lol_team_companion::{
@@ -214,6 +215,10 @@ async fn main() {
             "  per team: 2 drafts, 2 game plans, 3 reviews with action items, a team note, \
              a scouting profile of the other team"
         );
+        println!(
+            "  2 bug reports (one triaged and on the bug board, one new) and votes on 3 seeded \
+             What next ideas (ideas stay unpublished until an admin publishes them; no ledger figures)"
+        );
         println!("  1 invite code (25 uses, 30 days)");
         return;
     }
@@ -257,6 +262,11 @@ async fn main() {
         }
     }
 
+    if let Err(e) = community(&db, &teams).await {
+        eprintln!("Community demo data failed: {e}");
+        std::process::exit(1);
+    }
+
     let invite_code = db::generate_invite_code();
     let invite = db::create_invite(
         &db,
@@ -285,6 +295,90 @@ async fn main() {
         ),
         Err(e) => eprintln!("Warning: could not create the seed invite code: {e}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Community loop (M7)
+// ---------------------------------------------------------------------------
+
+/// Two bug reports by seed players (one triaged and on the board, one new)
+/// and votes on three seeded proposals. Proposals and surveys come from the
+/// migration and are never touched; no ledger figure is ever seeded.
+async fn community(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String> {
+    use lol_team_companion::models::bug_report::BugTriage;
+    use lol_team_companion::server::community::store;
+
+    let reporter = &teams[0].members[2];
+    let other = &teams[1].members[4];
+    db::create_bug_report(
+        db,
+        reporter,
+        "/draft".into(),
+        "Draft".into(),
+        "The pick order resets when I switch tabs during a draft.".into(),
+        "bug".into(),
+        Some(1280),
+        Some(800),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    db::create_bug_report(
+        db,
+        other,
+        "/game-plan".into(),
+        "The whole page".into(),
+        "A printable version of the game plan for the coach.".into(),
+        "wishlist".into(),
+        Some(390),
+        Some(844),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    let mine = store::list_my_bug_reports(db, reporter)
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(r) = mine.first() {
+        store::admin_update_bug_report(
+            db,
+            &teams[0].members[0],
+            &BugTriage {
+                id: r.id.clone(),
+                status: "planned".into(),
+                on_board: true,
+                public_title: "Draft pick order resets after switching tabs".into(),
+                public_note: "We can reproduce it; a fix is planned.".into(),
+                admin_note: "Seed demo report.".into(),
+                fixed_in: String::new(),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    #[derive(serde::Deserialize, SurrealValue)]
+    struct Row {
+        id: surrealdb::types::RecordId,
+    }
+    let mut r = db
+        .query("SELECT id FROM proposal WHERE seed_key IN ['series_fearless', 'opponent_memory', 'discord']")
+        .await
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<Row> = r.take(0).map_err(|e| e.to_string())?;
+    let voters: Vec<&String> = teams.iter().flat_map(|t| t.members.iter()).collect();
+    for (i, p) in ids.iter().enumerate() {
+        for u in voters.iter().take(6 - i * 2) {
+            db.query("CREATE proposal_vote SET proposal = $p, user = type::record('user', $u)")
+                .bind(("p", p.id.clone()))
+                .bind(("u", db::record_key(u, "user")))
+                .await
+                .and_then(|r| r.check())
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    println!(
+        "Created 2 bug reports and votes on {} seeded ideas.",
+        ids.len()
+    );
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +431,8 @@ async fn cleanup(db: &Surreal<Db>) -> Result<(), String> {
         DELETE personal_goal WHERE user IN $users; \
         DELETE ranked_snapshot WHERE user IN $users; \
         DELETE player_match WHERE user IN $users; \
+        DELETE proposal_vote WHERE user IN $users; \
+        DELETE survey_prompt WHERE user IN $users; \
         DELETE bug_report WHERE user IN $users; \
         DELETE user WHERE id IN $users; \
         DELETE invite WHERE note = 'seed'; \

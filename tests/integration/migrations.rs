@@ -72,6 +72,37 @@ async fn scope_fields_are_indexed() {
         ("replay_event", &["replay_event_replay"]),
         ("board", &["board_team"]),
         ("board_version", &["board_version_unique"]),
+        (
+            "bug_report",
+            &["bug_report_board_status", "bug_report_user"],
+        ),
+        (
+            "survey",
+            &["survey_seed_key_unique", "survey_trigger_status"],
+        ),
+        (
+            "survey_prompt",
+            &[
+                "survey_prompt_user",
+                "survey_prompt_unique",
+                "survey_prompt_user_shown",
+                "survey_prompt_survey_state",
+            ],
+        ),
+        ("proposal", &["proposal_seed_key_unique", "proposal_status"]),
+        (
+            "proposal_vote",
+            &[
+                "proposal_vote_unique",
+                "proposal_vote_proposal",
+                "proposal_vote_user",
+            ],
+        ),
+        (
+            "ledger_month",
+            &["ledger_month_unique", "ledger_month_published"],
+        ),
+        ("site_text", &["site_text_slug_unique"]),
     ];
     for (table, indexes) in expected {
         let info = info_for_table(&db, table).await;
@@ -539,4 +570,133 @@ async fn roster_places_roles_and_dead_links_are_migrated() {
 
     // Running again changes nothing.
     assert!(migrations::run(&db).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn bug_report_statuses_are_mapped_to_v2() {
+    let db = baseline_only().await;
+    db.query(
+        "DEFINE FIELD OVERWRITE status ON bug_report TYPE string DEFAULT 'open' \
+             ASSERT $value IN ['open', 'triaged', 'closed']; \
+         CREATE user:r SET username = 'R', email = 'r@example.com', password_hash = 'h'; \
+         CREATE bug_report:o SET user = user:r, page_url = '/', element_label = 'x', description = 'd', category = 'bug', status = 'open'; \
+         CREATE bug_report:t SET user = user:r, page_url = '/', element_label = 'x', description = 'd', category = 'bug', status = 'triaged'; \
+         CREATE bug_report:c SET user = user:r, page_url = '/', element_label = 'x', description = 'd', category = 'wishlist', status = 'closed';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+
+    migrations::run(&db).await.unwrap();
+
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Row {
+        status: String,
+        admin_note: Option<String>,
+        status_changed_at: Option<surrealdb::types::Datetime>,
+    }
+    let row = |key: &'static str| {
+        let db = db.clone();
+        async move {
+            let mut r = db
+                .query("SELECT status, admin_note, status_changed_at FROM type::record('bug_report', $k)")
+                .bind(("k", key))
+                .await
+                .unwrap();
+            let row: Option<Row> = r.take(0).unwrap();
+            row.unwrap()
+        }
+    };
+    assert_eq!(row("o").await.status, "new");
+    assert_eq!(row("t").await.status, "triaged");
+    let closed = row("c").await;
+    assert_eq!(closed.status, "triaged");
+    assert_eq!(
+        closed.admin_note.as_deref(),
+        Some("Closed before statuses existed; set a final status.")
+    );
+    // Not shown to the reporter as an update (M7 review).
+    assert!(closed.status_changed_at.is_none());
+
+    let bad = db
+        .query("CREATE bug_report SET user = user:r, page_url = '/', element_label = 'x', description = 'd', category = 'bug', status = 'open'")
+        .await
+        .unwrap()
+        .check();
+    assert!(bad.is_err(), "the old status is rejected");
+    db.query("CREATE bug_report:fresh SET user = user:r, page_url = '/', element_label = 'x', description = 'd', category = 'bug'")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_eq!(row("fresh").await.status, "new");
+    let info = info_for_table(&db, "bug_report").await;
+    assert!(info.contains("wont_fix"), "{info}");
+}
+
+#[tokio::test]
+async fn community_seed_content_is_inserted_once_and_unapproved() {
+    let db = crate::common::test_db().await;
+
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Counts {
+        proposals: i64,
+        published: i64,
+        surveys: i64,
+        approved_surveys: i64,
+        drafts: i64,
+        texts: i64,
+        approved_texts: i64,
+        player_cards: Option<String>,
+    }
+    let counts = || {
+        let db = db.clone();
+        async move {
+            let mut r = db
+                .query(
+                    "RETURN { \
+                        proposals: count(SELECT id FROM proposal WHERE seed_key != NONE), \
+                        published: count(SELECT id FROM proposal WHERE published = true), \
+                        surveys: count(SELECT id FROM survey WHERE seed_key != NONE), \
+                        approved_surveys: count(SELECT id FROM survey WHERE approved_hash != NONE), \
+                        drafts: count(SELECT id FROM survey WHERE status = 'draft'), \
+                        texts: count(SELECT id FROM site_text), \
+                        approved_texts: count(SELECT id FROM site_text WHERE approved = true), \
+                        player_cards: (SELECT VALUE shipped_in FROM proposal WHERE seed_key = 'player_cards')[0] \
+                     }",
+                )
+                .await
+                .unwrap();
+            let c: Option<Counts> = r.take(0).unwrap();
+            c.unwrap()
+        }
+    };
+    let c = counts().await;
+    assert_eq!(c.proposals, 17);
+    assert_eq!(
+        c.published, 0,
+        "nothing reaches the board before an admin publishes it"
+    );
+    assert_eq!(c.surveys, 4);
+    assert_eq!(c.drafts, 4);
+    assert_eq!(c.approved_surveys, 0);
+    assert_eq!(c.texts, 5);
+    assert_eq!(c.approved_texts, 0);
+    assert_eq!(
+        c.player_cards.as_deref(),
+        Some("milestone-m5-remaining-pages-navigation-mobile")
+    );
+
+    // Running the body again adds nothing; a deleted seed stays deleted
+    // because the migration is recorded.
+    migrations::community_seed_content(&db).await.unwrap();
+    assert_eq!(counts().await.proposals, 17);
+    db.query("DELETE proposal WHERE seed_key = 'light_theme'")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    migrations::run(&db).await.unwrap();
+    assert_eq!(counts().await.proposals, 16);
 }
