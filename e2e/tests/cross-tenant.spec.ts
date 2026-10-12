@@ -281,3 +281,45 @@ test("users see only their own bug reports and cannot answer another user's surv
     await call(admin, "admin_set_survey_status", { id: surveyId, status: "closed" });
   }
 });
+
+test("team invites: another team's leader cannot list or disable them, and the team is never taken from the client", async ({
+  browser,
+}) => {
+  const a = await (await browser.newContext()).newPage();
+  await authenticatePage(a);
+  await createTeam(a, `InvA_${TIMESTAMP}`);
+  const b = await (await browser.newContext()).newPage();
+  await authenticatePage(b);
+  await createTeam(b, `InvB_${TIMESTAMP}`);
+
+  const minted = await call(a, "mint_team_invite", { max_uses: "1", expires_in_days: "3", position: "" });
+  expect(minted.status()).toBe(200);
+  const codeA: string = await minted.json();
+  const listA = await (await call(a, "list_team_invites", {})).json();
+  const inviteA = listA[1].find((i: { code: string }) => i.code === codeA);
+  expect(inviteA).toBeTruthy();
+
+  // B lists only B's codes and cannot disable A's.
+  const listB = await (await call(b, "list_team_invites", {})).json();
+  expect(JSON.stringify(listB)).not.toContain(codeA);
+  const disable = await call(b, "disable_team_invite", { id: inviteA.id });
+  expect(disable.status()).not.toBe(200);
+
+  // An extra team field from the client is ignored: B's code is B's.
+  const teamA = inviteA.team_id as string;
+  const sneaky = await call(b, "mint_team_invite", { max_uses: "1", expires_in_days: "3", position: "", team_id: teamA });
+  if (sneaky.status() === 200) {
+    const codeB: string = await sneaky.json();
+    const again = await (await call(a, "list_team_invites", {})).json();
+    expect(JSON.stringify(again)).not.toContain(codeB);
+  }
+
+  // A's code is still open.
+  const after = await (await call(a, "list_team_invites", {})).json();
+  expect(after[1].find((i: { code: string }) => i.code === codeA).disabled).toBe(false);
+
+  // Someone without a team cannot mint at all.
+  const c = await (await browser.newContext()).newPage();
+  await authenticatePage(c);
+  expect((await call(c, "mint_team_invite", { max_uses: "1", expires_in_days: "3", position: "" })).status()).not.toBe(200);
+});

@@ -11,7 +11,7 @@ use crate::components::ui::{
     Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
 };
 use crate::pages::legal::impressum::{
-    OPERATOR_ADDRESS, OPERATOR_EMAIL, OPERATOR_NAME, OwnerPlaceholder,
+    OwnerPlaceholder, OPERATOR_ADDRESS, OPERATOR_EMAIL, OPERATOR_NAME,
 };
 use leptos::prelude::*;
 
@@ -33,7 +33,7 @@ pub const STORED: &[(&str, &[&str])] = &[
         "Signing in",
         &[
             "A session cookie (HttpOnly, SameSite=Strict) and the session it points to on the server. A session ends after 30 days without use; ended sessions are deleted.",
-            "Invite codes with how often they were used.",
+            "Invite codes with how often they were used and, for a team invite, the team and position it leads to.",
         ],
     ),
     (
@@ -192,7 +192,7 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <li>"Restriction and objection, and anything the buttons do not cover: write to the contact above."</li>
                     <li>"You can complain to a data protection supervisory authority. The one responsible for the operator is "
                         <span data-testid="authority">"Der Landesbeauftragte f\u{00fc}r den Datenschutz und die Informationsfreiheit Baden-W\u{00fc}rttemberg (LfDI), Lautenschlagerstra\u{00df}e 20, 70173 Stuttgart, "
-                        <a href="https://www.baden-wuerttemberg.datenschutz.de" rel="noopener noreferrer" class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">"www.baden-wuerttemberg.datenschutz.de"</a></span>
+                        <span class="text-primary">"www.baden-wuerttemberg.datenschutz.de"</span></span>
                         "."
                     </li>
                 </ul>

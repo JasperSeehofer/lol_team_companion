@@ -10,33 +10,42 @@ use leptos::prelude::*;
 
 use crate::components::ui::{
     Button, ButtonSize, ButtonType, ButtonVariant, EmptySize, EmptyState, Field, InputKind,
-    PageHeader, PageShell, PageWidth, SectionHeader, Skeleton, SkeletonGroup, Table, Td, TextField,
-    Th, ToastContext, ToastKind, Tr,
+    PageHeader, PageShell, PageWidth, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup,
+    Table, Td, TextField, Th, ToastContext, ToastKind, Tr,
 };
 use crate::error_template::NotFound;
 use crate::models::invite::Invite;
 
 /// All invites plus the server's current time (RFC 3339), used to show
-/// which codes have expired. (The clock is read on the server: `Utc::now()`
-/// is not available in the browser build.)
+/// which codes have expired, and every team as (id, name) for the
+/// optional team of a new code. (The clock is read on the server:
+/// `Utc::now()` is not available in the browser build.)
 #[server]
-pub async fn list_invites() -> Result<(String, Vec<Invite>), ServerFnError> {
+pub async fn list_invites() -> Result<(String, Vec<Invite>, Vec<(String, String)>), ServerFnError> {
     use crate::server::{authz, db};
 
     authz::require_admin().await?;
     let db = authz::db()?;
     let invites = db::list_invites(&db).await.map_err(authz::server_err)?;
+    let teams = db::list_all_teams(&db)
+        .await
+        .map_err(authz::server_err)?
+        .into_iter()
+        .filter_map(|t| t.id.map(|id| (id, t.name)))
+        .collect();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    Ok((now, invites))
+    Ok((now, invites, teams))
 }
 
 /// Mint a new random code. An empty `expires_in_days` means it never
-/// expires. Returns the code.
+/// expires. A non-empty `team_id` binds the code to that team (it must
+/// exist): whoever registers with it joins the team. Returns the code.
 #[server]
 pub async fn mint_invite(
     max_uses: i64,
     expires_in_days: String,
     note: String,
+    #[server(default)] team_id: String,
 ) -> Result<String, ServerFnError> {
     use crate::server::{authz, db};
 
@@ -63,16 +72,30 @@ pub async fn mint_invite(
     };
     let note = Some(note.trim().chars().take(200).collect::<String>()).filter(|n| !n.is_empty());
     let code = db::generate_invite_code();
-    db::create_invite(
-        &db,
-        Some(&admin.id),
-        code.clone(),
-        max_uses,
-        expires_at,
-        note,
-    )
-    .await
-    .map_err(authz::server_err)?;
+    match team_id.trim() {
+        "" => db::create_invite(
+            &db,
+            Some(&admin.id),
+            code.clone(),
+            max_uses,
+            expires_at,
+            note,
+        )
+        .await
+        .map_err(authz::server_err)?,
+        team => db::create_team_invite(
+            &db,
+            &admin.id,
+            team,
+            code.clone(),
+            max_uses,
+            expires_at,
+            None,
+            note,
+        )
+        .await
+        .map_err(authz::server_err)?,
+    };
     tracing::info!(admin = %admin.id, "minted invite code");
     Ok(code)
 }
@@ -145,11 +168,14 @@ pub fn AdminInvitesPage() -> impl IntoView {
     let max_uses = RwSignal::new("1".to_string());
     let expiry = RwSignal::new("14".to_string());
     let note = RwSignal::new(String::new());
+    let team = RwSignal::new(String::new());
     view! {
         <Suspense fallback=|| view! { <PageShell><SkeletonGroup label="Loading invites"><Skeleton lines=4 /></SkeletonGroup></PageShell> }>
             {move || invites.get().map(|result| match result {
                 Err(_) => view! { <NotFound /> }.into_any(),
-                Ok((now, rows)) => {
+                Ok((now, rows, teams)) => {
+                    let mut team_options = vec![SelectOption::new("", "No team (registration only)")];
+                    team_options.extend(teams.into_iter().map(|(id, name)| SelectOption::new(id, name)));
                     view! {
                         <PageShell width=PageWidth::Standard>
                             <PageHeader title="Beta invitations" eyebrow="Admin" meta=move || view! { <span>"Invite codes for the closed beta: mint, share the link, disable."</span> } />
@@ -165,6 +191,11 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                         <div class="w-40">
                                             <Field id="invite-expiry" label="Expires in days" hint="Empty: never">
                                                 <TextField kind=InputKind::Number name="expires_in_days" value=expiry />
+                                            </Field>
+                                        </div>
+                                        <div class="min-w-48">
+                                            <Field id="invite-team" label="Team (optional)" hint="Joins the account to this team">
+                                                <Select name="team_id" value=team options=team_options />
                                             </Field>
                                         </div>
                                         <div class="min-w-48 flex-1">
@@ -199,6 +230,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     <Th>"Code"</Th>
                                                     <Th>"Status"</Th>
                                                     <Th numeric=true>"Uses"</Th>
+                                                    <Th>"Team"</Th>
                                                     <Th>"Expires"</Th>
                                                     <Th>"Created"</Th>
                                                     <Th>"Note"</Th>
@@ -219,6 +251,7 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                             <Td><code class="font-mono text-caption text-primary">{inv.code.clone()}</code></Td>
                                                             <Td><span class=status_class(status)>{status}</span></Td>
                                                             <Td numeric=true>{format!("{} / {}", inv.uses, inv.max_uses)}</Td>
+                                                            <Td muted=inv.team_name.is_none()>{inv.team_name.clone().unwrap_or_else(|| "None".to_string())}</Td>
                                                             <Td>{inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}</Td>
                                                             <Td muted=true>{created}</Td>
                                                             <Td muted=true>{inv.note.clone().unwrap_or_default()}</Td>

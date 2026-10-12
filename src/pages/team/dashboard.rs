@@ -6,12 +6,13 @@
 use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
-    Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, Menu, MenuAlign, MenuItem,
-    NoTeamState, PageHeader, PageShell, ResultGlyph, Role, RoleLabel, SectionHeader, Select,
-    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
+    Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind, Menu, MenuAlign,
+    MenuItem, NoTeamState, PageHeader, PageShell, ResultGlyph, Role, RoleLabel, SectionHeader,
+    Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
     UserAvatar,
 };
 use crate::models::game_plan::PoolGapWarning;
+use crate::models::invite::Invite;
 use crate::models::team::Team;
 use crate::models::team_note::TeamNote;
 use crate::models::user::{JoinRequest, TeamMember};
@@ -56,6 +57,101 @@ pub async fn update_team_info(name: String, region: String) -> Result<(), Server
         .await
         .map_err(authz::server_err)
 }
+
+/// The team's invite codes and the server's time (RFC 3339, for the
+/// expired state). Leader only: everyone else gets an empty list, so the
+/// page can create the resource for every member.
+#[server]
+pub async fn list_team_invites() -> Result<(String, Vec<Invite>), ServerFnError> {
+    use crate::server::{authz, db};
+
+    let ctx = authz::authed().await?;
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let Some(team_id) = ctx.team().await? else {
+        return Ok((now, Vec::new()));
+    };
+    if !db::is_team_leader(&ctx.db, &ctx.user.id, &team_id)
+        .await
+        .map_err(authz::server_err)?
+    {
+        return Ok((now, Vec::new()));
+    }
+    let invites = db::list_team_invites(&ctx.db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    Ok((now, invites))
+}
+
+/// Mint a code that signs a new player straight into the leader's team
+/// (leader only; the team is the leader's own, never one from the client).
+/// `position` is empty or a position key. Returns the code.
+#[server]
+pub async fn mint_team_invite(
+    max_uses: i64,
+    expires_in_days: i64,
+    position: String,
+) -> Result<String, ServerFnError> {
+    use crate::server::rate_limit::Bucket;
+    use crate::server::{authz, db};
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    authz::rate_limit_user(Bucket::TeamInvite, &ctx.user)?;
+    if !(1..=TEAM_INVITE_MAX_USES).contains(&max_uses) {
+        return Err(ServerFnError::new(format!(
+            "Uses must be between 1 and {TEAM_INVITE_MAX_USES}."
+        )));
+    }
+    if !(1..=TEAM_INVITE_MAX_DAYS).contains(&expires_in_days) {
+        return Err(ServerFnError::new(format!(
+            "The link must expire within 1 to {TEAM_INVITE_MAX_DAYS} days."
+        )));
+    }
+    let position = match position.trim() {
+        "" => None,
+        p => Some(
+            Role::parse(p)
+                .ok_or_else(|| ServerFnError::new("Unknown position."))?
+                .key()
+                .to_string(),
+        ),
+    };
+    let code = db::generate_invite_code();
+    db::create_team_invite(
+        &ctx.db,
+        &ctx.user.id,
+        &team_id,
+        code.clone(),
+        max_uses,
+        Some(chrono::Utc::now() + chrono::Duration::days(expires_in_days)),
+        position,
+        None,
+    )
+    .await
+    .map_err(authz::server_err)?;
+    tracing::info!(user = %ctx.user.id, team = %team_id, "minted team invite");
+    Ok(code)
+}
+
+/// Disable one of the team's codes (leader only; another team's code is
+/// "not found").
+#[server]
+pub async fn disable_team_invite(id: String) -> Result<(), ServerFnError> {
+    use crate::server::rate_limit::Bucket;
+    use crate::server::{authz, db};
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    authz::rate_limit_user(Bucket::TeamInvite, &ctx.user)?;
+    db::disable_team_invite(&ctx.db, &team_id, &id)
+        .await
+        .map_err(authz::server_err)
+}
+
+/// Most uses a leader's code may have.
+pub const TEAM_INVITE_MAX_USES: i64 = 20;
+/// Longest a leader's code may stay valid, in days.
+pub const TEAM_INVITE_MAX_DAYS: i64 = 30;
 
 /// Place a member (leader only): `top` ... `support` starts them in that
 /// position (the starter there moves to the bench), `substitute` benches
@@ -420,6 +516,7 @@ struct TeamResources {
     notes: Resource<Result<Vec<TeamNote>, ServerFnError>>,
     games: Resource<Result<Vec<RecentMatch>, ServerFnError>>,
     gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>,
+    invites: Resource<Result<(String, Vec<Invite>), ServerFnError>>,
 }
 
 #[component]
@@ -441,6 +538,7 @@ pub fn TeamDashboard() -> impl IntoView {
         notes: Resource::new(|| (), |_| get_all_team_notes()),
         games: Resource::new(|| (), |_| get_recent_team_matches()),
         gaps: Resource::new(|| (), |_| get_pool_gap_panel()),
+        invites: Resource::new(|| (), |_| list_team_invites()),
     };
     let reload = Callback::new(move |_| {
         team.refetch();
@@ -696,6 +794,7 @@ fn TeamView(
                 <PoolGaps gaps=res.gaps />
             </div>
             <div class="flex min-w-0 flex-col gap-12">
+                {is_leader.then(|| view! { <InvitePlayers team_name=team.name.clone() invites=res.invites /> })}
                 {is_leader.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
                 <TeamNotes notes=res.notes />
             </div>
@@ -778,6 +877,135 @@ fn EditTeam(
             </div>
         </Dialog>
     }
+}
+
+/// The leader's "Invite a player": mint a link that signs a new player
+/// straight into the team, and the team's codes with their state.
+#[component]
+fn InvitePlayers(
+    team_name: String,
+    invites: Resource<Result<(String, Vec<Invite>), ServerFnError>>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let uses = RwSignal::new("1".to_string());
+    let days = RwSignal::new("7".to_string());
+    let position = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let minting = RwSignal::new(false);
+    let minted = RwSignal::new(None::<String>);
+    let mint = Callback::new(move |_| {
+        let (Ok(u), Ok(d)) = (
+            uses.get_untracked().trim().parse::<i64>(),
+            days.get_untracked().trim().parse::<i64>(),
+        ) else {
+            error.set(Some("Uses and days are whole numbers.".into()));
+            return;
+        };
+        error.set(None);
+        minting.set(true);
+        leptos::task::spawn_local(async move {
+            match mint_team_invite(u, d, position.get_untracked()).await {
+                Ok(code) => {
+                    minted.set(Some(invite_link(&code)));
+                    toast.push.run(Toast::success("Invite link ready"));
+                    invites.refetch();
+                }
+                Err(e) => error.set(Some(crate::models::utils::error_text(&e))),
+            }
+            minting.set(false);
+        });
+    });
+    let disable = Callback::new(move |id: String| {
+        leptos::task::spawn_local(async move {
+            match disable_team_invite(id).await {
+                Ok(()) => {
+                    toast.push.run(Toast::success("Invite link disabled"));
+                    invites.refetch();
+                }
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
+            }
+        });
+    });
+    let mut position_options = vec![SelectOption::new("", "Any position")];
+    position_options.extend(
+        Role::ALL
+            .iter()
+            .map(|r| SelectOption::new(r.key(), r.label())),
+    );
+    view! {
+        <section aria-labelledby="invite-h" data-team-invites>
+            <SectionHeader title="Invite a player" id="invite-h" />
+            <p class="mb-4 text-body text-secondary">{format!("A link that signs a new player up straight into {team_name}. They start as \u{201c}not placed yet\u{201d} until you place them.")}</p>
+            <div class="grid grid-cols-2 gap-4">
+                <Field id="team-invite-uses" label="Uses" hint=format!("Up to {TEAM_INVITE_MAX_USES}")>
+                    <TextField kind=InputKind::Number value=uses />
+                </Field>
+                <Field id="team-invite-days" label="Expires in days" hint=format!("1 to {TEAM_INVITE_MAX_DAYS}")>
+                    <TextField kind=InputKind::Number value=days />
+                </Field>
+            </div>
+            <div class="mt-4">
+                <Field id="team-invite-position" label="Position (optional)" hint="Shown on the roster; you still place the player." error=Signal::derive(move || error.get())>
+                    <Select value=position options=position_options />
+                </Field>
+            </div>
+            <div class="mt-4">
+                <Button on_click=mint loading=minting attr:data-testid="mint-team-invite">"Create invite link"</Button>
+            </div>
+            {move || minted.get().map(|link| view! {
+                <p class="mt-4 text-body text-secondary" data-testid="team-invite-link">
+                    "Send this link to the player: "
+                    <code class="break-all font-mono text-primary">{link}</code>
+                </p>
+            })}
+            <Suspense fallback=|| ()>
+                {move || invites.get().map(|r| {
+                    let (now, list) = r.unwrap_or_default();
+                    if list.is_empty() {
+                        return view! { <p class="mt-6 text-body text-muted">"No invite links yet. Links you create appear here with their uses and expiry."</p> }.into_any();
+                    }
+                    view! {
+                        <ul class="mt-6 border-b border-rule" aria-label="Invite links">
+                            {list.into_iter().map(|inv| {
+                                let status = inv.status(&now);
+                                let open = status == "open";
+                                let id = inv.id.clone();
+                                let position = inv.position.as_deref().and_then(Role::parse);
+                                let expires = inv.expires_at.as_deref().map(|e| e.get(..10).unwrap_or(e).to_string()).unwrap_or_else(|| "never".into());
+                                view! {
+                                    <li class="flex flex-wrap items-center justify-between gap-3 border-t border-rule py-2.5" data-team-invite=inv.code.clone()>
+                                        <span class="min-w-0">
+                                            <code class="block font-mono text-label text-primary">{inv.code.clone()}</code>
+                                            <span class="figures block text-caption text-muted">
+                                                {format!("{status} \u{00b7} {} of {} used \u{00b7} expires {expires}", inv.uses, inv.max_uses)}
+                                                {position.map(|r| format!(" \u{00b7} {}", r.label()))}
+                                            </span>
+                                        </span>
+                                        {open.then(|| view! {
+                                            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| disable.run(id.clone()))>"Disable"</Button>
+                                        })}
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                    }.into_any()
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+/// The full invite link for a code: absolute in the browser (the leader
+/// copies it into a chat), the path on the server.
+fn invite_link(code: &str) -> String {
+    let path = format!("/auth/register?invite={code}");
+    #[cfg(feature = "hydrate")]
+    if let Some(origin) = web_sys::window().and_then(|w| w.location().origin().ok()) {
+        return format!("{origin}{path}");
+    }
+    path
 }
 
 #[component]

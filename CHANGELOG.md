@@ -10,6 +10,12 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ### Polish before launch (2026-10-12)
 
+Introduce: /team/dashboard | Invite a player | Team leaders: create a link here that signs a new player up straight into your team.
+
+#### Added
+- Invite a player: the team leader creates an invite link on the team page (how many uses, when it expires, optionally a position). Whoever signs up with it is on the team at once, not placed until the leader places them, and the welcome says which team they are on. Someone already signed in without a team joins with one click; someone already on a team is told to leave it first. The leader sees each link's uses and can disable it.
+- Admins can bind an invite code on the admin page to a team.
+
 #### Changed
 - The app has its name: Team Companion. It replaces the working title in the browser tab, the navigation, the footer's Riot disclaimer, the legal pages and every page that named the app.
 - Impressum, privacy page and terms are filled in with the operator's details: who runs the app and how to reach them, the hosting (Helsinki) and backup storage (Falkenstein), access logs kept for 14 days, the data protection authority you can complain to, the price (using Team Companion costs nothing; support is voluntary), liability and governing law. Only the privacy page's legal basis is still marked as open.
