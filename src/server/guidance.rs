@@ -120,6 +120,16 @@ pub async fn reset(db: &Surreal<Db>, user_id: &str, what: Reset) -> DbResult<()>
 }
 
 /// The account's guidance switch and creation time.
+/// The visit before this one (`user.prev_seen_at`; see `db::touch_last_seen`).
+async fn prev_seen(db: &Surreal<Db>, user_id: &str) -> DbResult<Option<DateTime<Utc>>> {
+    let mut r = db
+        .query("SELECT VALUE prev_seen_at FROM ONLY type::record('user', $uk)")
+        .bind(("uk", record_key(user_id, "user")))
+        .await?;
+    let v: Option<Datetime> = r.take(0)?;
+    Ok(v.as_ref().and_then(parse_dt))
+}
+
 async fn account(db: &Surreal<Db>, user_id: &str) -> DbResult<(bool, Option<DateTime<Utc>>)> {
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Row {
@@ -393,6 +403,7 @@ pub async fn nudge_facts(
     Ok(NudgeFacts {
         now,
         last_write: last_write(db, user_id, Some(team_id)).await?,
+        prev_seen: prev_seen(db, user_id).await?,
         account_created: created,
         match_without_review,
         old_open_items: old.map(|c| c.n.max(0) as usize).unwrap_or(0),

@@ -770,3 +770,9 @@ DEFINE INDEX IF NOT EXISTS user_guidance_unique ON user_guidance FIELDS user, ke
 -- (NONE = on); migration 13 (user_guidance) backfills true and tightens it
 -- to bool DEFAULT true.
 DEFINE FIELD IF NOT EXISTS guidance_enabled ON user TYPE option<bool>;
+-- When the user was last here, to the hour (polish pass, migration 16): any
+-- signed-in request writes last_seen_at at most once an hour and moves the
+-- previous value to prev_seen_at, so Match Day can tell a returning visit
+-- ("Picking up again?") from a reader who comes every day.
+DEFINE FIELD IF NOT EXISTS last_seen_at ON user TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS prev_seen_at ON user TYPE option<datetime>;

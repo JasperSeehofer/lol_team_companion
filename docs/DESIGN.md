@@ -482,7 +482,7 @@ Owner's intent (MISSION section 8, 12 October 2026): new users feel welcomed and
 
 | Order | Mute key | Rule | Action |
 |---|---|---|---|
-| 1 | `nudge.returning` | No write by the user for 14 days (account age if nothing written) | "Open the checklist" (`/?guide=1`) |
+| 1 | `nudge.returning` | Neither a write nor a visit by the user for 14 days before this visit (a visit is any signed-in request, recorded at most once an hour; the account's age when there is neither) | "Open the checklist" (`/?guide=1`) |
 | 2 | `nudge.match_without_review` | The last match of the past 21 days had a game plan and has no review | "Write the review" |
 | 3 | `nudge.old_action_items` | Open action items older than 7 days | "Go through them" |
 | 4 | `nudge.draft_without_plan` | A draft of the last 21 days has no game plan | "Write the game plan" |

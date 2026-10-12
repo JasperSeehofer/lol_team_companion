@@ -554,6 +554,8 @@ pub struct NudgeFacts {
     /// The newest record the user wrote (drafts, plans, reviews, trees,
     /// notes, learnings, pool, the next match ...).
     pub last_write: Option<DateTime<Utc>>,
+    /// The visit before this one (`user.prev_seen_at`): reading counts too.
+    pub prev_seen: Option<DateTime<Utc>>,
     pub account_created: Option<DateTime<Utc>>,
     pub match_without_review: Option<PastMatch>,
     /// Open action items older than `OPEN_ITEM_DAYS`.
@@ -564,10 +566,14 @@ pub struct NudgeFacts {
     pub dossier_without_draft: Option<(String, String)>,
 }
 
-/// Whether the user has been away: no write for `RETURNING_AFTER_DAYS`
-/// (an account that never wrote anything counts from its creation).
+/// Whether the user has been away: neither a write nor a visit for
+/// `RETURNING_AFTER_DAYS` before this visit (polish pass: reading counts).
+/// Without either, the account's age decides.
 pub fn is_returning(f: &NudgeFacts) -> bool {
-    let since = f.last_write.or(f.account_created);
+    let since = match (f.last_write, f.prev_seen) {
+        (Some(w), Some(s)) => Some(w.max(s)),
+        (w, s) => w.or(s).or(f.account_created),
+    };
     since.is_some_and(|t| f.now - t >= Duration::days(RETURNING_AFTER_DAYS))
 }
 
@@ -812,6 +818,7 @@ mod tests {
         NudgeFacts {
             now: at(now),
             last_write: Some(at(now)),
+            prev_seen: None,
             account_created: Some(at("2026-01-01T00:00:00Z")),
             match_without_review: None,
             old_open_items: 0,
@@ -834,6 +841,24 @@ mod tests {
         f.last_write = None;
         assert!(is_returning(&f));
         f.account_created = Some(at("2026-10-10T00:00:00Z"));
+        assert!(!is_returning(&f));
+    }
+
+    /// Reading counts (polish pass): a member who opened the app a day ago
+    /// is not "picking up again", however long ago they last wrote.
+    #[test]
+    fn a_recent_visit_counts_like_a_write() {
+        let mut f = facts("2026-10-12T12:00:00Z");
+        f.last_write = Some(at("2026-08-01T00:00:00Z"));
+        f.prev_seen = Some(at("2026-10-11T09:00:00Z"));
+        assert!(!is_returning(&f));
+        // Away for two weeks: both the last write and the last visit are old.
+        f.prev_seen = Some(at("2026-09-28T12:00:00Z"));
+        assert!(is_returning(&f));
+        // A visit but never a write: the visit decides, not the account age.
+        f.last_write = None;
+        f.account_created = Some(at("2026-01-01T00:00:00Z"));
+        f.prev_seen = Some(at("2026-10-05T00:00:00Z"));
         assert!(!is_returning(&f));
     }
 

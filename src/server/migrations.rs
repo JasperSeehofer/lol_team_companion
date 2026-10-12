@@ -176,6 +176,17 @@ pub const MIGRATIONS: &[Migration] = &[
              DEFINE INDEX IF NOT EXISTS invite_team ON invite FIELDS team;",
         ),
     },
+    Migration {
+        version: 16,
+        name: "user_last_seen",
+        // Polish pass: reads count as activity for "Picking up again?".
+        // Both fields start empty (no visit recorded yet; the rule then falls
+        // back to the newest write or the account's age, as before).
+        step: Step::Surql(
+            "DEFINE FIELD IF NOT EXISTS last_seen_at ON user TYPE option<datetime>; \
+             DEFINE FIELD IF NOT EXISTS prev_seen_at ON user TYPE option<datetime>;",
+        ),
+    },
 ];
 
 const BUG_REPORT_STATUSES_V2: &str = "\

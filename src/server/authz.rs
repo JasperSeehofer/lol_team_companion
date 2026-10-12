@@ -120,7 +120,8 @@ pub fn server_err<E: IntoServerError>(e: E) -> ServerFnError {
 /// clone in a request's owner could outlive the request and keep the
 /// database open at shutdown.)
 pub fn db() -> Result<DbHandle, ServerFnError> {
-    use_context::<DbHandle>().ok_or_else(|| internal_error("server fn context", "no DB handle"))
+    crate::server::db::shared()
+        .ok_or_else(|| internal_error("server fn context", "no DB handle (shutting down)"))
 }
 
 /// The shared Riot API client provided to every server function.
@@ -129,12 +130,81 @@ pub fn riot() -> Result<Arc<crate::server::riot::RiotClient>, ServerFnError> {
         .ok_or_else(|| internal_error("server fn context", "no Riot client"))
 }
 
-/// The signed-in user, if any.
+/// The signed-in user, if any. A signed-in request also records the visit
+/// (`user.last_seen_at`, at most once an hour per user; see
+/// [`last_seen_due`]).
 pub async fn optional_user() -> Result<Option<AppUser>, ServerFnError> {
     let auth: AuthSession = leptos_axum::extract()
         .await
         .map_err(|e| internal_error("extract auth session", e))?;
+    if let Some(u) = &auth.user {
+        if last_seen_due(&u.id, std::time::Instant::now()) {
+            if let Some(db) = crate::server::db::shared() {
+                if let Err(e) = crate::server::db::touch_last_seen(&db, &u.id).await {
+                    tracing::warn!(user = %u.id, error = %e, "could not record the visit");
+                }
+            }
+        }
+    }
     Ok(auth.user)
+}
+
+/// Whether this process should write the user's visit now: the first
+/// signed-in request, then once an hour (the database query checks the hour
+/// too, across restarts). Kept in memory so most requests cost nothing.
+pub fn last_seen_due(user_id: &str, now: std::time::Instant) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static SEEN: OnceLock<Mutex<HashMap<String, std::time::Instant>>> = OnceLock::new();
+    let mut map = SEEN
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    last_seen_due_in(&mut map, user_id, now)
+}
+
+fn last_seen_due_in(
+    map: &mut std::collections::HashMap<String, std::time::Instant>,
+    user_id: &str,
+    now: std::time::Instant,
+) -> bool {
+    const HOUR: std::time::Duration = std::time::Duration::from_secs(3600);
+    match map.get(user_id) {
+        Some(at) if now.duration_since(*at) < HOUR => false,
+        _ => {
+            map.insert(user_id.to_string(), now);
+            true
+        }
+    }
+}
+
+#[cfg(test)]
+mod last_seen_tests {
+    use super::last_seen_due_in;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_visit_is_written_once_an_hour() {
+        let mut map = std::collections::HashMap::new();
+        let t0 = Instant::now();
+        assert!(last_seen_due_in(&mut map, "user:a", t0));
+        assert!(!last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(60)
+        ));
+        assert!(last_seen_due_in(&mut map, "user:b", t0), "per user");
+        assert!(!last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(3599)
+        ));
+        assert!(last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(3600)
+        ));
+    }
 }
 
 /// The signed-in user, or "Not signed in".
