@@ -192,6 +192,37 @@ fn WidgetInner() -> impl IntoView {
         }
     };
 
+    // Focus goes back to the docked trigger when a report ends (sent,
+    // cancelled, or select mode left with Escape). The dialog's own focus
+    // return points at the element focused before it opened, which is
+    // often the hint bar's Skip button that no longer exists.
+    let focus_trigger = move || {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::{closure::Closure, JsCast};
+            if let Some(win) = web_sys::window() {
+                let cb = Closure::once(move || {
+                    let el = web_sys::window()
+                        .and_then(|w| w.document())
+                        .and_then(|d| {
+                            d.query_selector("[data-bug-report-dock] button")
+                                .ok()
+                                .flatten()
+                        })
+                        .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok());
+                    if let Some(el) = el {
+                        let _ = el.focus();
+                    }
+                });
+                let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    0,
+                );
+                cb.forget();
+            }
+        }
+    };
+
     let open_form = move |about: String| {
         exit_select();
         label.set(about);
@@ -263,6 +294,7 @@ fn WidgetInner() -> impl IntoView {
                     if ev.key() == "Escape" {
                         state.set(WidgetState::Idle);
                         exit_select();
+                        focus_trigger();
                     }
                 },
             );
@@ -291,6 +323,7 @@ fn WidgetInner() -> impl IntoView {
         if !dialog_open.get() && state.get_untracked() == WidgetState::Editing {
             state.set(WidgetState::Idle);
             error.set(None);
+            focus_trigger();
         }
     });
 
@@ -329,6 +362,7 @@ fn WidgetInner() -> impl IntoView {
                     dialog_open.set(false);
                     state.set(WidgetState::Idle);
                     text.set(String::new());
+                    focus_trigger();
                     if let Some(toast) = toast {
                         toast
                             .push
