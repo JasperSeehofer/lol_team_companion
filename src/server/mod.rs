@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod authz;
 pub mod bug_report_export;
+pub mod community;
 pub mod config;
 pub mod data_dragon;
 pub mod db;

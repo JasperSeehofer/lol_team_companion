@@ -5,6 +5,7 @@
 
 mod common;
 
+mod community;
 mod data_dragon;
 mod datetimes;
 mod db_champion_pool;

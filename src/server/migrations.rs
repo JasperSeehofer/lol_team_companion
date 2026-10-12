@@ -110,7 +110,70 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "normalise_pool_roles",
         step: Step::Rust(|db| Box::pin(normalise_pool_roles(db))),
     },
+    Migration {
+        version: 10,
+        name: "bug_report_statuses_v2",
+        // M7: statuses users can follow. `closed` had no recorded meaning
+        // (fixed or declined), so those rows go back to `triaged` with a note
+        // for an admin instead of an invented decision.
+        step: Step::Surql(BUG_REPORT_STATUSES_V2),
+    },
+    Migration {
+        version: 11,
+        name: "community_seed_content",
+        // M7: the first what-next proposals (unpublished), the proposed
+        // surveys (drafts, unapproved) and the money texts (unapproved).
+        // Idempotent: rows are keyed by seed_key / slug.
+        step: Step::Rust(|db| Box::pin(community_seed_content(db))),
+    },
 ];
+
+const BUG_REPORT_STATUSES_V2: &str = "\
+    DEFINE FIELD OVERWRITE status ON bug_report TYPE string DEFAULT 'new'; \
+    UPDATE bug_report SET status = 'new' WHERE status = 'open'; \
+    UPDATE bug_report SET status = 'triaged', \
+        admin_note = 'Closed before statuses existed; set a final status.', \
+        status_changed_at = time::now() \
+      WHERE status = 'closed'; \
+    UPDATE bug_report SET status = 'new' \
+      WHERE status NOT IN ['new', 'triaged', 'planned', 'fixed', 'wont_fix']; \
+    DEFINE FIELD OVERWRITE status ON bug_report TYPE string DEFAULT 'new' \
+      ASSERT $value IN ['new', 'triaged', 'planned', 'fixed', 'wont_fix'];";
+
+/// M7 seed content (see `server::community::seeds`). Creates a row only when
+/// none with its key exists, so an admin's edits are never overwritten.
+pub async fn community_seed_content(db: &Surreal<Db>) -> DbResult<()> {
+    use crate::server::community::{seeds, wording_hash};
+    db.query(
+        "FOR $p IN $proposals { \
+             IF array::len(SELECT VALUE id FROM proposal WHERE seed_key = $p.seed_key) = 0 { \
+                 CREATE proposal SET seed_key = $p.seed_key, title = $p.title, summary = $p.summary, \
+                     status = $p.status, source = $p.source, shipped_in = $p.shipped_in, \
+                     published = false, created_at = time::now(), status_changed_at = time::now(); \
+             }; \
+         }; \
+         FOR $s IN $surveys { \
+             IF array::len(SELECT VALUE id FROM survey WHERE seed_key = $s.seed_key) = 0 { \
+                 CREATE survey SET seed_key = $s.seed_key, question = $s.question, kind = $s.kind, \
+                     choices = $s.choices, scale_low_label = $s.scale_low_label, \
+                     scale_high_label = $s.scale_high_label, trigger = $s.trigger, status = 'draft', \
+                     wording_hash = $s.wording_hash, note = $s.note, created_at = time::now(); \
+             }; \
+         }; \
+         FOR $t IN $texts { \
+             IF array::len(SELECT VALUE id FROM site_text WHERE slug = $t.slug) = 0 { \
+                 CREATE site_text SET slug = $t.slug, body = $t.body, approved = false, \
+                     updated_at = time::now(); \
+             }; \
+         };",
+    )
+    .bind(("proposals", seeds::proposals()))
+    .bind(("surveys", seeds::surveys(wording_hash)))
+    .bind(("texts", seeds::texts()))
+    .await?
+    .check()?;
+    Ok(())
+}
 
 /// M5: one spelling per position, a real place for every member (starting
 /// five, substitutes, coaches, or not placed yet), the per-page view

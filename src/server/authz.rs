@@ -291,6 +291,14 @@ pub async fn rate_limit(bucket: Bucket) -> Result<(), ServerFnError> {
         .map_err(|wait| ServerFnError::new(slow_down_message(wait)))
 }
 
+/// Take a token from `bucket` for this signed-in user (keyed by user id,
+/// so users behind one address do not share a budget).
+pub fn rate_limit_user(bucket: Bucket, user: &AppUser) -> Result<(), ServerFnError> {
+    Limiter::global()
+        .hit(bucket, &user.id)
+        .map_err(|wait| ServerFnError::new(slow_down_message(wait)))
+}
+
 /// Allow `name` for this team at most once per `period`.
 pub fn team_cooldown(
     name: &'static str,

@@ -375,8 +375,8 @@ DEFINE FIELD IF NOT EXISTS created_at ON personal_goal TYPE datetime DEFAULT tim
 DEFINE FIELD IF NOT EXISTS updated_at ON personal_goal TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS personal_goal_user_type ON personal_goal FIELDS user, goal_type UNIQUE;
 
--- Bug reports (Phase 19 D-02) — captured by floating widget,
--- exported to .planning/INBOX/bug-reports.md on server start.
+-- Bug reports (Phase 19 D-02, M7 v2): captured by the widget, triaged on
+-- /admin/bugs, exported to docs/inbox/bug-reports.md on server start.
 DEFINE TABLE IF NOT EXISTS bug_report SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS user ON bug_report TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS page_url ON bug_report TYPE string;
@@ -387,8 +387,9 @@ DEFINE FIELD IF NOT EXISTS category ON bug_report TYPE string
 DEFINE FIELD IF NOT EXISTS viewport_w ON bug_report TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS viewport_h ON bug_report TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS created_at ON bug_report TYPE datetime DEFAULT time::now();
-DEFINE FIELD IF NOT EXISTS status ON bug_report TYPE string DEFAULT 'open'
-  ASSERT $value IN ['open', 'triaged', 'closed'];
+-- status: tightened to new/triaged/planned/fixed/wont_fix by migration
+-- `bug_report_statuses_v2` (M7).
+DEFINE FIELD IF NOT EXISTS status ON bug_report TYPE string DEFAULT 'new';
 DEFINE INDEX IF NOT EXISTS bug_report_status_created
   ON bug_report FIELDS status, created_at;
 
@@ -574,3 +575,159 @@ DEFINE FIELD IF NOT EXISTS expires_at ON share_link TYPE datetime;
 DEFINE FIELD IF NOT EXISTS revoked ON share_link TYPE bool DEFAULT false;
 DEFINE INDEX IF NOT EXISTS share_link_token ON share_link FIELDS token UNIQUE;
 DEFINE INDEX IF NOT EXISTS share_link_team ON share_link FIELDS team;
+
+-- ===========================================================================
+-- Community loop (M7): bug reports v2, surveys, what-next board, the
+-- transparency ledger and admin-approved site texts. All global tables (no
+-- team scope); user-scoped rows (survey_prompt, proposal_vote) link the user.
+-- Field names avoid SurrealQL words (`on_board`, `choices`, `seed_key`).
+-- ===========================================================================
+
+-- Micro-surveys. A survey is one question written by an admin; it can go
+-- live only while `approved_hash` equals `wording_hash` (the exact wording
+-- an admin approved). A survey_prompt is one user's delivery and answer.
+DEFINE TABLE IF NOT EXISTS survey SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS seed_key ON survey TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS question ON survey TYPE string
+  ASSERT string::len($value) >= 1 AND string::len($value) <= 200;
+DEFINE FIELD IF NOT EXISTS kind ON survey TYPE string
+  ASSERT $value IN ['single_choice', 'scale', 'short_text'];
+DEFINE FIELD IF NOT EXISTS choices ON survey TYPE array<string> DEFAULT []
+  ASSERT array::len($value) <= 5;
+DEFINE FIELD IF NOT EXISTS scale_low_label ON survey TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS scale_high_label ON survey TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS trigger ON survey TYPE string
+  ASSERT $value IN ['draft_saved_3', 'review_saved', 'patch_changed', 'what_next_visit'];
+DEFINE FIELD IF NOT EXISTS status ON survey TYPE string DEFAULT 'draft'
+  ASSERT $value IN ['draft', 'approved', 'live', 'paused', 'closed'];
+DEFINE FIELD IF NOT EXISTS wording_hash ON survey TYPE string;
+DEFINE FIELD IF NOT EXISTS approved_hash ON survey TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS approved_by ON survey TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS approved_at ON survey TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS note ON survey TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_by ON survey TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS created_at ON survey TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_by ON survey TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS updated_at ON survey TYPE option<datetime>;
+
+DEFINE TABLE IF NOT EXISTS survey_prompt SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON survey_prompt TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS survey ON survey_prompt TYPE record<survey>;
+-- '' for one-time surveys; the patch version for `patch_changed`.
+DEFINE FIELD IF NOT EXISTS occurrence ON survey_prompt TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS state ON survey_prompt TYPE string DEFAULT 'pending'
+  ASSERT $value IN ['pending', 'shown', 'answered', 'dismissed', 'expired'];
+DEFINE FIELD IF NOT EXISTS created_at ON survey_prompt TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS shown_at ON survey_prompt TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS closed_at ON survey_prompt TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS answer_choice ON survey_prompt TYPE option<int>
+  ASSERT $value = NONE OR ($value >= 0 AND $value <= 4);
+DEFINE FIELD IF NOT EXISTS answer_scale ON survey_prompt TYPE option<int>
+  ASSERT $value = NONE OR ($value >= 1 AND $value <= 5);
+DEFINE FIELD IF NOT EXISTS answer_text ON survey_prompt TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) <= 500;
+-- The wording the user was shown (results are grouped by it).
+DEFINE FIELD IF NOT EXISTS answer_hash ON survey_prompt TYPE option<string>;
+
+-- What-next board. Proposals are admin-written and shown to users only
+-- once published (and not in `draft`); a vote is one user's vote on one
+-- proposal (UNIQUE pair). Counts are computed, never stored.
+DEFINE TABLE IF NOT EXISTS proposal SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS seed_key ON proposal TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS title ON proposal TYPE string
+  ASSERT string::len($value) >= 1 AND string::len($value) <= 100;
+DEFINE FIELD IF NOT EXISTS summary ON proposal TYPE string DEFAULT ''
+  ASSERT string::len($value) <= 1000;
+DEFINE FIELD IF NOT EXISTS status ON proposal TYPE string DEFAULT 'draft'
+  ASSERT $value IN ['draft', 'proposed', 'planned', 'building', 'shipped', 'declined'];
+DEFINE FIELD IF NOT EXISTS status_note ON proposal TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) <= 600;
+DEFINE FIELD IF NOT EXISTS shipped_in ON proposal TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS source ON proposal TYPE string DEFAULT 'admin'
+  ASSERT $value IN ['mission', 'backlog', 'wishlist', 'admin'];
+DEFINE FIELD IF NOT EXISTS published ON proposal TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS published_by ON proposal TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS published_at ON proposal TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_by ON proposal TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS created_at ON proposal TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_by ON proposal TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS updated_at ON proposal TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS status_changed_at ON proposal TYPE option<datetime>;
+
+DEFINE TABLE IF NOT EXISTS proposal_vote SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS proposal ON proposal_vote TYPE record<proposal>;
+DEFINE FIELD IF NOT EXISTS user ON proposal_vote TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON proposal_vote TYPE datetime DEFAULT time::now();
+
+-- bug_report v2 fields (after `proposal`, which record<proposal> names).
+DEFINE FIELD IF NOT EXISTS on_board ON bug_report TYPE option<bool>;
+DEFINE FIELD IF NOT EXISTS public_title ON bug_report TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) <= 120;
+DEFINE FIELD IF NOT EXISTS public_note ON bug_report TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) <= 600;
+DEFINE FIELD IF NOT EXISTS admin_note ON bug_report TYPE option<string>;
+-- Slug of a CHANGELOG.md entry (validated against the running build).
+DEFINE FIELD IF NOT EXISTS fixed_in ON bug_report TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS status_changed_at ON bug_report TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS triaged_by ON bug_report TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS updated_at ON bug_report TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS reporter_seen_at ON bug_report TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS proposal ON bug_report TYPE option<record<proposal>>;
+
+-- user: true = never ask survey questions (absent = ask).
+DEFINE FIELD IF NOT EXISTS survey_opt_out ON user TYPE option<bool>;
+
+-- Transparency ledger: one row per month (record id ledger_month:⟨YYYY-MM⟩
+-- plus a UNIQUE index on `month`). Amounts are euro cents; "to the
+-- maintainer" is computed, never stored. Nothing is seeded.
+DEFINE TABLE IF NOT EXISTS ledger_month SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS month ON ledger_month TYPE string
+  ASSERT string::matches($value, '^[0-9]{4}-(0[1-9]|1[0-2])$');
+DEFINE FIELD IF NOT EXISTS support_cents ON ledger_month TYPE int DEFAULT 0
+  ASSERT $value >= 0 AND $value <= 100000000;
+DEFINE FIELD IF NOT EXISTS hosting_cents ON ledger_month TYPE int DEFAULT 0
+  ASSERT $value >= 0 AND $value <= 100000000;
+DEFINE FIELD IF NOT EXISTS domain_cents ON ledger_month TYPE int DEFAULT 0
+  ASSERT $value >= 0 AND $value <= 100000000;
+DEFINE FIELD IF NOT EXISTS ai_tokens_cents ON ledger_month TYPE int DEFAULT 0
+  ASSERT $value >= 0 AND $value <= 100000000;
+DEFINE FIELD IF NOT EXISTS other_cents ON ledger_month TYPE int DEFAULT 0
+  ASSERT $value >= 0 AND $value <= 100000000;
+DEFINE FIELD IF NOT EXISTS other_label ON ledger_month TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) <= 120;
+DEFINE FIELD IF NOT EXISTS note ON ledger_month TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) <= 600;
+DEFINE FIELD IF NOT EXISTS published ON ledger_month TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS published_at ON ledger_month TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS revised_at ON ledger_month TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS updated_by ON ledger_month TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS updated_at ON ledger_month TYPE option<datetime>;
+
+-- Site texts: public wording an admin must approve before it renders (the
+-- money policy, ledger labels, the support sentence). Any edit withdraws
+-- the approval. Seeded unapproved by migration `community_seed_content`.
+DEFINE TABLE IF NOT EXISTS site_text SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS slug ON site_text TYPE string;
+DEFINE FIELD IF NOT EXISTS body ON site_text TYPE string
+  ASSERT string::len($value) <= 3000;
+DEFINE FIELD IF NOT EXISTS approved ON site_text TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS approved_by ON site_text TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS approved_at ON site_text TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS updated_by ON site_text TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS updated_at ON site_text TYPE option<datetime>;
+
+DEFINE INDEX IF NOT EXISTS bug_report_board_status ON bug_report FIELDS on_board, status;
+DEFINE INDEX IF NOT EXISTS survey_seed_key_unique ON survey FIELDS seed_key UNIQUE;
+DEFINE INDEX IF NOT EXISTS survey_trigger_status ON survey FIELDS trigger, status;
+DEFINE INDEX IF NOT EXISTS survey_prompt_user ON survey_prompt FIELDS user;
+DEFINE INDEX IF NOT EXISTS survey_prompt_unique ON survey_prompt FIELDS user, survey, occurrence UNIQUE;
+DEFINE INDEX IF NOT EXISTS survey_prompt_user_shown ON survey_prompt FIELDS user, shown_at;
+DEFINE INDEX IF NOT EXISTS survey_prompt_survey_state ON survey_prompt FIELDS survey, state;
+DEFINE INDEX IF NOT EXISTS proposal_seed_key_unique ON proposal FIELDS seed_key UNIQUE;
+DEFINE INDEX IF NOT EXISTS proposal_status ON proposal FIELDS published, status;
+DEFINE INDEX IF NOT EXISTS proposal_vote_unique ON proposal_vote FIELDS proposal, user UNIQUE;
+DEFINE INDEX IF NOT EXISTS proposal_vote_proposal ON proposal_vote FIELDS proposal;
+DEFINE INDEX IF NOT EXISTS proposal_vote_user ON proposal_vote FIELDS user;
+DEFINE INDEX IF NOT EXISTS ledger_month_unique ON ledger_month FIELDS month UNIQUE;
+DEFINE INDEX IF NOT EXISTS ledger_month_published ON ledger_month FIELDS published, month;
+DEFINE INDEX IF NOT EXISTS site_text_slug_unique ON site_text FIELDS slug UNIQUE;

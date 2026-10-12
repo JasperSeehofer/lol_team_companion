@@ -32,6 +32,12 @@ pub enum Bucket {
     /// Share-link lookups and share-link changes, per client IP (the
     /// public `/s/{token}` page needs no sign-in).
     Share,
+    /// Bug reports and wishes, per user (M7).
+    Feedback,
+    /// Votes and survey answers, dismissals and the survey switch, per user (M7).
+    Community,
+    /// Public community reads (changelog, transparency), per client IP (M7).
+    PublicRead,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -80,6 +86,21 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::Share => Limit {
             capacity: 30.0,
             refill_per_sec: 0.5,
+        },
+        // 5 reports, then one every 2 minutes.
+        Bucket::Feedback => Limit {
+            capacity: 5.0,
+            refill_per_sec: 1.0 / 120.0,
+        },
+        // 30 votes or answers, then one every 2 s.
+        Bucket::Community => Limit {
+            capacity: 30.0,
+            refill_per_sec: 0.5,
+        },
+        // 120 page loads, then two a second.
+        Bucket::PublicRead => Limit {
+            capacity: 120.0,
+            refill_per_sec: 2.0,
         },
     }
 }
