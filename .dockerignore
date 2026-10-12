@@ -1,0 +1,24 @@
+# Build context for the Dockerfile. target/ is ~26 GB on a dev machine: never
+# send it. Secrets (.env) must never reach an image layer.
+target/
+data/
+.git/
+.env
+deploy/backup.env
+.env.*
+!.env.example
+.mcp.json
+node_modules/
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/
+test-results/
+docs/inbox/
+tailwindcss-linux-x64
+.local-design-source/
+.playwright-mcp/
+.gardener-notes.md
+# Deployment state that lives next to the checkout on the VM
+backups/
+*.tar.zst
+*.tar.gz

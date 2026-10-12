@@ -128,6 +128,174 @@ jobs:
             e2e/test-results/
           retention-days: 7
 
+  scripts:
+    name: Ops scripts (shellcheck, backup and restore harness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck, rclone, zstd
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck rclone zstd
+
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh scripts/tests/*.sh deploy/backup/entrypoint.sh
+
+      # backup.sh and restore.sh against a fake docker CLI, a local rclone
+      # crypt remote and a mock HTTP app (scripts/tests/mock_app.py).
+      - name: Backup and restore harness
+        run: ./scripts/tests/run-script-tests.sh scripts
+
+  image:
+    name: Container image (build, run, sign in, stop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BASE_URL: http://127.0.0.1:3020
+      E2E_INVITE_CODE: E2E-INVITE-CODE
+      E2E_EXPECT_PRODUCTION: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose.yaml and the Caddyfile
+        run: |
+          cp deploy/env.production.example .env
+          cp deploy/backup.env.example deploy/backup.env
+          docker compose config -q
+          rm .env deploy/backup.env
+          docker run --rm -e COMPANION_DOMAIN=ci.example.org -e ACME_EMAIL=ci@example.org \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11 \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - uses: docker/setup-buildx-action@v3
+        id: buildx
+
+      # BuildKit cache mounts (cargo registry, target/, cargo-leptos tools)
+      # are not part of the layer cache; carry them between runs through the
+      # Actions cache.
+      - uses: actions/cache@v4
+        id: mounts
+        with:
+          path: buildkit-mounts
+          key: image-mounts-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'Dockerfile') }}-${{ github.run_id }}
+          restore-keys: |
+            image-mounts-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'Dockerfile') }}-
+            image-mounts-
+
+      - uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          cache-dir: buildkit-mounts
+          dockerfile: Dockerfile
+
+      - name: Build the app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: companion:ci
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=companion-image
+          cache-to: type=gha,mode=max,scope=companion-image
+
+      - name: Build the backup sidecar image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/backup/Dockerfile
+          load: true
+          tags: companion-backup:ci
+          cache-from: type=gha,scope=companion-backup
+          cache-to: type=gha,mode=max,scope=companion-backup
+
+      - name: Inspect the image
+        run: |
+          docker image ls companion:ci
+          docker run --rm --entrypoint sh companion:ci -c \
+            'id; ls -la /app /app/site /app/site/pkg; ls /app/site/fonts | head; if ldd /app/lol_team_companion | grep "not found"; then exit 1; fi'
+          {
+            echo "### Container image"
+            echo ""
+            echo "| Image | Size |"
+            echo "|---|---|"
+            echo "| companion:ci | $(docker image inspect companion:ci --format '{{.Size}}' | awk '{printf "%.0f MB", $1/1000000}') |"
+            echo "| companion-backup:ci | $(docker image inspect companion-backup:ci --format '{{.Size}}' | awk '{printf "%.0f MB", $1/1000000}') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The compose settings: read-only root, no capabilities, an anonymous
+      # volume for /data (owned by uid 10001 from the image), production mode.
+      - name: Run the image
+        run: |
+          docker run -d --name companion --read-only --tmpfs /tmp:size=64m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -p 127.0.0.1:3020:3020 \
+            -e SESSION_SECRET=ci-only-session-secret-0123456789abcdef \
+            -e COOKIE_SECURE=false \
+            -e BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE -e BOOTSTRAP_INVITE_MAX_USES=100000 \
+            -e RATE_LIMIT_MULTIPLIER=100 -e ADMIN_EMAILS=e2e-admin@test.invalid \
+            -e RIOT_API_KEY=RGAPI-ci-dummy \
+            companion:ci
+          ./scripts/wait_for_server.sh 180 "$BASE_URL" || { docker logs companion; exit 1; }
+          docker logs companion 2>&1 | grep -E "security configuration|Listening" || true
+
+      - name: Sign in over HTTP (bootstrap invite)
+        run: SMOKE_EMAIL=ci-smoke@test.invalid SMOKE_PASSWORD=ci-smoke-password-123 ./scripts/smoke_signin.sh "$BASE_URL"
+
+      - name: Docker health check turns healthy
+        run: |
+          for _ in $(seq 1 30); do
+            s="$(docker inspect -f '{{.State.Health.Status}}' companion)"
+            echo "health: $s"
+            [ "$s" = healthy ] && exit 0
+            sleep 5
+          done
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      # The release build (opt-level z WASM, LTO) must hydrate like the debug build.
+      - name: Playwright against the image
+        working-directory: e2e
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts legal.spec.ts --retries=1
+
+      - name: Graceful stop, restart on the same volume
+        run: |
+          start=$(date +%s)
+          docker stop -t 30 companion
+          echo "stopped in $(( $(date +%s) - start ))s"
+          code="$(docker inspect -f '{{.State.ExitCode}}' companion)"
+          docker logs companion 2>&1 | tail -n 8
+          [ "$code" = 0 ] || { echo "exit code $code (expected 0)"; exit 1; }
+          docker logs companion 2>&1 | grep -q "database closed" || { echo "no clean database close in the log"; exit 1; }
+          docker start companion
+          ./scripts/wait_for_server.sh 180 "$BASE_URL" || { docker logs companion; exit 1; }
+          SKIP_REGISTER=1 SMOKE_EMAIL=ci-smoke@test.invalid SMOKE_PASSWORD=ci-smoke-password-123 ./scripts/smoke_signin.sh "$BASE_URL"
+
+      - name: Container log
+        if: always()
+        run: docker logs companion 2>&1 | tail -n 200 || true
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-image
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
   style_guardrails:
     name: Style guardrails (G-01, design lint)
     runs-on: ubuntu-latest

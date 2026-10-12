@@ -21,3 +21,10 @@ docs/inbox/
 
 # Playwright output at repo root (stray runs outside e2e/)
 /test-results/
+
+# Deployment state next to the checkout (M8): backup credentials, the
+# previous image tag, restore drill logs and scratch restores.
+deploy/backup.env
+.previous-tag
+restore-drills.log
+restore-*/
