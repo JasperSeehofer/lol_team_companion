@@ -21,7 +21,8 @@ use crate::components::ui::{
 };
 use crate::error_template::NotFound;
 use crate::pages::design_domain::{
-    AvatarSection, CanvasSection, LegendSection, MarkersSection, ReadoutSection, TimelineSection,
+    AvatarSection, BarSection, CanvasSection, LegendSection, MarkersSection, ReadoutSection,
+    TimelineSection,
 };
 use crate::pages::design_interaction::{
     CalloutSection, CommandSection, DialogSection, EmptySection, KeycapSection, MenuSection,
@@ -64,6 +65,7 @@ const SECTIONS: &[(&str, &str)] = &[
     ("avatar", "Champion avatar"),
     ("markers", "Role, side, result"),
     ("readout", "Stat readout"),
+    ("bar", "Proportion bar"),
     ("draft", "Tournament draft"),
     ("prep", "Prep sequence"),
     ("legend", "Legend block"),
@@ -162,6 +164,7 @@ fn Gallery() -> impl IntoView {
             <AvatarSection />
             <MarkersSection />
             <ReadoutSection />
+            <BarSection />
             <DraftSection />
             <PrepSection />
             <LegendSection />

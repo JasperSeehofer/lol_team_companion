@@ -7,7 +7,7 @@
 //! Callout, EmptyState, Skeleton, Tooltip, SegmentedControl, Switch, Checkbox.
 //! Batch 3 (domain): ChampionAvatar/UserAvatar, RoleLabel, SideMarker,
 //! ResultGlyph, StatReadout, LegendBlock, CanvasFrame/ScaleBar,
-//! Annotation, TimelineScrub.
+//! Annotation, TimelineScrub; ProportionBar (M7).
 //!
 //! Rules for every component here: typed variants (enums, no strings),
 //! class names written out in full (Tailwind only sees literals), identical
@@ -17,6 +17,7 @@
 pub mod a11y;
 pub mod avatar;
 pub mod badge;
+pub mod bar;
 pub mod button;
 pub mod callout;
 pub mod canvas;
@@ -42,6 +43,7 @@ pub mod tooltip;
 
 pub use avatar::{AvatarShape, AvatarSize, AvatarState, ChampionAvatar, UserAvatar};
 pub use badge::{Badge, BadgeTone};
+pub use bar::{bar_widths, BarInk, BarSegment, BarSize, ProportionBar};
 pub use button::{Button, ButtonSize, ButtonType, ButtonVariant, Force, Keycap};
 pub use callout::{Callout, CalloutTone};
 pub use canvas::{
