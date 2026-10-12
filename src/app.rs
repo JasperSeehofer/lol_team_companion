@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
-    components::{Redirect, Route, Router, Routes},
+    components::{Route, Router, Routes},
     path, SsrMode,
 };
 
@@ -91,14 +91,10 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/tree-drafter") view=TreeDrafterPage />
                         <Route path=path!("/stats") view=StatsPage />
                         <Route path=path!("/champion-pool") view=ChampionPoolPage />
-                        // Parked pages and the old solo dashboard: plain redirects.
-                        <Route path=path!("/team-builder") view=|| view! { <Redirect path="/draft" /> } />
                         <Route path=path!("/game-plan") view=GamePlanPage />
                         <Route path=path!("/post-game") view=PostGamePage />
                         <Route path=path!("/opponents") view=OpponentsPage />
                         <Route path=path!("/action-items") view=ActionItemsPage />
-                        <Route path=path!("/analytics") view=|| view! { <Redirect path="/stats" /> } />
-                        <Route path=path!("/solo") view=|| view! { <Redirect path="/me" /> } />
                         <Route path=path!("/me") view=MyGamesPage />
                         <Route path=path!("/match/:id") view=MatchDetailPage />
                         <Route path=path!("/personal-learnings") view=PersonalLearningsPage />

@@ -61,5 +61,11 @@ for (const [from, to] of [["/solo", "/me"], ["/analytics", "/stats"], ["/team-bu
   test(`${from} redirects to ${to}`, async ({ authedPage }) => {
     await authedPage.goto(from);
     await authedPage.waitForURL((u) => new URL(u).pathname === to, { timeout: 15000 });
+    // A redirect must not leave its status behind: static files still load
+    // with 200 afterwards (a Leptos <Redirect> once made them 302 at random).
+    for (let i = 0; i < 8; i++) {
+      const res = await authedPage.request.get("/pkg/lol_team_companion.js", { maxRedirects: 0 });
+      expect(res.status()).toBe(200);
+    }
   });
 }

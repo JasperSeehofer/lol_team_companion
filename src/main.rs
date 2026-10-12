@@ -1,6 +1,6 @@
 #![recursion_limit = "512"]
 
-use axum::{extract::State, http::StatusCode, routing::get, Router};
+use axum::{extract::State, http::StatusCode, response::Redirect, routing::get, Router};
 use axum_login::{tower_sessions::SessionManagerLayer, AuthManagerLayerBuilder};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -183,6 +183,18 @@ async fn main() {
         .route("/img/champion/{key}", get(images::champion_portrait))
         .route("/img/champion/{key}/icon", get(images::champion_icon))
         .route("/img/item/{id}", get(images::item_icon))
+        // Parked pages and the old solo dashboard redirect here, in axum: a
+        // Leptos `<Redirect>` rendered on the server left its 302 status
+        // behind for later static-file responses on the same worker thread.
+        .route("/solo", get(|| async { Redirect::temporary("/me") }))
+        .route(
+            "/analytics",
+            get(|| async { Redirect::temporary("/stats") }),
+        )
+        .route(
+            "/team-builder",
+            get(|| async { Redirect::temporary("/draft") }),
+        )
         .leptos_routes_with_context(
             &app_state,
             routes,
