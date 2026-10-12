@@ -68,7 +68,7 @@ pub const STORED: &[(&str, &[&str])] = &[
         &[
             "Your votes on What next ideas (which idea, when). Others see only how many votes an idea has, never who voted.",
             "Survey questions you were asked: which question, when it was shown, and your answer or that you dismissed it; and whether you turned survey questions off. Admins see answers without names.",
-            "What admins write: survey questions, What next ideas, the monthly transparency figures and the texts of the transparency page, each with who changed it and when.",
+            "What admins write: survey questions, What next ideas, the monthly transparency figures, the texts of the transparency page and the champion traits behind the Draft Graph, each with who changed it and when.",
         ],
     ),
 ];
@@ -170,7 +170,7 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <li>"Your team's records: until the team deletes them, or the team is deleted. When you delete your account, what you wrote for the team stays with the team, shown as written by a former member."</li>
                     <li>"Deleted team notes: one day, so they can be restored. Sessions: 30 days after the last visit."</li>
                     <li>"Bug reports: until an admin deletes them; when you delete your account, your text is removed from them."</li>
-                    <li>"Backups: 30 days. Data you delete disappears from the backups within 30 days."</li>
+                    <li>"Backups: 30 days. Data you delete disappears from the backups within 30 days. If nightly backups stop working for a while, the last good copies are kept until new ones succeed, so that a working copy always exists."</li>
                 </ul>
             </section>
 
@@ -242,16 +242,12 @@ mod tests {
         "proposal_vote",
         "ledger_month",
         "site_text",
-    ];
-    /// Tables that hold nothing about a person or a team: migration
-    /// bookkeeping, the champion data cache, patch changes and the shipped
-    /// champion traits.
-    const NOT_PERSONAL: &[&str] = &[
-        "schema_migration",
-        "ddragon_cache",
-        "patch_change",
         "champion_trait",
     ];
+    /// Tables that hold nothing about a person or a team: migration
+    /// bookkeeping, the champion data cache and patch changes. (Champion
+    /// traits are listed above: they record the admin who edited them.)
+    const NOT_PERSONAL: &[&str] = &["schema_migration", "ddragon_cache", "patch_change"];
 
     fn schema_tables() -> Vec<String> {
         include_str!("../../../schema.surql")
