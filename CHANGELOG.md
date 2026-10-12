@@ -27,6 +27,7 @@ Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`
 - "Add month" on the ledger admin page no longer overwrites a month that already exists; change it with Edit instead.
 - A survey question shown again after its wording changed now records the answer against the wording the person actually saw.
 - Screen readers now announce a new survey question and the thank-you line.
+- Closing or sending a report returns focus to the Report a bug button.
 - Every changelog entry now has a date.
 
 ### Milestone M5: Remaining pages, navigation, mobile (2026-10-12)
