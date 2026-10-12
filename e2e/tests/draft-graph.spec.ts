@@ -103,6 +103,24 @@ test("graph: keyboard focus moves the Why panel, Enter picks with a guessed role
   await expect(page.locator(draftSlot(10))).toBeFocused();
 });
 
+test("graph: a second quick pick never overwrites the slot of an older ranking", async ({
+  teamPage,
+}) => {
+  const page = teamPage;
+  await midDraft(page);
+  await openGraph(page);
+  const options = page.locator("[data-graph-list] [role=option]");
+  await options.first().focus();
+  const first = ((await options.first().locator("span.truncate").first().textContent()) ?? "").trim();
+  // Enter, then at once the next candidate and Enter again, before the
+  // ranking for the next slot has arrived.
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(draftSlot(9))).toHaveAttribute("aria-label", new RegExp(`: ${first},`));
+  await expect(page.locator("[data-graph-status]")).toContainText("Blue pick 3", { timeout: 10000 });
+});
+
 test("graph: a team note raises the pair and shows in the explanation", async ({ teamPage }) => {
   const page = teamPage;
   await midDraft(page);

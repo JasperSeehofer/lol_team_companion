@@ -596,6 +596,14 @@ pub fn DraftGraphPanel(
             return;
         };
         let Some(target) = g.target else { return };
+        // The board moved on since this ranking (a pick, a drop or another
+        // slot): never write into the slot of an older answer.
+        if inputs.active.get_untracked() != Some(target.slot) {
+            toast.push.run(Toast::info(
+                "The ranking is catching up with the board; pick again in a moment",
+            ));
+            return;
+        }
         on_pick.run(GraphPick {
             slot: target.slot,
             name: c.name.clone(),
@@ -1043,6 +1051,7 @@ fn CandidateRow(
     let fit = c.fit;
     let role = c.role;
     let guessed = c.role_guessed;
+    let low_confidence = c.trait_low_confidence;
     let champion = c.champion.clone();
     view! {
         <li
@@ -1072,6 +1081,9 @@ fn CandidateRow(
                 </span>
                 {pool.map(|p| view! {
                     <span class=if pool_bad { "text-caption text-warning" } else { "text-caption text-muted" }>{p}</span>
+                })}
+                {low_confidence.then(|| view! {
+                    <span class="text-caption text-muted" data-low-confidence="">"Traits: low confidence"</span>
                 })}
             </span>
             <span class="figures text-right text-heading font-semibold text-primary">

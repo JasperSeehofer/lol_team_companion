@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 #### Fixed
 - The side marker in the draft page's header now follows the side switch.
+- When the graph ranks the other side's pick, your draft's composition tags (teamfight, scaling, ...) no longer count for their candidates.
+- Two team members who met as opponents in the same game no longer count as a pair "together in your games".
+- A quick second pick from the graph (before the ranking for the next slot arrived) no longer replaces the champion just picked.
+- The ranked list says when a candidate's traits are low confidence, not only the Why panel.
 
 ### Milestone M4: Draft Graph, stage A (the model)
 

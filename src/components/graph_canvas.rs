@@ -608,8 +608,9 @@ pub fn DraftGraphCanvas(
             );
         }
         let Some(i) = focus_node.get() else {
-            // Focused in the list but below the candidates drawn here.
-            let below = focused.get().and_then(|f| {
+            // Focused in the list but below the candidates drawn here (once
+            // the layout exists: before that nothing is drawn yet).
+            let below = focused.get().filter(|_| shown.get() > 0).and_then(|f| {
                 result.with_value(|g| {
                     g.candidates
                         .iter()

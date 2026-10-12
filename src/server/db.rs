@@ -6555,10 +6555,17 @@ pub async fn list_team_relations(
         .query("SELECT * FROM team_relation WHERE team = type::record('team', $team_key) ORDER BY created_at DESC")
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
-    let rows: Vec<DbTeamRelation> = r.take(0).unwrap_or_default();
+    let rows: Vec<DbTeamRelation> = r.take(0)?;
     Ok(rows
         .into_iter()
-        .filter_map(DbTeamRelation::into_model)
+        .filter_map(|row| {
+            let id = row.id.to_sql();
+            let rel = row.into_model();
+            if rel.is_none() {
+                tracing::warn!(relation = %id, "team_relation row outside the vocabulary; skipped");
+            }
+            rel
+        })
         .collect())
 }
 
