@@ -101,6 +101,31 @@ async fn the_switch_and_the_resets_touch_only_the_users_own_rows() {
     assert!(g::rows(&db, &a).await.unwrap().is_empty());
     assert_eq!(g::rows(&db, &b).await.unwrap().len(), 2);
 
+    // "Show nudges again": every muted nudge kind comes back, nothing else
+    // of ann's changes and nothing of ben's.
+    for u in [&a, &b] {
+        g::mark(&db, u, "nudge.returning", Mark::Muted)
+            .await
+            .unwrap();
+        g::mark(&db, u, "nudge.old_action_items", Mark::Muted)
+            .await
+            .unwrap();
+    }
+    g::mark(&db, &a, "hint.draft_keys", Mark::Muted)
+        .await
+        .unwrap();
+    g::reset(&db, &a, Reset::Nudges).await.unwrap();
+    let ra = g::rows(&db, &a).await.unwrap();
+    assert!(ra.iter().all(|r| !r.key.starts_with("nudge.")), "{ra:?}");
+    assert!(
+        row(&ra, "hint.draft_keys").is_some(),
+        "hints stay dismissed"
+    );
+    let rb = g::rows(&db, &b).await.unwrap();
+    assert!(row(&rb, "nudge.returning").is_some_and(|r| r.muted));
+    assert!(row(&rb, "nudge.old_action_items").is_some_and(|r| r.muted));
+    g::reset(&db, &a, Reset::Hints).await.unwrap();
+
     g::set_enabled(&db, &a, false).await.unwrap();
     assert!(!g::enabled(&db, &a).await.unwrap());
     assert!(g::enabled(&db, &b).await.unwrap());

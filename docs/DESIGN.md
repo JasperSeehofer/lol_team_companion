@@ -451,7 +451,7 @@ Owner's intent (MISSION section 8, 12 October 2026): new users feel welcomed and
 **Rules for every piece of guidance.**
 - Inline, in the page flow. Never a modal, a tour, a spotlight, a floating overlay, a video or anything that covers content or blocks an action.
 - At most one hint or introduction per page (an introduction wins over a hint; the command-bar line yields to both), at most one nudge on Match Day.
-- Every piece can be muted where it appears ("Got it", "Skip, I'll find my way", "Hide this checklist", "Don't show this again"), and the profile's **Guidance** switch turns all of it off, "New" marks included. "Show the checklist again" and "Show hints again" undo the mutes.
+- Every piece can be muted where it appears ("Got it", "Skip, I'll find my way", "Hide this checklist", "Don't show this again"), and the profile's **Guidance** switch turns all of it off, "New" marks included. "Show the checklist again", "Show hints again" and "Show nudges again" undo the mutes.
 - Done means done in the records: checklist steps, "used" hints and nudges are computed on the server from the user's and the team's data, never from clicks alone (the two exceptions record a real use: picking a Draft Graph candidate and opening the command bar).
 - None on admin pages, the gallery, sign-in, legal pages, the closed-beta page and share links (`is_quiet_path`).
 - Never a second chalk action: the welcome's Start is primary only on the start page without a team; with a team, Match Day's own next step stays the one primary action (Start is secondary and the checklist `PrepEmphasis::Quiet`).

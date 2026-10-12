@@ -110,6 +110,9 @@ test("the profile switch hides every piece of guidance", async ({ teamPage }) =>
   await sw.click();
   await expect(sw).toHaveAttribute("aria-checked", "false");
   await expect(page.getByText("Guidance is off:")).toBeVisible();
+  // "Show nudges again" is there and answers.
+  await section.getByTestId("reset-nudges").click();
+  await expect(page.getByText("Next-step lines you turned off can show on Match Day again.")).toBeVisible();
 
   await navigateTo(page, "/");
   await expect(page.locator("[data-welcome]")).toHaveCount(0);

@@ -88,7 +88,8 @@ pub async fn set_guidance_enabled(on: bool) -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
-/// "Show the checklist again" (`checklist`) or "Show hints again" (`hints`).
+/// "Show the checklist again" (`checklist`), "Show hints again" (`hints`) or
+/// "Show nudges again" (`nudges`: every muted nudge kind).
 #[server]
 pub async fn reset_guidance(what: String) -> Result<(), ServerFnError> {
     use crate::server::rate_limit::Bucket;
@@ -98,6 +99,7 @@ pub async fn reset_guidance(what: String) -> Result<(), ServerFnError> {
     let what = match what.as_str() {
         "hints" => guidance::Reset::Hints,
         "checklist" => guidance::Reset::Checklist,
+        "nudges" => guidance::Reset::Nudges,
         _ => return Err(ServerFnError::new("Unknown guidance item.")),
     };
     guidance::reset(&ctx.db, &ctx.user.id, what)
@@ -552,7 +554,7 @@ pub fn NudgeLine(nudge: Nudge, on_change: Callback<()>) -> impl IntoView {
 // Profile
 // ---------------------------------------------------------------------------
 
-/// The profile's "Guidance" section: the switch and the two resets.
+/// The profile's "Guidance" section: the switch and the three resets.
 ///
 /// A11y: a `Switch` (`role="switch"`) named "Show guidance"; the resets are
 /// buttons; results are announced by toasts (polite).
@@ -611,9 +613,10 @@ pub fn GuidanceSettings(enabled: bool) -> impl IntoView {
             <div class="flex flex-wrap gap-3">
                 <Button on_click=reset("checklist", "The checklist is back on Match Day until it is complete.") attr:data-testid="reset-checklist">"Show the checklist again"</Button>
                 <Button on_click=reset("hints", "Hints you dismissed will show again where their feature is.") attr:data-testid="reset-hints">"Show hints again"</Button>
+                <Button on_click=reset("nudges", "Next-step lines you turned off can show on Match Day again.") attr:data-testid="reset-nudges">"Show nudges again"</Button>
             </div>
             {move || (!on.get()).then(|| view! {
-                <Callout tone=CalloutTone::Info>"Guidance is off. The two buttons take effect when you turn it on again."</Callout>
+                <Callout tone=CalloutTone::Info>"Guidance is off. These buttons take effect when you turn it on again."</Callout>
             })}
         </section>
     }

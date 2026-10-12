@@ -36,6 +36,8 @@ pub enum Reset {
     Hints,
     /// The checklist's "Hide this checklist".
     Checklist,
+    /// Every nudge kind turned off with "Don't show this again".
+    Nudges,
 }
 
 fn parse_dt(dt: &Datetime) -> Option<DateTime<Utc>> {
@@ -105,6 +107,9 @@ pub async fn reset(db: &Surreal<Db>, user_id: &str, what: Reset) -> DbResult<()>
         }
         Reset::Checklist => {
             "DELETE user_guidance WHERE user = type::record('user', $uk) AND key = 'checklist'"
+        }
+        Reset::Nudges => {
+            "DELETE user_guidance WHERE user = type::record('user', $uk) AND string::starts_with(key, 'nudge.')"
         }
     };
     db.query(q)

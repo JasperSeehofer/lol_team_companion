@@ -10,7 +10,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ### Milestone M9: Welcome and guidance (2026-10-12)
 
-Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudges off here, or show the checklist and hints again.
+Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudges off here, or show the checklist, hints and nudges again.
 
 #### Added
 - A welcome on your first visit to Match Day: the loop in one line (scout, draft, plan, play, review), what to do first, and the optional Riot link. "Start" takes you to the first open step; "Skip, I'll find my way" hides it for good.
@@ -18,7 +18,7 @@ Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudg
 - One-time hints where a feature is, each with "Got it": the draft board's keys, the Draft Graph, branching a draft tree, share links, Undo on team notes, champion pool tiers, and the command bar. They stop once you have used the feature.
 - One quiet line on Match Day when something is waiting: picking up again after two weeks away, a match with a plan but no review, action items open for over a week, a draft without a game plan, a scouted opponent without a draft. Each kind can be turned off with one click.
 - New features are introduced on the page where they live, once, with a "New" mark in the navigation until you have seen them. The Draft Graph and share links are introduced this way to everyone who used the app before they arrived.
-- Guidance on your profile: one switch for all of it, "Show the checklist again" and "Show hints again". "What's new" in the command bar opens the changelog.
+- Guidance on your profile: one switch for all of it, "Show the checklist again", "Show hints again" and "Show nudges again". "What's new" in the command bar opens the changelog.
 - For operators: a promote command makes an existing account an admin without editing `ADMIN_EMAILS` (`promote <email>`, `--revoke`, `--list`; see the runbook).
 
 #### Changed
