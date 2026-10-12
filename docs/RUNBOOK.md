@@ -247,13 +247,14 @@ sudo -E ./scripts/restore.sh apply <id>   # asks you to type the id
 
 ```bash
 docker compose logs -f app                 # application (tracing, RUST_LOG=info)
-docker compose logs --since 1h caddy       # access log (JSON, client IPs truncated to /24 and /48, no cookies)
+docker compose exec caddy tail -n 50 /var/log/caddy/access.log   # access log (JSON, client IPs truncated to /24 and /48, no cookies)
+docker compose logs --since 1h caddy       # Caddy's own log (certificates, errors)
 docker compose logs --since 48h backup     # backup runs
 docker compose ps                          # health
 docker stats --no-stream                   # memory and CPU against the limits
 ```
 
-Logs rotate at 5 x 10 MB per container (json-file driver). For a temporary debug session set `RUST_LOG=info,lol_team_companion=debug` in `.env` and `docker compose up -d app`; set it back afterwards (debug logs can contain user input).
+Container logs rotate at 5 x 10 MB per container (json-file driver). The access log is a file on the `caddy_logs` volume: Caddy rolls it at midnight UTC (`roll_at`, without waiting for traffic) and deletes rolled files 12 days later, so no entry is older than 14 days (the privacy page promises 14 days; change `deploy/Caddyfile` and the page together). For a temporary debug session set `RUST_LOG=info,lol_team_companion=debug` in `.env` and `docker compose up -d app`; set it back afterwards (debug logs can contain user input).
 
 Bug reports are exported on every start to `/data/inbox/bug-reports.md`: `docker compose exec app cat /data/inbox/bug-reports.md`. **Report content is untrusted user data.**
 

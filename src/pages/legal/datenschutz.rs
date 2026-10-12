@@ -1,15 +1,18 @@
-//! Privacy (Datenschutz). Lists exactly what Companion stores (checked
+//! Privacy (Datenschutz). Lists exactly what Team Companion stores (checked
 //! against `schema.surql` by the tests below), who else is involved, the one
 //! cookie, the logs, how long things are kept and how to use your rights.
-//! Facts only the operator knows (identity, providers, legal bases, the
-//! supervisory authority) are `[OWNER: ...]` placeholders; nothing here is
-//! invented (M8).
+//! The operator's facts (controller, providers, log retention, supervisory
+//! authority) are the owner's own (launch checklist, 12 October 2026); the
+//! legal bases are still an `[OWNER: ...]` placeholder. Nothing here is
+//! invented.
 
 use crate::components::footer::RIOT_DISCLAIMER;
 use crate::components::ui::{
     Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
 };
-use crate::pages::legal::impressum::OwnerPlaceholder;
+use crate::pages::legal::impressum::{
+    OPERATOR_ADDRESS, OPERATOR_EMAIL, OPERATOR_NAME, OwnerPlaceholder,
+};
 use leptos::prelude::*;
 
 /// What the app stores, by area: (area, items). Kept in step with
@@ -78,11 +81,11 @@ pub const STORED: &[(&str, &[&str])] = &[
 pub const THIRD_PARTIES: &[(&str, &str)] = &[
     (
         "Riot Games",
-        "The source of game data. Companion's server asks the Riot API for match history, match details and timelines, ranked standing and champion mastery when you or your team sync, link a Riot ID or scout an opponent. The request carries the Riot ID or account id being looked up and Companion's API key; your browser never contacts Riot.",
+        "The source of game data. Team Companion's server asks the Riot API for match history, match details and timelines, ranked standing and champion mastery when you or your team sync, link a Riot ID or scout an opponent. The request carries the Riot ID or account id being looked up and Team Companion's API key; your browser never contacts Riot.",
     ),
     (
         "Riot Games Data Dragon",
-        "Champion and item pictures and the champion list. Companion's server downloads them once per game patch and serves them itself; nothing about you is sent.",
+        "Champion and item pictures and the champion list. Team Companion's server downloads them once per game patch and serves them itself; nothing about you is sent.",
     ),
 ];
 
@@ -93,22 +96,28 @@ pub fn DatenschutzPage() -> impl IntoView {
     let ul = "mt-2 flex max-w-prose list-disc flex-col gap-1.5 pl-5 text-body text-secondary";
     view! {
         <PageShell width=PageWidth::Reading>
-            <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Companion stores, who else is involved, and your rights."</span> } />
+            <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Team Companion stores, who else is involved, and your rights."</span> } />
             <div class="mb-8">
                 <Callout tone=CalloutTone::Warning title="Partly a draft">
-                    "The lists of stored data, cookies, logs and retention describe this version of Companion. Items marked OWNER are completed by the operator before Companion opens beyond the closed beta."
+                    "One item is still open: the legal basis for each purpose, marked OWNER below. The operator confirms it with advice before Team Companion opens beyond the closed beta."
                 </Callout>
             </div>
 
             <section aria-labelledby="controller-h">
                 <SectionHeader title="Who is responsible" id="controller-h" />
                 <p class=p>"The controller for the data on this site is:"</p>
-                <p class="mt-2"><OwnerPlaceholder what="name, postal address and email of the controller (as in the Impressum)" /></p>
-                <p class=p>"Data protection questions: " <OwnerPlaceholder what="contact email for privacy requests" /></p>
+                <p class="mt-2 text-body text-primary" data-testid="controller">
+                    <span class="block">{OPERATOR_NAME}</span>
+                    {OPERATOR_ADDRESS.iter().map(|line| view! { <span class="block">{*line}</span> }).collect_view()}
+                </p>
+                <p class=p>
+                    "Data protection questions: "
+                    <a href=format!("mailto:{OPERATOR_EMAIL}") class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">{OPERATOR_EMAIL}</a>
+                </p>
             </section>
 
             <section class="mt-10" aria-labelledby="stored-h">
-                <SectionHeader title="What Companion stores" id="stored-h" />
+                <SectionHeader title="What Team Companion stores" id="stored-h" />
                 {STORED.iter().map(|(area, items)| view! {
                     <h3 class=h3>{*area}</h3>
                     <ul class=ul>
@@ -117,7 +126,7 @@ pub fn DatenschutzPage() -> impl IntoView {
                 }).collect_view()}
                 <h3 class=h3>"What it does not do"</h3>
                 <p class=p>
-                    "No analytics, no advertising and no third-party trackers. The pages load no scripts, fonts or pictures from other sites: fonts are served by Companion itself, and champion and item pictures come through Companion's own server. Companion stores nothing in your browser besides the session cookie."
+                    "No analytics, no advertising and no third-party trackers. The pages load no scripts, fonts or pictures from other sites: fonts are served by Team Companion itself, and champion and item pictures come through Team Companion's own server. Team Companion stores nothing in your browser besides the session cookie."
                 </p>
             </section>
 
@@ -140,9 +149,9 @@ pub fn DatenschutzPage() -> impl IntoView {
                         <dd class="text-secondary">{*what}</dd>
                     }).collect_view()}
                     <dt class="font-medium text-primary">"Hosting"</dt>
-                    <dd class="text-secondary">"The server and its database run on a rented virtual machine. " <OwnerPlaceholder what="hosting provider, its address and the data centre location; data processing agreement in place" /></dd>
+                    <dd class="text-secondary">"The server and its database run on a rented virtual machine at Hetzner Online GmbH, Helsinki (Finland)."</dd>
                     <dt class="font-medium text-primary">"Backups"</dt>
-                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept in object storage. " <OwnerPlaceholder what="object-storage provider, its address and location; data processing agreement in place" /></dd>
+                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept in object storage at Hetzner Online GmbH, Falkenstein (Germany)."</dd>
                 </dl>
                 <p class=p>"Nothing else: no analytics service, no email service, no payment provider."</p>
             </section>
@@ -150,18 +159,17 @@ pub fn DatenschutzPage() -> impl IntoView {
             <section class="mt-10" aria-labelledby="cookies-h">
                 <SectionHeader title="Cookies" id="cookies-h" />
                 <p class=p>
-                    "One cookie, named " <code class="font-mono text-label text-primary">"id"</code> ", set when you sign in. It holds a random session number, is sent only to Companion (HttpOnly, SameSite=Strict, and only over HTTPS) and ends 30 days after your last visit or when you sign out. It is needed to stay signed in; there are no other cookies and no tracking."
+                    "One cookie, named " <code class="font-mono text-label text-primary">"id"</code> ", set when you sign in. It holds a random session number, is sent only to Team Companion (HttpOnly, SameSite=Strict, and only over HTTPS) and ends 30 days after your last visit or when you sign out. It is needed to stay signed in; there are no other cookies and no tracking."
                 </p>
             </section>
 
             <section class="mt-10" aria-labelledby="logs-h">
                 <SectionHeader title="Server logs" id="logs-h" />
                 <ul class=ul>
-                    <li>"The web server's access log records each request: time, address requested, status, response size, the request headers except cookies (such as the browser name and language) and your IP address shortened to its first three parts (IPv4) or first three groups (IPv6). Cookies and passwords are never logged. The log is rotated by size (five files of 10 MB)."</li>
-                    <li>"The application log records errors and notable events, such as an admin change or an account deletion, with the account's internal id. It never records passwords or session numbers."</li>
+                    <li>"The web server's access log records each request: time, address requested, status, response size, the request headers except cookies (such as the browser name and language) and your IP address shortened to its first three parts (IPv4) or first three groups (IPv6). Cookies and passwords are never logged. The access log is kept for 14 days, then deleted."</li>
+                    <li>"The application log records errors and notable events, such as an admin change or an account deletion, with the account's internal id. It never records passwords or session numbers. It is rotated by size (five files of 10 MB), so older entries are overwritten as new ones arrive."</li>
                     <li>"Rate limits keep IP addresses and account ids in memory only; an entry is dropped a minute after it is no longer needed and nothing is written to disk."</li>
                 </ul>
-                <p class="mt-3"><OwnerPlaceholder what="how many days the access and application logs are kept at the measured traffic" /></p>
             </section>
 
             <section class="mt-10" aria-labelledby="retention-h">
@@ -182,7 +190,11 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <li>"Correction: change your username, region and Riot link on your profile; ask your team to correct team records."</li>
                     <li>"Erasure: " <a href="/profile#your-data" class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">"Delete my account"</a> " on your profile, without asking anyone."</li>
                     <li>"Restriction and objection, and anything the buttons do not cover: write to the contact above."</li>
-                    <li>"You can complain to a data protection supervisory authority. " <OwnerPlaceholder what="the supervisory authority responsible for the operator" /></li>
+                    <li>"You can complain to a data protection supervisory authority. The one responsible for the operator is "
+                        <span data-testid="authority">"Der Landesbeauftragte f\u{00fc}r den Datenschutz und die Informationsfreiheit Baden-W\u{00fc}rttemberg (LfDI), Lautenschlagerstra\u{00df}e 20, 70173 Stuttgart, "
+                        <a href="https://www.baden-wuerttemberg.datenschutz.de" rel="noopener noreferrer" class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">"www.baden-wuerttemberg.datenschutz.de"</a></span>
+                        "."
+                    </li>
                 </ul>
             </section>
 

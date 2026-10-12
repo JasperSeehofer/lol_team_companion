@@ -12,6 +12,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 #### Changed
 - The app has its name: Team Companion. It replaces the working title in the browser tab, the navigation, the footer's Riot disclaimer, the legal pages and every page that named the app.
+- Impressum, privacy page and terms are filled in with the operator's details: who runs the app and how to reach them, the hosting (Helsinki) and backup storage (Falkenstein), access logs kept for 14 days, the data protection authority you can complain to, the price (using Team Companion costs nothing; support is voluntary), liability and governing law. Only the privacy page's legal basis is still marked as open.
 
 ### Milestone M9: Welcome and guidance (2026-10-12)
 

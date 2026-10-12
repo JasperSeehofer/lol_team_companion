@@ -75,11 +75,20 @@
 		}
 	}
 
-	# Access log to stdout (docker logs, rotated by the json-file driver:
-	# 5 x 10 MB). Client IPs are truncated and cookies are never logged, so the
-	# privacy page can say what the log holds.
+	# Access log to a file on the caddy_logs volume, rolled at midnight (UTC; a
+	# scheduled roll that does not wait for traffic) and deleted 12 days after
+	# its roll: with a daily roll and a cleanup that runs at each roll, no entry
+	# is older than 14 days (the privacy page says "kept for 14 days"; change
+	# both together). roll_size only guards against a flood. Client IPs are
+	# truncated and cookies are never logged, so the privacy page can say what
+	# the log holds. Read it with: docker compose exec caddy tail /var/log/caddy/access.log
 	log {
-		output stdout
+		output file /var/log/caddy/access.log {
+			roll_at 00:00
+			roll_keep_for 288h
+			roll_keep 20
+			roll_size 100MiB
+		}
 		format filter {
 			wrap json
 			fields {

@@ -206,7 +206,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 | `/auth/login` | LoginPage | No |
 | `/auth/register?invite=CODE` | RegisterPage (without `invite` it redirects to `/closed-beta`) | No |
 | `/closed-beta` | ClosedBetaPage | No |
-| `/legal/impressum`, `/legal/datenschutz`, `/legal/terms` | ImpressumPage, DatenschutzPage, TermsPage (facts the operator must supply are `[OWNER: ...]` placeholders) | No |
+| `/legal/impressum`, `/legal/datenschutz`, `/legal/terms` | ImpressumPage, DatenschutzPage, TermsPage (operator's facts filled in; the privacy page's legal basis is still an `[OWNER: ...]` placeholder) | No |
 | `/me` | MyGamesPage: synced games, ranked standing, LP history, champion trends, goals (the personal layer) | Yes |
 | `/profile` | ProfilePage: account, region, Riot link, sign out, survey switch, "Your data" (player-card switch, Download my data, Delete my account) | Yes |
 | `/team/dashboard` | TeamDashboard: roster by place (starting five, substitutes, coaches, not placed), join requests, team notes with Undo, recent games, pool gaps | Yes |
