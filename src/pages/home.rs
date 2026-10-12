@@ -412,7 +412,10 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
 #[component]
 pub fn HomePage() -> impl IntoView {
     let query = leptos_router::hooks::use_query_map();
-    let home = Resource::new(move || query.read().get("guide").is_some(), get_home);
+    let home = Resource::new(
+        move || query.read().get("guide").as_deref() == Some("1"),
+        get_home,
+    );
     view! {
         <Suspense fallback=|| view! {
             <PageShell>

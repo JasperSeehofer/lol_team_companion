@@ -484,17 +484,26 @@ pub fn GettingStarted(
     on_change: Callback<()>,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>();
+    let query = leptos_router::hooks::use_query_map();
+    let navigate = leptos_router::hooks::use_navigate();
     let done = items.iter().filter(|i| i.done).count();
     let total = items.len();
     let steps = checklist_steps(&items);
     let hide = Callback::new(move |_| {
+        let navigate = navigate.clone();
         mark_then(guidance::CHECKLIST, true, move || {
             if let Some(t) = toast {
                 t.push.run(Toast::info(
                     "Checklist hidden. Bring it back on your profile, under Guidance.",
                 ));
             }
-            on_change.run(());
+            // "Guide me" (`/?guide=1`) forces the checklist open: a refetch
+            // of the same address would draw it again, so leave the query.
+            if query.with_untracked(|q| q.get("guide").is_some()) {
+                navigate("/", Default::default());
+            } else {
+                on_change.run(());
+            }
         })
     });
     view! {

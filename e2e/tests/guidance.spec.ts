@@ -77,6 +77,10 @@ test("the checklist ticks after creating a team and a draft, and hides on reques
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-checklist]")).toBeVisible({ timeout: 10000 });
   await expect(page.locator("[data-checklist]")).toContainText("Shown because you asked for it");
+  // Hiding it again from the Guide me address works too.
+  await page.getByTestId("hide-checklist").click();
+  await expect(page.locator("[data-checklist]")).toHaveCount(0, { timeout: 10000 });
+  await expect(page).toHaveURL((u) => !u.search.includes("guide"));
 });
 
 test("a hint shows once on the draft board and not after Got it", async ({ teamPage }) => {
