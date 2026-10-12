@@ -1713,7 +1713,7 @@ fn DraftEditor(
         >
             <h2 id="draft-board-heading" class="sr-only">"Board"</h2>
             <div class="flex min-w-0 flex-col gap-4">
-                <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::DraftKeys title="The board works from the keyboard">
+                <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::DraftKeys title="The board works from the keyboard" class="hidden md:block">
                     "Click the board once, then use the arrow keys to move between slots, Enter to choose a champion, Backspace to clear and Esc to come back. The keys are listed under the board."
                 </crate::components::guidance::FirstUseHint>
                 <DraftBoard
