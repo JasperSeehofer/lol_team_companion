@@ -95,9 +95,17 @@ fi
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 ID="$TS${BACKUP_REASON:+-$BACKUP_REASON}"
+# Two runs in the same second (a manual run right after a failed one) must
+# not share a work directory: the second would treat the first's finished
+# archive as its own (CI caught it).
+n=1
+while [[ -e "$STAGING_DIR/$ID" || -e "$STAGING_DIR/failed-$ID" ]]; do
+  n=$((n + 1))
+  ID="$TS${BACKUP_REASON:+-$BACKUP_REASON}-$n"
+done
 WORK="$STAGING_DIR/$ID"
 ARCHIVE="companion-$ID.$EXT"
-mkdir -p "$WORK"
+mkdir "$WORK"
 
 CONTAINER=""
 STOPPED=0
