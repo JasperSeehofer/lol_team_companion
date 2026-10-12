@@ -32,6 +32,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Creating an account before the page had finished loading failed with "Registration failed" even with a valid invite link.
 - Saving a game plan started from a draft before the draft had loaded saved it without the link to that draft; "Save plan" now waits for the draft.
 - An empty state right under a page title no longer draws a second line under the title's own.
+- After opening an old address that redirects (the solo dashboard, analytics, team builder), pages could intermittently fail to load their scripts.
+- The phone menu stays a full-screen sheet over the page once its counts have loaded.
+- Wide tables on phones (such as the invite list) scroll inside their frame instead of widening the page.
 
 #### Removed
 - The standalone solo dashboard (now My games and your profile; its address redirects), and the parked analytics and team builder pages (their addresses redirect to Team games and Draft).

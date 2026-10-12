@@ -41,10 +41,13 @@ pub fn Table(
         density,
         sticky: sticky_header,
     });
+    // `relative`: the wrapper is the containing block of anything absolutely
+    // positioned inside (an `sr-only` header), so it scrolls with the table
+    // instead of widening the page on phones.
     let wrapper = if sticky_header {
-        "overflow-auto max-h-[28rem]"
+        "relative overflow-auto max-h-[28rem]"
     } else {
-        "overflow-x-auto"
+        "relative overflow-x-auto"
     };
     let caption_class = if caption_hidden {
         "sr-only"
