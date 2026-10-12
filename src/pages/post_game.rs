@@ -418,6 +418,8 @@ impl ReviewEd {
     }
     fn build(&self) -> PostGameLearning {
         PostGameLearning {
+            draft_deleted: false,
+            created_at: None,
             id: self.id.get_untracked(),
             team_id: String::new(),
             match_riot_id: opt(self.match_id.get_untracked()),

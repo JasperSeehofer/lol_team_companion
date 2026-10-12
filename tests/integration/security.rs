@@ -68,6 +68,7 @@ async fn make_draft(db: &Surreal<Db>, team: &str, user: &str, name: &str) -> Str
 
 fn plan(team: &str, name: &str) -> GamePlan {
     GamePlan {
+        draft_deleted: false,
         id: None,
         team_id: team.into(),
         draft_id: None,
@@ -323,6 +324,8 @@ async fn review_is_isolated_between_teams() {
     let db = common::test_db().await;
     let t = tenants(&db).await;
     let review = PostGameLearning {
+        draft_deleted: false,
+        created_at: None,
         id: None,
         team_id: t.team1.clone(),
         match_riot_id: None,
@@ -443,6 +446,8 @@ async fn action_item_source_review_must_belong_to_the_team() {
     let db = common::test_db().await;
     let t = tenants(&db).await;
     let review = PostGameLearning {
+        draft_deleted: false,
+        created_at: None,
         id: None,
         team_id: t.team2.clone(),
         match_riot_id: None,

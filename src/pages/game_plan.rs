@@ -304,6 +304,8 @@ pub async fn start_post_game_review(
     }
 
     let review = PostGameLearning {
+        draft_deleted: false,
+        created_at: None,
         id: None,
         team_id,
         match_riot_id: None,
@@ -599,6 +601,7 @@ impl PlanEd {
     fn build(&self, tracked: bool) -> GamePlan {
         let g = |s: RwSignal<String>| if tracked { s.get() } else { s.get_untracked() };
         GamePlan {
+            draft_deleted: false,
             id: if tracked {
                 self.id.get()
             } else {

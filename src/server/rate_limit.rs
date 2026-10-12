@@ -29,6 +29,9 @@ pub enum Bucket {
     /// Draft Graph rankings, per client IP (the page asks again after
     /// each draft change, debounced).
     Graph,
+    /// Share-link lookups and share-link changes, per client IP (the
+    /// public `/s/{token}` page needs no sign-in).
+    Share,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -71,6 +74,12 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::Graph => Limit {
             capacity: 60.0,
             refill_per_sec: 2.0,
+        },
+        // 30 lookups, then one every 2 s: enough to open and reload a
+        // shared page, far too slow to guess tokens.
+        Bucket::Share => Limit {
+            capacity: 30.0,
+            refill_per_sec: 0.5,
         },
     }
 }

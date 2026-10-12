@@ -559,6 +559,7 @@ async fn populate(
         .map_err(err)?;
 
         let plan = GamePlan {
+            draft_deleted: false,
             id: None,
             team_id: team.id.clone(),
             draft_id: Some(draft_id.clone()),
@@ -636,6 +637,8 @@ async fn populate(
         db::create_review_with_action_items(
             db,
             PostGameLearning {
+                draft_deleted: false,
+                created_at: None,
                 id: None,
                 team_id: team.id.clone(),
                 match_riot_id: None,

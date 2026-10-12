@@ -179,6 +179,8 @@ async fn opponent_and_players_are_created_together() {
 
 fn review(t: &str, u: &str, improvements: &[&str]) -> PostGameLearning {
     PostGameLearning {
+        draft_deleted: false,
+        created_at: None,
         id: None,
         team_id: t.into(),
         match_riot_id: None,

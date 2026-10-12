@@ -24,6 +24,9 @@ pub struct GamePlan {
     pub notes: Option<String>,
     // Strategy tag (e.g. "teamfight", "split-push", "poke")
     pub win_condition_tag: Option<String>,
+    /// The linked draft was deleted (the link is gone; the page says so).
+    #[serde(default)]
+    pub draft_deleted: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -42,6 +45,12 @@ pub struct PostGameLearning {
     pub win_loss: Option<String>, // "win" | "loss" | None
     #[serde(default)]
     pub rating: Option<u8>, // 1-5 stars | None
+    /// The linked draft was deleted (the link is gone; the page says so).
+    #[serde(default)]
+    pub draft_deleted: bool,
+    /// When the review was written (RFC 3339), filled on reads.
+    #[serde(default)]
+    pub created_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -147,6 +156,7 @@ mod tests {
     #[test]
     fn game_plan_all_options_none_round_trips() {
         let plan = GamePlan {
+            draft_deleted: false,
             id: None,
             team_id: "team:t1".into(),
             draft_id: None,
@@ -173,6 +183,7 @@ mod tests {
     #[test]
     fn game_plan_all_options_some_round_trips() {
         let plan = GamePlan {
+            draft_deleted: false,
             id: Some("game_plan:1".into()),
             team_id: "team:t1".into(),
             draft_id: Some("draft:1".into()),
@@ -269,6 +280,8 @@ mod tests {
     #[test]
     fn post_game_learning_round_trips_json() {
         let pgl = PostGameLearning {
+            draft_deleted: false,
+            created_at: None,
             id: Some("post_game_learning:1".into()),
             team_id: "team:t1".into(),
             match_riot_id: Some("EUW1_1234".into()),
@@ -290,6 +303,8 @@ mod tests {
     #[test]
     fn post_game_learning_with_win_loss_rating_round_trips() {
         let pgl = PostGameLearning {
+            draft_deleted: false,
+            created_at: None,
             id: Some("post_game_learning:2".into()),
             team_id: "team:t1".into(),
             match_riot_id: None,
