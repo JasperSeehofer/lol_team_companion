@@ -14,6 +14,9 @@
 #   2. wasm32 target for the pinned rustc   (changes: when RUST_VERSION moves)
 #   3. cargo-leptos prebuilt binary         (changes: when CARGO_LEPTOS_VERSION moves)
 #   4. source copy + `cargo leptos build`   (changes: every commit)
+# cargo-leptos downloads wasm-bindgen, Tailwind and wasm-opt from GitHub on a
+# cold tool cache; one CI build failed on such a download, so the build step
+# retries twice (a retry reuses everything already compiled).
 # Step 4 uses BuildKit cache mounts for the cargo registry, the target dir and
 # cargo-leptos' tool cache (wasm-bindgen, tailwind, wasm-opt), so a rebuild on
 # the same host only recompiles this crate. Cache mounts are not exported with
@@ -81,7 +84,11 @@ RUN --mount=type=cache,id=companion-cargo-registry,target=/usr/local/cargo/regis
     --mount=type=cache,id=companion-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=companion-target,target=/src/target \
     --mount=type=cache,id=companion-leptos-tools,target=/root/.cache/cargo-leptos \
-    cargo leptos build --release \
+    for attempt in 1 2 3; do \
+      cargo leptos build --release && break; \
+      [ "$attempt" = 3 ] && exit 1; \
+      echo "cargo leptos build failed (attempt $attempt); retrying in 20 s"; sleep 20; \
+    done \
  && mkdir -p /out \
  && cp target/release/lol_team_companion /out/lol_team_companion \
  && strip /out/lol_team_companion \

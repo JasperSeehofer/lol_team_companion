@@ -3,6 +3,7 @@
  * the player-card switch and the account deletion flow.
  */
 import { test, expect, TEST_PASSWORD } from "./fixtures";
+import { navigateTo } from "./helpers";
 
 const SHOTS = process.env.M8_SHOTS_DIR;
 
@@ -12,7 +13,7 @@ test("signed out, the export answers 401", async ({ request }) => {
 });
 
 test("download my data returns the account as a JSON file", async ({ authedPage: page }) => {
-  await page.goto("/profile");
+  await navigateTo(page, "/profile");
   const section = page.locator("[data-your-data]");
   await expect(section).toBeVisible();
   await expect(page.getByTestId("export-data")).toHaveAttribute("href", "/account/export");
@@ -37,13 +38,14 @@ test("download my data returns the account as a JSON file", async ({ authedPage:
 });
 
 test("the player-card switch persists", async ({ authedPage: page }) => {
-  await page.goto("/profile");
+  // Wait for hydration: a click on the server-rendered switch does nothing.
+  await navigateTo(page, "/profile");
   const toggle = page.getByRole("switch", { name: "Keep my player card out of share links" });
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await page.waitForTimeout(500);
-  await page.reload();
+  await navigateTo(page, "/profile");
   await expect(page.getByRole("switch", { name: "Keep my player card out of share links" })).toHaveAttribute(
     "aria-checked",
     "true"
@@ -51,7 +53,7 @@ test("the player-card switch persists", async ({ authedPage: page }) => {
 });
 
 test("deleting the account needs the username and password, then signs out", async ({ authedPage: page }) => {
-  await page.goto("/profile");
+  await navigateTo(page, "/profile");
   const username = (await page.locator("h1").textContent())?.trim() ?? "";
   const email = (await page.getByTestId("profile-email").textContent())?.trim() ?? "";
   expect(username.length).toBeGreaterThan(0);

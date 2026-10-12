@@ -75,6 +75,9 @@ test("triage reaches the reporter and the board; a fix links the changelog", asy
   await expect(admin.getByText("Saved. The reporter sees the new status.")).toBeVisible();
 
   await user.goto("/bugs");
+  // The tabs switch only once hydrated; a click before that is lost (CI flake).
+  await user.waitForLoadState("networkidle");
+  await user.waitForTimeout(500);
   await user.getByRole("tab", { name: /Fixed/ }).click();
   const fixed = user.locator("#bugs-panel-fixed");
   await expect(fixed).toContainText(title);
