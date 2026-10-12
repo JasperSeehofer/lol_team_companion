@@ -424,6 +424,12 @@ async fn main() {
         let _ = task.await;
     }
     drop(riot);
+    // Every other handle should be gone now; one still held somewhere (a
+    // request's reactive owner, a task) keeps SurrealKV open, so say so.
+    let held = Arc::strong_count(&surreal_db) - 1;
+    if held > 0 {
+        tracing::warn!("{held} database handle(s) still held at shutdown");
+    }
     drop(surreal_db);
 
     let closed = wait_for_db_close(std::path::Path::new(&data_dir), close_limit).await;
