@@ -28,8 +28,8 @@
 //! power spikes 1. Synergy and counters count at least
 //! [`MIN_SCALE_PICKS`] picks (polish pass): with one locked pick a strong
 //! relation moves the part a third of the way, so early in a draft one link
-//! cannot fill it and candidates do not tie at the top. Every point has a
-//! [`Reason`].
+//! cannot fill it. Every point has a [`Reason`]. Equal fits are ordered by
+//! pool comfort, then playstyle fit, then name (M10 review).
 //!
 //! The ranking is a pure function of the trait table, the draft state and
 //! the team's knowledge, so it is deterministic and unit-tested.
@@ -870,8 +870,10 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
                 .then(order(a.component).cmp(&order(b.component)))
         });
 
-        let syn_pts = parts[0].points;
-        let ctr_pts = parts[1].points;
+        // Tie-breaks (M10 review, orchestrator decision): pool comfort,
+        // then playstyle fit, then the name.
+        let pool_pts = parts[4].points;
+        let play_pts = parts[2].points;
         candidates.push((
             Candidate {
                 champion: t.champion.clone(),
@@ -887,17 +889,20 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
                 trait_default: rec.source == TraitSource::Default,
                 trait_low_confidence: t.confidence == crate::models::graph::Confidence::Low,
             },
-            syn_pts,
-            ctr_pts,
+            pool_pts,
+            play_pts,
         ));
         all_edges.extend(edges);
     }
 
-    candidates.sort_by(|(a, asyn, actr), (b, bsyn, bctr)| {
+    // Best fit first; equal fits go by the slot player's comfort with the
+    // champion (pool points), then playstyle fit, then the name, so the
+    // order is total and deterministic (DESIGN 6.7).
+    candidates.sort_by(|(a, apool, aplay), (b, bpool, bplay)| {
         b.fit
             .cmp(&a.fit)
-            .then(bsyn.cmp(asyn))
-            .then(bctr.cmp(actr))
+            .then(bpool.cmp(apool))
+            .then(bplay.cmp(aplay))
             .then(a.name.cmp(&b.name))
     });
     candidates.truncate(MAX_CANDIDATES);
@@ -1186,6 +1191,81 @@ mod tests {
                 c.champion
             );
         }
+    }
+
+    /// Equal fits are ordered by pool comfort, then playstyle fit, then the
+    /// name (M10 review, orchestrator decision).
+    #[test]
+    fn ties_break_by_pool_comfort_then_playstyle_then_name() {
+        let t = table();
+        let ev = nobody();
+        let mut rng = Rng(0x7135_0bad_cafe_0042);
+        let ids: Vec<String> = t.rows.iter().map(|r| r.traits.champion.clone()).collect();
+        // Every role has a player whose pool holds most champions at a
+        // random tier, so pool points differ between candidates.
+        let tiers = ["comfort", "match_ready", "scrim_ready", "practicing", "to_practice"];
+        let pools: Vec<PoolPlayer> = Role::ALL
+            .iter()
+            .map(|r| PoolPlayer {
+                username: format!("p-{}", r.key()),
+                role: Some(*r),
+                entries: ids
+                    .iter()
+                    .filter(|_| rng.below(4) != 0)
+                    .map(|c| (c.clone(), tiers[rng.below(tiers.len())].to_string()))
+                    .collect(),
+            })
+            .collect();
+        let mut ties = 0;
+        let mut pool_decided = 0;
+        for _ in 0..200 {
+            let filled = rng.below(12);
+            let mut slots = vec![None; 20];
+            let mut used = HashSet::new();
+            for s in slots.iter_mut().take(filled) {
+                loop {
+                    let c = ids[rng.below(ids.len())].clone();
+                    if used.insert(c.clone()) {
+                        *s = Some(c);
+                        break;
+                    }
+                }
+            }
+            let state = DraftState {
+                slots,
+                roles: vec![None; 20],
+                roles_guessed: vec![false; 20],
+                current: Some(filled),
+                our_side: "blue".into(),
+                tags: vec![],
+                opponent_id: None,
+                unavailable: vec![],
+                role: None,
+                focus: None,
+            };
+            let r = rank(&t, &state, &knowledge(&[], &pools, &ev, &[]));
+            for w in r.candidates.windows(2) {
+                let (a, b) = (&w[0], &w[1]);
+                assert!(a.fit >= b.fit);
+                if a.fit != b.fit {
+                    continue;
+                }
+                ties += 1;
+                if part(a, Component::Pool) != part(b, Component::Pool) {
+                    pool_decided += 1;
+                }
+                let key = |c: &Candidate| {
+                    (
+                        -part(c, Component::Pool),
+                        -part(c, Component::Playstyle),
+                        c.name.clone(),
+                    )
+                };
+                assert!(key(a) <= key(b), "{} before {}", a.name, b.name);
+            }
+        }
+        assert!(ties > 0, "the fuzzed drafts produced no ties to check");
+        assert!(pool_decided > 0, "no tie was decided by the pool");
     }
 
     /// Only the top eight and the focused candidate carry every reason; the

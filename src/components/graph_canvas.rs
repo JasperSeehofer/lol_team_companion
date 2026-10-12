@@ -712,7 +712,7 @@ pub fn DraftGraphCanvas(
         ),
         LegendEntry::new(
             Swatch::Anchor(SwatchInk::Accent),
-            "Focused candidate: only its lines are drawn, and the picks they reach stay lit",
+            "Focus (a candidate, or a locked pick you clicked): only its lines are drawn, and what they reach stays lit",
         ),
     ];
 

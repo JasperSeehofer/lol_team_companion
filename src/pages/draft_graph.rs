@@ -552,9 +552,12 @@ pub fn DraftGraphPanel(
     let memory: StoredValue<HashMap<String, (f32, f32)>> = StoredValue::new(HashMap::new());
     let refresh = RwSignal::new(0u32);
     let generation = StoredValue::new(0u32);
-    // The question the current result answers (for the lazy reasons).
+    // The generation and question of the result on screen (for the lazy
+    // reasons: they must belong to that ranking, not a newer request).
     #[allow(unused_variables)]
-    let asked = StoredValue::new(String::new());
+    let asked = StoredValue::new((0u32, String::new()));
+    // The candidate whose remaining reasons failed to load.
+    let reasons_failed = RwSignal::new(None::<String>);
     #[allow(unused_variables)]
     let timer: RwSignal<Option<i32>> = RwSignal::new(None);
 
@@ -592,7 +595,7 @@ pub fn DraftGraphPanel(
                 leptos::task::spawn_local(async move {
                     let r = graph_candidates(json).await.map_err(|e| e.to_string());
                     if generation.get_value() == gen {
-                        asked.set_value(asked_json);
+                        asked.set_value((gen, asked_json));
                         result.set(Some(r));
                     }
                 });
@@ -654,15 +657,19 @@ pub fn DraftGraphPanel(
         let _ = c;
         #[cfg(feature = "hydrate")]
         {
-            let gen = generation.get_value();
-            let json = asked.get_value();
+            let (gen, json) = asked.get_value();
+            reasons_failed.set(None);
             leptos::task::spawn_local(async move {
-                let Ok(reasons) = graph_candidate_reasons(json, c.champion.clone()).await else {
-                    return;
-                };
-                if generation.get_value() != gen {
+                let answer = graph_candidate_reasons(json, c.champion.clone()).await;
+                // Only for the ranking still on screen (M10 review: a reply
+                // for an older draft state must not fill a newer result).
+                if asked.with_value(|(g, _)| *g) != gen {
                     return;
                 }
+                let Ok(reasons) = answer else {
+                    reasons_failed.set(Some(c.champion.clone()));
+                    return;
+                };
                 result.update(|r| {
                     if let Some(Ok(g)) = r {
                         if let Some(x) = g.candidates.iter_mut().find(|x| x.champion == c.champion)
@@ -988,6 +995,7 @@ pub fn DraftGraphPanel(
                             <div class="flex min-w-0 flex-col gap-6">
                                 {move || focused_candidate.get().map(|c| view! {
                                     <WhyPanel
+                                        reasons_failed=reasons_failed.get().as_deref() == Some(c.champion.as_str())
                                         candidate=c
                                         team=notes.team
                                         on_pick=pick
@@ -1223,6 +1231,8 @@ fn CandidateRow(
 #[component]
 fn WhyPanel(
     candidate: Candidate,
+    /// The rest of a trimmed candidate's reasons could not be loaded.
+    reasons_failed: bool,
     team: bool,
     on_pick: Callback<Candidate>,
     on_argue: Callback<Option<(String, String, &'static str)>>,
@@ -1320,7 +1330,11 @@ fn WhyPanel(
                     </div>
                 }
             }).collect_view()}
-            {(!c.reasons_complete).then(|| view! { <p class="text-caption text-muted" data-graph-why-loading="">"Loading the rest of the reasons."</p> })}
+            {(!c.reasons_complete).then(|| if reasons_failed {
+                view! { <p class="text-caption text-muted" data-graph-why-failed="">"The rest of the reasons could not be loaded. Focus another candidate and come back to try again."</p> }.into_any()
+            } else {
+                view! { <p class="text-caption text-muted" data-graph-why-loading="">"Loading the rest of the reasons."</p> }.into_any()
+            })}
             {trait_note.map(|t| view! { <p class="text-caption text-muted">{t}</p> })}
         </section>
     }
