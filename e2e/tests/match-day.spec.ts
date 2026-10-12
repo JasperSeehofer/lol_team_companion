@@ -128,6 +128,11 @@ test("phone menu at 400 px lists every page by group", async ({ authedPage }) =>
   await page.getByTestId("phone-menu-trigger").click();
   const menu = page.getByRole("dialog", { name: "Menu" });
   await expect(menu).toBeVisible();
+  // It stays a modal sheet once its counts have loaded (covers the screen
+  // from the top, page behind it inert).
+  await page.waitForTimeout(800);
+  expect(await menu.evaluate((d) => d.matches(":modal"))).toBe(true);
+  expect(await menu.evaluate((d) => Math.round(d.getBoundingClientRect().top))).toBe(0);
   for (const g of ["Today", "After the game", "Team", "You"]) {
     await expect(menu.getByRole("heading", { level: 3, name: g })).toBeVisible();
   }

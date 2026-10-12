@@ -350,7 +350,7 @@ fn PhoneMenu(
     open: RwSignal<bool>,
     is_admin: bool,
     username: String,
-    counts: Resource<Option<NavCounts>>,
+    counts: ReadSignal<Option<NavCounts>>,
 ) -> impl IntoView {
     let location = use_location();
     let username = StoredValue::new(username);
@@ -383,7 +383,7 @@ fn PhoneMenu(
                     <div class="min-w-0">
                         <p class="eyebrow">"Team"</p>
                         <p class="truncate font-display text-reading font-semibold text-primary">
-                            {move || counts.get().flatten().and_then(|c| c.team_name).unwrap_or_else(|| "No team yet".to_string())}
+                            {move || counts.get().and_then(|c| c.team_name).unwrap_or_else(|| "No team yet".to_string())}
                         </p>
                     </div>
                     <UserAvatar name=username.get_value() size=AvatarSize::Md />
@@ -409,7 +409,7 @@ fn PhoneMenu(
                                         >
                                             <span>{pg.label}</span>
                                             <span class="figures text-caption text-muted">
-                                                {move || counts.get().flatten().and_then(|c| count_for(path, &c))}
+                                                {move || counts.get().and_then(|c| count_for(path, &c))}
                                             </span>
                                         </A>
                                     </li>
@@ -452,7 +452,7 @@ pub fn Nav() -> impl IntoView {
     // Created here, not inside the user's Suspense: a resource created after
     // an await would get a different id on the server and in the browser and
     // shift every resource of the page during hydration.
-    let counts = Resource::new(
+    let counts_res = Resource::new(
         move || menu_open.get(),
         |o| async move {
             if o {
@@ -462,6 +462,16 @@ pub fn Nav() -> impl IntoView {
             }
         },
     );
+    // The menu reads the counts from a plain signal, filled once they
+    // arrive: reading the resource inside the menu would suspend the
+    // enclosing Suspense when the menu opens, which remounts the open
+    // dialog and drops its modal state.
+    let (counts, set_counts) = signal(None::<NavCounts>);
+    Effect::new(move |_| {
+        if let Some(Some(c)) = counts_res.get() {
+            set_counts.set(Some(c));
+        }
+    });
 
     Effect::new(move || {
         if let Some(Ok(())) = logout_action.value().get() {
