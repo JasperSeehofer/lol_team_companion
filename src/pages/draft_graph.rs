@@ -717,6 +717,9 @@ pub fn DraftGraphPanel(
         if let Some(next) = roving_index(&key, cur, shown, true) {
             ev.prevent_default();
             focused.set(Some(list[next].champion.clone()));
+            if let Some(g) = use_context::<crate::components::guidance::GuidanceCtx>() {
+                g.used(crate::models::guidance::Hint::DraftGraph);
+            }
             focus_id(&candidate_dom_id(next));
             return;
         }

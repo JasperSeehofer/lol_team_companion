@@ -466,7 +466,7 @@ Owner's intent (MISSION section 8, 12 October 2026): new users feel welcomed and
 | Key | Where (only while on screen) | Gone when |
 |---|---|---|
 | `hint.draft_keys` | Above the draft board | the user created a draft |
-| `hint.draft_graph` | Above the Draft Graph, when it ranks candidates | the user picked a candidate in the list |
+| `hint.draft_graph` | Above the Draft Graph, when it ranks candidates | the user chose a candidate in the graph or the list (click or arrow keys) |
 | `hint.tree_branching` | Under "Branches" of an open tree | the team's tree has a branch |
 | `hint.share_links` | Game plan and review (saved), player card (shareable) | the user made a share link |
 | `hint.note_undo` | Above the team notes, when there are notes | a team note was edited or deleted |
