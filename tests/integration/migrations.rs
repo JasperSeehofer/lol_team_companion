@@ -616,7 +616,8 @@ async fn bug_report_statuses_are_mapped_to_v2() {
         closed.admin_note.as_deref(),
         Some("Closed before statuses existed; set a final status.")
     );
-    assert!(closed.status_changed_at.is_some());
+    // Not shown to the reporter as an update (M7 review).
+    assert!(closed.status_changed_at.is_none());
 
     let bad = db
         .query("CREATE bug_report SET user = user:r, page_url = '/', element_label = 'x', description = 'd', category = 'bug', status = 'open'")

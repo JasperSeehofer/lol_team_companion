@@ -115,7 +115,8 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "bug_report_statuses_v2",
         // M7: statuses users can follow. `closed` had no recorded meaning
         // (fixed or declined), so those rows go back to `triaged` with a note
-        // for an admin instead of an invented decision.
+        // for an admin instead of an invented decision. `status_changed_at`
+        // stays unset: the move is bookkeeping, not news for the reporter.
         step: Step::Surql(BUG_REPORT_STATUSES_V2),
     },
     Migration {
@@ -132,8 +133,7 @@ const BUG_REPORT_STATUSES_V2: &str = "\
     DEFINE FIELD OVERWRITE status ON bug_report TYPE string DEFAULT 'new'; \
     UPDATE bug_report SET status = 'new' WHERE status = 'open'; \
     UPDATE bug_report SET status = 'triaged', \
-        admin_note = 'Closed before statuses existed; set a final status.', \
-        status_changed_at = time::now() \
+        admin_note = 'Closed before statuses existed; set a final status.' \
       WHERE status = 'closed'; \
     UPDATE bug_report SET status = 'new' \
       WHERE status NOT IN ['new', 'triaged', 'planned', 'fixed', 'wont_fix']; \

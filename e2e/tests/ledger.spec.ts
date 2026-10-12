@@ -80,7 +80,7 @@ test("draft, publish, not covered and revised", async ({ browser }) => {
     await saveMonth(admin, m2, "1", "4", /Not covered by support: €3\.00/);
     await publish(admin, label2);
     await guest.reload();
-    await expect(guest.locator("tr").filter({ hasText: label2 })).toContainText("Not covered: €3.00");
+    await expect(guest.locator("tr").filter({ hasText: label2 })).toContainText("Not covered by support: €3.00");
 
     // Edit the published first month: a revision.
     await admin.locator("tr").filter({ hasText: label1 }).getByRole("button", { name: "Edit" }).click();

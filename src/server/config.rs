@@ -65,7 +65,6 @@ pub fn closed_beta_enabled(is_dev: bool, closed_beta_var: Option<&str>) -> bool 
     !matches!(closed_beta_var.and_then(parse_bool), Some(false))
 }
 
-/// Parse `ADMIN_EMAILS`: comma or whitespace separated, normalised.
 /// `SUPPORT_URL` if it is an absolute `https://` URL with a host, without
 /// credentials, whitespace or control characters; otherwise `None`.
 pub fn parse_support_url(value: Option<&str>) -> Option<String> {
@@ -85,6 +84,7 @@ pub fn parse_support_url(value: Option<&str>) -> Option<String> {
     ok.then(|| v.to_string())
 }
 
+/// Parse `ADMIN_EMAILS`: comma or whitespace separated, normalised.
 pub fn parse_admin_emails(value: Option<&str>) -> Vec<String> {
     value
         .unwrap_or_default()

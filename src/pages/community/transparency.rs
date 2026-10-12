@@ -190,6 +190,8 @@ fn MonthTable(
             let other_label = m.other_label.clone();
             let caption = note.is_some() || revised.is_some() || (short > 0 && not_covered_note.is_some()) || other_label.is_some();
             let ncn = not_covered_note.clone();
+            // The approved label, not a sentence of our own (money wording).
+            let not_covered_label = labels.not_covered.clone();
             let label = month_label(&m.month);
             let to_m = m.to_maintainer_cents();
             let (support, hosting, domain, ai, other) = (m.support_cents, m.hosting_cents, m.domain_cents, m.ai_tokens_cents, m.other_cents);
@@ -205,7 +207,7 @@ fn MonthTable(
                         <Td numeric=true>{format_euros(costs)}</Td>
                         <Td numeric=true>
                             {format_euros(to_m)}
-                            {(short > 0).then(|| view! { <span class="block text-caption text-secondary">{format!("Not covered: {}", format_euros(short))}</span> })}
+                            {(short > 0).then(|| view! { <span class="block text-caption text-secondary">{format!("{}: {}", not_covered_label, format_euros(short))}</span> })}
                         </Td>
                         <Td>
                             <div class="w-28">
