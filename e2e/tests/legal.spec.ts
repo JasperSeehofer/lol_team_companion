@@ -1,8 +1,10 @@
 /**
  * Legal pages and the Riot verification file: Impressum, privacy and terms
  * render for visitors with the Riot disclaimer and the operator's facts
- * (owner's launch facts, 12 Oct 2026); the only placeholder left is the
- * privacy page's legal basis. /riot.txt is served as plain text.
+ * (owner's launch facts, 12 Oct 2026); no placeholder is left. The privacy
+ * page's legal bases and the terms' liability and law clauses are drafts
+ * pending the operator's adviser (the privacy callout says so). /riot.txt is
+ * served as plain text.
  */
 import { test, expect } from "@playwright/test";
 
@@ -10,7 +12,7 @@ const SHOTS = process.env.LEGAL_SHOTS_DIR ?? process.env.M8_SHOTS_DIR;
 
 for (const { path, heading, placeholders } of [
   { path: "/legal/impressum", heading: "Impressum", placeholders: 0 },
-  { path: "/legal/datenschutz", heading: "Privacy", placeholders: 1 },
+  { path: "/legal/datenschutz", heading: "Privacy", placeholders: 0 },
   { path: "/legal/terms", heading: "Terms of use", placeholders: 0 },
 ]) {
   test(`${path} renders for visitors`, async ({ page }) => {
@@ -79,6 +81,12 @@ test("privacy page names cookies, logs, retention, rights and third parties", as
   await expect(main).toContainText("Hetzner Online GmbH, Falkenstein (Germany)");
   await expect(main).toContainText("kept for 14 days");
   await expect(page.getByTestId("authority")).toContainText("Baden-Württemberg");
+  // Legal bases: drafted defaults, stated as text, flagged as drafts.
+  const bases = page.getByTestId("legal-bases");
+  await expect(bases).toContainText("performance of the contract with you (Art. 6(1)(b) GDPR)");
+  await expect(bases).toContainText("legitimate interest in the security and operation of the service (Art. 6(1)(f) GDPR)");
+  await expect(main.getByText("Partly a draft")).toBeVisible();
+  await expect(main).toContainText("drafts pending the operator's adviser");
 });
 
 test("/riot.txt is served as plain text", async ({ request }) => {

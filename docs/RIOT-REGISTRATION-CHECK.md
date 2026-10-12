@@ -56,7 +56,7 @@ Account holders can download everything about themselves and delete their accoun
 ## 5. Policies the code follows
 
 - **Disclaimer:** every page footer carries Riot's legal boilerplate with the product name (`components/footer.rs`, `RIOT_DISCLAIMER`; a unit test keeps the exact wording).
-- **Privacy and terms:** `/legal/datenschutz` lists what is stored, the one session cookie, the logs, retention, third parties and rights; `/legal/terms` has the rules of use. Both carry `[OWNER: ...]` placeholders for the operator's identity and legal facts until filled in.
+- **Privacy and terms:** `/legal/datenschutz` lists what is stored, the one session cookie, the logs, retention, third parties and rights; `/legal/terms` has the rules of use. The operator's facts are filled in (no `[OWNER: ...]` left); the privacy page's legal bases and the terms' liability and law clauses are drafts pending the operator's adviser.
 - **Scouting:** only public match history, looked up by the Riot IDs a team enters for an upcoming opponent; visible only to that team.
 - **Isolation:** every server function derives the team from the session; cross-tenant tests in `tests/integration/security.rs` and `e2e/tests/cross-tenant.spec.ts`.
 - **Game integrity:** nothing during a live game or champion select beyond what the team prepared before.
@@ -73,5 +73,5 @@ Account holders can download everything about themselves and delete their accoun
 ## 7. Production key, if the registration still needs one
 
 1. Make sure sections 1 to 6 match the registration; update the product description on the portal where they do not.
-2. The portal asks for a live site over HTTPS with terms, a privacy policy, `riot.txt` and a working prototype: deploy per `docs/RUNBOOK.md`, fill every `[OWNER: ...]` on the legal pages, and give the reviewer an invite link and a test account with a linked Riot ID (or a short screencast).
+2. The portal asks for a live site over HTTPS with terms, a privacy policy, `riot.txt` and a working prototype: deploy per `docs/RUNBOOK.md`, have the adviser confirm the drafted legal bases and clauses on the legal pages, and give the reviewer an invite link and a test account with a linked Riot ID (or a short screencast).
 3. After approval: set `RIOT_API_KEY` and the two budget variables on the VM (`docs/RUNBOOK.md` sections 2.4 and 8) and note the approval date and the limits in MISSION.md's decision log.

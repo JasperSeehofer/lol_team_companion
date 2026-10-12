@@ -427,7 +427,7 @@ The page exposes the last run as attributes on `[data-graph-canvas]`: `data-sim-
 
 **Match timeline markers.** Category shapes in SVG, filled in the side colour (blue, red, neutral): diamond objective (larger for Baron and Voidgrubs), square tower, triangle kill, cross ward, ring recall, hexagon teamfight; a chalk outline when you were involved. A legend under the track repeats every shape and the sides; filters are pressed toggle buttons; each marker is a button named with the event in words.
 
-**Legal pages.** Reading width, `PageHeader`, a warning `Callout` only while something is still a placeholder (which it names); a missing owner's fact appears as `[OWNER: ...]` in mono warning ink (`OwnerPlaceholder`), never invented. The privacy page lists what the app stores by area; a unit test checks the tables it names exist in `schema.surql`.
+**Legal pages.** Reading width, `PageHeader`, a warning `Callout` only while something is still a placeholder or a draft (which it names); a missing owner's fact appears as `[OWNER: ...]` in mono warning ink (`OwnerPlaceholder`), never invented. The privacy page lists what the app stores by area; a unit test checks the tables it names exist in `schema.surql`.
 
 **Bug-report button.** Docked in the page flow above the footer at every width (an outlined "Report a bug" button), so it covers nothing. Rebuilt in M7, see 6.10.
 

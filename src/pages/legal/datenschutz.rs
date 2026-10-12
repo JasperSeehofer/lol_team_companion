@@ -2,17 +2,15 @@
 //! against `schema.surql` by the tests below), who else is involved, the one
 //! cookie, the logs, how long things are kept and how to use your rights.
 //! The operator's facts (controller, providers, log retention, supervisory
-//! authority) are the owner's own (launch checklist, 12 October 2026); the
-//! legal bases are still an `[OWNER: ...]` placeholder. Nothing here is
-//! invented.
+//! authority) are the owner's own (launch checklist, 12 October 2026). The
+//! legal bases ([`LEGAL_BASES`]) are drafted defaults pending the operator's
+//! adviser (M10 review); the callout says so. Nothing here is invented.
 
 use crate::components::footer::RIOT_DISCLAIMER;
 use crate::components::ui::{
     Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
 };
-use crate::pages::legal::impressum::{
-    OwnerPlaceholder, OPERATOR_ADDRESS, OPERATOR_EMAIL, OPERATOR_NAME,
-};
+use crate::pages::legal::impressum::{OPERATOR_ADDRESS, OPERATOR_EMAIL, OPERATOR_NAME};
 use leptos::prelude::*;
 
 /// What the app stores, by area: (area, items). Kept in step with
@@ -77,6 +75,32 @@ pub const STORED: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Why each kind of data is processed, and on what legal basis: (purpose,
+/// basis). Drafted defaults (orchestrator's decision in the M10 review),
+/// pending the operator's adviser; the page's callout says so.
+pub const LEGAL_BASES: &[(&str, &str)] = &[
+    (
+        "Your account, your team's workspace and your own pages: to provide the service you signed up for.",
+        "Legal basis: performance of the contract with you (Art. 6(1)(b) GDPR).",
+    ),
+    (
+        "Linking your Riot account, syncing your games and your team's games, and share links: done when you or your team choose to.",
+        "Legal basis: your own action under the contract with you (Art. 6(1)(b) GDPR).",
+    ),
+    (
+        "Scouting: when your team scouts an opponent, the public match history of the players it names.",
+        "Legal basis: the team's legitimate interest in preparing for its matches (Art. 6(1)(f) GDPR).",
+    ),
+    (
+        "Logs, rate limits and backups: to keep the service secure, available and recoverable.",
+        "Legal basis: legitimate interest in the security and operation of the service (Art. 6(1)(f) GDPR).",
+    ),
+    (
+        "Bug reports, votes and survey answers: to decide what to fix and build next, with you.",
+        "Legal basis: your own action under the contract with you (Art. 6(1)(b) GDPR); you choose whether to send them.",
+    ),
+];
+
 /// Who else touches the data: (who, role, what reaches them).
 pub const THIRD_PARTIES: &[(&str, &str)] = &[
     (
@@ -99,7 +123,7 @@ pub fn DatenschutzPage() -> impl IntoView {
             <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Team Companion stores, who else is involved, and your rights."</span> } />
             <div class="mb-8">
                 <Callout tone=CalloutTone::Warning title="Partly a draft">
-                    "One item is still open: the legal basis for each purpose, marked OWNER below. The operator confirms it with advice before Team Companion opens beyond the closed beta."
+                    "The legal bases below and two clauses of the terms (liability, governing law) are drafts pending the operator's adviser."
                 </Callout>
             </div>
 
@@ -132,13 +156,9 @@ pub fn DatenschutzPage() -> impl IntoView {
 
             <section class="mt-10" aria-labelledby="basis-h">
                 <SectionHeader title="Why, and on what legal basis" id="basis-h" />
-                <ul class=ul>
-                    <li>"Your account, your team's workspace and your own pages: to provide the service you signed up for."</li>
-                    <li>"Game data from Riot: to show your games and your team's games and, when your team scouts an opponent, the public match history of the players it names."</li>
-                    <li>"Logs, rate limits and backups: to keep the service secure, available and recoverable."</li>
-                    <li>"Bug reports, votes and survey answers: to decide what to fix and build next, with you."</li>
+                <ul class=ul data-testid="legal-bases">
+                    {LEGAL_BASES.iter().map(|(purpose, basis)| view! { <li>{*purpose} " " <span class="text-primary">{*basis}</span></li> }).collect_view()}
                 </ul>
-                <p class="mt-3"><OwnerPlaceholder what="the legal basis for each purpose above (for example Art. 6(1)(b) and 6(1)(f) GDPR), confirmed with advice" /></p>
             </section>
 
             <section class="mt-10" aria-labelledby="third-h">
@@ -270,6 +290,17 @@ mod tests {
             .filter_map(|rest| rest.split_whitespace().next())
             .map(|t| t.trim_end_matches(';').to_string())
             .collect()
+    }
+
+    /// Every purpose has a stated legal basis; no placeholder is left.
+    #[test]
+    fn every_purpose_has_a_legal_basis() {
+        assert_eq!(super::LEGAL_BASES.len(), 5);
+        for (purpose, basis) in super::LEGAL_BASES {
+            assert!(!purpose.contains("OWNER") && !basis.contains("OWNER"));
+            assert!(basis.starts_with("Legal basis: "), "{basis}");
+            assert!(basis.contains("Art. 6(1)("), "{basis}");
+        }
     }
 
     #[test]
