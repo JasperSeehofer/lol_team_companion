@@ -1451,12 +1451,25 @@ fn HistorySection(
             .and_then(|d| d.opponent)
             .filter(|o| !o.is_empty())
     });
+    // The source reads only signals; the drafts resource is awaited inside
+    // the fetcher, so nothing reads a resource outside a Suspense.
     let vs = Resource::new(
-        move || (scope.get(), opponent.get()),
-        |(s, o)| async move {
-            match (s.as_str(), o) {
-                ("vs", Some(o)) => get_strategy_win_rates_vs_opponent(o).await,
-                _ => Ok(Vec::new()),
+        move || (scope.get(), ed.draft_id.get()),
+        move |(s, id)| async move {
+            if s != "vs" {
+                return Ok(Vec::new());
+            }
+            let opp = drafts
+                .await
+                .ok()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|d| d.id.as_deref() == Some(id.as_str()))
+                .and_then(|d| d.opponent)
+                .filter(|o| !o.is_empty());
+            match opp {
+                Some(o) => get_strategy_win_rates_vs_opponent(o).await,
+                None => Ok(Vec::new()),
             }
         },
     );

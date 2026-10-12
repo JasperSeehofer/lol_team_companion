@@ -230,6 +230,22 @@ struct Page {
     order: RwSignal<Vec<String>>,
 }
 
+/// The viewer's calendar day (`YYYY-MM-DD`), empty until hydration.
+#[derive(Clone, Copy)]
+struct ClientToday(RwSignal<String>);
+
+impl ClientToday {
+    /// The browser's day once known, else the server's.
+    fn day(&self, server: &str) -> String {
+        let d = self.0.get();
+        if d.is_empty() {
+            server.to_string()
+        } else {
+            d
+        }
+    }
+}
+
 #[component]
 pub fn ActionItemsPage() -> impl IntoView {
     let user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
@@ -243,6 +259,15 @@ pub fn ActionItemsPage() -> impl IntoView {
     });
 
     let data = Resource::new(|| (), |_| get_action_items());
+    // "Overdue" is judged by the viewer's own calendar day: the server's
+    // (UTC) day renders first, the browser's replaces it after hydration.
+    let client_today = ClientToday(RwSignal::new(String::new()));
+    provide_context(client_today);
+    Effect::new(move |_| {
+        client_today
+            .0
+            .set(crate::components::local_time::local_today())
+    });
     let page = Page {
         data,
         focus_after: RwSignal::new(None),
@@ -271,7 +296,8 @@ pub fn ActionItemsPage() -> impl IntoView {
                     <Suspense fallback=|| ()>
                         {move || data.get().and_then(|r| r.ok()).filter(|d| d.has_team).map(|d| {
                             let count = |s: &str| d.items.iter().filter(|i| i.status == s).count();
-                            let overdue = d.items.iter().filter(|i| i.is_overdue(&d.today)).count();
+                            let today = client_today.day(&d.today);
+                            let overdue = d.items.iter().filter(|i| i.is_overdue(&today)).count();
                             view! {
                                 <span class="figures" data-testid="action-counts">
                                     {format!("{} open \u{b7} {} in progress \u{b7} {} done", count("open"), count("in_progress"), count("done"))}
@@ -364,7 +390,7 @@ fn ItemsBody(data: ActionItemsData, owner_filter: RwSignal<String>) -> impl Into
                                             <SectionHeader title=heading.to_string() id=heading_id meta=format!("{}", list.len()) />
                                             <ul class="flex flex-col border-t border-rule">
                                                 {list.into_iter().map(|item| view! {
-                                                    <ItemRow item=item members=members.get_value() today=today.get_value() />
+                                                    <ItemRow item=item members=members.get_value() server_today=today.get_value() />
                                                 }).collect_view()}
                                             </ul>
                                         </section>
@@ -473,7 +499,8 @@ fn NewItemForm(members: Vec<String>) -> impl IntoView {
 /// One item: a checkbox (done), owner, due day, and its actions. `E` edits
 /// in place, `Delete` removes it (with Undo), arrows move between rows.
 #[component]
-fn ItemRow(item: ActionItem, members: Vec<String>, today: String) -> impl IntoView {
+fn ItemRow(item: ActionItem, members: Vec<String>, server_today: String) -> impl IntoView {
+    let client_today = expect_context::<ClientToday>();
     let page = expect_context::<Page>();
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let id = item.id.clone().unwrap_or_default();
@@ -592,8 +619,20 @@ fn ItemRow(item: ActionItem, members: Vec<String>, today: String) -> impl IntoVi
 
     let status = item.status.clone();
     let status_attr = item.status.clone();
-    let overdue = item.is_overdue(&today);
-    let due_text = item.due.as_deref().map(|d| due_label(d, &today));
+    let item_for_due = StoredValue::new(item.clone());
+    let server_today = StoredValue::new(server_today);
+    let due_view = move || {
+        let today = client_today.day(&server_today.get_value());
+        let item = item_for_due.get_value();
+        let overdue = item.is_overdue(&today);
+        item.due.as_deref().map(|d| due_label(d, &today)).map(|d| {
+            view! {
+                <span class=if overdue { "text-warning" } else { "" } data-due="">
+                    {if overdue { format!("Overdue \u{b7} {d}") } else { d }}
+                </span>
+            }
+        })
+    };
     let owner = item.assigned_to.clone();
     let review = item.source_review.clone();
     let members = StoredValue::new(members);
@@ -610,7 +649,6 @@ fn ItemRow(item: ActionItem, members: Vec<String>, today: String) -> impl IntoVi
             } else {
                 let status = status.clone();
                 let dom_id = dom_id.clone();
-                let due_text = due_text.clone();
                 let owner = owner.clone();
                 let review = review.clone();
                 view! {
@@ -625,11 +663,7 @@ fn ItemRow(item: ActionItem, members: Vec<String>, today: String) -> impl IntoVi
                             />
                             <p class="flex flex-wrap gap-x-3 gap-y-0.5 pl-6.5 text-caption text-muted">
                                 <span data-owner="">{match owner { Some(o) => format!("Owner {o}"), None => "Unassigned".to_string() }}</span>
-                                {due_text.map(|d| view! {
-                                    <span class=if overdue { "text-warning" } else { "" } data-due="">
-                                        {if overdue { format!("Overdue \u{b7} {d}") } else { d }}
-                                    </span>
-                                })}
+                                {due_view}
                                 {review.map(|r| view! {
                                     <a class="underline decoration-rule underline-offset-2 hover:text-primary" href=format!("/post-game?review_id={r}")>"From a review"</a>
                                 })}
