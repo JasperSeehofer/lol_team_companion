@@ -6,6 +6,28 @@ Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`
 
 ## [Unreleased]
 
+### Milestone M8: Ship-ready (2026-10-12)
+
+#### Added
+- Download my data: on your profile, one click saves a file with everything Companion stores about you (account, Riot link, team membership, champion pool and notes, learnings, goals, synced games, notes you wrote, bug reports, votes and survey answers, and the team records you created by name).
+- Delete my account: on your profile, with your username and password. Your personal data goes at once and you are signed out everywhere; what you wrote for your team stays with the team as written by a former member. A leader hands leadership to a teammate first, or deletes the team with the account when they are its only member.
+- Hand over leadership: the team leader can make another member the leader from the member's actions on the team page.
+- Keep your player card out of share links: a switch on your profile; turning it on also ends the links that already exist. Teammates still see the card in the app.
+- Terms of use (`/legal/terms`), linked in the footer, and a complete privacy page: what is stored, who else is involved, the one cookie, the logs, how long things are kept and how to use your rights. Facts only the operator can give are marked until they are filled in.
+- The Riot verification file at `/riot.txt`.
+- For operators: a container image, a Docker Compose stack with automatic HTTPS (Caddy) and nightly encrypted backups with 30-day retention, a restore drill, a runbook and a launch checklist. CI builds and runs the image on every change.
+
+#### Changed
+- Settings are checked when the server starts: a mistyped value stops it with a list of every problem instead of silently using a default.
+- The server shuts down cleanly: requests in flight finish (for up to 10 seconds) and the database is closed before it exits, so restarts for updates and backups are quick.
+- Match Day shows the patch line only for two weeks after a patch change.
+- Share pages show visitors a bare header, without Sign in and Request access.
+
+#### Fixed
+- Opening a review with a link to a draft or plan that is not your team's starts the review without it, instead of failing when you save.
+- The phone menu no longer shows old counts after a failed load.
+- An older version of the app started on a database from a newer version now stops before it changes anything.
+
 ### Milestone M7: Community and transparency loop (2026-10-12)
 
 #### Added

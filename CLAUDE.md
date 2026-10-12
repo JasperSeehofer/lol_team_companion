@@ -16,6 +16,9 @@ A private coaching workspace for one League of Legends team: scouting, drafting,
 | `docs/ARCHITECTURE.md` | How the code is put together today (crate layout, server functions, DB, auth, Riot integration, theming, tests). |
 | `docs/DESIGN.md` | Design system (direction "Survey"): principles, tokens, type, primitives, gallery, lint gates, migration plan. The single source of truth for UI. |
 | `CHANGELOG.md` | Keep a Changelog. Add an entry under `Unreleased` for every user-visible change. |
+| `docs/RUNBOOK.md` | Running production (M8): first deploy, building the image, updates and rollback, backups, restore, logs, keys, failure recovery, migrations, incidents, and the verification checklist (what CI proves, what the owner checks on the VM). |
+| `docs/LAUNCH-CHECKLIST.md` | Everything to tick before the first outside team is invited, owner or agent per line, with the state after M8. |
+| `docs/RIOT-REGISTRATION-CHECK.md` | What the code sends to and keeps from Riot, to compare with the existing Riot registration; `riot.txt` and production-key steps. |
 | `.claude/rules/*.md` | Path-scoped gotchas (SurrealDB, Leptos, WASM/e2e). Loaded automatically. |
 
 The old GSD planning tree was archived under the git tag `planning-archive-2026-10` and removed from the working tree.
@@ -48,11 +51,26 @@ cargo test --features ssr --lib
 cargo test --features ssr
 
 # e2e (needs a running server started with the e2e env, see "Testing" below)
-cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts
+cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts
 
 # Seed demo data (STOP THE SERVER FIRST, see "One process per database").
 # Idempotent; prints every login and a 25-use invite code. --dry-run shows the plan.
 cargo run --features ssr --bin seed
+
+# Register + sign in over plain HTTP against a running server (CI runs it on the image)
+./scripts/smoke_signin.sh http://127.0.0.1:3020
+
+# Ops scripts: ShellCheck and the offline backup/restore harness (needs rclone, python3)
+shellcheck scripts/*.sh scripts/tests/*.sh deploy/backup/entrypoint.sh
+./scripts/tests/run-script-tests.sh scripts
+
+# Container image and production stack (needs a Docker daemon; none in cloud sessions,
+# so the image is built and run by CI's `image` job). Full procedures: docs/RUNBOOK.md
+docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) -t companion:dev .
+cp deploy/env.production.example .env && cp deploy/backup.env.example deploy/backup.env  # then fill in
+docker compose up -d --build
+docker compose run --rm backup now                 # one backup now (stops the app for seconds)
+sudo -E ./scripts/restore.sh drill latest          # restore drill: scripts/restore-drill.md
 ```
 
 `just` recipes exist for most of these (`just verify`, `just e2e`, `just smoke`); if `just` is not installed, run the commands directly.
@@ -115,7 +133,8 @@ Single crate, two compile targets. `--features ssr` builds the Axum server (Surr
 
 ```
 src/
-├── main.rs              # Axum setup: DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth, /img/* images, /healthz
+├── main.rs              # Axum setup: AppConfig, DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth,
+│                        # /img/* images, /healthz, /account/export; graceful shutdown (drain, close the DB, exit)
 ├── app.rs               # Shell, <Routes>, footer
 ├── lib.rs               # Crate root, hydrate() entry
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
@@ -124,7 +143,9 @@ src/
 │   ├── db.rs            # All SurrealDB queries (Db* structs -> models), tenant-scoped
 │   ├── migrations.rs    # Versioned migrations run after schema.surql (schema_migration table)
 │   ├── authz.rs         # authed()/require_team()/require_admin(), server_err, rate_limit()
-│   ├── config.rs        # Security config from env (dev detection, invite gate, secrets)
+│   ├── config.rs        # AppConfig: every env variable validated at startup (VARIABLES table), SecurityConfig
+│   ├── account.rs       # M8: data export, account deletion (tombstone "Former member"), leadership hand-over,
+│                        # player-card switch; USER_LINKS = every record<user> field and its treatment
 │   ├── rate_limit.rs    # In-memory token buckets + per-user cooldowns
 │   ├── auth.rs          # axum-login backend, argon2 (spawn_blocking), HMAC session hash
 │   ├── session_store.rs # tower-sessions store on SurrealDB (expiry + purge)
@@ -157,6 +178,11 @@ input.css                # Tailwind entry + Survey tokens (@theme, OKLCH) + @fon
 public/fonts/            # Self-hosted woff2 (Familjen Grotesk, Public Sans, JetBrains Mono, Source Serif 4) + licences
 e2e/                     # Playwright suite
 tests/integration/       # DB integration tests (one binary)
+public/riot.txt          # Riot verification file, served at /riot.txt (owner pastes the portal code)
+Dockerfile, .dockerignore, compose.yaml   # M8 container image and production stack (app, Caddy, backup)
+deploy/                  # Caddyfile, env templates, backup sidecar (Dockerfile + entrypoint)
+scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, backup.sh, restore.sh (+ restore-drill.md),
+                         # tests/ (backup/restore harness), ...
 ```
 
 ## Routes
@@ -167,9 +193,9 @@ tests/integration/       # DB integration tests (one binary)
 | `/auth/login` | LoginPage | No |
 | `/auth/register?invite=CODE` | RegisterPage (without `invite` it redirects to `/closed-beta`) | No |
 | `/closed-beta` | ClosedBetaPage | No |
-| `/legal/impressum`, `/legal/datenschutz` | ImpressumPage, DatenschutzPage | No |
+| `/legal/impressum`, `/legal/datenschutz`, `/legal/terms` | ImpressumPage, DatenschutzPage, TermsPage (facts the operator must supply are `[OWNER: ...]` placeholders) | No |
 | `/me` | MyGamesPage: synced games, ranked standing, LP history, champion trends, goals (the personal layer) | Yes |
-| `/profile` | ProfilePage: account, region, Riot link, sign out | Yes |
+| `/profile` | ProfilePage: account, region, Riot link, sign out, survey switch, "Your data" (player-card switch, Download my data, Delete my account) | Yes |
 | `/team/dashboard` | TeamDashboard: roster by place (starting five, substitutes, coaches, not placed), join requests, team notes with Undo, recent games, pool gaps | Yes |
 | `/team/roster` | RosterPage: members see their roster and how players join; create or join only without a team | Yes |
 | `/team/player/:id` | PlayerCardPage: a teammate's card, shareable | Yes |
@@ -194,12 +220,14 @@ tests/integration/       # DB integration tests (one binary)
 | `/admin/traits` | AdminTraitsPage: the champion trait table behind the Draft Graph (search, edit, reset to default) | Admin (404 for everyone else) |
 | `/design` | DesignGalleryPage: every primitive, token and state | Admin, or anyone in a dev build (404 otherwise) |
 | `/img/champion/{key}`, `/img/champion/{key}/icon`, `/img/item/{id}` | Axum handlers (not Leptos): cached champion and item images | No |
+| `/account/export` | Axum handler: the signed-in user's data as a JSON download (401 signed out, `Bucket::Account`) | Yes |
+| `/riot.txt` | Static file from `public/` (Riot verification) | No |
 | `/solo`, `/analytics`, `/team-builder` | Axum redirects (307) to `/me`, `/stats`, `/draft` (the solo dashboard was folded into the personal layer; the parked pages were deleted) | No |
 | anything else | NotFound (HTTP 404) | No |
 
 Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Sign-in and registration redirect on the server (so a submit before hydration still lands) and, once hydrated, hard-navigate to `/` (Home: Match Day with a team, a start page without). `user.mode` is still stored but nothing reads it. Redirect old addresses in axum (`main.rs`), never with a server-rendered Leptos `<Redirect>`: its 302 leaked into later static-file responses on the same worker thread.
 
-## Security model (M1)
+## Security model (M1, extended through M8)
 
 - **Server functions** start with `let ctx = authz::authed().await?;` (or `authz::Ctx { db, user }`) and get the team with `ctx.require_team()` / `ctx.team()` (empty-state lists) / `ctx.require_leader()`. **Never accept a team ID from the client.** Admin-only functions use `authz::require_admin()`, which answers non-admins with "Not found".
 - **DB functions** for team data take `team_id` and verify ownership (`ensure_team_record`, or a `WHERE team = ...` filter); user data takes `user_id` (`ensure_user_record`). A record outside the scope is `DbError::NotFound`, the same as a missing one. Child records check through their parent (`tree.team`, `opponent.team`). IDs that link records (a review's `game_plan_id`, a plan's `draft_id`, a draft's `series_id`) are checked against the team too.
@@ -211,7 +239,8 @@ Pages redirect signed-out visitors to `/auth/login` client-side; the real enforc
 - **Sessions:** expired rows load as absent and are purged hourly; the cookie is `HttpOnly`, `SameSite=Strict` and `Secure` outside dev; the session auth hash is an HMAC of the password hash keyed with `SESSION_SECRET`.
 - **Users belong to at most one team**; `create_team` and join requests enforce it.
 - **Community loop (M7):** the community tables are global, not team-scoped; user-scoped rows (`survey_prompt`, `proposal_vote`, a reporter's `bug_report` rows) filter by `user`. No user-written text is shown to another user (the board shows admin-written titles and notes only). Nothing unapproved reaches users: surveys need an approved wording hash, money texts an approved `site_text`, proposals `published = true`. Submissions and votes are rate-limited per user (`authz::rate_limit_user`, `Bucket::Feedback` / `Community`, and `SurveyCheck` for the band's check on every route change, which answers "no question" when over the limit); public reads per IP (`PublicRead`). Migrations 10 (`bug_report_statuses_v2`) and 11 (`community_seed_content`: 17 unpublished proposals, 4 unapproved surveys, 5 unapproved money texts) belong to M7. Admin writes store `*_by`/`*_at` and log the admin id. Details in `docs/ARCHITECTURE.md` ("Community loop").
-- Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/community.rs` (cross-user cases) and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
+- **Account export and deletion (M8):** both act only on the session's user (`server::account`). Deletion needs the username typed again and the password, takes `invariant_lock`, refuses a leader whose team has other members, and in one transaction deletes personal rows and moves every other `record<user>` link to the tombstone `user:former_member`; then the user's sessions are deleted. **A new `record<user>` field must be added to `account::USER_LINKS` with its treatment** (a unit test fails otherwise) and to the export if it is about the user. A `THROW` only aborts the statements after it inside `BEGIN ... COMMIT` (outside a transaction the next statement still runs).
+- Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/community.rs` (cross-user cases), `tests/integration/account.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
 
 ## Critical patterns and gotchas
 
@@ -254,7 +283,7 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates` and `bug-triage` specs against a debug build. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates`, `bug-triage`, `legal` and `account` specs against a debug build; the `image` job builds the container and runs `smoke`, `hydration-no-panic`, `auth`, `legal` and `account` against the release build inside it; the `scripts` job runs ShellCheck and the backup/restore harness. `legal.spec.ts` and `account.spec.ts` write screenshots to `$M8_SHOTS_DIR` when set. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container
@@ -263,7 +292,8 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 2. Wait: `./scripts/wait_for_server.sh 600`.
 3. Screenshot: `AGENT_BROWSER_EXECUTABLE_PATH=/opt/pw-browsers/chromium npx -y agent-browser@0.27.0 open http://127.0.0.1:3020/<route>` then `screenshot <path>`.
 4. The browser loads nothing from third parties (role marks are typographic, champion art comes from `/img/...`); if Data Dragon is unreachable from the sandbox, avatars show their monograms.
-5. Stop the server when done.
+5. Stop the server when done: `kill -TERM $(pidof cargo-leptos)` (never `pkill -f "cargo leptos"`: the pattern also matches the shell that runs it). The server shuts down gracefully (SIGTERM/SIGINT drain for up to `SHUTDOWN_DRAIN_SECS`, then the database closes); wait until `pidof lol_team_companion` is empty before seeding.
+6. Disk is tight: debug builds grow `target/debug/incremental` by gigabytes per feature set. Run one-off test and clippy commands with `CARGO_INCREMENTAL=0`, and delete stale test binaries (`target/debug/deps/{integration,seed}-*`) and `target/debug/incremental` when under 2 GB free.
 
 When diagnosing reactive bugs without a browser, trace which signals an Effect tracks (`.get()`) versus reads untracked, look for values read lazily inside timers, and check both targets compile (some warnings only appear in one).
 
