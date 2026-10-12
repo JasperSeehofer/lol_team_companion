@@ -299,6 +299,38 @@ pub async fn applied_versions(db: &Surreal<Db>) -> DbResult<BTreeSet<i64>> {
     Ok(rows.into_iter().map(|r| r.version).collect())
 }
 
+/// Refuse a database that records a migration `migrations` does not know:
+/// it was migrated by a newer build.
+fn refuse_unknown(applied: &BTreeSet<i64>, migrations: &[Migration]) -> DbResult<()> {
+    let known: BTreeSet<i64> = migrations.iter().map(|m| m.version).collect();
+    if let Some(unknown) = applied.iter().find(|v| !known.contains(v)) {
+        return Err(DbError::Other(format!(
+            "the database records migration {unknown}, which this build does not know; \
+             it was migrated by a newer version of the app"
+        )));
+    }
+    Ok(())
+}
+
+/// Check, before anything is written, that this build knows every migration
+/// the database records. `db::prepare` calls it before it applies the
+/// `schema.surql` baseline, so an older image started on a newer database
+/// stops without writing its older definitions into it. On a fresh database
+/// (no `schema_migration` table yet) there is nothing to check.
+pub async fn check_known(db: &Surreal<Db>) -> DbResult<()> {
+    let applied = match applied_versions(db).await {
+        Ok(applied) => applied,
+        // SurrealDB 3 reports a table that was never defined as not found.
+        Err(DbError::Surreal(e))
+            if matches!(e.details(), surrealdb::types::ErrorDetails::NotFound(_)) =>
+        {
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+    };
+    refuse_unknown(&applied, MIGRATIONS)
+}
+
 /// Apply every pending migration in order. Returns the versions applied by
 /// this call.
 pub async fn run(db: &Surreal<Db>) -> DbResult<Vec<i64>> {
@@ -315,13 +347,7 @@ pub async fn run_list(db: &Surreal<Db>, migrations: &[Migration]) -> DbResult<Ve
     }
 
     let applied = applied_versions(db).await?;
-    let known: BTreeSet<i64> = migrations.iter().map(|m| m.version).collect();
-    if let Some(unknown) = applied.iter().find(|v| !known.contains(v)) {
-        return Err(DbError::Other(format!(
-            "the database records migration {unknown}, which this build does not know; \
-             it was migrated by a newer version of the app"
-        )));
-    }
+    refuse_unknown(&applied, migrations)?;
 
     let mut done = Vec::new();
     for m in migrations.iter().filter(|m| !applied.contains(&m.version)) {

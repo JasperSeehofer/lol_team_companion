@@ -572,7 +572,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                             title="This match could not be loaded"
                             action=move || view! { <Button size=ButtonSize::Sm on_click=Callback::new(move |_| detail.refetch())>"Try again"</Button> }
                         >
-                            {e.to_string().trim_start_matches("error running server function: ").to_string()}
+                            {crate::models::utils::error_text(&e)}
                         </Callout>
                     }.into_any(),
                     Ok(d) => view! { <MatchBody d=d /> }.into_any(),

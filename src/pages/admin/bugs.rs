@@ -63,9 +63,7 @@ pub async fn admin_bug_to_proposal(id: String) -> Result<String, ServerFnError> 
 
 /// Strip the server-fn wrapper from an error message.
 pub fn err_text(e: &ServerFnError) -> String {
-    e.to_string()
-        .trim_start_matches("error running server function: ")
-        .to_string()
+    crate::models::utils::error_text(e)
 }
 
 fn first_line(s: &str) -> String {

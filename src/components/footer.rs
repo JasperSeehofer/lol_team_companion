@@ -36,6 +36,7 @@ pub fn SiteFooter() -> impl IntoView {
                 <nav class="flex shrink-0 gap-5 text-caption" aria-label="Legal">
                     <a href="/legal/impressum" class=link>"Impressum"</a>
                     <a href="/legal/datenschutz" class=link>"Datenschutz"</a>
+                    <a href="/legal/terms" class=link>"Terms"</a>
                 </nav>
             </div>
         </footer>

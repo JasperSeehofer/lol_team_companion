@@ -311,9 +311,8 @@ pub async fn get_nav_counts() -> Result<NavCounts, ServerFnError> {
     use crate::server::db;
 
     let ctx = authz::authed().await?;
-    let learnings = db::list_personal_learnings(&ctx.db, &ctx.user.id)
+    let learnings = db::count_personal_learnings(&ctx.db, &ctx.user.id)
         .await
-        .map(|l| l.len())
         .unwrap_or(0);
     let Some(team_id) = ctx.team().await? else {
         return Ok(NavCounts {
@@ -327,12 +326,8 @@ pub async fn get_nav_counts() -> Result<NavCounts, ServerFnError> {
     let next = db::next_scheduled_match(&ctx.db, &team_id)
         .await
         .map_err(authz::server_err)?;
-    let team_name = db::get_user_team_with_members(&ctx.db, &ctx.user.id)
-        .await
-        .map_err(authz::server_err)?
-        .map(|(t, _)| t.name);
     Ok(NavCounts {
-        team_name,
+        team_name: Some(counts.name.clone()).filter(|n| !n.is_empty()),
         next_match_at: next.map(|m| m.starts_at),
         opponents: counts.opponents,
         drafts: counts.drafts,
@@ -394,12 +389,18 @@ fn is_current(path: &str, current: &str) -> bool {
     }
 }
 
+/// Public share pages (`/s/{token}`), where guests see a bare header.
+pub fn is_share_path(path: &str) -> bool {
+    path.starts_with("/s/")
+}
+
 /// The phone menu: every page grouped by when you need it, with counts.
 ///
 /// A11y: a modal sheet (`Dialog`, focus trapped, Escape closes, focus
 /// returns to the Menu button); a `nav` named "Phone menu" with one list
 /// per group under a visible heading; the current page has
 /// `aria-current="page"`. Counts are plain text after the page name.
+
 #[component]
 fn PhoneMenu(
     open: RwSignal<bool>,
@@ -536,9 +537,11 @@ pub fn Nav() -> impl IntoView {
     // enclosing Suspense when the menu opens, which remounts the open
     // dialog and drops its modal state.
     let (counts, set_counts) = signal(None::<NavCounts>);
+    // Every answer replaces the previous one, an empty one too, so a failed
+    // load or a team left meanwhile never leaves old counts behind.
     Effect::new(move |_| {
-        if let Some(Some(c)) = counts_res.get() {
-            set_counts.set(Some(c));
+        if let Some(c) = counts_res.get() {
+            set_counts.set(c);
         }
     });
 
@@ -770,11 +773,17 @@ pub fn Nav() -> impl IntoView {
                                             <PhoneMenu open=menu_open is_admin=u.is_admin username=name.clone() counts=counts />
                                         }.into_any()
                                     }
+                                    // A guest on a share page gets the brand only (M5
+                                    // review): the link is for reading, not an invitation.
+                                    // Tracked here (not in the match) so leaving the share
+                                    // page brings the buttons back without remounting the rest.
                                     _ => view! {
-                                        <div class="flex items-center gap-2">
-                                            <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
-                                            <Button href="/closed-beta" variant=ButtonVariant::Secondary>"Request access"</Button>
-                                        </div>
+                                        <Show when=move || !is_share_path(&location.pathname.get())>
+                                            <div class="flex items-center gap-2">
+                                                <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
+                                                <Button href="/closed-beta" variant=ButtonVariant::Secondary>"Request access"</Button>
+                                            </div>
+                                        </Show>
                                     }.into_any(),
                                 }
                             })}

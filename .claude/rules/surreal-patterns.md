@@ -70,3 +70,9 @@ description: SurrealDB 3.x patterns and gotchas for lol_team_companion
     Avoid SurrealQL keywords as field names in bound structs (`draft_action.order` is bound as `ord` and written with `` `order` = $a.ord ``).
 
 40. **`ORDER BY` only on selected fields in partial SELECTs** — SurrealDB 3.x rejects `ORDER BY <field>` if the field is not included in a partial `SELECT` clause. Either add the field to the `SELECT` or use `SELECT *`.
+
+63. **`THROW` aborts only inside a transaction** — In a multi-statement query without `BEGIN ... COMMIT`, a `THROW` (or any failing statement) fails that statement and the next ones still run: `IF ... { THROW 'NOT_MEMBER' }; UPDATE ...` updated anyway (M8, `account::hand_over_leadership`, caught by a cross-tenant test). Put guard-then-write queries in a transaction and read the tag with `db::check_tx` + `db::thrown_tag`.
+
+64. **A missing table is an error in SurrealDB 3** — `SELECT ... FROM schema_migration` on a database where the table was never defined returns "The table 'schema_migration' does not exist" (`ErrorDetails::NotFound`), not an empty list. Code that may run before the baseline (`migrations::check_known`) treats that error as "nothing there".
+
+65. **Every `record<user>` field has a deletion treatment** — Adding one to `schema.surql` means adding it to `server::account::USER_LINKS` (delete, tombstone, remove from array) and, if it is about the user, to the export sections; unit tests in `account.rs` fail otherwise, and `tests/integration/account.rs` seeds a row through every link.

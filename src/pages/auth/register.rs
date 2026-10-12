@@ -147,12 +147,11 @@ pub fn RegisterPage() -> impl IntoView {
     // The server sends user-safe messages only (generic for invite and
     // duplicate-account failures, specific for password rules).
     let error = move || {
-        register.value().get().and_then(|r| r.err()).map(|e| {
-            let msg = e.to_string();
-            msg.strip_prefix("error running server function: ")
-                .unwrap_or(&msg)
-                .to_string()
-        })
+        register
+            .value()
+            .get()
+            .and_then(|r| r.err())
+            .map(|e| crate::models::utils::error_text(&e))
     };
 
     view! {

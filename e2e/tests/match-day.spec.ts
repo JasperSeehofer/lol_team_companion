@@ -85,7 +85,10 @@ test("player card: shared read-only without signing in", async ({ teamPage, brow
   // Nothing else of the team: no team navigation, no notes, no roster.
   await expect(guest.locator('nav[aria-label="Primary"]')).toHaveCount(0);
   await expect(guest.locator("[data-team-notes], [data-roster]")).toHaveCount(0);
-  await expect(guest.getByRole("link", { name: "Sign in" })).toBeVisible();
+  // Guests get a bare header on share pages (M8): the brand, no Sign in or Request access.
+  await expect(guest.getByRole("link", { name: "Companion" }).first()).toBeVisible();
+  await expect(guest.getByRole("link", { name: "Sign in" })).toHaveCount(0);
+  await expect(guest.getByRole("link", { name: "Request access" })).toHaveCount(0);
 
   // Revoked, it opens nothing.
   await dialog.getByRole("button", { name: "Revoke" }).first().click();

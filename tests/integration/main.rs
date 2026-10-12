@@ -3,6 +3,7 @@
 //! in-memory SurrealDB from `common::test_db()`.
 #![cfg(feature = "ssr")]
 
+mod account;
 mod common;
 
 mod community;

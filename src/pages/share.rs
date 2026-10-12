@@ -161,6 +161,8 @@ pub async fn get_shared(token: String) -> Result<Option<Shared>, ServerFnError> 
             })
         }
         ShareKind::Player => match db::player_card(&db, &link.team_id, &link.target_id).await {
+            // A player who hid their card: older links open nothing.
+            Ok(card) if card.share_hidden => return Ok(None),
             Ok(card) => SharedView::Player(card),
             Err(db::DbError::NotFound) => return Ok(None),
             Err(e) => return Err(authz::server_err(e)),
@@ -333,7 +335,7 @@ pub fn SharePage() -> impl IntoView {
                     }.into_any(),
                     Err(e) => view! {
                         <PageHeader title="This link could not be opened" eyebrow="Shared link" />
-                        <Callout tone=CalloutTone::Warning>{e.to_string().trim_start_matches("error running server function: ").to_string()}</Callout>
+                        <Callout tone=CalloutTone::Warning>{crate::models::utils::error_text(&e)}</Callout>
                     }.into_any(),
                 })}
             </Suspense>
@@ -586,17 +588,23 @@ pub fn PlayerCardPage() -> impl IntoView {
         <PageShell width=PageWidth::Reading attr:data-feedback-label="Player card">
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading the player card"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || card.get().map(|r| match r {
-                    Ok(c) => view! {
+                    Ok(c) => {
+                        let hidden = c.share_hidden;
+                        view! {
                         <PageHeader
                             title=c.username.clone()
                             eyebrow="Player card"
+                            meta=move || hidden.then(|| view! { <span data-testid="card-not-shareable">"Not shareable: this player keeps their card out of share links."</span> })
                             actions=move || view! {
                                 <Button href="/team/dashboard" variant=ButtonVariant::Quiet>"Team page"</Button>
-                                <Button on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="share-player-card">"Share"</Button>
+                                {(!hidden).then(|| view! {
+                                    <Button on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="share-player-card">"Share"</Button>
+                                })}
                             }
                         />
                         <PlayerCardView card=c />
-                    }.into_any(),
+                    }.into_any()
+                    }
                     Err(_) => view! {
                         <PageHeader title="Player card" />
                         <EmptyState message="This player is not on your team, or the card did not load. Cards exist for every member of your team; open one from the team page." cta_label="Team page" cta_href="/team/dashboard" />

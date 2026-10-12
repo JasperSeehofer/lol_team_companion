@@ -1442,10 +1442,8 @@ async fn surrealkv_db() -> (std::sync::Arc<Surreal<Db>>, std::path::PathBuf) {
         std::process::id(),
         db::generate_invite_code()
     ));
-    let db = Surreal::new::<SurrealKv>(dir.to_string_lossy().to_string())
-        .await
-        .unwrap();
-    db.use_ns("test").use_db("test").await.unwrap();
+    let path = dir.to_string_lossy().to_string();
+    let db = crate::common::open_with_retry(|| Surreal::new::<SurrealKv>(path.clone())).await;
     // Baseline plus migrations, so the unique indexes added by migrations
     // (username_lc, team_member.user) exist as in production.
     db::prepare(&db).await.unwrap();
@@ -1759,4 +1757,28 @@ fn concurrent_joins_keep_one_team_surrealkv() {
         std::mem::forget(db);
         let _ = std::fs::remove_dir_all(dir);
     });
+}
+
+/// M8: leadership can only go to a member of the leader's own team, and an
+/// account export holds nothing of another tenant.
+#[tokio::test]
+async fn hand_over_and_export_stay_inside_the_tenant() {
+    use lol_team_companion::server::account;
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    assert_not_found(
+        account::hand_over_leadership(&db, &t.team1, &t.b).await,
+        "hand over team 1 to a member of team 2",
+    );
+    assert_not_found(
+        account::hand_over_leadership(&db, &t.team2, &t.a).await,
+        "hand over team 2 to a member of team 1",
+    );
+    assert!(db::is_team_leader(&db, &t.a, &t.team1).await.unwrap());
+    assert!(db::is_team_leader(&db, &t.b, &t.team2).await.unwrap());
+    let doc = account::export_user_data(&db, &t.a)
+        .await
+        .unwrap()
+        .to_string();
+    assert!(!doc.contains("bob") && !doc.contains("Team Two"), "{doc}");
 }

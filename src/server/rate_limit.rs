@@ -41,6 +41,10 @@ pub enum Bucket {
     /// The survey band's check on every route change, per user (M7 review).
     /// Over the limit the band simply shows nothing.
     SurveyCheck,
+    /// Data exports and account deletion attempts, per user (M8): each
+    /// export reads every personal table, and a deletion attempt checks the
+    /// password.
+    Account,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,6 +108,11 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::SurveyCheck => Limit {
             capacity: 30.0,
             refill_per_sec: 0.5,
+        },
+        // 5 exports or deletion attempts, then one a minute.
+        Bucket::Account => Limit {
+            capacity: 5.0,
+            refill_per_sec: 1.0 / 60.0,
         },
         // 120 page loads, then two a second.
         Bucket::PublicRead => Limit {
@@ -277,7 +286,7 @@ impl Limiter {
 }
 
 /// Purge [`Limiter::global`] every `every` on a background task.
-pub fn spawn_purge_task(every: Duration) {
+pub fn spawn_purge_task(every: Duration) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(every);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -288,7 +297,7 @@ pub fn spawn_purge_task(every: Duration) {
                 tracing::debug!(removed, "rate limiter purge");
             }
         }
-    });
+    })
 }
 
 // ---------------------------------------------------------------------------

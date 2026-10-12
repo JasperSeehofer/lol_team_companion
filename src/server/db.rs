@@ -159,6 +159,16 @@ pub async fn ensure_user_record(
     ensure_owned(db, table, id, "user", "user", user_id).await
 }
 
+/// The stored password hash of a user (to confirm a destructive action).
+pub async fn password_hash_of(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let mut r = db
+        .query("SELECT VALUE password_hash FROM ONLY type::record('user', $user_key)")
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let hash: Option<String> = r.take(0)?;
+    hash.ok_or(DbError::NotFound)
+}
+
 /// True when the user is a member of the team.
 pub async fn is_team_member(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<bool> {
     let mut r = db
@@ -263,11 +273,13 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     Ok(Arc::new(db))
 }
 
-/// Bring a database up to date: apply the `schema.surql` baseline, then every
+/// Bring a database up to date: refuse a database migrated by a newer build
+/// (before writing anything), apply the `schema.surql` baseline, then every
 /// pending migration (`server::migrations`). Fails when a migration fails, so
 /// the server refuses to start on a half-migrated database. Tests call this on
 /// their in-memory databases too.
 pub async fn prepare(db: &Surreal<Db>) -> DbResult<()> {
+    crate::server::migrations::check_known(db).await?;
     apply_schema(db).await?;
     let applied = crate::server::migrations::run(db).await?;
     if !applied.is_empty() {
@@ -2096,6 +2108,18 @@ pub async fn store_matches_with_synced_by(
 /// Get team stats with player details, joining match + player_match.
 /// Returns all player_match entries for team members, enriched with match date.
 pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamMatchRow>> {
+    get_team_match_stats_limit(db, team_id, 200).await
+}
+
+/// [`get_team_match_stats`], newest first, at most `limit` rows (the team
+/// page needs five distinct games; one game holds at most ten members'
+/// rows, e.g. an in-house game of a roster with substitutes, so it asks
+/// for 50).
+pub async fn get_team_match_stats_limit(
+    db: &Surreal<Db>,
+    team_id: &str,
+    limit: i64,
+) -> DbResult<Vec<TeamMatchRow>> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // All player_match records for team members, enriched via the match link.
@@ -2103,8 +2127,9 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
     // subquery for every row (see the Draft Graph budget in ARCHITECTURE.md).
     let mut result = db
         .query("LET $users = (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)); \
-                SELECT id, match AS match_ref, user, champion, kills, deaths, assists, cs, vision_score, damage, win, match.match_id AS riot_match_id, match.queue_id AS queue_id, match.game_duration AS game_duration, match.game_end AS game_end, user.username AS username FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT 200")
+                SELECT id, match AS match_ref, user, champion, kills, deaths, assists, cs, vision_score, damage, win, match.match_id AS riot_match_id, match.queue_id AS queue_id, match.game_duration AS game_duration, match.game_end AS game_end, user.username AS username FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT $limit")
         .bind(("team_key", team_key))
+        .bind(("limit", limit))
         .await?;
     let rows: Vec<DbTeamMatchRow> = result.take(1).unwrap_or_default();
     Ok(rows.into_iter().map(TeamMatchRow::from).collect())
@@ -7549,12 +7574,28 @@ pub async fn get_post_game_learning(
 /// Counts for the phone menu and the command bar.
 #[derive(Clone, Debug, Default)]
 pub struct TeamCounts {
+    /// The team's name (the phone menu's heading).
+    pub name: String,
     pub opponents: usize,
     pub drafts: usize,
     pub plans: usize,
     pub open_items: usize,
     pub members: usize,
     pub reviews: usize,
+}
+
+/// How many personal learnings the user has (a count, not the rows).
+pub async fn count_personal_learnings(db: &Surreal<Db>, user_id: &str) -> DbResult<usize> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Count {
+        n: i64,
+    }
+    let mut r = db
+        .query("SELECT count() AS n FROM personal_learning WHERE user = type::record('user', $user_key) GROUP ALL")
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let row: Option<Count> = r.take(0)?;
+    Ok(row.map(|c| c.n.max(0) as usize).unwrap_or(0))
 }
 
 pub async fn team_counts(db: &Surreal<Db>, team_id: &str) -> DbResult<TeamCounts> {
@@ -7570,15 +7611,18 @@ pub async fn team_counts(db: &Surreal<Db>, team_id: &str) -> DbResult<TeamCounts
              SELECT count() AS n FROM game_plan WHERE team = $t GROUP ALL; \
              SELECT count() AS n FROM action_item WHERE team = $t AND status IN ['open', 'in_progress'] GROUP ALL; \
              SELECT count() AS n FROM team_member WHERE team = $t GROUP ALL; \
-             SELECT count() AS n FROM post_game_learning WHERE team = $t GROUP ALL;",
+             SELECT count() AS n FROM post_game_learning WHERE team = $t GROUP ALL; \
+             SELECT VALUE name FROM ONLY $t;",
         )
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
+    let name: Option<String> = r.take(7).unwrap_or_default();
     let mut n = |i: usize| -> usize {
         let row: Option<Count> = r.take(i).unwrap_or_default();
         row.map(|c| c.n.max(0) as usize).unwrap_or(0)
     };
     Ok(TeamCounts {
+        name: name.unwrap_or_default(),
         opponents: n(1),
         drafts: n(2),
         plans: n(3),
@@ -7649,11 +7693,15 @@ async fn ensure_share_target(
         ShareKind::GamePlan => ensure_team_record(db, "game_plan", target_id, team_id).await,
         ShareKind::Review => ensure_team_record(db, "post_game_learning", target_id, team_id).await,
         ShareKind::Player => {
-            if is_team_member(db, target_id, team_id).await? {
-                Ok(())
-            } else {
-                Err(DbError::NotFound)
+            if !is_team_member(db, target_id, team_id).await? {
+                return Err(DbError::NotFound);
             }
+            if crate::server::account::share_card_hidden(db, target_id).await? {
+                return Err(DbError::Invalid(
+                    "This player keeps their card out of share links.".into(),
+                ));
+            }
+            Ok(())
         }
     }
 }
@@ -7771,6 +7819,7 @@ pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbRe
         role: String,
         roster_type: String,
         team_name: String,
+        share_hidden: Option<bool>,
     }
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Pool {
@@ -7787,7 +7836,7 @@ pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbRe
     let mut r = db
         .query(
             "LET $u = type::record('user', $user_key); \
-             SELECT user.username AS username, role, roster_type, team.name AS team_name FROM team_member WHERE team = type::record('team', $team_key) AND user = $u LIMIT 1; \
+             SELECT user.username AS username, role, roster_type, team.name AS team_name, user.share_card_hidden AS share_hidden FROM team_member WHERE team = type::record('team', $team_key) AND user = $u LIMIT 1; \
              SELECT champion, tier FROM champion_pool WHERE user = $u; \
              SELECT champion, win, match.game_end AS game_end FROM player_match WHERE user = $u ORDER BY game_end DESC LIMIT 50;",
         )
@@ -7831,6 +7880,7 @@ pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbRe
     played.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     played.truncate(3);
     Ok(PlayerCard {
+        share_hidden: member.share_hidden.unwrap_or(false),
         username: member.username,
         team_name: member.team_name,
         role: member.role,

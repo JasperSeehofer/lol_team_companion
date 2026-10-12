@@ -110,6 +110,20 @@ pub struct PatchLine {
     pub since: String,
 }
 
+/// How long a patch change stays news on Match Day (M5 review: the line
+/// "Patch 16.20 since 14 Sep" is true for months but stops being useful).
+pub const PATCH_NEWS_DAYS: i64 = 14;
+
+impl PatchLine {
+    /// Whether the change happened less than [`PATCH_NEWS_DAYS`] before
+    /// `now`. An unreadable date is not news.
+    pub fn is_news(&self, now: chrono::DateTime<chrono::Utc>) -> bool {
+        chrono::DateTime::parse_from_rfc3339(&self.since)
+            .map(|t| now.signed_duration_since(t) < chrono::Duration::days(PATCH_NEWS_DAYS))
+            .unwrap_or(false)
+    }
+}
+
 /// Everything Match Day shows for a signed-in team member.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MatchDay {
@@ -153,6 +167,22 @@ pub fn shorten(s: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_patch_is_news_for_two_weeks() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-12T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let line = |since: &str| PatchLine {
+            version: "16.20".into(),
+            since: since.into(),
+        };
+        assert!(line("2026-10-01T09:00:00Z").is_news(now));
+        assert!(line("2026-09-28T12:00:01Z").is_news(now));
+        assert!(!line("2026-09-28T12:00:00Z").is_news(now));
+        assert!(!line("2026-08-01T09:00:00Z").is_news(now));
+        assert!(!line("not a date").is_news(now));
+    }
+
     use super::*;
 
     #[test]

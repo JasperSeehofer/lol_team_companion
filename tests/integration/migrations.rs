@@ -11,8 +11,7 @@ use surrealdb::Surreal;
 /// a database created before M6 would look after the first M6 start applies
 /// `schema.surql`.
 async fn baseline_only() -> Surreal<Db> {
-    let db = Surreal::new::<Mem>(()).await.unwrap();
-    db.use_ns("test").use_db("test").await.unwrap();
+    let db = crate::common::open_with_retry(|| Surreal::new::<Mem>(())).await;
     db.query(include_str!("../../schema.surql"))
         .await
         .unwrap()
@@ -258,6 +257,34 @@ async fn a_database_from_a_newer_build_is_refused() {
     let err = migrations::run(&db).await.unwrap_err();
     assert!(err.to_string().contains("9999"), "{err}");
     assert!(db::prepare(&db).await.is_err());
+}
+
+/// An older image started on a newer database must stop before it writes
+/// anything: the version check runs before the `schema.surql` baseline (M8).
+#[tokio::test]
+async fn a_newer_database_is_refused_before_the_baseline_is_applied() {
+    let db = crate::common::open_with_retry(|| Surreal::new::<Mem>(())).await;
+    // A database from a future build: one recorded migration, one table.
+    db.query(
+        "CREATE schema_migration SET version = 9999, name = 'future', applied_at = time::now(); \
+         DEFINE TABLE future_only SCHEMALESS;",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    let err = db::prepare(&db).await.unwrap_err();
+    assert!(err.to_string().contains("9999"), "{err}");
+    let mut r = db
+        .query("RETURN object::keys((INFO FOR DB).tables)")
+        .await
+        .unwrap();
+    let tables: Vec<String> = r.take(0).unwrap();
+    assert!(tables.iter().any(|t| t == "future_only"), "{tables:?}");
+    assert!(
+        !tables.iter().any(|t| t == "user" || t == "team"),
+        "the baseline was applied to a newer database: {tables:?}"
+    );
 }
 
 #[tokio::test]

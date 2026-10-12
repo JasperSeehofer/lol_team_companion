@@ -1,0 +1,100 @@
+# Companion reverse proxy (M8). Caddy obtains and renews the TLS certificate
+# automatically (Let's Encrypt / ZeroSSL) and redirects HTTP to HTTPS.
+# COMPANION_DOMAIN and ACME_EMAIL come from compose.yaml (.env).
+{
+	email {$ACME_EMAIL}
+	# No trusted_proxies: Caddy faces the internet directly, so it never trusts
+	# an incoming X-Forwarded-For. If a CDN is ever put in front, revisit
+	# TRUST_FORWARDED_FOR in the app (it takes the LAST hop).
+}
+
+{$COMPANION_DOMAIN} {
+	# Compress text and WASM; woff2 and images are already compressed.
+	encode {
+		zstd
+		gzip 6
+		minimum_length 1024
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type application/wasm*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	header {
+		# Start without includeSubDomains/preload; extend once the domain is final.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# Report-only first: Leptos hydration uses an inline module script and
+		# WebAssembly needs 'wasm-unsafe-eval'. Switch to the enforcing header
+		# once a browser walkthrough shows no violations (LAUNCH-CHECKLIST).
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		-Server
+	}
+
+	# /pkg/* file names are not content-hashed (hash-files is off), so the
+	# browser must revalidate on every load (304 via Last-Modified) or it would
+	# run an old WASM against a new server after a deploy.
+	@pkg path /pkg/*
+	header @pkg Cache-Control "public, max-age=0, must-revalidate"
+
+	# Self-hosted fonts change only with a font update.
+	@fonts path /fonts/*
+	header @fonts Cache-Control "public, max-age=2592000"
+
+	# /img/* (champion and item art) already carries Cache-Control (7 days),
+	# an ETag and a ?v=<patch> cache buster from the app; Caddy leaves it alone.
+	# There is no proxy-side cache: the app keeps images in memory.
+
+	request_body {
+		max_size 10MB
+	}
+
+	# X-Forwarded-For: with no trusted_proxies, Caddy ignores the client's own
+	# header and sends only the peer address (an explicit header_up is
+	# redundant, caddy adapt warns about it). The app reads the last hop, so it
+	# sees the real client. Verify once after deploy (RUNBOOK "First deploy").
+	reverse_proxy app:3020 {
+		# Leptos streams server-rendered HTML; pass chunks through at once.
+		flush_interval -1
+	}
+
+	# The app is down for a few seconds during the nightly backup and updates.
+	handle_errors {
+		@down expression `{err.status_code} in [502, 503, 504]`
+		handle @down {
+			header Retry-After "60"
+			header Cache-Control "no-store"
+			respond "Companion is restarting (nightly backup or an update). Please try again in a minute." 503
+		}
+	}
+
+	# Access log to stdout (docker logs, rotated by the json-file driver:
+	# 5 x 10 MB). Client IPs are truncated and cookies are never logged, so the
+	# privacy page can say what the log holds.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>client_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}

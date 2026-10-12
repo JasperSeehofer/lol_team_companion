@@ -63,6 +63,14 @@ impl RiotClient {
         Self::new(std::env::var("RIOT_API_KEY").ok(), RiotBudget::from_env())
     }
 
+    /// Build from the validated configuration (`config::AppConfig`).
+    pub fn from_config(cfg: &crate::server::config::RiotConfig) -> Self {
+        Self::new(
+            cfg.api_key.clone(),
+            RiotBudget::new(cfg.budget_per_sec, cfg.budget_per_min),
+        )
+    }
+
     /// A client for `key` (`None` or blank: not configured).
     pub fn new(key: Option<String>, budget: RiotBudget) -> Self {
         let key = key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty());

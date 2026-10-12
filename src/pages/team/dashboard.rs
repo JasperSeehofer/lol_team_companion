@@ -104,6 +104,22 @@ pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
+/// Make another member the team's leader (M8). The leader keeps their
+/// membership; the new leader gets the leader's actions.
+#[server]
+pub async fn hand_over_leadership(member_user_id: String) -> Result<(), ServerFnError> {
+    use crate::server::{account, authz};
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    if member_user_id == ctx.user.id {
+        return Err(ServerFnError::new("You already lead the team."));
+    }
+    account::hand_over_leadership(&ctx.db, &team_id, &member_user_id)
+        .await
+        .map_err(authz::server_err)
+}
+
 #[server]
 pub async fn leave_team() -> Result<(), ServerFnError> {
     use crate::server::authz;
@@ -182,7 +198,7 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
     let Some(team_id) = ctx.team().await? else {
         return Ok(Vec::new());
     };
-    let rows = db::get_team_match_stats(&ctx.db, &team_id)
+    let rows = db::get_team_match_stats_limit(&ctx.db, &team_id, 50)
         .await
         .map_err(authz::server_err)?;
     let mut seen = std::collections::HashSet::new();
@@ -391,6 +407,7 @@ fn member_actions(m: &TeamMember, is_self: bool) -> Vec<MenuItem> {
         items.push(MenuItem::new("member", "Take off the roster"));
     }
     if !is_self {
+        items.push(MenuItem::new("lead", "Make team leader"));
         items.push(MenuItem::new("kick", "Remove from team").danger());
     }
     items
@@ -476,6 +493,7 @@ fn TeamView(
     let leave_open = RwSignal::new(false);
     let kick_target = RwSignal::new(None::<(String, String)>);
     let kick_open = RwSignal::new(false);
+    let lead_open = RwSignal::new(false);
     let member_count = members.len();
     let region = team.region.clone();
 
@@ -483,6 +501,11 @@ fn TeamView(
         if action == "kick" {
             kick_target.set(Some((user_id, name)));
             kick_open.set(true);
+            return;
+        }
+        if action == "lead" {
+            kick_target.set(Some((user_id, name)));
+            lead_open.set(true);
             return;
         }
         leptos::task::spawn_local(async move {
@@ -517,6 +540,24 @@ fn TeamView(
                     reload.run(());
                 }
                 Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    let hand_over = Callback::new(move |_| {
+        let Some((id, name)) = kick_target.get_untracked() else {
+            return;
+        };
+        leptos::task::spawn_local(async move {
+            match hand_over_leadership(id).await {
+                Ok(()) => {
+                    toast
+                        .push
+                        .run(Toast::success(format!("{name} now leads the team")));
+                    reload.run(());
+                }
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -668,6 +709,14 @@ fn TeamView(
             confirm_label="Leave team"
             tone=ConfirmTone::Destructive
             on_confirm=leave
+        />
+        <ConfirmDialog
+            id="hand-over-leadership"
+            open=lead_open
+            title="Hand over leadership?"
+            message="The new leader places players, answers join requests and edits the team. You stay on the team as a member."
+            confirm_label="Make team leader"
+            on_confirm=hand_over
         />
         <ConfirmDialog
             id="kick-member"

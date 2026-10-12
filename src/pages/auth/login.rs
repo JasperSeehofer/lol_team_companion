@@ -82,12 +82,11 @@ pub fn LoginPage() -> impl IntoView {
     });
 
     let error = move || {
-        login.value().get().and_then(|r| r.err()).map(|e| {
-            let msg = e.to_string();
-            msg.strip_prefix("error running server function: ")
-                .unwrap_or(&msg)
-                .to_string()
-        })
+        login
+            .value()
+            .get()
+            .and_then(|r| r.err())
+            .map(|e| crate::models::utils::error_text(&e))
     };
 
     view! {

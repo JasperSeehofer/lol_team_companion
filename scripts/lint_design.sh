@@ -9,7 +9,7 @@
 # Escape hatch for a legitimate exception: put `lint:allow(<rule>)` in a
 # comment on the same line.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 # grep -P needs a UTF-8 locale for the emoji code points.
 export LC_ALL=C.UTF-8
 
