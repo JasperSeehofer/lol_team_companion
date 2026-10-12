@@ -68,7 +68,7 @@ pub use markers::{
     GameResult, GlyphSize, ResultGlyph, Role, RoleLabel, RoleLabelStyle, SideMarker, SideText,
 };
 pub use menu::{Menu, MenuAlign, MenuItem};
-pub use prep::{PrepSequence, PrepState, PrepStep};
+pub use prep::{PrepEmphasis, PrepSequence, PrepState, PrepStep};
 pub use readout::{Delta, ReadoutSize, Sentiment, StatReadout, Trend};
 pub use skeleton::{
     Skeleton, SkeletonCard, SkeletonGrid, SkeletonGroup, SkeletonLine, SkeletonShape,

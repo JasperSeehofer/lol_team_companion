@@ -1664,7 +1664,7 @@ fn DraftEditor(
             id="delete-draft"
             open=confirm_delete
             title="Delete this draft?"
-            message="The draft, its picks and its comments are deleted. Game plans made from it stay, without the link."
+            message="The draft, its picks and its comments are deleted. Game plans and reviews made from it stay and say the draft was deleted."
             confirm_label="Delete draft"
             tone=ConfirmTone::Destructive
             on_confirm=on_delete

@@ -28,6 +28,7 @@ use crate::pages::{
     personal_learnings::{NewLearningPage, PersonalLearningsPage},
     post_game::PostGamePage,
     profile::ProfilePage,
+    share::{PlayerCardPage, SharePage},
     stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
     tree_drafter::TreeDrafterPage,
@@ -83,6 +84,9 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/auth/register") view=RegisterPage />
                         <Route path=path!("/team/dashboard") view=TeamDashboard />
                         <Route path=path!("/team/roster") view=RosterPage />
+                        <Route path=path!("/team/player/:id") view=PlayerCardPage />
+                        // Public, read-only share links (no sign-in).
+                        <Route path=path!("/s/:token") view=SharePage />
                         <Route path=path!("/draft") view=DraftPage />
                         <Route path=path!("/tree-drafter") view=TreeDrafterPage />
                         <Route path=path!("/stats") view=StatsPage />

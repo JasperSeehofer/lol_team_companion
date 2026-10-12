@@ -8,9 +8,9 @@ use crate::components::ui::a11y::focus_id;
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar, Checkbox,
     ConfirmDialog, ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell,
-    PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment, SegmentSize,
-    SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Table, Td,
-    TextField, Th, Toast, ToastContext, Tr,
+    PrepEmphasis, PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment,
+    SegmentSize, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
+    Table, Td, TextField, Th, Toast, ToastContext, Tr,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -473,6 +473,8 @@ struct PlanEd {
     tag: RwSignal<String>,
     /// Picks came from the linked draft (shown read-only until edited).
     from_draft: RwSignal<bool>,
+    /// The draft this plan was linked to was deleted.
+    draft_deleted: RwSignal<bool>,
 }
 
 impl PlanEd {
@@ -492,6 +494,7 @@ impl PlanEd {
             notes: s(),
             tag: s(),
             from_draft: RwSignal::new(false),
+            draft_deleted: RwSignal::new(false),
         }
     }
 
@@ -518,6 +521,7 @@ impl PlanEd {
             sig.set(String::new());
         }
         self.from_draft.set(false);
+        self.draft_deleted.set(false);
     }
 
     fn load(&self, p: &GamePlan) {
@@ -548,6 +552,7 @@ impl PlanEd {
         self.tag
             .set(p.win_condition_tag.clone().unwrap_or_default());
         self.from_draft.set(false);
+        self.draft_deleted.set(p.draft_deleted);
     }
 
     /// Seed picks (and, for a new plan, name, tag, win conditions and role
@@ -837,6 +842,7 @@ pub fn GamePlanPage() -> impl IntoView {
         name_error.set(None);
     });
     let confirm_delete = RwSignal::new(false);
+    let share_open = RwSignal::new(false);
     let do_delete = Callback::new(move |_| {
         let Some(id) = ed.id.get_untracked() else {
             return;
@@ -885,11 +891,13 @@ pub fn GamePlanPage() -> impl IntoView {
                 actions=move || view! {
                     <Button variant=ButtonVariant::Quiet on_click=new_plan>"New plan"</Button>
                     {move || ed.id.get().map(|_| view! {
+                        <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="plan-share">"Share"</Button>
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
                     <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="plan-save">"Save plan"</Button>
                 }
             />
+            <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::GamePlan target=Signal::derive(move || ed.id.get()) />
             <ConfirmDialog
                 id="delete-plan"
                 open=confirm_delete
@@ -985,7 +993,7 @@ fn PlanSteps(ed: PlanEd) -> impl IntoView {
                         if state == PrepState::Next { step.link(*href, "Go there") } else { step }
                     })
                     .collect();
-                view! { <PrepSequence label="Plan steps" steps=items /> }
+                view! { <PrepSequence label="Plan steps" steps=items emphasis=PrepEmphasis::Quiet /> }
             }}
         </section>
     }
@@ -1042,9 +1050,15 @@ fn BasicsSection(
                     </Suspense>
                     {move || {
                         let d = ed.draft_id.get();
-                        (!d.is_empty()).then(|| view! {
-                            <div><Button variant=ButtonVariant::Quiet size=ButtonSize::Sm href=format!("/draft?draft_id={d}")>"Open the draft"</Button></div>
-                        })
+                        if d.is_empty() {
+                            ed.draft_deleted.get().then(|| view! {
+                                <p class="text-caption text-muted" data-testid="plan-draft-deleted">"Draft deleted: the draft this plan was linked to no longer exists. Choose another to link it again."</p>
+                            }.into_any())
+                        } else {
+                            Some(view! {
+                                <div><Button variant=ButtonVariant::Quiet size=ButtonSize::Sm href=format!("/draft?draft_id={d}")>"Open the draft"</Button></div>
+                            }.into_any())
+                        }
                     }}
                 </div>
             </div>

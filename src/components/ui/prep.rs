@@ -66,14 +66,31 @@ impl PrepStep {
     }
 }
 
+/// How loudly the next step asks to be done.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PrepEmphasis {
+    /// The next step's link is the view's primary action (chalk fill):
+    /// Match Day.
+    #[default]
+    Primary,
+    /// The view has its own primary action (the game plan's "Save plan"):
+    /// the next step is outlined, not filled.
+    Quiet,
+}
+
 /// A numbered list of preparation steps with the next one emphasised.
 ///
 /// A11y: an ordered list; each item states its status in words ("Done",
 /// "Next", "Needs attention"), with the shape of the number box as a second
 /// cue. The next step carries `aria-current="step"` and a real link to
-/// where it is done.
+/// where it is done. With `emphasis` Quiet the next step is outlined, so
+/// the page's own primary action stays the only chalk fill.
 #[component]
-pub fn PrepSequence(#[prop(into)] label: String, steps: Vec<PrepStep>) -> impl IntoView {
+pub fn PrepSequence(
+    #[prop(into)] label: String,
+    steps: Vec<PrepStep>,
+    #[prop(optional)] emphasis: PrepEmphasis,
+) -> impl IntoView {
     view! {
         <ol class="flex flex-col" aria-label=label>
             {steps
@@ -89,6 +106,7 @@ pub fn PrepSequence(#[prop(into)] label: String, steps: Vec<PrepStep>) -> impl I
                     };
                     let num = match s.state {
                         PrepState::Done => "figures inline-grid size-6 place-items-center rounded-ctl bg-ink-3 text-caption text-secondary",
+                        PrepState::Next if emphasis == PrepEmphasis::Quiet => "figures inline-grid size-6 place-items-center rounded-ctl border border-accent text-caption font-semibold text-accent",
                         PrepState::Next => "figures inline-grid size-6 place-items-center rounded-ctl bg-accent text-caption font-semibold text-accent-ink",
                         PrepState::Todo => "figures inline-grid size-6 place-items-center rounded-ctl border border-outline text-caption text-muted",
                         PrepState::Attention => "figures inline-grid size-6 place-items-center rounded-ctl border border-warning text-caption text-warning",
@@ -136,7 +154,10 @@ pub fn PrepSequence(#[prop(into)] label: String, steps: Vec<PrepStep>) -> impl I
                         (true, Some(href), Some(action)) => Some(view! {
                             <a
                                 href=href
-                                class="col-start-2 inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-accent bg-accent px-3 text-label font-semibold text-accent-ink transition-colors hover:bg-accent-hover"
+                                class=match emphasis {
+                                    PrepEmphasis::Primary => "col-start-2 inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-accent bg-accent px-3 text-label font-semibold text-accent-ink transition-colors hover:bg-accent-hover",
+                                    PrepEmphasis::Quiet => "col-start-2 inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-outline px-3 text-label font-medium text-primary transition-colors hover:bg-ink-3",
+                                }
                             >
                                 {action}
                                 <span aria-hidden="true">"\u{2192}"</span>
