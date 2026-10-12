@@ -157,9 +157,13 @@ const DELETE_TEAM: &str = "\
     DELETE $t;";
 
 /// Everything the account deletion removes or rewrites for user `$u`
-/// (username `$name`), after the team question was settled.
+/// (username `$name`), after the team question was settled. The two
+/// username copies (`team_note.edited_by_name`, `action_item.assigned_to`)
+/// are plain strings, so they are rewritten only inside the user's own team:
+/// another team may use the same free-text name for someone else.
 const DELETE_USER: &str = "\
     LET $tomb = user:former_member; \
+    LET $my_teams = (SELECT VALUE team FROM team_member WHERE user = $u); \
     DELETE team_member WHERE user = $u; \
     DELETE join_request WHERE user = $u; \
     DELETE player_match WHERE user = $u; \
@@ -178,7 +182,7 @@ const DELETE_USER: &str = "\
     UPDATE draft_tree SET created_by = $tomb WHERE created_by = $u; \
     UPDATE series SET created_by = $tomb WHERE created_by = $u; \
     UPDATE team_note SET author = $tomb, author_name = $former WHERE author = $u; \
-    UPDATE team_note SET edited_by_name = $former WHERE edited_by_name = $name; \
+    UPDATE team_note SET edited_by_name = $former WHERE team IN $my_teams AND edited_by_name = $name; \
     UPDATE invite SET created_by = $tomb WHERE created_by = $u; \
     UPDATE board SET created_by = $tomb WHERE created_by = $u; \
     UPDATE board_version SET author = $tomb WHERE author = $u; \
@@ -198,7 +202,7 @@ const DELETE_USER: &str = "\
     UPDATE ledger_month SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE site_text SET approved_by = $tomb WHERE approved_by = $u; \
     UPDATE site_text SET updated_by = $tomb WHERE updated_by = $u; \
-    UPDATE action_item SET assigned_to = NONE WHERE assigned_to = $name; \
+    UPDATE action_item SET assigned_to = NONE WHERE team IN $my_teams AND assigned_to = $name; \
     DELETE $u;";
 
 /// What a deletion did, for the log and the confirmation.
@@ -222,7 +226,8 @@ pub async fn delete_account(db: &Surreal<Db>, user_id: &str) -> DbResult<Deleted
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Led {
         id: RecordId,
-        members: i64,
+        /// Members other than the user.
+        others: i64,
     }
 
     // The team question and the deletion must not interleave with a join
@@ -232,7 +237,7 @@ pub async fn delete_account(db: &Surreal<Db>, user_id: &str) -> DbResult<Deleted
         .query(
             "LET $u = type::record('user', $user_key); \
              SELECT username FROM ONLY $u; \
-             SELECT id, count((SELECT id FROM team_member WHERE team = $parent.id)) AS members FROM team WHERE created_by = $u;",
+             SELECT id, count((SELECT id FROM team_member WHERE team = $parent.id AND user != $u)) AS others FROM team WHERE created_by = $u;",
         )
         .bind(("user_key", user_key.clone()))
         .await?;
@@ -240,8 +245,10 @@ pub async fn delete_account(db: &Surreal<Db>, user_id: &str) -> DbResult<Deleted
     let Some(me) = me else {
         return Err(DbError::NotFound);
     };
-    let led: Vec<Led> = r.take(2).unwrap_or_default();
-    if led.iter().any(|t| t.members > 1) {
+    // An error here must not skip the leader check (the team would keep a
+    // deleted leader), so it is propagated.
+    let led: Vec<Led> = r.take(2)?;
+    if led.iter().any(|t| t.others > 0) {
         return Err(DbError::Invalid(
             "You lead a team with other members. Hand leadership to one of them on the team \
              page first, then delete your account."

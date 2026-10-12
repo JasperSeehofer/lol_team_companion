@@ -202,8 +202,21 @@ async fn export_holds_every_section_and_nothing_of_others() {
 async fn deletion_leaves_no_row_pointing_at_the_user() {
     let db = crate::common::test_db().await;
     let w = world(&db).await;
+    // Another team uses the free-text name "alice" for someone else: the
+    // deletion must not touch that team's rows (review fix).
+    db.query(
+        "LET $other = (SELECT VALUE id FROM ONLY team WHERE name = 'Riverside' LIMIT 1); \
+         CREATE action_item SET team = $other, text = 'other team item', assigned_to = 'alice'; \
+         CREATE team_note SET team = $other, author = user:former_member, author_name = 'x', content = 'other team note', edited_by_name = 'alice';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
     let out = account::delete_account(&db, &w.alice).await.unwrap();
     assert!(!out.team_deleted);
+    assert_eq!(count(&db, "SELECT count() AS n FROM action_item WHERE text = 'other team item' AND assigned_to = 'alice' GROUP ALL").await, 1);
+    assert_eq!(count(&db, "SELECT count() AS n FROM team_note WHERE content = 'other team note' AND edited_by_name = 'alice' GROUP ALL").await, 1);
 
     for (link, n) in links_to(&db, &w.alice).await {
         assert_eq!(n, 0, "{link} still points at the deleted user");
