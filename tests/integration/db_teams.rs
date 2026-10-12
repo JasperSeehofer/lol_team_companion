@@ -261,3 +261,24 @@ async fn new_members_are_unplaced_and_the_leader_places_them() {
         Err(db::DbError::NotFound)
     ));
 }
+
+#[tokio::test]
+async fn the_join_list_counts_members_per_team() {
+    let db = common::test_db().await;
+    let a = make_user(&db, "list_a").await;
+    let b = make_user(&db, "list_b").await;
+    let c = make_user(&db, "list_c").await;
+    let alpha = db::create_team(&db, &a, "Alpha".into(), "EUW".into())
+        .await
+        .unwrap();
+    db::create_team(&db, &b, "Beta".into(), "NA".into())
+        .await
+        .unwrap();
+    db::join_team(&db, &c, &alpha).await.unwrap();
+    let teams = db::list_all_teams(&db).await.unwrap();
+    let names: Vec<(&str, Option<u32>)> = teams
+        .iter()
+        .map(|t| (t.name.as_str(), t.member_count))
+        .collect();
+    assert_eq!(names, vec![("Alpha", Some(2)), ("Beta", Some(1))]);
+}

@@ -1049,10 +1049,40 @@ pub async fn remove_team_member(db: &Surreal<Db>, team_id: &str, user_id: &str) 
     Ok(())
 }
 
+/// Every team with its member count (the join list). Two statements, not a
+/// subquery per team: with a few thousand teams the correlated count took
+/// seconds.
 pub async fn list_all_teams(db: &Surreal<Db>) -> DbResult<Vec<Team>> {
-    let mut r = db.query("SELECT *, (SELECT count() FROM team_member WHERE team = $parent.id GROUP ALL)[0].count AS member_count FROM team ORDER BY name ASC").await?;
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MemberCount {
+        team: RecordId,
+        n: i64,
+    }
+    let mut r = db
+        .query(
+            "SELECT * FROM team ORDER BY name ASC; \
+             SELECT team, count() AS n FROM team_member GROUP BY team;",
+        )
+        .await?;
     let teams: Vec<DbTeam> = r.take(0).unwrap_or_default();
-    Ok(teams.into_iter().map(Team::from).collect())
+    let counts: Vec<MemberCount> = r.take(1).unwrap_or_default();
+    let counts: std::collections::HashMap<String, u32> = counts
+        .into_iter()
+        .map(|c| (c.team.to_sql(), c.n.max(0) as u32))
+        .collect();
+    Ok(teams
+        .into_iter()
+        .map(|t| {
+            let mut team = Team::from(t);
+            team.member_count = Some(
+                team.id
+                    .as_ref()
+                    .and_then(|id| counts.get(id).copied())
+                    .unwrap_or(0),
+            );
+            team
+        })
+        .collect())
 }
 
 pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<()> {
