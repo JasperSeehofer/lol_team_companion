@@ -164,7 +164,9 @@ pub fn RegisterPage() -> impl IntoView {
                     {move || error().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
 
                     // The invite code travels with the form; the server checks it.
-                    <input type="hidden" name="invite_code" prop:value=move || invite.get() />
+                    // `value`, not `prop:value`: the attribute is rendered on the
+                    // server, so a form sent before hydration carries the code.
+                    <input type="hidden" name="invite_code" value=move || invite.get() />
 
                     <Field id="register-username" label="Username">
                         <TextField name="username" required=true autocomplete="username" />
