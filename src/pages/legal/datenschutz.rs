@@ -1,7 +1,9 @@
-//! Privacy (Datenschutz). Lists exactly what Companion stores, checked
-//! against `schema.surql`, and the Riot disclaimer. The legal parts
-//! (controller, legal basis, hosting, retention, rights) are the owner's to
-//! write with advice; until then they are marked placeholders.
+//! Privacy (Datenschutz). Lists exactly what Companion stores (checked
+//! against `schema.surql` by the tests below), who else is involved, the one
+//! cookie, the logs, how long things are kept and how to use your rights.
+//! Facts only the operator knows (identity, providers, legal bases, the
+//! supervisory authority) are `[OWNER: ...]` placeholders; nothing here is
+//! invented (M8).
 
 use crate::components::footer::RIOT_DISCLAIMER;
 use crate::components::ui::{
@@ -20,6 +22,7 @@ pub const STORED: &[(&str, &[&str])] = &[
             "Your password, only as an Argon2 hash; the password itself is never stored.",
             "Your region, and once you link it, your Riot ID and the Riot account id (PUUID) Riot returns for it.",
             "Whether you are an admin, and when the account was created.",
+            "Your settings: whether you get survey questions and whether teammates may share your player card by link.",
         ],
     ),
     (
@@ -70,62 +73,118 @@ pub const STORED: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Who else touches the data: (who, role, what reaches them).
+pub const THIRD_PARTIES: &[(&str, &str)] = &[
+    (
+        "Riot Games",
+        "The source of game data. Companion's server asks the Riot API for match history, match details and timelines, ranked standing and champion mastery when you or your team sync, link a Riot ID or scout an opponent. The request carries the Riot ID or account id being looked up and Companion's API key; your browser never contacts Riot.",
+    ),
+    (
+        "Riot Games Data Dragon",
+        "Champion and item pictures and the champion list. Companion's server downloads them once per game patch and serves them itself; nothing about you is sent.",
+    ),
+];
+
 #[component]
 pub fn DatenschutzPage() -> impl IntoView {
-    let legal: [(&str, &str, &str); 5] = [
-        (
-            "controller-h",
-            "Controller",
-            "name, address and email of the controller",
-        ),
-        (
-            "basis-h",
-            "Legal basis",
-            "the legal basis for each kind of data above",
-        ),
-        (
-            "hosting-h",
-            "Hosting and server logs",
-            "hosting provider, location, what the server logs record and for how long",
-        ),
-        (
-            "retention-h",
-            "Retention and deletion",
-            "how long each kind of data is kept and how to have it deleted",
-        ),
-        (
-            "rights-h",
-            "Your rights",
-            "the rights of data subjects and the supervisory authority",
-        ),
-    ];
+    let h3 = "mt-6 font-display text-heading font-semibold text-primary";
+    let p = "mt-2 max-w-prose text-body text-secondary";
+    let ul = "mt-2 flex max-w-prose list-disc flex-col gap-1.5 pl-5 text-body text-secondary";
     view! {
         <PageShell width=PageWidth::Reading>
-            <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Companion stores, and why it is there."</span> } />
+            <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Companion stores, who else is involved, and your rights."</span> } />
             <div class="mb-8">
                 <Callout tone=CalloutTone::Warning title="Partly a draft">
-                    "The list of stored data is complete for this version. The legal sections further down are placeholders until the operator completes them."
+                    "The lists of stored data, cookies, logs and retention describe this version of Companion. Items marked OWNER are completed by the operator before Companion opens beyond the closed beta."
                 </Callout>
             </div>
-            <section aria-labelledby="stored-h">
+
+            <section aria-labelledby="controller-h">
+                <SectionHeader title="Who is responsible" id="controller-h" />
+                <p class=p>"The controller for the data on this site is:"</p>
+                <p class="mt-2"><OwnerPlaceholder what="name, postal address and email of the controller (as in the Impressum)" /></p>
+                <p class=p>"Data protection questions: " <OwnerPlaceholder what="contact email for privacy requests" /></p>
+            </section>
+
+            <section class="mt-10" aria-labelledby="stored-h">
                 <SectionHeader title="What Companion stores" id="stored-h" />
                 {STORED.iter().map(|(area, items)| view! {
-                    <h3 class="mt-6 font-display text-heading font-semibold text-primary">{*area}</h3>
-                    <ul class="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-body text-secondary">
+                    <h3 class=h3>{*area}</h3>
+                    <ul class=ul>
                         {items.iter().map(|i| view! { <li>{*i}</li> }).collect_view()}
                     </ul>
                 }).collect_view()}
-                <h3 class="mt-6 font-display text-heading font-semibold text-primary">"What it does not do"</h3>
-                <p class="mt-2 max-w-prose text-body text-secondary">
-                    "No analytics and no third-party trackers. Fonts are served by Companion itself, and champion and item pictures come through Companion's own server, so your browser does not contact other sites while you use it."
+                <h3 class=h3>"What it does not do"</h3>
+                <p class=p>
+                    "No analytics, no advertising and no third-party trackers. The pages load no scripts, fonts or pictures from other sites: fonts are served by Companion itself, and champion and item pictures come through Companion's own server. Companion stores nothing in your browser besides the session cookie."
                 </p>
             </section>
-            {legal.into_iter().map(|(id, title, what)| view! {
-                <section class="mt-10" aria-labelledby=id>
-                    <SectionHeader title=title id=id />
-                    <p><OwnerPlaceholder what=what /></p>
-                </section>
-            }).collect_view()}
+
+            <section class="mt-10" aria-labelledby="basis-h">
+                <SectionHeader title="Why, and on what legal basis" id="basis-h" />
+                <ul class=ul>
+                    <li>"Your account, your team's workspace and your own pages: to provide the service you signed up for."</li>
+                    <li>"Game data from Riot: to show your games and your team's games and, when your team scouts an opponent, the public match history of the players it names."</li>
+                    <li>"Logs, rate limits and backups: to keep the service secure, available and recoverable."</li>
+                    <li>"Bug reports, votes and survey answers: to decide what to fix and build next, with you."</li>
+                </ul>
+                <p class="mt-3"><OwnerPlaceholder what="the legal basis for each purpose above (for example Art. 6(1)(b) and 6(1)(f) GDPR), confirmed with advice" /></p>
+            </section>
+
+            <section class="mt-10" aria-labelledby="third-h">
+                <SectionHeader title="Who else is involved" id="third-h" />
+                <dl class="mt-2 grid max-w-prose gap-x-6 gap-y-3 text-body sm:grid-cols-[12rem_minmax(0,1fr)]">
+                    {THIRD_PARTIES.iter().map(|(who, what)| view! {
+                        <dt class="font-medium text-primary">{*who}</dt>
+                        <dd class="text-secondary">{*what}</dd>
+                    }).collect_view()}
+                    <dt class="font-medium text-primary">"Hosting"</dt>
+                    <dd class="text-secondary">"The server and its database run on a rented virtual machine. " <OwnerPlaceholder what="hosting provider, its address and the data centre location; data processing agreement in place" /></dd>
+                    <dt class="font-medium text-primary">"Backups"</dt>
+                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept in object storage. " <OwnerPlaceholder what="object-storage provider, its address and location; data processing agreement in place" /></dd>
+                </dl>
+                <p class=p>"Nothing else: no analytics service, no email service, no payment provider."</p>
+            </section>
+
+            <section class="mt-10" aria-labelledby="cookies-h">
+                <SectionHeader title="Cookies" id="cookies-h" />
+                <p class=p>
+                    "One cookie, named " <code class="font-mono text-label text-primary">"id"</code> ", set when you sign in. It holds a random session number, is sent only to Companion (HttpOnly, SameSite=Strict, and only over HTTPS) and ends 30 days after your last visit or when you sign out. It is needed to stay signed in; there are no other cookies and no tracking."
+                </p>
+            </section>
+
+            <section class="mt-10" aria-labelledby="logs-h">
+                <SectionHeader title="Server logs" id="logs-h" />
+                <ul class=ul>
+                    <li>"The web server's access log records each request: time, address requested, status, response size, the request headers except cookies (such as the browser name and language) and your IP address shortened to its first three parts (IPv4) or first three groups (IPv6). Cookies and passwords are never logged. The log is rotated by size (five files of 10 MB)."</li>
+                    <li>"The application log records errors and notable events, such as an admin change or an account deletion, with the account's internal id. It never records passwords or session numbers."</li>
+                    <li>"Rate limits keep IP addresses and account ids in memory only; an entry is dropped a minute after it is no longer needed and nothing is written to disk."</li>
+                </ul>
+                <p class="mt-3"><OwnerPlaceholder what="how many days the access and application logs are kept at the measured traffic" /></p>
+            </section>
+
+            <section class="mt-10" aria-labelledby="retention-h">
+                <SectionHeader title="How long data is kept" id="retention-h" />
+                <ul class=ul>
+                    <li>"Your account, your own pages, synced games and ranked snapshots: until you delete your account."</li>
+                    <li>"Your team's records: until the team deletes them, or the team is deleted. When you delete your account, what you wrote for the team stays with the team, shown as written by a former member."</li>
+                    <li>"Deleted team notes: one day, so they can be restored. Sessions: 30 days after the last visit."</li>
+                    <li>"Bug reports: until an admin deletes them; when you delete your account, your text is removed from them."</li>
+                    <li>"Backups: 30 days. Data you delete disappears from the backups within 30 days."</li>
+                </ul>
+            </section>
+
+            <section class="mt-10" aria-labelledby="rights-h">
+                <SectionHeader title="Your rights" id="rights-h" />
+                <ul class=ul>
+                    <li>"Access and portability: " <a href="/profile#your-data" class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">"Download my data"</a> " on your profile gives you everything stored about you as a JSON file, at any time."</li>
+                    <li>"Correction: change your username, region and Riot link on your profile; ask your team to correct team records."</li>
+                    <li>"Erasure: " <a href="/profile#your-data" class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">"Delete my account"</a> " on your profile, without asking anyone."</li>
+                    <li>"Restriction and objection, and anything the buttons do not cover: write to the contact above."</li>
+                    <li>"You can complain to a data protection supervisory authority. " <OwnerPlaceholder what="the supervisory authority responsible for the operator" /></li>
+                </ul>
+            </section>
+
             <section class="mt-10" aria-labelledby="riot-h">
                 <SectionHeader title="Riot Games" id="riot-h" />
                 <p class="max-w-prose text-body text-secondary">{RIOT_DISCLAIMER}</p>

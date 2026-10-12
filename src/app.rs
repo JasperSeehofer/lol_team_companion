@@ -32,7 +32,7 @@ use crate::pages::{
     draft::DraftPage,
     game_plan::GamePlanPage,
     home::HomePage,
-    legal::{datenschutz::DatenschutzPage, impressum::ImpressumPage},
+    legal::{datenschutz::DatenschutzPage, impressum::ImpressumPage, terms::TermsPage},
     match_detail::MatchDetailPage,
     me::MyGamesPage,
     opponents::OpponentsPage,
@@ -128,6 +128,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/design") view=DesignGalleryPage ssr=SsrMode::Async />
                         <Route path=path!("/legal/impressum") view=ImpressumPage />
                         <Route path=path!("/legal/datenschutz") view=DatenschutzPage />
+                        <Route path=path!("/legal/terms") view=TermsPage />
                     </Routes>
                 </main>
                 // The bug-report button docks above the footer (it self-gates
