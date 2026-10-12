@@ -399,7 +399,7 @@ fn BugReportWidgetInner(
                 // Inner card — stop propagation so clicking inside
                 // does not close the modal.
                 <div
-                    class="bg-surface border border-divider rounded-xl p-6 shadow-overlay max-w-md w-full"
+                    class="bg-ink-1 border border-rule rounded-xl p-6 shadow-overlay max-w-md w-full"
                     on:click=|ev: ev::MouseEvent| ev.stop_propagation()
                 >
                     <h2 class="font-display text-xl text-primary mb-4">
@@ -409,7 +409,7 @@ fn BugReportWidgetInner(
                     <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
                         "Element"
                     </div>
-                    <div class="bg-elevated rounded-lg p-2 text-sm text-secondary mb-4">
+                    <div class="bg-ink-2 rounded-lg p-2 text-sm text-secondary mb-4">
                         {move || element_label.get()}
                     </div>
 
@@ -418,9 +418,9 @@ fn BugReportWidgetInner(
                         <button
                             type="button"
                             class=move || if report_kind_cls_bug.get() == "bug" {
-                                "bg-accent text-accent-contrast px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-accent text-accent-ink px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             } else {
-                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-divider focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-rule focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             }
                             on:click=move |_| report_kind_set_bug.set("bug".to_string())
                         >
@@ -429,9 +429,9 @@ fn BugReportWidgetInner(
                         <button
                             type="button"
                             class=move || if report_kind_cls_wish.get() == "wishlist" {
-                                "bg-accent text-accent-contrast px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-accent text-accent-ink px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             } else {
-                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-divider focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-rule focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             }
                             on:click=move |_| report_kind_set_wish.set("wishlist".to_string())
                         >
@@ -440,7 +440,7 @@ fn BugReportWidgetInner(
                     </div>
 
                     <textarea
-                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        class="w-full bg-ink-2 border border-outline rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         rows="4"
                         placeholder="What went wrong, or what would you like?"
                         prop:value=move || report_text_get.get()
@@ -464,7 +464,7 @@ fn BugReportWidgetInner(
                         </button>
                         <button
                             type="button"
-                            class="bg-accent text-accent-contrast font-semibold rounded-lg px-4 py-2 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                            class="bg-accent text-accent-ink font-semibold rounded-lg px-4 py-2 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                             on:click=move |_| {
                                 submit_error.set(None);
 

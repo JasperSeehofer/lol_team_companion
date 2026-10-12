@@ -8,8 +8,5 @@ pub mod graph_layout;
 pub mod icon;
 pub mod local_time;
 pub mod nav;
-pub mod region;
-pub mod skeleton;
-pub mod stat_card;
 pub mod tree_graph;
 pub mod ui;

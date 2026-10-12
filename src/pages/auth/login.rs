@@ -8,8 +8,8 @@
 //! the visual layer is restyled.
 
 use crate::components::ui::{
-    Button, ButtonSize, ButtonType, ButtonVariant, ErrorBanner, Field, InputKind, PageShell,
-    PageWidth, TextField,
+    Button, ButtonSize, ButtonType, ButtonVariant, Callout, CalloutTone, Field, InputKind,
+    PageHeader, PageShell, PageWidth, TextField,
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -92,18 +92,12 @@ pub fn LoginPage() -> impl IntoView {
 
     view! {
         <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
-            <p class="eyebrow">"Closed beta"</p>
-            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">
-                "Sign in"
-            </h1>
-            <p class="mt-2 text-body text-secondary">
-                "Your team's drafts, plans and reviews are where you left them."
-            </p>
+            <PageHeader title="Sign in" eyebrow="Closed beta" meta=move || view! { <span>"Your team's drafts, plans and reviews are where you left them."</span> } />
 
             // ActionForm has no `class` prop (leptos rule 7).
             <ActionForm action=login>
-                <div class="mt-8 flex flex-col gap-5">
-                    {move || error().map(|e| view! { <ErrorBanner message=e /> })}
+                <div class="flex flex-col gap-5">
+                    {move || error().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
 
                     <Field id="login-email" label="Email">
                         <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
