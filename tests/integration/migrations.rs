@@ -102,6 +102,7 @@ async fn scope_fields_are_indexed() {
             &["ledger_month_unique", "ledger_month_published"],
         ),
         ("site_text", &["site_text_slug_unique"]),
+        ("user_guidance", &["user_guidance_unique"]),
     ];
     for (table, indexes) in expected {
         let info = info_for_table(&db, table).await;
