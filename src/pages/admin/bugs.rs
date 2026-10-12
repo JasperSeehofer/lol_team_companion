@@ -165,7 +165,7 @@ fn Triage(
                     let found = sel.as_ref().and_then(|id| rows.get_value().into_iter().find(|r| &r.id == id));
                     match found {
                         Some(r) => view! { <Editor report=r choices=choices.get_value() on_saved=on_saved /> }.into_any(),
-                        None => view! { <EmptyState size=EmptySize::Compact message="Choose a report on the left to read and triage it." /> }.into_any(),
+                        None => view! { <EmptyState size=EmptySize::Compact message="Choose a report from the list to read and triage it." /> }.into_any(),
                     }
                 }}
             </div>

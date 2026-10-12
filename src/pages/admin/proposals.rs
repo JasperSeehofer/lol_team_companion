@@ -143,7 +143,7 @@ fn Proposals(
                             Some(p) => view! { <Editor p=Some(p) choices=choices.get_value() on_saved=on_saved /> }.into_any(),
                             None => view! { <EmptyState size=EmptySize::Compact message="That proposal no longer exists." /> }.into_any(),
                         },
-                        None => view! { <EmptyState size=EmptySize::Compact message="Choose a proposal on the left, or write a new one." /> }.into_any(),
+                        None => view! { <EmptyState size=EmptySize::Compact message="Choose a proposal from the list, or write a new one." /> }.into_any(),
                     }
                 }}
             </div>

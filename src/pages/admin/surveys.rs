@@ -194,7 +194,7 @@ fn Surveys(
                         Some(s) => view! { <Editor survey=Some(s) results=results on_saved=on_saved /> }.into_any(),
                         None => view! { <EmptyState size=EmptySize::Compact message="That survey no longer exists." /> }.into_any(),
                     },
-                    None => view! { <EmptyState size=EmptySize::Compact message="Choose a survey on the left, or write a new one." /> }.into_any(),
+                    None => view! { <EmptyState size=EmptySize::Compact message="Choose a survey from the list, or write a new one." /> }.into_any(),
                 }}
             </div>
         </div>
