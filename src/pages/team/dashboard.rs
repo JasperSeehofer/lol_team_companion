@@ -940,6 +940,9 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
                         view! { <div class="mt-6"><EmptyState size=EmptySize::Compact message="No notes yet. Notes you add appear here for the whole team, pinned ones first." /></div> }.into_any()
                     } else {
                         view! {
+                            <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::NoteUndo title="Edits can be undone" class="mt-6">
+                                "Anyone on the team can edit or delete a note. After a change, the message at the bottom of the screen has Undo, so nothing is lost by accident."
+                            </crate::components::guidance::FirstUseHint>
                             <ul class="mt-6 border-b border-rule">
                                 {list.into_iter().map(|n| {
                                     let id = n.id.clone().unwrap_or_default();

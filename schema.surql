@@ -20,7 +20,6 @@ DEFINE FIELD IF NOT EXISTS riot_puuid ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS riot_summoner_name ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON user TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS email_unique ON user FIELDS email UNIQUE;
-DEFINE FIELD IF NOT EXISTS mode ON user TYPE string DEFAULT 'solo';
 DEFINE FIELD IF NOT EXISTS riot_region ON user TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 -- user.theme (Demacia/Pandemonium) was removed by migration 7 (drop_user_theme):
@@ -28,12 +27,17 @@ DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 
 -- user.draft_mode, team_dashboard_mode and solo_mode (per-page view
 -- preferences of views that no longer exist) were removed by migration 8.
--- user.mode stays stored for compatibility; since M5 nothing gates on it.
+-- user.mode (the old Solo/Team workspace switch) was removed by migration 12
+-- (drop_user_mode): nothing has read it since M5.
 
 -- M1: admin flag. option<bool> (NONE = not admin) so users created before
 -- this field existed stay valid on UPDATE; ADMIN_EMAILS promotes at login.
 -- Migration 3 backfills NONE to false and tightens it to bool DEFAULT false.
 DEFINE FIELD IF NOT EXISTS is_admin ON user TYPE option<bool>;
+-- M9: set by the promote command (`cargo run --features ssr --bin promote`):
+-- an admin that does not depend on an ADMIN_EMAILS listing. NONE = not
+-- promoted that way.
+DEFINE FIELD IF NOT EXISTS admin_promoted_at ON user TYPE option<datetime>;
 
 -- M6: lowercase username for case-insensitive uniqueness. Migration 2
 -- backfills it, tightens it to string and adds the unique index
@@ -734,3 +738,25 @@ DEFINE INDEX IF NOT EXISTS proposal_vote_user ON proposal_vote FIELDS user;
 DEFINE INDEX IF NOT EXISTS ledger_month_unique ON ledger_month FIELDS month UNIQUE;
 DEFINE INDEX IF NOT EXISTS ledger_month_published ON ledger_month FIELDS published, month;
 DEFINE INDEX IF NOT EXISTS site_text_slug_unique ON site_text FIELDS slug UNIQUE;
+
+-- ===========================================================================
+-- Guidance (M9): the welcome, the getting-started checklist, first-use
+-- hints, nudges and new-feature introductions. One row per user and key
+-- (`welcome`, `checklist`, `hint.*`, `nudge.*`, `intro:<slug>:<route>`):
+-- seen_at when the user saw or used it, muted_at when they turned it off.
+-- The record id is [user key, key], so a write is an UPSERT that cannot
+-- race; the unique index states the rule as well. Personal data: deleted
+-- with the account and part of the export.
+-- ===========================================================================
+DEFINE TABLE IF NOT EXISTS user_guidance SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON user_guidance TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS key ON user_guidance TYPE string
+  ASSERT string::len($value) > 0 AND string::len($value) <= 160;
+DEFINE FIELD IF NOT EXISTS seen_at ON user_guidance TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS muted_at ON user_guidance TYPE option<datetime>;
+DEFINE INDEX IF NOT EXISTS user_guidance_unique ON user_guidance FIELDS user, key UNIQUE;
+
+-- The one switch for all guidance (profile, "Guidance"). option<bool> here
+-- (NONE = on); migration 13 (user_guidance) backfills true and tightens it
+-- to bool DEFAULT true.
+DEFINE FIELD IF NOT EXISTS guidance_enabled ON user TYPE option<bool>;

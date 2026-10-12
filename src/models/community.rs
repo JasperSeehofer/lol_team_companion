@@ -1024,6 +1024,19 @@ pub struct ChangelogEntry {
     /// `YYYY-MM-DD` when the file records it.
     pub date: Option<String>,
     pub sections: Vec<ChangelogSection>,
+    /// New-feature introductions (`Introduce:` lines, M9).
+    #[serde(default)]
+    pub intros: Vec<ChangelogIntro>,
+}
+
+/// An `Introduce: /route | Feature | How to try it.` line in a changelog
+/// entry: the first visit to `route` after the entry's date shows a one-time
+/// "New" callout to people who used the app before (M9).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangelogIntro {
+    pub route: String,
+    pub feature: String,
+    pub text: String,
 }
 
 /// A detected game patch.

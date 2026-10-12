@@ -45,6 +45,11 @@ pub enum Bucket {
     /// export reads every personal table, and a deletion attempt checks the
     /// password.
     Account,
+    /// Guidance writes (seen, muted, the switch, show again), per user (M9).
+    Guidance,
+    /// The guidance check on every route change, per user (M9). Over the
+    /// limit the page simply shows no hint.
+    GuidanceCheck,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -113,6 +118,16 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::Account => Limit {
             capacity: 5.0,
             refill_per_sec: 1.0 / 60.0,
+        },
+        // 60 writes, then one a second.
+        Bucket::Guidance => Limit {
+            capacity: 60.0,
+            refill_per_sec: 1.0,
+        },
+        // 60 route changes, then two a second.
+        Bucket::GuidanceCheck => Limit {
+            capacity: 60.0,
+            refill_per_sec: 2.0,
         },
         // 120 page loads, then two a second.
         Bucket::PublicRead => Limit {

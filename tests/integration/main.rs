@@ -20,6 +20,7 @@ mod db_teams;
 mod db_tree;
 mod db_users;
 mod graph;
+mod guidance;
 mod match_day;
 mod migrations;
 mod sand_table;

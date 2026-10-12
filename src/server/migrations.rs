@@ -127,6 +127,24 @@ pub const MIGRATIONS: &[Migration] = &[
         // Idempotent: rows are keyed by seed_key / slug.
         step: Step::Rust(|db| Box::pin(community_seed_content(db))),
     },
+    Migration {
+        version: 12,
+        name: "drop_user_mode",
+        // The Solo/Team workspace switch went in M5; nothing has read
+        // `user.mode` since (owner decision: drop it).
+        step: Step::Surql("REMOVE FIELD IF EXISTS mode ON user; UPDATE user UNSET mode;"),
+    },
+    Migration {
+        version: 13,
+        name: "user_guidance",
+        // M9: guidance is on for everyone until they turn it off. The
+        // `user_guidance` table and its unique index are new, so they live
+        // in the baseline.
+        step: Step::Surql(
+            "UPDATE user SET guidance_enabled = true WHERE guidance_enabled = NONE; \
+             DEFINE FIELD OVERWRITE guidance_enabled ON user TYPE bool DEFAULT true;",
+        ),
+    },
 ];
 
 const BUG_REPORT_STATUSES_V2: &str = "\

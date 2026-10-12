@@ -640,6 +640,9 @@ fn TreeEditor(
                     />
                 }
             />
+            <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::TreeBranching title="Branch from any node">
+                "A tree is your plan with its alternatives: choose Branch on a node (or the + beside it in the graph) for what you do when they ban or pick something else. In Live game mode you follow the branch that happens."
+            </crate::components::guidance::FirstUseHint>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading branches"><Skeleton shape=SkeletonShape::Line lines=4 /></SkeletonGroup> }>
                 {move || nodes.get().map(|r| match r {
                     Err(_) => view! { <Callout tone=CalloutTone::Danger>"The branches did not load."</Callout> }.into_any(),

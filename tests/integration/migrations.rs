@@ -102,6 +102,7 @@ async fn scope_fields_are_indexed() {
             &["ledger_month_unique", "ledger_month_published"],
         ),
         ("site_text", &["site_text_slug_unique"]),
+        ("user_guidance", &["user_guidance_unique"]),
     ];
     for (table, indexes) in expected {
         let info = info_for_table(&db, table).await;
@@ -477,6 +478,35 @@ async fn the_user_theme_field_is_dropped() {
         .unwrap();
     let v: Value = r.take(0).unwrap();
     assert!(!format!("{v:?}").contains("demacia"));
+}
+
+#[tokio::test]
+async fn the_user_mode_field_is_dropped() {
+    let db = baseline_only().await;
+    // The pre-M9 shape: every user carried the old Solo/Team switch.
+    db.query(
+        "DEFINE FIELD mode ON user TYPE string DEFAULT 'solo'; \
+         CREATE user:moded SET username = 'Mo', email = 'mo@example.com', password_hash = 'h', mode = 'team';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    assert!(info_for_table(&db, "user").await.contains("mode"));
+
+    migrations::run(&db).await.unwrap();
+
+    let info = info_for_table(&db, "user").await;
+    assert!(
+        !info.contains(" mode ON"),
+        "the field definition is gone: {info}"
+    );
+    let mut r = db.query("SELECT VALUE mode FROM user:moded").await.unwrap();
+    let v: Value = r.take(0).unwrap();
+    assert!(
+        !format!("{v:?}").contains("team"),
+        "the value is gone: {v:?}"
+    );
 }
 
 #[tokio::test]

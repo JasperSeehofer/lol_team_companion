@@ -166,6 +166,14 @@ async fn main() {
     // Load .env file (if present)
     dotenvy::dotenv().ok();
 
+    // `lol_team_companion promote ...`: the admin command (server::promote),
+    // so the container image can run it without a second binary. It opens
+    // the database itself; the server must be stopped.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("promote") {
+        std::process::exit(lol_team_companion::server::promote::run(&args[1..]).await);
+    }
+
     // Logging. An invalid RUST_LOG is reported, not silently replaced.
     let filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
         Ok(f) => f,
@@ -416,6 +424,12 @@ async fn main() {
         let _ = task.await;
     }
     drop(riot);
+    // Every other handle should be gone now; one still held somewhere (a
+    // request's reactive owner, a task) keeps SurrealKV open, so say so.
+    let held = Arc::strong_count(&surreal_db) - 1;
+    if held > 0 {
+        tracing::warn!("{held} database handle(s) still held at shutdown");
+    }
     drop(surreal_db);
 
     let closed = wait_for_db_close(std::path::Path::new(&data_dir), close_limit).await;

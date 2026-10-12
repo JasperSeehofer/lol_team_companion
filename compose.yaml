@@ -46,6 +46,12 @@ services:
       # (surrealdb-core 3.0.2 kvs/surrealkv/cnf.rs; CI logged 7.3 GB on an
       # unlimited 16 GB runner.)
       SURREAL_SURREALKV_BLOCK_CACHE_CAPACITY: "268435456"
+      # The embedded engine can take more than the 5 s default to release
+      # SurrealKV after a long run (seen in M8/M9 testing; data is safe
+      # either way). 15 s gives a slow close time to finish; drain 10 s +
+      # 15 s still fits stop_grace_period (30 s). It cannot help while the
+      # log says "database handle(s) still held". docs/RUNBOOK.md section 4.
+      SHUTDOWN_DB_SECS: "15"
     volumes:
       - data:/data
     expose:
@@ -61,8 +67,8 @@ services:
     security_opt:
       - no-new-privileges:true
     # tini forwards SIGTERM; the app drains requests for up to
-    # SHUTDOWN_DRAIN_SECS (10) and waits up to SHUTDOWN_DB_SECS (5) for the
-    # database to close, well inside the grace period. Committed data is safe
+    # SHUTDOWN_DRAIN_SECS (10) and waits up to SHUTDOWN_DB_SECS (15, set
+    # above) for the database to close, inside the grace period. Committed data is safe
     # even on a kill (SurrealKV syncs every commit).
     stop_grace_period: 30s
     healthcheck:

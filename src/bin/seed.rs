@@ -219,6 +219,7 @@ async fn main() {
             "  2 bug reports (one triaged and on the bug board, one new) and votes on 3 seeded \
              What next ideas (ideas stay unpublished until an admin publishes them; no ledger figures)"
         );
+        println!("  guidance demo: seed-beta-sup is a returning user (account 40 days old, writes 30 days old)");
         println!("  1 invite code (25 uses, 30 days)");
         return;
     }
@@ -267,6 +268,11 @@ async fn main() {
         std::process::exit(1);
     }
 
+    if let Err(e) = returning_user(&db, &teams).await {
+        eprintln!("Backdating the returning demo user failed: {e}");
+        std::process::exit(1);
+    }
+
     let invite_code = db::generate_invite_code();
     let invite = db::create_invite(
         &db,
@@ -282,7 +288,11 @@ async fn main() {
     for (spec, team) in TEAMS.iter().zip(&teams) {
         println!("  {}:", team.name);
         for (i, p) in spec.players.iter().enumerate() {
-            let lead = if i == 0 { ", team leader" } else { "" };
+            let lead = match (i, spec.name == TEAMS[1].name) {
+                (0, _) => ", team leader",
+                (4, true) => ", returning user: 40 days old, last write 30 days ago",
+                _ => "",
+            };
             println!(
                 "    {}@example.com  ({}, {}{lead})",
                 p.login, p.username, ROLES[i]
@@ -304,6 +314,37 @@ async fn main() {
 /// Two bug reports by seed players (one triaged and on the board, one new)
 /// and votes on three seeded proposals. Proposals and surveys come from the
 /// migration and are never touched; no ledger figure is ever seeded.
+/// Guidance demo (M9): the second team's support player is a "returning"
+/// user. The account is 40 days old and everything it wrote is 30 days
+/// old, so Match Day shows "Picking up again?" and the account sees the
+/// new-feature introductions dated after it was created. The other seeded
+/// accounts are new and get the welcome.
+async fn returning_user(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String> {
+    let Some(user) = teams.get(1).and_then(|t| t.members.get(4)) else {
+        return Ok(());
+    };
+    let q = "LET $u = type::record('user', $uk); \
+        UPDATE $u SET created_at = time::now() - 40d; \
+        UPDATE draft SET created_at = time::now() - 30d WHERE created_by = $u; \
+        UPDATE game_plan SET created_at = time::now() - 30d WHERE created_by = $u; \
+        UPDATE post_game_learning SET created_at = time::now() - 30d WHERE created_by = $u; \
+        UPDATE draft_tree SET created_at = time::now() - 30d WHERE created_by = $u; \
+        UPDATE team_note SET created_at = time::now() - 30d WHERE author = $u; \
+        UPDATE scheduled_match SET updated_at = time::now() - 30d WHERE created_by = $u; \
+        UPDATE series SET created_at = time::now() - 30d WHERE created_by = $u; \
+        UPDATE team_relation SET created_at = time::now() - 30d WHERE author = $u; \
+        UPDATE personal_learning SET created_at = time::now() - 30d WHERE user = $u; \
+        UPDATE champion_pool SET created_at = time::now() - 30d WHERE user = $u; \
+        UPDATE champion_note SET created_at = time::now() - 30d WHERE user = $u;";
+    db.query(q)
+        .bind(("uk", db::record_key(user, "user")))
+        .await
+        .map_err(|e| e.to_string())?
+        .check()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 async fn community(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String> {
     use lol_team_companion::models::bug_report::BugTriage;
     use lol_team_companion::server::community::store;
@@ -433,6 +474,7 @@ async fn cleanup(db: &Surreal<Db>) -> Result<(), String> {
         DELETE player_match WHERE user IN $users; \
         DELETE proposal_vote WHERE user IN $users; \
         DELETE survey_prompt WHERE user IN $users; \
+        DELETE user_guidance WHERE user IN $users; \
         DELETE bug_report WHERE user IN $users; \
         DELETE user WHERE id IN $users; \
         DELETE invite WHERE note = 'seed'; \
@@ -512,9 +554,6 @@ async fn create_team(
             .await
             .map_err(|e| e.to_string())?;
     }
-    db::set_user_mode(db, &members[0], "team")
-        .await
-        .map_err(|e| e.to_string())?;
     println!("Created team {} with {} players.", spec.name, members.len());
     Ok(SeededTeam {
         name: spec.name,

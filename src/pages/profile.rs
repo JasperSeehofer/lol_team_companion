@@ -19,7 +19,6 @@ pub async fn get_current_user() -> Result<Option<PublicUser>, ServerFnError> {
         username: u.username,
         email: u.email,
         riot_summoner_name: u.riot_summoner_name,
-        mode: u.mode,
         riot_region: u.riot_region,
         is_admin: u.is_admin,
     }))
@@ -195,6 +194,10 @@ pub fn ProfilePage() -> impl IntoView {
         |_| crate::components::survey_prompt::get_survey_opt_out(),
     );
     let card_hidden = Resource::new(|| (), |_| get_share_card_hidden());
+    let guidance_on = Resource::new(
+        || (),
+        |_| crate::components::guidance::get_guidance_enabled(),
+    );
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
             #[cfg(feature = "hydrate")]
@@ -212,6 +215,9 @@ pub fn ProfilePage() -> impl IntoView {
                         _ => view! { <PageHeader title="Profile" /> }.into_any(),
                     }
                 })}
+            </Suspense>
+            <Suspense fallback=|| ()>
+                {move || guidance_on.get().and_then(|r| r.ok()).map(|on| view! { <crate::components::guidance::GuidanceSettings enabled=on /> })}
             </Suspense>
             <Suspense fallback=|| ()>
                 {move || surveys_off.get().and_then(|r| r.ok()).map(|off| view! { <SurveySettings off=off /> })}

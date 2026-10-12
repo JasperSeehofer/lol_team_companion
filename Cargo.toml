@@ -88,6 +88,11 @@ name = "seed"
 path = "src/bin/seed.rs"
 required-features = ["ssr"]
 
+[[bin]]
+name = "promote"
+path = "src/bin/promote.rs"
+required-features = ["ssr"]
+
 [package.metadata.leptos]
 bin-target = "lol_team_companion"
 output-name = "lol_team_companion"

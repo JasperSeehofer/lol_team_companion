@@ -443,6 +443,52 @@ pub async fn set_user_admin(db: &Surreal<Db>, user_id: &str, is_admin: bool) -> 
     Ok(())
 }
 
+/// The promote command (`src/bin/promote.rs`): make the account with this
+/// email an admin that does not depend on `ADMIN_EMAILS`, or revoke that.
+/// Returns the account's (id, username). Revoking clears the flag too; an
+/// address still listed in `ADMIN_EMAILS` is promoted again at its next
+/// sign-in.
+pub async fn set_admin_promotion(
+    db: &Surreal<Db>,
+    email: &str,
+    promote: bool,
+) -> DbResult<(String, String)> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        id: RecordId,
+        username: String,
+    }
+    let q = if promote {
+        "UPDATE user SET is_admin = true, admin_promoted_at = time::now() WHERE email = $email RETURN id, username"
+    } else {
+        "UPDATE user SET is_admin = false, admin_promoted_at = NONE WHERE email = $email RETURN id, username"
+    };
+    let mut r = db.query(q).bind(("email", normalize_email(email))).await?;
+    let rows: Vec<Row> = r.take(0)?;
+    rows.into_iter()
+        .next()
+        .map(|row| (row.id.to_sql(), row.username))
+        .ok_or(DbError::NotFound)
+}
+
+/// (email, username, promoted with the command) of every stored admin.
+pub async fn list_admins(db: &Surreal<Db>) -> DbResult<Vec<(String, String, bool)>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        email: String,
+        username: String,
+        promoted: bool,
+    }
+    let mut r = db
+        .query("SELECT email, username, admin_promoted_at != NONE AS promoted FROM user WHERE is_admin = true OR admin_promoted_at != NONE ORDER BY email")
+        .await?;
+    let rows: Vec<Row> = r.take(0).unwrap_or_default();
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.email, r.username, r.promoted))
+        .collect())
+}
+
 // ---------------------------------------------------------------------------
 // Invites (closed-beta gate)
 // ---------------------------------------------------------------------------
@@ -5079,34 +5125,8 @@ pub struct DraftOutcomeData {
 }
 
 // ---------------------------------------------------------------------------
-// Solo Mode: User mode + region
+// User region
 // ---------------------------------------------------------------------------
-
-pub async fn get_user_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct ModeRecord {
-        mode: Option<String>,
-    }
-    let mut result = db
-        .query("SELECT mode FROM type::record('user', $user_key)")
-        .bind(("user_key", user_key))
-        .await?;
-    let row: Option<ModeRecord> = result.take(0)?;
-    Ok(row
-        .and_then(|r| r.mode)
-        .unwrap_or_else(|| "solo".to_string()))
-}
-
-pub async fn set_user_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE type::record('user', $user_key) SET mode = $mode")
-        .bind(("user_key", user_key))
-        .bind(("mode", mode.to_string()))
-        .await?
-        .check()?;
-    Ok(())
-}
 
 pub async fn set_user_region(db: &Surreal<Db>, user_id: &str, region: &str) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
@@ -7168,23 +7188,6 @@ mod tests {
     // ----- Solo mode DB function stubs (Phase 12) -----
     // These require a live SurrealDB instance. Marked #[ignore] for unit test runs.
     // Run with: cargo test --features ssr --lib -- db::tests --ignored (when DB available)
-
-    #[tokio::test]
-    #[ignore = "requires SurrealDB instance"]
-    async fn test_get_user_mode_defaults_to_solo() {
-        // Setup: create user without explicit mode field
-        // Assert: get_user_mode returns "solo"
-        todo!("Promote to integration test when linker OOM is resolved");
-    }
-
-    #[tokio::test]
-    #[ignore = "requires SurrealDB instance"]
-    async fn test_set_and_get_user_mode_round_trip() {
-        // Setup: create user, set_user_mode to "team"
-        // Assert: get_user_mode returns "team"
-        // Set back to "solo", assert returns "solo"
-        todo!("Promote to integration test when linker OOM is resolved");
-    }
 
     #[tokio::test]
     #[ignore = "requires SurrealDB instance"]

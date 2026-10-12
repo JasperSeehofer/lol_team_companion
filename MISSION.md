@@ -75,6 +75,7 @@ Ways of working
 | M6 | Data layer and integrations | M | light | Migrations, indexes and unique constraints, record links, transactions, shared Riot client with region, live Data Dragon version and champion keys, learnings bug, seed tool, patch-diff detection, Sand Table frame storage. |
 | M7 | Community and transparency loop | M | medium | Bug reports v2, micro-surveys, what-next board and changelog, transparency ledger and admin form, support link, admin role. |
 | M8 | Ship-ready and launch | M | STRONG | Container image and compose, typed config, health check, graceful shutdown, backups and restore drill, runbook, real Impressum and privacy page, account deletion and export, Riot production key application, launch checklist, first teams invited. |
+| M9 | Welcome and guidance | M | medium | Welcome moment, getting-started checklist, first-use hints, rule-based nudges, new-feature introductions, all muteable; before the first invites. |
 
 Order: M0 → M1 strictly first. M2 before M3, M4 and M5. M4 after M3. M6 and M7 interleave after M1. M8 last. Release 2 opens with the Sand Table (Board v1 with live cursors, Replay v1, plan-versus-reality).
 
@@ -116,3 +117,10 @@ Decisions the owner took after the contract was agreed. Each entry is dated; lat
 - The login lockout is accepted for the beta.
 - The commit history is left as it is.
 - The migration data cleanup is accepted.
+
+2026-10-12 (owner's addition: M9 Welcome and guidance)
+- New users must feel welcomed and never lost, and someone who returns after a month must find the way back.
+- Nothing may be built that cannot be muted: every piece of guidance can be switched off.
+- New features are introduced where they are used, not in a tour.
+- Good pages stay self-explanatory; guidance is a safety net on top of them. A step counts as done only when the data says so.
+- M9 is added after M8 and comes before the first invites.

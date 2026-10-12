@@ -717,6 +717,9 @@ pub fn DraftGraphPanel(
         if let Some(next) = roving_index(&key, cur, shown, true) {
             ev.prevent_default();
             focused.set(Some(list[next].champion.clone()));
+            if let Some(g) = use_context::<crate::components::guidance::GuidanceCtx>() {
+                g.used(crate::models::guidance::Hint::DraftGraph);
+            }
             focus_id(&candidate_dom_id(next));
             return;
         }
@@ -821,6 +824,9 @@ pub fn DraftGraphPanel(
                                 "This is their pick: ranked for their side (synergy with their picks, counters to yours). Pools apply to your picks only."
                             </Callout>
                         })}
+                        <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::DraftGraph title="Click a candidate to see why">
+                            "Each candidate's fit comes with its reasons: synergy with your picks, counters to theirs, what the comp still needs. Click one in the graph or the list and the Why panel explains it."
+                        </crate::components::guidance::FirstUseHint>
                         <DraftGraphCanvas
                             result=g.clone()
                             focused=focused
@@ -853,7 +859,12 @@ pub fn DraftGraphPanel(
                                                     rank=i + 1
                                                     candidate=c
                                                     selected=selected
-                                                    on_focus=Callback::new(move |_| focused.set(Some(id_click.clone())))
+                                                    on_focus=Callback::new(move |_| {
+                                                        focused.set(Some(id_click.clone()));
+                                                        if let Some(g) = use_context::<crate::components::guidance::GuidanceCtx>() {
+                                                            g.used(crate::models::guidance::Hint::DraftGraph);
+                                                        }
+                                                    })
                                                     on_pick=Callback::new(move |_| pick.run(c_pick.clone()))
                                                     name_of=Callback::new(move |s: String| name_of(&s))
                                                 />

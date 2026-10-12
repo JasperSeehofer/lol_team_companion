@@ -21,8 +21,6 @@ pub struct PublicUser {
     /// The address the user signs in with (shown on their own profile only).
     pub email: String,
     pub riot_summoner_name: Option<String>,
-    /// Stored "solo" / "team" (kept for compatibility; nothing gates on it).
-    pub mode: String,
     pub riot_region: Option<String>,
     /// Admins see the invite management page.
     #[serde(default)]

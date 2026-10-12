@@ -318,6 +318,13 @@ pub fn DraftGraphCanvas(
 ) -> impl IntoView {
     let result = StoredValue::new(result);
     let node_ref = NodeRef::<leptos::html::Div>::new();
+    // Choosing a candidate here is what the Draft Graph hint asks for (M9).
+    let guide = use_context::<crate::components::guidance::GuidanceCtx>();
+    let hint_used = move || {
+        if let Some(g) = guide {
+            g.used(crate::models::guidance::Hint::DraftGraph);
+        }
+    };
     let size = RwSignal::new((gl::WIDTH, gl::HEIGHT));
     let plan: StoredValue<Option<LayoutPlan>> = StoredValue::new(None);
     let plan_ver = RwSignal::new(0u32);
@@ -465,6 +472,7 @@ pub fn DraftGraphCanvas(
             pin_focus.set(None);
             if let Some(c) = candidate_at(r) {
                 focused.set(Some(c.champion));
+                hint_used();
             }
             return;
         }
@@ -506,6 +514,7 @@ pub fn DraftGraphCanvas(
         } else {
             last_click.set_value(Some((i, now)));
             focused.set(Some(c.champion));
+            hint_used();
         }
     };
     #[allow(unused_variables)]

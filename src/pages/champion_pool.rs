@@ -303,6 +303,9 @@ pub fn ChampionPoolPage() -> impl IntoView {
                     <span>"Your champions per role, from comfort picks to the ones you are learning. The draft page shows them to your team."</span>
                 }
             />
+            <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::PoolTiers title="Tiers say how ready a champion is" class="mb-6">
+                "Each role has five tiers, from Comfort (play it in any game) to To practise. Move a champion by dragging it, or pick it up with Space, choose a tier with the arrow keys and drop it with Space. The draft page shows your team these tiers."
+            </crate::components::guidance::FirstUseHint>
             <p class="sr-only" aria-live="polite" data-testid="pool-announce">{move || announce.get()}</p>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading your pool"><Skeleton shape=SkeletonShape::Line lines=6 /></SkeletonGroup> }>
                 {move || Suspend::new(async move {

@@ -101,7 +101,8 @@ impl Force {
 
 pub(crate) const BASE: &str = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary";
 
-/// A button, or a link styled as one when `href` is set.
+/// A button, or a link styled as one when `href` is set (`on_click` runs
+/// for both; on a link it runs before the navigation).
 ///
 /// A11y: a native `<button type="button">` by default (Enter and Space
 /// work, focus is visible through the global 2px chalk outline). While
@@ -176,6 +177,11 @@ pub fn Button(
                 data-force=force
                 aria-label=aria_label
                 aria-keyshortcuts=shortcut
+                on:click=move |ev| {
+                    if let Some(cb) = on_click {
+                        cb.run(ev);
+                    }
+                }
             >
                 {icon_view}
                 {children()}

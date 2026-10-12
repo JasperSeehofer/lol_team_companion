@@ -1782,3 +1782,39 @@ async fn hand_over_and_export_stay_inside_the_tenant() {
         .to_string();
     assert!(!doc.contains("bob") && !doc.contains("Team Two"), "{doc}");
 }
+
+/// M9: guidance state is per user and reads only the user's own team. The
+/// server functions take the user from the session, never an id.
+#[tokio::test]
+async fn guidance_is_isolated_between_users_and_teams() {
+    use lol_team_companion::server::guidance::{self as g, Mark};
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    make_draft(&db, &t.team1, &t.a, "Alice draft").await;
+    g::mark(&db, &t.a, "checklist", Mark::Muted).await.unwrap();
+    g::set_enabled(&db, &t.a, false).await.unwrap();
+
+    // Bob's rows, switch and facts are untouched by alice's.
+    assert!(g::rows(&db, &t.b).await.unwrap().is_empty());
+    assert!(g::enabled(&db, &t.b).await.unwrap());
+    let fb = g::checklist_facts(&db, &t.b).await.unwrap();
+    assert_eq!(fb.team_name.as_deref(), Some("Team Two"));
+    assert_eq!(fb.drafts, 0, "alice's draft does not tick bob's step");
+    assert!(!g::hint_use(&db, &t.b).await.unwrap().drafted);
+    let nb = g::nudge_facts(&db, &t.b, &t.team2, chrono::Utc::now())
+        .await
+        .unwrap();
+    assert!(nb.draft_without_plan.is_none());
+    // Another team's id is refused, not read.
+    assert!(matches!(
+        g::nudge_facts(&db, &t.b, &t.team1, chrono::Utc::now()).await,
+        Err(lol_team_companion::server::db::DbError::NotFound)
+    ));
+    let home = g::home_guide(&db, &t.b, "bob", false, false, None, chrono::Utc::now())
+        .await
+        .unwrap();
+    assert!(
+        home.checklist.is_some(),
+        "alice's hidden checklist is not bob's"
+    );
+}

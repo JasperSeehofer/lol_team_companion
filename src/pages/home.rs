@@ -8,9 +8,11 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
+use crate::components::guidance::{GettingStarted, NudgeLine, WelcomePanel};
 use crate::components::local_time::{
     local_input_to_utc, parse_utc, utc_to_local_inputs, LocalTime, TimeStyle,
 };
+use crate::components::ui::PrepEmphasis;
 use crate::components::ui::{
     Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone, Dialog,
     EmptySize, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, InputKind, PageHeader,
@@ -18,6 +20,7 @@ use crate::components::ui::{
     SectionHeader, Segment, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup,
     SkeletonShape, TextField, Toast, ToastContext,
 };
+use crate::models::guidance::HomeGuide;
 use crate::models::match_day::{
     format_label, kind_label, BriefPlayer, LinkRef, MatchDay, OpponentBrief, ScheduledMatchInput,
     FORMATS, KINDS,
@@ -28,12 +31,39 @@ use crate::pages::closed_beta::Landing;
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum Home {
     SignedOut,
-    NoTeam { username: String },
-    Team(Box<MatchDay>),
+    NoTeam { username: String, guide: HomeGuide },
+    Team(Box<MatchDay>, HomeGuide),
 }
 
+/// Match Day's guidance for the user (M9). A failure here never breaks
+/// Match Day: it is logged and the page shows no guidance.
+#[cfg(feature = "ssr")]
+async fn home_guide_for(
+    db: &crate::server::authz::DbHandle,
+    user: &crate::server::auth::AppUser,
+    guide: bool,
+    skip_href: Option<&str>,
+) -> HomeGuide {
+    crate::server::guidance::home_guide(
+        db,
+        &user.id,
+        &user.username,
+        user.riot_summoner_name.is_some(),
+        guide,
+        skip_href,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!(user = %user.id, error = %e, "match day guidance failed");
+        HomeGuide::default()
+    })
+}
+
+/// Home. `guide` is "Guide me" (`/?guide=1`): the checklist shows even when
+/// it is hidden or complete.
 #[server]
-pub async fn get_home() -> Result<Home, ServerFnError> {
+pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
     use crate::models::match_day::{shorten, BriefPlayer, OpponentBrief, PatchLine, ReviewLine};
     use crate::models::opponent::is_stale;
     use crate::models::utils::format_timestamp;
@@ -47,8 +77,10 @@ pub async fn get_home() -> Result<Home, ServerFnError> {
         .await
         .map_err(authz::server_err)?
     else {
+        let guide = home_guide_for(&db, &user, guide, None).await;
         return Ok(Home::NoTeam {
             username: user.username,
+            guide,
         });
     };
     let team_id = team.id.clone().unwrap_or_default();
@@ -155,10 +187,10 @@ pub async fn get_home() -> Result<Home, ServerFnError> {
         })
         .collect();
 
-    Ok(Home::Team(Box::new(MatchDay {
+    let md = MatchDay {
         team_name: team.name,
         member_count: members.len(),
-        viewer_id: user.id,
+        viewer_id: user.id.clone(),
         next,
         brief,
         drafts: facts.drafts,
@@ -171,7 +203,14 @@ pub async fn get_home() -> Result<Home, ServerFnError> {
         patch,
         opponents,
         now: chrono::Utc::now().to_rfc3339(),
-    })))
+    };
+    // A nudge never repeats the prep sequence's next step.
+    let skip = prep_steps(&md)
+        .into_iter()
+        .find(|s| s.state == PrepState::Next)
+        .and_then(|s| s.href);
+    let guide = home_guide_for(&db, &user, guide, skip.as_deref()).await;
+    Ok(Home::Team(Box::new(md), guide))
 }
 
 /// Create or update the next match (any member).
@@ -372,7 +411,11 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
 
 #[component]
 pub fn HomePage() -> impl IntoView {
-    let home = Resource::new(|| (), |_| get_home());
+    let query = leptos_router::hooks::use_query_map();
+    let home = Resource::new(
+        move || query.read().get("guide").as_deref() == Some("1"),
+        get_home,
+    );
     view! {
         <Suspense fallback=|| view! {
             <PageShell>
@@ -386,8 +429,8 @@ pub fn HomePage() -> impl IntoView {
             {move || Suspend::new(async move {
                 match home.await {
                     Ok(Home::SignedOut) => view! { <AccountDeletedNote /> <Landing /> }.into_any(),
-                    Ok(Home::NoTeam { username }) => view! { <NoTeamHome username=username /> }.into_any(),
-                    Ok(Home::Team(md)) => view! { <MatchDayView md=*md on_change=Callback::new(move |_| home.refetch()) /> }.into_any(),
+                    Ok(Home::NoTeam { username, guide }) => view! { <NoTeamHome username=username guide=guide on_change=Callback::new(move |_| home.refetch()) /> }.into_any(),
+                    Ok(Home::Team(md, guide)) => view! { <MatchDayView md=*md guide=guide on_change=Callback::new(move |_| home.refetch()) /> }.into_any(),
                     Err(_) => view! {
                         <PageShell>
                             <PageHeader title="Match Day" />
@@ -420,17 +463,30 @@ fn AccountDeletedNote() -> impl IntoView {
 /// Signed in without a team: where Match Day comes from, and the personal
 /// pages that work already.
 #[component]
-fn NoTeamHome(username: String) -> impl IntoView {
+fn NoTeamHome(username: String, guide: HomeGuide, on_change: Callback<()>) -> impl IntoView {
+    let has_welcome = guide.welcome.is_some();
+    let has_list = guide.checklist.is_some();
     view! {
         <PageShell width=PageWidth::Standard>
             <PageHeader title="Match Day" eyebrow=format!("Signed in as {username}") />
-            <EmptyState
-                title="Match Day needs a team"
-                level=HeadingLevel::H2
-                message="Match Day walks your team through the next scrim or match: the opponent brief, draft plans, the game plan, open action items and the review. Create a team or ask to join one on the roster page."
-                cta_label="Create or join a team"
-                cta_href="/team/roster"
-            />
+            {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=true on_change=on_change /> })}
+            {guide.checklist.clone().map(|items| view! {
+                <GettingStarted
+                    items=items
+                    forced=guide.forced
+                    emphasis=if has_welcome { PrepEmphasis::Quiet } else { PrepEmphasis::Primary }
+                    on_change=on_change
+                />
+            })}
+            {(!has_list).then(|| view! {
+                <EmptyState
+                    title="Match Day needs a team"
+                    level=HeadingLevel::H2
+                    message="Match Day walks your team through the next scrim or match: the opponent brief, draft plans, the game plan, open action items and the review. Create a team or ask to join one on the roster page."
+                    cta_label="Create or join a team"
+                    cta_href="/team/roster"
+                />
+            })}
             <section class="mt-12" aria-labelledby="home-yours">
                 <SectionHeader title="Your own pages" id="home-yours" />
                 <ul class="max-w-2xl">
@@ -452,7 +508,7 @@ fn NoTeamHome(username: String) -> impl IntoView {
 }
 
 #[component]
-fn MatchDayView(md: MatchDay, on_change: Callback<()>) -> impl IntoView {
+fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let editor_open = RwSignal::new(false);
     let steps = prep_steps(&md);
@@ -473,6 +529,7 @@ fn MatchDayView(md: MatchDay, on_change: Callback<()>) -> impl IntoView {
     let patch = md.patch.clone();
     let has_match = next.is_some();
     let team_name = md.team_name.clone();
+    let nudge = guide.nudge.clone();
 
     let set_read = Callback::new(move |read: bool| {
         let Some(id) = match_id.clone() else {
@@ -531,6 +588,12 @@ fn MatchDayView(md: MatchDay, on_change: Callback<()>) -> impl IntoView {
             <p class="-mt-3 mb-6 text-caption text-muted md:hidden" data-testid="phone-read-only">
                 "Read-only on the phone. Edit the match on a larger screen."
             </p>
+            {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=false on_change=on_change /> })}
+            // Match Day has its own primary action (the prep sequence's
+            // next step or "Add the next match"): the checklist stays quiet.
+            {guide.checklist.clone().map(|items| view! {
+                <GettingStarted items=items forced=guide.forced emphasis=PrepEmphasis::Quiet on_change=on_change />
+            })}
 
             {match next.clone() {
                 None => view! {
@@ -546,6 +609,7 @@ fn MatchDayView(md: MatchDay, on_change: Callback<()>) -> impl IntoView {
                             </div>
                         }
                     />
+                    {nudge.clone().map(|n| view! { <div class="mt-6"><NudgeLine nudge=n on_change=on_change /></div> })}
                     <div class="mt-10 grid gap-10 lg:grid-cols-3">
                         <OpenItems md=md.clone() />
                         <LastReview md=md.clone() />
@@ -561,6 +625,7 @@ fn MatchDayView(md: MatchDay, on_change: Callback<()>) -> impl IntoView {
                                 {m.notes.clone().map(|n| view! {
                                     <p class="mt-4 max-w-prose text-body text-secondary"><span class="eyebrow mr-2">"Notes"</span>{n}</p>
                                 })}
+                                {nudge.clone().map(|n| view! { <div class="mt-4"><NudgeLine nudge=n on_change=on_change /></div> })}
                             </section>
                             <Brief brief=md.brief.clone() viewer_read=viewer_read read_by=m.brief_read_by.len() members=md.member_count set_read=set_read />
                         </div>

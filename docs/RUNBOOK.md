@@ -167,7 +167,9 @@ docker compose logs -f --since 5m app           # watch "migrations applied" / e
 curl -fsS https://$COMPANION_DOMAIN/healthz
 ```
 
-Downtime is the restart: a few seconds to stop (the app drains requests for up to `SHUTDOWN_DRAIN_SECS`, 10, and closes the database within `SHUTDOWN_DB_SECS`, 5; `docker compose stop app` exits with code 0), then startup, during which Caddy shows the "restarting" page. Migrations run at startup, before the server listens; a failing migration stops startup and the container restarts in a loop (section 10).
+Downtime is the restart: a few seconds to stop (the app drains requests for up to `SHUTDOWN_DRAIN_SECS`, 10, and closes the database within `SHUTDOWN_DB_SECS`, which compose sets to 15; `docker compose stop app` exits with code 0), then startup, during which Caddy shows the "restarting" page. Migrations run at startup, before the server listens; a failing migration stops startup and the container restarts in a loop (section 10).
+
+Why 15 s for the database: the app releases SurrealKV only after the embedded engine has stopped its background tasks. Usually that takes well under a second, but after a long busy run it was seen to take more than the 5 s default (M8 and M9 testing), and the app then exits with code 1 and "database did not close within 5s". No data is lost in that case (every commit is synced and the next start replays the log), but the exit code looks like a failure. Compose therefore sets `SHUTDOWN_DB_SECS=15`; with the 10 s drain that is 25 s, inside the 30 s `stop_grace_period`. If a stop still logs "did not close", look at the line before it: "N database handle(s) still held at shutdown" means some of the app's own handles were never released (seen once in review, after the full browser suite: 9 held), and no waiting time fixes that; keep the logs for a fix. The data is safe in both cases.
 
 Read `CHANGELOG.md` for the release before updating. If it mentions a new migration, the pre-update backup is the only way back.
 
@@ -270,6 +272,17 @@ Announce it ("you will need to sign in again").
 **Rotate the Riot key** (production keys do not expire, but rotate after a leak, and development keys expire daily): regenerate it in the developer portal, put it into `RIOT_API_KEY`, `docker compose up -d app`. The old key stops working when Riot revokes it; in between both work. A rejected key shows "The Riot API rejected our key" in the app and 401/403 in the log.
 
 **Admins:** add or remove addresses in `ADMIN_EMAILS` and `docker compose up -d app`. Removal revokes admin at once for access checks.
+
+Or, without touching `.env`, promote an account that is already registered (owner decision: there is no email provider in Release 1). The command opens the database directly, so the app must be stopped (SurrealKV allows one process):
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps app /app/lol_team_companion promote someone@example.com
+docker compose run --rm --no-deps app /app/lol_team_companion promote --list
+docker compose start app
+```
+
+`promote --revoke someone@example.com` takes it back (an address still in `ADMIN_EMAILS` is promoted again at its next sign-in, so remove it there too). A promoted account is an admin from its next request; no sign-in needed. In development: `cargo run --features ssr --bin promote -- <email>` with the dev server stopped.
 
 **Bucket credentials and crypt passphrases:** rotate the access key in the provider console and in `deploy/backup.env`. Changing the crypt passphrases makes old backups unreadable with the new remote: keep the old passphrases until the last old backup has aged out (30 days), or start a new bucket path.
 

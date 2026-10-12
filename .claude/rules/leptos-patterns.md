@@ -96,7 +96,7 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 50. **Protected pages redirect to `/auth/login`** — All protected page components fetch `get_current_user()` on mount and redirect via `window.location().set_href()` if the user is `None`. The redirect is client-side only (`#[cfg(feature = "hydrate")]`).
 
-51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, redirects on the server (`leptos_axum::redirect("/")`, for a submit before hydration) and returns `/`, where the hydrated page hard-navigates. Sign-in does the same. Home is Match Day for team members and a start page otherwise; `user.mode` is stored but unused.
+51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, redirects on the server (`leptos_axum::redirect("/")`, for a submit before hydration) and returns `/`, where the hydrated page hard-navigates. Sign-in does the same. Home is Match Day for team members and a start page otherwise (there is no stored mode since migration 12).
 
 52. **Auth-aware nav** — The nav's user cluster (join requests, account menu, phone "Menu" button) derives from the `user` Resource; hub links show only when signed in. One table, `PAGES` in `nav.rs` (+ `MENU_GROUPS` for the phone menu), drives the hubs, the sub-nav, the phone menu and the command bar.
 

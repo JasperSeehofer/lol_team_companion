@@ -57,6 +57,13 @@ cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec
 # Idempotent; prints every login and a 25-use invite code. --dry-run shows the plan.
 cargo run --features ssr --bin seed
 
+# Make an existing account an admin, or take it back (STOP THE SERVER FIRST).
+# Promoted accounts are admins without an ADMIN_EMAILS listing. The server
+# binary runs the same command: `lol_team_companion promote <email>`.
+cargo run --features ssr --bin promote -- someone@example.com
+cargo run --features ssr --bin promote -- --revoke someone@example.com
+cargo run --features ssr --bin promote -- --list
+
 # Register + sign in over plain HTTP against a running server (CI runs it on the image)
 ./scripts/smoke_signin.sh http://127.0.0.1:3020
 
@@ -103,7 +110,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes and 8 distinct characters (`openssl rand -hex 32`). **Required outside dev**; in dev a random key is used per run | none |
 | `CLOSED_BETA` | `false` disables the invite gate. **Honoured only in dev**; production always requires an invite | gate on |
 | `COOKIE_SECURE` | `Secure` flag on the session cookie | `true` outside dev, `false` in dev |
-| `ADMIN_EMAILS` | Comma-separated emails that are admins (`user.is_admin`). Listed addresses are promoted when they sign in or register; **removing an address revokes admin** (immediately for access checks, and the stored flag is cleared at that user's next sign-in). There is no email verification, so register the admin account first (with the bootstrap invite), then list it | empty |
+| `ADMIN_EMAILS` | Comma-separated emails that are admins (`user.is_admin`). Listed addresses are promoted when they sign in or register; **removing an address revokes admin** (immediately for access checks, and the stored flag is cleared at that user's next sign-in). There is no email verification, so register the admin account first (with the bootstrap invite), then list it. The `promote` command (Commands) makes an account admin without a listing, until `--revoke` | empty |
 | `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs); uses 1 to 1,000,000 | unset / `1` |
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities, 1 to 1,000 (e2e uses `100`; warned about outside dev) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy; `compose.yaml` forces it on) | `false` |
@@ -125,7 +132,7 @@ SurrealKV takes an exclusive lock on `./data`. Only one process can open it: nev
 
 ### Seed tool
 
-`cargo run --features ssr --bin seed` (data dir from `SURREAL_DATA_DIR`, default `./data`) runs the migrations, removes what an earlier run created (accounts `seed-*@example.com`, the teams they created and everything those teams own, invites noted `seed`; nothing else) and creates it again, so it is safe to repeat. It creates two teams of five ("Northgate Academy" led by `seed-alpha-top@example.com`, "Riverside Rooks" led by `seed-beta-top@example.com`; members `seed-{alpha,beta}-{top,jg,mid,bot,sup}`), all with password `seedpass123`, starting roles, two drafts with linked game plans, three reviews with action items, a team note, champion pools and notes, a scouting profile of the other team and a scrim against it tomorrow at 18:00 UTC (so Match Day has a next match), two bug reports (one planned and on the bug board, one new) and votes on three seeded What next ideas (no ledger figures, ever), plus a 25-use invite code. Seeded proposals, surveys and money texts come from migration 11, stay unpublished or unapproved, and the seed tool never touches them. It prints every login and the code. Players are fictional and are not looked up on Riot unless you pass `--link-riot`. To try it on a copy first: `SURREAL_DATA_DIR=/tmp/data-copy cargo run --features ssr --bin seed`.
+`cargo run --features ssr --bin seed` (data dir from `SURREAL_DATA_DIR`, default `./data`) runs the migrations, removes what an earlier run created (accounts `seed-*@example.com`, the teams they created and everything those teams own, invites noted `seed`; nothing else) and creates it again, so it is safe to repeat. It creates two teams of five ("Northgate Academy" led by `seed-alpha-top@example.com`, "Riverside Rooks" led by `seed-beta-top@example.com`; members `seed-{alpha,beta}-{top,jg,mid,bot,sup}`), all with password `seedpass123`, starting roles, two drafts with linked game plans, three reviews with action items, a team note, champion pools and notes, a scouting profile of the other team and a scrim against it tomorrow at 18:00 UTC (so Match Day has a next match), two bug reports (one planned and on the bug board, one new) and votes on three seeded What next ideas (no ledger figures, ever), plus a 25-use invite code. For the guidance demo (M9) `seed-beta-sup` is a returning user: the account is 40 days old and everything it wrote 30 days old, so Match Day shows "Picking up again?" and it sees the new-feature introductions; the other seeded accounts are new and get the welcome. Seeded proposals, surveys and money texts come from migration 11, stay unpublished or unapproved, and the seed tool never touches them. It prints every login and the code. Players are fictional and are not looked up on Riot unless you pass `--link-riot`. To try it on a copy first: `SURREAL_DATA_DIR=/tmp/data-copy cargo run --features ssr --bin seed`.
 
 ## Architecture in one paragraph
 
@@ -139,6 +146,7 @@ src/
 ├── lib.rs               # Crate root, hydrate() entry
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
 ├── bin/seed.rs          # Demo data seeder (server must be stopped)
+├── bin/promote.rs       # Admin promote command (server must be stopped; logic in server/promote.rs)
 ├── server/              # SSR only
 │   ├── db.rs            # All SurrealDB queries (Db* structs -> models), tenant-scoped
 │   ├── migrations.rs    # Versioned migrations run after schema.surql (schema_migration table)
@@ -153,12 +161,15 @@ src/
 │   ├── riot.rs          # Shared RiotClient (riven): region routing, global request budget
 │   ├── data_dragon.rs   # Live patch version + champion cache (DB copy, 6 h refresh, patch changes)
 │   ├── sand_table.rs    # Riot Match-V5 timeline importer (replay frames and events)
+│   ├── guidance.rs      # M9: user_guidance rows, the switch, checklist/hint/nudge facts, Match Day guide
+│   ├── promote.rs       # M9: the promote command (also `lol_team_companion promote <email>`)
 │   ├── community/       # M7: changelog parser, survey delivery rules, seed content, store.rs (queries)
 │   ├── graph/           # Draft Graph: traits.rs (defaults file champion_traits.csv, startup sync,
 │   │                    # in-memory table), rules.rs (trait rules), evidence.rs (own games), fit.rs (ranking)
 │   └── bug_report_export.rs # Exports open bug reports to markdown on start
 ├── models/              # Shared types (SSR + WASM); graph.rs = trait vocabulary, DraftState, GraphResult;
-│                        # match_day.rs (next match, prep steps), share.rs (share links, player cards)
+│                        # match_day.rs (next match, prep steps), share.rs (share links, player cards),
+│                        # guidance.rs (M9: checklist, welcome, hint, nudge and introduction rules, pure)
 ├── pages/               # Route components (+ their #[server] fns)
 │   ├── auth/{login,register}.rs, team/{dashboard,roster}.rs
 │   ├── admin/{invites,traits}.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
@@ -172,7 +183,9 @@ src/
                          # local_time (LocalTime: times in the viewer's zone after hydration), icon,
                          # draft_board (slot metadata only; the board is ui::DraftBoard),
                          # champion_picker/autocomplete, tree_graph, graph_canvas (Draft Graph canvas)
-                         # + graph_layout (its force simulation, pure Rust), bug_report_widget
+                         # + graph_layout (its force simulation, pure Rust), bug_report_widget,
+                         # guidance (M9: GuidanceProvider, FirstUseHint, IntroNote, NewMark, CommandBarHint,
+                         # Match Day's WelcomePanel/GettingStarted/NudgeLine, the profile's GuidanceSettings)
 schema.surql             # Baseline DB schema (idempotent), applied on every start; migrations follow
 input.css                # Tailwind entry + Survey tokens (@theme, OKLCH) + @font-face
 public/fonts/            # Self-hosted woff2 (Familjen Grotesk, Public Sans, JetBrains Mono, Source Serif 4) + licences
@@ -189,7 +202,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 
 | Path | Component | Auth |
 |------|-----------|------|
-| `/` | HomePage: the landing page signed out, Match Day for team members, a start page (create or join a team) otherwise | No |
+| `/` | HomePage: the landing page signed out, Match Day for team members, a start page (create or join a team) otherwise; both carry the guidance (welcome, getting-started checklist, one nudge). `/?guide=1` ("Guide me") shows the checklist even when hidden or complete | No |
 | `/auth/login` | LoginPage | No |
 | `/auth/register?invite=CODE` | RegisterPage (without `invite` it redirects to `/closed-beta`) | No |
 | `/closed-beta` | ClosedBetaPage | No |
@@ -225,7 +238,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 | `/solo`, `/analytics`, `/team-builder` | Axum redirects (307) to `/me`, `/stats`, `/draft` (the solo dashboard was folded into the personal layer; the parked pages were deleted) | No |
 | anything else | NotFound (HTTP 404) | No |
 
-Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Sign-in and registration redirect on the server (so a submit before hydration still lands) and, once hydrated, hard-navigate to `/` (Home: Match Day with a team, a start page without). `user.mode` is still stored but nothing reads it. Redirect old addresses in axum (`main.rs`), never with a server-rendered Leptos `<Redirect>`: its 302 leaked into later static-file responses on the same worker thread.
+Pages redirect signed-out visitors to `/auth/login` client-side; the real enforcement is in every server function (see "Security model"). Sign-in and registration redirect on the server (so a submit before hydration still lands) and, once hydrated, hard-navigate to `/` (Home: Match Day with a team, a start page without). The old `user.mode` field was dropped by migration 12. Redirect old addresses in axum (`main.rs`), never with a server-rendered Leptos `<Redirect>`: its 302 leaked into later static-file responses on the same worker thread.
 
 ## Security model (M1, extended through M8)
 
@@ -240,7 +253,8 @@ Pages redirect signed-out visitors to `/auth/login` client-side; the real enforc
 - **Users belong to at most one team**; `create_team` and join requests enforce it.
 - **Community loop (M7):** the community tables are global, not team-scoped; user-scoped rows (`survey_prompt`, `proposal_vote`, a reporter's `bug_report` rows) filter by `user`. No user-written text is shown to another user (the board shows admin-written titles and notes only). Nothing unapproved reaches users: surveys need an approved wording hash, money texts an approved `site_text`, proposals `published = true`. Submissions and votes are rate-limited per user (`authz::rate_limit_user`, `Bucket::Feedback` / `Community`, and `SurveyCheck` for the band's check on every route change, which answers "no question" when over the limit); public reads per IP (`PublicRead`). Migrations 10 (`bug_report_statuses_v2`) and 11 (`community_seed_content`: 17 unpublished proposals, 4 unapproved surveys, 5 unapproved money texts) belong to M7. Admin writes store `*_by`/`*_at` and log the admin id. Details in `docs/ARCHITECTURE.md` ("Community loop").
 - **Account export and deletion (M8):** both act only on the session's user (`server::account`). Deletion needs the username typed again and the password, takes `invariant_lock`, refuses a leader whose team has other members, and in one transaction deletes personal rows and moves every other `record<user>` link to the tombstone `user:former_member`; then the user's sessions are deleted. **A new `record<user>` field must be added to `account::USER_LINKS` with its treatment** (a unit test fails otherwise) and to the export if it is about the user. A `THROW` only aborts the statements after it inside `BEGIN ... COMMIT` (outside a transaction the next statement still runs).
-- Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/community.rs` (cross-user cases), `tests/integration/account.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
+- **Guidance (M9):** `user_guidance` rows (user, key, seen_at, muted_at; unique on user and key, row id `<user key>~<key>`) and `user.guidance_enabled` are read and written only for the session's user; team facts come from the user's own membership. The browser may write only known keys (`models::guidance::is_known_key`); writes take `Bucket::Guidance`, the per-route check `Bucket::GuidanceCheck`. Migrations 12 (`drop_user_mode`) and 13 (`user_guidance`) belong to M9. Patterns and mute keys: `docs/DESIGN.md` 6.11; code: `docs/ARCHITECTURE.md` "Guidance".
+- Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/guidance.rs`, `tests/integration/community.rs` (cross-user cases), `tests/integration/account.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
 
 ## Critical patterns and gotchas
 
@@ -262,7 +276,9 @@ Toolchain and external APIs:
 
 ## Adding things
 
-Changelog: every user-visible change gets an entry; every milestone heading carries its date, `### Milestone M7: Title (YYYY-MM-DD)` (a unit test checks it; the earlier ones were dated from git). The slug of the heading without its date is the stable anchor bug fixes and shipped ideas link to, so never rename a heading that something links to. `/changelog` renders the file.
+Changelog: every user-visible change gets an entry; every milestone heading carries its date, `### Milestone M7: Title (YYYY-MM-DD)` (a unit test checks it; the earlier ones were dated from git). The slug of the heading without its date is the stable anchor bug fixes and shipped ideas link to, so never rename a heading that something links to. `/changelog` renders the file. A line `Introduce: /route | Feature | How to try it.` in an entry (not a bullet) introduces a new feature where it is used: accounts created before the entry's date see a one-time "New" note on that route and a "New" mark on it in the navigation, for 180 days; a unit test checks every such line parses.
+
+Guidance (M9, `docs/DESIGN.md` 6.11): a new feature that needs explaining gets a `FirstUseHint` (a `Hint` variant with its key, routes and "used" rule in `models::guidance`) placed where the feature is on screen, never a modal or overlay; one hint per page; nothing on admin pages; everything muteable.
 
 New page: `src/pages/my_page.rs` with `#[component] pub fn MyPage()` and its `#[server]` fns; `pub mod` in `src/pages/mod.rs`; `<Route>` in `src/app.rs`; nav entry in `src/components/nav.rs`: add it to `PAGES` (path, label, hub, keywords) and to `MENU_GROUPS` (unit tests check every page has a hub, appears in the phone menu once and in the command bar); smoke entry in `e2e/tests/pages.spec.ts` (`AUTHED_PAGES`) or `smoke.spec.ts` (`PUBLIC_PAGES`); verify in a browser.
 
@@ -283,7 +299,7 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates`, `bug-triage`, `legal` and `account` specs against a debug build; the `image` job builds the container and runs `smoke`, `hydration-no-panic`, `auth`, `legal` and `account` against the release build inside it; the `scripts` job runs ShellCheck and the backup/restore harness. `legal.spec.ts` and `account.spec.ts` write screenshots to `$M8_SHOTS_DIR` when set. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates`, `bug-triage`, `legal` and `account` specs against a debug build; the `image` job builds the container and runs `smoke`, `hydration-no-panic`, `auth`, `legal` and `account` against the release build inside it; the `scripts` job runs ShellCheck and the backup/restore harness. `legal.spec.ts` and `account.spec.ts` write screenshots to `$M8_SHOTS_DIR` when set. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set. `guidance.spec.ts` (M9) covers the welcome and Skip, the checklist ticking, a hint shown once, the profile switch, no guidance on admin pages and, when the seed data is present (seed before starting the server; skipped otherwise), the returning-user line and a "New" mark that clears; screenshots to `$M9_SHOTS_DIR` when set. Fresh e2e accounts see the welcome and checklist on Match Day and hints on feature pages; specs that count callouts or `role="status"` elements must allow for them.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container
