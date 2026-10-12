@@ -2112,7 +2112,9 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
 }
 
 /// [`get_team_match_stats`], newest first, at most `limit` rows (the team
-/// page needs five distinct games: at most five members per game).
+/// page needs five distinct games; one game holds at most ten members'
+/// rows, e.g. an in-house game of a roster with substitutes, so it asks
+/// for 50).
 pub async fn get_team_match_stats_limit(
     db: &Surreal<Db>,
     team_id: &str,

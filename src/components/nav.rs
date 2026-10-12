@@ -389,16 +389,17 @@ fn is_current(path: &str, current: &str) -> bool {
     }
 }
 
+/// Public share pages (`/s/{token}`), where guests see a bare header.
+pub fn is_share_path(path: &str) -> bool {
+    path.starts_with("/s/")
+}
+
 /// The phone menu: every page grouped by when you need it, with counts.
 ///
 /// A11y: a modal sheet (`Dialog`, focus trapped, Escape closes, focus
 /// returns to the Menu button); a `nav` named "Phone menu" with one list
 /// per group under a visible heading; the current page has
 /// `aria-current="page"`. Counts are plain text after the page name.
-/// Public share pages (`/s/{token}`), where guests see a bare header.
-pub fn is_share_path(path: &str) -> bool {
-    path.starts_with("/s/")
-}
 
 #[component]
 fn PhoneMenu(
@@ -774,12 +775,15 @@ pub fn Nav() -> impl IntoView {
                                     }
                                     // A guest on a share page gets the brand only (M5
                                     // review): the link is for reading, not an invitation.
-                                    _ if is_share_path(&location.pathname.get_untracked()) => ().into_any(),
+                                    // Tracked here (not in the match) so leaving the share
+                                    // page brings the buttons back without remounting the rest.
                                     _ => view! {
-                                        <div class="flex items-center gap-2">
-                                            <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
-                                            <Button href="/closed-beta" variant=ButtonVariant::Secondary>"Request access"</Button>
-                                        </div>
+                                        <Show when=move || !is_share_path(&location.pathname.get())>
+                                            <div class="flex items-center gap-2">
+                                                <Button href="/auth/login" variant=ButtonVariant::Quiet>"Sign in"</Button>
+                                                <Button href="/closed-beta" variant=ButtonVariant::Secondary>"Request access"</Button>
+                                            </div>
+                                        </Show>
                                     }.into_any(),
                                 }
                             })}

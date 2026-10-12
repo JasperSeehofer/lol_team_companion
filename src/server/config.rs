@@ -389,7 +389,7 @@ impl AppConfig {
 
         // --- security -------------------------------------------------------
         let closed_beta_var = r.flag("CLOSED_BETA");
-        let closed_beta = !is_dev || closed_beta_var != Some(false);
+        let closed_beta = closed_beta_enabled(is_dev, r.raw("CLOSED_BETA").as_deref());
         if !is_dev && closed_beta_var == Some(false) {
             r.warnings
                 .push("CLOSED_BETA=false is ignored outside dev: the invite gate stays on".into());

@@ -400,8 +400,6 @@ pub fn HomePage() -> impl IntoView {
     }
 }
 
-/// Signed in without a team: where Match Day comes from, and the personal
-/// pages that work already.
 /// After "Delete my account" the profile page sends the browser to
 /// `/?account=deleted`; say plainly that it happened.
 #[component]
@@ -419,6 +417,8 @@ fn AccountDeletedNote() -> impl IntoView {
     }
 }
 
+/// Signed in without a team: where Match Day comes from, and the personal
+/// pages that work already.
 #[component]
 fn NoTeamHome(username: String) -> impl IntoView {
     view! {
