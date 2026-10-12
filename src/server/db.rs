@@ -263,11 +263,13 @@ pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     Ok(Arc::new(db))
 }
 
-/// Bring a database up to date: apply the `schema.surql` baseline, then every
+/// Bring a database up to date: refuse a database migrated by a newer build
+/// (before writing anything), apply the `schema.surql` baseline, then every
 /// pending migration (`server::migrations`). Fails when a migration fails, so
 /// the server refuses to start on a half-migrated database. Tests call this on
 /// their in-memory databases too.
 pub async fn prepare(db: &Surreal<Db>) -> DbResult<()> {
+    crate::server::migrations::check_known(db).await?;
     apply_schema(db).await?;
     let applied = crate::server::migrations::run(db).await?;
     if !applied.is_empty() {
