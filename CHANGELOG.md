@@ -4,7 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`. Dates before M7 were filled in from the git history (the commit that first wrote each entry). The app shows this file on /changelog.
 
+A line `Introduce: /route | Feature | How to try it.` inside an entry introduces a new feature where it is used: people who used the app before the entry's date see a one-time "New" note on that page and a "New" mark on it in the navigation (M9). It is not listed as an item.
+
 ## [Unreleased]
+
+### Milestone M9: Welcome and guidance (2026-10-12)
+
+Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudges off here, or show the checklist and hints again.
+
+#### Added
+- Guidance placeholder.
 
 ### Milestone M8: Ship-ready (2026-10-12)
 
@@ -56,6 +65,8 @@ Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`
 - Every changelog entry now has a date.
 
 ### Milestone M5: Remaining pages, navigation, mobile (2026-10-12)
+
+Introduce: /game-plan | Share links | Open a saved plan and choose Share: the read-only link opens without signing in and expires when you say.
 
 #### Added
 - Match Day: signed in with a team, Home walks the team through the next scrim or match. Set it with date and time (in your own time zone), opponent, format and notes; the page then shows a preparation sequence built from your own records (read the opponent brief, draft plans against them, a game plan from those drafts, open action items, and the review after the game), with the one step to do now and a link to where it is done. Beside it: the opponent brief with when the dossier was last surveyed and who on the team has read it, open action items, the last review's lesson, form over your last five reviewed games, and the current patch. Without a match it says how to start; on a phone it is a read-only summary in the same order.
@@ -112,6 +123,8 @@ Every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`
 - The ranked list says when a candidate's traits are low confidence, not only the Why panel.
 
 ### Milestone M4: Draft Graph, stage A (the model) (2026-10-11)
+
+Introduce: /draft | Draft Graph | Switch the side panel from Picker to Draft Graph to see how each candidate fits your draft, and why.
 
 #### Added
 - The draft page has a Draft Graph view beside the board (switch "Picker | Draft Graph"). For the pick being decided it ranks the candidates by fit (0 to 100, from a neutral 50) and says why: synergy with your locked picks, counters against theirs, how the pick fits the draft's composition and what the comp still lacks, and whether its power curve matches the comp's plan, in that order of weight, plus the player's champion pool. Every point has a reason a coach can read and argue with; there is no win probability.

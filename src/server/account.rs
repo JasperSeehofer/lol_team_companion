@@ -11,7 +11,8 @@
 //! **Deletion** ([`delete_account`]), one transaction:
 //! - Personal rows are deleted: the user, the membership, join requests,
 //!   pool, champion notes, learnings, goals, ranked snapshots, synced games,
-//!   votes, survey prompts and answers, share links to the user's player card.
+//!   votes, survey prompts and answers, guidance rows (what they saw or
+//!   muted), share links to the user's player card.
 //! - Records that belong to the team (drafts, trees, series, plans, reviews,
 //!   boards, notes, pair notes, the next match, share links) and the global
 //!   records admins wrote (surveys, proposals, ledger months, site texts,
@@ -98,6 +99,7 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
     ("survey", "created_by", Treatment::Tombstone),
     ("survey", "updated_by", Treatment::Tombstone),
     ("survey_prompt", "user", Treatment::Delete),
+    ("user_guidance", "user", Treatment::Delete),
     ("proposal", "published_by", Treatment::Tombstone),
     ("proposal", "created_by", Treatment::Tombstone),
     ("proposal", "updated_by", Treatment::Tombstone),
@@ -172,6 +174,7 @@ const DELETE_USER: &str = "\
     DELETE personal_learning WHERE user = $u; \
     DELETE personal_goal WHERE user = $u; \
     DELETE survey_prompt WHERE user = $u; \
+    DELETE user_guidance WHERE user = $u; \
     DELETE proposal_vote WHERE user = $u; \
     DELETE share_link WHERE target = $u; \
     UPDATE match SET synced_by = $tomb WHERE synced_by = $u; \
@@ -346,7 +349,7 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
     (
         "account",
         "SELECT id, username, email, created_at, riot_summoner_name, riot_puuid, riot_region, \
-         last_solo_sync, is_admin, admin_promoted_at, survey_opt_out, share_card_hidden FROM ONLY $u",
+         last_solo_sync, is_admin, admin_promoted_at, guidance_enabled, survey_opt_out, share_card_hidden FROM ONLY $u",
     ),
     (
         "team_membership",
@@ -412,6 +415,10 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
         "survey_questions",
         "SELECT survey.question AS question, state, created_at, shown_at, closed_at, \
          answer_choice, answer_scale, answer_text FROM survey_prompt WHERE user = $u",
+    ),
+    (
+        "guidance",
+        "SELECT key, seen_at, muted_at FROM user_guidance WHERE user = $u",
     ),
     (
         "team_records_created",

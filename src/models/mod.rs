@@ -6,6 +6,7 @@ pub mod ddragon;
 pub mod draft;
 pub mod game_plan;
 pub mod graph;
+pub mod guidance;
 pub mod invite;
 pub mod match_data;
 pub mod match_day;

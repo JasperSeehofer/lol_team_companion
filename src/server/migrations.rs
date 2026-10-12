@@ -134,6 +134,17 @@ pub const MIGRATIONS: &[Migration] = &[
         // `user.mode` since (owner decision: drop it).
         step: Step::Surql("REMOVE FIELD IF EXISTS mode ON user; UPDATE user UNSET mode;"),
     },
+    Migration {
+        version: 13,
+        name: "user_guidance",
+        // M9: guidance is on for everyone until they turn it off. The
+        // `user_guidance` table and its unique index are new, so they live
+        // in the baseline.
+        step: Step::Surql(
+            "UPDATE user SET guidance_enabled = true WHERE guidance_enabled = NONE; \
+             DEFINE FIELD OVERWRITE guidance_enabled ON user TYPE bool DEFAULT true;",
+        ),
+    },
 ];
 
 const BUG_REPORT_STATUSES_V2: &str = "\

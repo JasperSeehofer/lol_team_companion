@@ -7,10 +7,19 @@
 //! continuation lines. Inline markup kept: `code` and **bold**; links become
 //! their text, plus the target when it is a relative path. No HTML passes
 //! through: everything is text that Leptos escapes.
+//!
+//! M9: a line `Introduce: /route | Feature | How to try it.` anywhere in an
+//! entry (not a bullet) marks a new-feature introduction: people who used
+//! the app before the entry's date see a one-time "New" callout on that
+//! route and a "New" mark on it in the navigation (`models::guidance`).
+//! The line is not shown on /changelog as an item.
 
 use std::sync::OnceLock;
 
-use crate::models::community::{ChangelogChoice, ChangelogEntry, ChangelogSection, Span, SpanKind};
+use crate::models::community::{
+    ChangelogChoice, ChangelogEntry, ChangelogIntro, ChangelogSection, Span, SpanKind,
+};
+use crate::models::guidance::{intro_key, Intro};
 
 const SOURCE: &str = include_str!("../../../CHANGELOG.md");
 
@@ -39,6 +48,50 @@ pub fn choices() -> Vec<ChangelogChoice> {
         .iter()
         .map(|e| (e.slug.clone(), e.title.clone()))
         .collect()
+}
+
+/// Every introduction of the running build (dated entries only).
+pub fn intros() -> &'static [Intro] {
+    static INTROS: OnceLock<Vec<Intro>> = OnceLock::new();
+    INTROS.get_or_init(|| intros_of(entries()))
+}
+
+/// The introductions in `entries`, as guidance sees them.
+pub fn intros_of(entries: &[ChangelogEntry]) -> Vec<Intro> {
+    entries
+        .iter()
+        .filter_map(|e| e.date.as_ref().map(|d| (e, d)))
+        .flat_map(|(e, d)| {
+            e.intros.iter().map(move |i| Intro {
+                key: intro_key(&e.slug, &i.route),
+                route: i.route.clone(),
+                feature: i.feature.clone(),
+                text: i.text.clone(),
+                slug: e.slug.clone(),
+                date: d.clone(),
+            })
+        })
+        .collect()
+}
+
+/// `Introduce: /route | Feature | How to try it.` (route: a site path
+/// without spaces, query or fragment; all three parts non-empty).
+pub fn parse_intro(line: &str) -> Option<ChangelogIntro> {
+    let rest = line.strip_prefix("Introduce:")?;
+    let parts: Vec<&str> = rest.split('|').map(str::trim).collect();
+    let [route, feature, text] = parts.as_slice() else {
+        return None;
+    };
+    let route_ok = route.starts_with('/')
+        && !route.starts_with("//")
+        && route
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_'));
+    (route_ok && !feature.is_empty() && !text.is_empty()).then(|| ChangelogIntro {
+        route: route.to_string(),
+        feature: feature.to_string(),
+        text: text.to_string(),
+    })
 }
 
 /// "Milestone M7: Community and transparency loop" ->
@@ -180,6 +233,7 @@ pub fn parse(source: &str) -> Vec<ChangelogEntry> {
                 title,
                 date,
                 sections: Vec::new(),
+                intros: Vec::new(),
             });
         } else if let Some(h) = line.strip_prefix("#### ") {
             flush(&mut entries, &mut item);
@@ -193,9 +247,15 @@ pub fn parse(source: &str) -> Vec<ChangelogEntry> {
                     title,
                     date,
                     sections: Vec::new(),
+                    intros: Vec::new(),
                 });
             } else {
                 open_section(&mut entries, h);
+            }
+        } else if line.starts_with("Introduce:") {
+            flush(&mut entries, &mut item);
+            if let (Some(intro), Some(e)) = (parse_intro(line), entries.last_mut()) {
+                e.intros.push(intro);
             }
         } else if let Some(text) = line.strip_prefix("- ") {
             flush(&mut entries, &mut item);
@@ -257,6 +317,26 @@ mod tests {
     }
 
     #[test]
+    fn introduce_lines_mark_introductions() {
+        let src = "## [Unreleased]\n\n### Milestone M9: Guidance (2026-10-12)\n\nIntroduce: /profile | Guidance | Turn hints off or show them again.\n\n#### Added\n- A thing.\nIntroduce: /draft | Draft Graph | Open it.\n\n### Milestone M8: Ship (2026-10-11)\n\n#### Added\n- Other.\nIntroduce: no-slash | X | Y\nIntroduce: /a b | X | Y\nIntroduce: /ok | | Y\n";
+        let e = parse(src);
+        assert_eq!(e[0].intros.len(), 2);
+        assert_eq!(e[0].intros[0].route, "/profile");
+        assert_eq!(e[0].intros[0].feature, "Guidance");
+        assert_eq!(e[0].intros[0].text, "Turn hints off or show them again.");
+        // The line is not an item, and it ends the bullet before it.
+        assert_eq!(e[0].sections[0].items.len(), 1);
+        assert_eq!(e[0].sections[0].items[0][0].text, "A thing.");
+        // Malformed lines are dropped.
+        assert!(e[1].intros.is_empty());
+        let i = intros_of(&e);
+        assert_eq!(i.len(), 2);
+        assert_eq!(i[0].key, "intro:milestone-m9-guidance:/profile");
+        assert_eq!(i[0].date, "2026-10-12");
+        assert_eq!(i[1].slug, "milestone-m9-guidance");
+    }
+
+    #[test]
     fn slugs_and_dates() {
         assert_eq!(
             slugify("Milestone M7: Community and transparency loop"),
@@ -296,5 +376,20 @@ mod tests {
             "milestone-m5-remaining-pages-navigation-mobile"
         ));
         assert!(!entry_exists("nope"));
+        // Every Introduce line in the file parses (a typo would silently
+        // drop an introduction otherwise).
+        let lines = SOURCE
+            .lines()
+            .filter(|l| l.starts_with("Introduce:"))
+            .count();
+        assert_eq!(intros().len(), lines);
+        for i in intros() {
+            assert!(entry_exists(&i.slug));
+        }
+        // The backfilled introductions (M9 brief).
+        assert!(intros()
+            .iter()
+            .any(|i| i.route == "/draft" && i.feature == "Draft Graph"));
+        assert!(intros().iter().any(|i| i.feature == "Share links"));
     }
 }

@@ -84,6 +84,7 @@ async fn seed_rows(db: &Surreal<Db>, user: &str, leader: &str, team: &str, tag: 
         CREATE survey_prompt SET user = $u, survey = type::record('survey', $tag), state = 'answered', answer_scale = 4, answer_text = 'answer ' + $tag; \
         CREATE type::record('proposal', $tag) SET title = 'Idea ' + $tag, published_by = $u, created_by = $u, updated_by = $u; \
         CREATE proposal_vote SET proposal = type::record('proposal', $tag), user = $u; \
+        CREATE user_guidance SET user = $u, key = 'hint.draft_keys', muted_at = time::now(); \
         CREATE ledger_month SET month = IF $tag = 'a' { '2026-08' } ELSE { '2026-09' }, updated_by = $u; \
         CREATE site_text SET slug = 'account-test-' + $tag, body = 'b', approved_by = $u, updated_by = $u; \
         CREATE join_request SET team = $t, user = $u, status = 'accepted'; \

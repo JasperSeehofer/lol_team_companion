@@ -738,3 +738,25 @@ DEFINE INDEX IF NOT EXISTS proposal_vote_user ON proposal_vote FIELDS user;
 DEFINE INDEX IF NOT EXISTS ledger_month_unique ON ledger_month FIELDS month UNIQUE;
 DEFINE INDEX IF NOT EXISTS ledger_month_published ON ledger_month FIELDS published, month;
 DEFINE INDEX IF NOT EXISTS site_text_slug_unique ON site_text FIELDS slug UNIQUE;
+
+-- ===========================================================================
+-- Guidance (M9): the welcome, the getting-started checklist, first-use
+-- hints, nudges and new-feature introductions. One row per user and key
+-- (`welcome`, `checklist`, `hint.*`, `nudge.*`, `intro:<slug>:<route>`):
+-- seen_at when the user saw or used it, muted_at when they turned it off.
+-- The record id is [user key, key], so a write is an UPSERT that cannot
+-- race; the unique index states the rule as well. Personal data: deleted
+-- with the account and part of the export.
+-- ===========================================================================
+DEFINE TABLE IF NOT EXISTS user_guidance SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON user_guidance TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS key ON user_guidance TYPE string
+  ASSERT string::len($value) > 0 AND string::len($value) <= 160;
+DEFINE FIELD IF NOT EXISTS seen_at ON user_guidance TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS muted_at ON user_guidance TYPE option<datetime>;
+DEFINE INDEX IF NOT EXISTS user_guidance_unique ON user_guidance FIELDS user, key UNIQUE;
+
+-- The one switch for all guidance (profile, "Guidance"). option<bool> here
+-- (NONE = on); migration 13 (user_guidance) backfills true and tightens it
+-- to bool DEFAULT true.
+DEFINE FIELD IF NOT EXISTS guidance_enabled ON user TYPE option<bool>;
