@@ -13,6 +13,28 @@ pub struct Invite {
     pub expires_at: Option<String>,
     pub disabled: bool,
     pub note: Option<String>,
+    /// The team a team-bound code puts new accounts in (`None`: a plain
+    /// code that only opens registration).
+    #[serde(default)]
+    pub team_id: Option<String>,
+    #[serde(default)]
+    pub team_name: Option<String>,
+    /// The position a team-bound code gives the new member (`top` ...
+    /// `support`), if any. The member is not placed until the leader does.
+    #[serde(default)]
+    pub position: Option<String>,
+}
+
+/// What the register page shows about an invite link (see
+/// `pages::auth::register::preview_invite`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct InvitePreview {
+    /// The team a usable team-bound code leads to.
+    pub team_name: Option<String>,
+    /// The username of a signed-in visitor.
+    pub signed_in_as: Option<String>,
+    /// Whether that account already belongs to a team.
+    pub signed_in_has_team: bool,
 }
 
 impl Invite {
@@ -67,6 +89,9 @@ mod tests {
             expires_at: None,
             disabled: false,
             note: None,
+            team_id: None,
+            team_name: None,
+            position: None,
         }
     }
 

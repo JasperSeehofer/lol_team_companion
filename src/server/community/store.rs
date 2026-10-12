@@ -1426,7 +1426,8 @@ impl From<DbLedger> for LedgerMonth {
     }
 }
 
-const LEDGER_FIELDS: &str = "month, support_cents, payment_fees_cents, hosting_cents, domain_cents, ai_tokens_cents, \
+const LEDGER_FIELDS: &str =
+    "month, support_cents, payment_fees_cents, hosting_cents, domain_cents, ai_tokens_cents, \
      other_cents, other_label, note, published, published_at, revised_at, updated_at, \
      updated_by.username AS updated_by_name";
 

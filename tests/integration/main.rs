@@ -25,4 +25,5 @@ mod match_day;
 mod migrations;
 mod sand_table;
 mod security;
+mod team_invites;
 mod transactions;

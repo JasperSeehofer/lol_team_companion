@@ -504,6 +504,9 @@ struct DbInvite {
     expires_at: Option<Datetime>,
     disabled: bool,
     note: Option<String>,
+    team: Option<RecordId>,
+    team_name: Option<String>,
+    position: Option<String>,
 }
 
 impl From<DbInvite> for crate::models::invite::Invite {
@@ -518,8 +521,24 @@ impl From<DbInvite> for crate::models::invite::Invite {
             expires_at: opt_dt(i.expires_at),
             disabled: i.disabled,
             note: i.note,
+            team_id: i.team.map(|t| t.to_sql()),
+            team_name: i.team_name,
+            position: i.position,
         }
     }
+}
+
+/// The columns of an invite as `DbInvite` reads them.
+const INVITE_FIELDS: &str = "id, code, created_by.username AS created_by_name, created_at, \
+     max_uses, uses, expires_at, disabled, note, team, team.name AS team_name, position";
+
+/// What one use of an invite code grants: a plain code only lets the
+/// account in; a team-bound code also puts it in that team (as a member not
+/// placed yet, with the position the code names, if any).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InviteGrant {
+    pub team_id: Option<String>,
+    pub position: Option<String>,
 }
 
 /// A random invite code such as `K7QM-2XWD-9HPA` (60 bits of entropy, no
@@ -555,6 +574,61 @@ pub async fn create_invite(
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
     note: Option<String>,
 ) -> DbResult<String> {
+    insert_invite(db, created_by, code, max_uses, expires_at, note, None, None).await
+}
+
+/// Create an invite bound to a team: whoever registers with it joins
+/// `team_id` (a member not placed yet, with `position` if given). The team
+/// must exist. Admins may bind a code to any team; a leader's server
+/// function passes the leader's own team, never one from the client.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_team_invite(
+    db: &Surreal<Db>,
+    created_by: &str,
+    team_id: &str,
+    code: String,
+    max_uses: i64,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    position: Option<String>,
+    note: Option<String>,
+) -> DbResult<String> {
+    if let Some(p) = position.as_deref() {
+        if !["top", "jungle", "mid", "bot", "support"].contains(&p) {
+            return Err(DbError::Invalid("Unknown position.".into()));
+        }
+    }
+    let mut r = db
+        .query("SELECT id FROM type::record('team', $team_key)")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    insert_invite(
+        db,
+        Some(created_by),
+        code,
+        max_uses,
+        expires_at,
+        note,
+        Some(team_id),
+        position,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_invite(
+    db: &Surreal<Db>,
+    created_by: Option<&str>,
+    code: String,
+    max_uses: i64,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    note: Option<String>,
+    team_id: Option<&str>,
+    position: Option<String>,
+) -> DbResult<String> {
     if max_uses < 1 {
         return Err(DbError::Invalid("Max uses must be at least 1.".into()));
     }
@@ -567,8 +641,12 @@ pub async fn create_invite(
                 created_by = IF $created_by = NONE { NONE } ELSE { type::record('user', $created_by) }, \
                 max_uses = $max_uses, uses = 0, \
                 expires_at = IF $expires_at = NONE { NONE } ELSE { <datetime>$expires_at }, \
-                disabled = false, note = $note")
+                disabled = false, note = $note, \
+                team = IF $team = NONE { NONE } ELSE { type::record('team', $team) }, \
+                position = $position")
         .bind(("code", code))
+        .bind(("team", team_id.map(|t| record_key(t, "team"))))
+        .bind(("position", position))
         .bind(("created_by", created_by.map(|u| record_key(u, "user"))))
         .bind(("max_uses", max_uses))
         .bind(("expires_at", expires_at.map(|t| t.to_rfc3339())))
@@ -605,14 +683,46 @@ pub async fn ensure_invite(db: &Surreal<Db>, code: &str, max_uses: i64) -> DbRes
 
 pub async fn list_invites(db: &Surreal<Db>) -> DbResult<Vec<crate::models::invite::Invite>> {
     let mut r = db
-        .query(
-            "SELECT id, code, created_by.username AS created_by_name, created_at, \
-                max_uses, uses, expires_at, disabled, note \
-                FROM invite ORDER BY created_at DESC",
-        )
+        .query(format!(
+            "SELECT {INVITE_FIELDS} FROM invite ORDER BY created_at DESC"
+        ))
         .await?;
-    let rows: Vec<DbInvite> = r.take(0).unwrap_or_default();
+    let rows: Vec<DbInvite> = r.take(0)?;
     Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// The invite codes bound to one team, newest first.
+pub async fn list_team_invites(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<crate::models::invite::Invite>> {
+    let mut r = db
+        .query(format!(
+            "SELECT {INVITE_FIELDS} FROM invite WHERE team = type::record('team', $team_key) \
+             ORDER BY created_at DESC"
+        ))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbInvite> = r.take(0)?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// Disable one of the team's codes. A code of another team (or a global
+/// one) is `NotFound`, the same as a missing one.
+pub async fn disable_team_invite(db: &Surreal<Db>, team_id: &str, invite_id: &str) -> DbResult<()> {
+    let mut r = db
+        .query(
+            "UPDATE type::record('invite', $key) SET disabled = true \
+             WHERE team = type::record('team', $team_key) RETURN AFTER",
+        )
+        .bind(("key", record_key(invite_id, "invite")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
 }
 
 pub async fn disable_invite(db: &Surreal<Db>, invite_id: &str) -> DbResult<()> {
@@ -632,9 +742,20 @@ pub async fn disable_invite(db: &Surreal<Db>, invite_id: &str) -> DbResult<()> {
 /// conditional UPDATE run under `invariant_lock`, so two registrations cannot
 /// both take the last slot.
 pub async fn consume_invite(db: &Surreal<Db>, code: &str) -> DbResult<bool> {
+    Ok(consume_invite_grant(db, code).await?.is_some())
+}
+
+/// Like [`consume_invite`], and say what the use grants (`None`: the code
+/// is unknown, disabled, expired or used up).
+pub async fn consume_invite_grant(db: &Surreal<Db>, code: &str) -> DbResult<Option<InviteGrant>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Used {
+        team: Option<RecordId>,
+        position: Option<String>,
+    }
     let code = normalize_invite_code(code);
     if code.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
     let _guard = invariant_lock().await;
     let mut r = db
@@ -642,13 +763,130 @@ pub async fn consume_invite(db: &Surreal<Db>, code: &str) -> DbResult<bool> {
             "UPDATE invite SET uses += 1 \
                 WHERE code = $code AND disabled = false AND uses < max_uses \
                 AND (expires_at = NONE OR expires_at > time::now()) \
-                RETURN AFTER",
+                RETURN team, position",
         )
         .bind(("code", code))
         .await?;
-    let rows: Vec<IdRecord> = r.take(0).unwrap_or_default();
-    Ok(!rows.is_empty())
+    let rows: Vec<Used> = r.take(0)?;
+    Ok(rows.into_iter().next().map(|u| InviteGrant {
+        team_id: u.team.map(|t| t.to_sql()),
+        position: u.position,
+    }))
 }
+
+/// The name of the team a usable team-bound code leads to (`None` for a
+/// plain, unknown, disabled, expired or used-up code).
+pub async fn team_invite_name(db: &Surreal<Db>, code: &str) -> DbResult<Option<String>> {
+    let code = normalize_invite_code(code);
+    if code.is_empty() {
+        return Ok(None);
+    }
+    let mut r = db
+        .query(
+            "SELECT VALUE team.name FROM invite \
+                WHERE code = $code AND team != NONE AND disabled = false AND uses < max_uses \
+                AND (expires_at = NONE OR expires_at > time::now()) LIMIT 1",
+        )
+        .bind(("code", code))
+        .await?;
+    let names: Vec<Option<String>> = r.take(0)?;
+    Ok(names.into_iter().next().flatten())
+}
+
+/// Put a newly registered account into the team its invite names (a member
+/// not placed yet, at the invite's position if any).
+pub async fn join_team_from_invite(
+    db: &Surreal<Db>,
+    user_id: &str,
+    grant: &InviteGrant,
+) -> DbResult<()> {
+    let Some(team_id) = grant.team_id.as_deref() else {
+        return Ok(());
+    };
+    let _guard = invariant_lock().await;
+    db.query(
+        "CREATE team_member SET team = type::record('team', $team_key), \
+             user = type::record('user', $user_key), role = $role, roster_type = 'member'",
+    )
+    .bind(("team_key", record_key(team_id, "team")))
+    .bind(("user_key", record_key(user_id, "user")))
+    .bind((
+        "role",
+        grant
+            .position
+            .clone()
+            .unwrap_or_else(|| "unassigned".to_string()),
+    ))
+    .await?
+    .check()
+    .map_err(|e| {
+        if e.to_string().contains("team_member_user_unique") {
+            DbError::Invalid("You already belong to a team.".into())
+        } else {
+            DbError::Surreal(e)
+        }
+    })?;
+    Ok(())
+}
+
+/// A signed-in account without a team uses a team-bound code: one use is
+/// taken and the account joins that team, in one transaction. Refused,
+/// without taking a use, when the account already belongs to a team or the
+/// code is not a usable team code (plain codes only open registration).
+/// Returns the team id.
+pub async fn redeem_team_invite(db: &Surreal<Db>, user_id: &str, code: &str) -> DbResult<String> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Joined {
+        team: RecordId,
+    }
+    let code = normalize_invite_code(code);
+    if code.is_empty() {
+        return Err(DbError::Invalid(INVALID_TEAM_INVITE.into()));
+    }
+    let _guard = invariant_lock().await;
+    let r = db
+        .query(
+            "BEGIN TRANSACTION; \
+             IF array::len(SELECT id FROM team_member WHERE user = type::record('user', $user_key)) > 0 \
+                 { THROW 'IN_TEAM' }; \
+             LET $inv = (UPDATE invite SET uses += 1 \
+                 WHERE code = $code AND team != NONE AND disabled = false AND uses < max_uses \
+                 AND (expires_at = NONE OR expires_at > time::now()) RETURN AFTER)[0]; \
+             IF $inv = NONE { THROW 'BAD_CODE' }; \
+             CREATE team_member SET team = $inv.team, user = type::record('user', $user_key), \
+                 role = $inv.position ?? 'unassigned', roster_type = 'member'; \
+             RETURN { team: $inv.team }; \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("code", code))
+        .await?;
+    let mut r = match check_tx(r) {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(match thrown_tag(&e).as_deref() {
+                Some("IN_TEAM") => DbError::Invalid(
+                    "You already belong to a team. Leave it before using a team invite.".into(),
+                ),
+                Some("BAD_CODE") => DbError::Invalid(INVALID_TEAM_INVITE.into()),
+                _ if e.to_string().contains("team_member_user_unique") => DbError::Invalid(
+                    "You already belong to a team. Leave it before using a team invite.".into(),
+                ),
+                _ => e,
+            })
+        }
+    };
+    // Statements: BEGIN 0, IF 1, LET 2, IF 3, CREATE 4, RETURN 5.
+    let joined: Option<Joined> = r.take(5)?;
+    joined
+        .map(|j| j.team.to_sql())
+        .ok_or_else(|| DbError::Other("team invite: no team returned".into()))
+}
+
+/// Shown for any code that cannot put a signed-in account into a team, so
+/// the answer does not reveal which codes exist.
+pub const INVALID_TEAM_INVITE: &str =
+    "That code is not a team invite that can be used now. Ask your team leader for a new link.";
 
 /// Give back a slot taken by `consume_invite` when registration fails after it.
 pub async fn release_invite(db: &Surreal<Db>, code: &str) -> DbResult<()> {

@@ -162,6 +162,20 @@ pub const MIGRATIONS: &[Migration] = &[
                  AND array::len(array::filter(string::split(body, '\\n'), |$l| string::trim($l) != '')) = 8;",
         ),
     },
+    Migration {
+        version: 15,
+        name: "invite_team",
+        // Polish pass: an invite may carry a team (and a position). Both
+        // fields are optional and existing codes stay global, so this only
+        // states the fields and the index for databases created before the
+        // baseline had them (the baseline defines the same, idempotently).
+        step: Step::Surql(
+            "DEFINE FIELD IF NOT EXISTS team ON invite TYPE option<record<team>>; \
+             DEFINE FIELD IF NOT EXISTS position ON invite TYPE option<string> \
+               ASSERT $value = NONE OR $value IN ['top', 'jungle', 'mid', 'bot', 'support']; \
+             DEFINE INDEX IF NOT EXISTS invite_team ON invite FIELDS team;",
+        ),
+    },
 ];
 
 const BUG_REPORT_STATUSES_V2: &str = "\

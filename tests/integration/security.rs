@@ -1818,3 +1818,70 @@ async fn guidance_is_isolated_between_users_and_teams() {
         "alice's hidden checklist is not bob's"
     );
 }
+
+/// Team-bound invites (polish pass): a team's codes are listed and disabled
+/// only through that team; a code cannot be bound to a missing team or an
+/// unknown position. (The leader's server functions take the team from the
+/// session, never from the client: `mint_team_invite` has no team argument.)
+#[tokio::test]
+async fn team_invites_stay_inside_their_team() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let soon = Some(chrono::Utc::now() + chrono::Duration::days(3));
+    db::create_team_invite(
+        &db,
+        &t.a,
+        &t.team1,
+        "TEAM1-CODE".into(),
+        5,
+        soon,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let id = db::list_team_invites(&db, &t.team1).await.unwrap()[0]
+        .id
+        .clone();
+
+    assert!(db::list_team_invites(&db, &t.team2)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_not_found(
+        db::disable_team_invite(&db, &t.team2, &id).await,
+        "team 2 disables team 1's code",
+    );
+    let still = db::list_team_invites(&db, &t.team1).await.unwrap();
+    assert!(!still[0].disabled, "team 1's code is untouched");
+    // A global code is not any team's to disable either.
+    let global = db::create_invite(&db, None, "GLOBAL-1".into(), 1, None, None)
+        .await
+        .unwrap();
+    assert_not_found(
+        db::disable_team_invite(&db, &t.team1, &global).await,
+        "a team disables a global code",
+    );
+
+    assert_not_found(
+        db::create_team_invite(&db, &t.b, "team:missing", "X-1".into(), 1, soon, None, None).await,
+        "a code for a missing team",
+    );
+    assert!(matches!(
+        db::create_team_invite(
+            &db,
+            &t.b,
+            &t.team2,
+            "X-2".into(),
+            1,
+            soon,
+            Some("captain".into()),
+            None
+        )
+        .await,
+        Err(DbError::Invalid(_))
+    ));
+
+    db::disable_team_invite(&db, &t.team1, &id).await.unwrap();
+    assert!(db::list_team_invites(&db, &t.team1).await.unwrap()[0].disabled);
+}

@@ -152,6 +152,7 @@ const DELETE_TEAM: &str = "\
     DELETE checklist_instance WHERE team = $t; \
     DELETE scheduled_match WHERE team = $t; \
     DELETE share_link WHERE team = $t; \
+    DELETE invite WHERE team = $t; \
     UPDATE match SET team_id = NONE WHERE team_id = $t; \
     DELETE join_request WHERE team = $t; \
     DELETE team_member WHERE team = $t; \
@@ -531,6 +532,35 @@ mod tests {
                 Treatment::Leader => continue,
             };
             assert!(all.contains(&needle), "{t}.{f}: expected `{needle}`");
+        }
+    }
+
+    /// Deleting a team removes (or unlinks) every row that points at it
+    /// through a `record<team>` field, so no row is left with a dangling
+    /// team (team-bound invites included).
+    #[test]
+    fn deleting_a_team_covers_every_team_link() {
+        let links: Vec<(String, String)> = include_str!("../../schema.surql")
+            .lines()
+            .filter(|l| l.contains("record<team>"))
+            .filter_map(|l| {
+                let rest = l.trim().strip_prefix("DEFINE FIELD IF NOT EXISTS ")?;
+                let mut words = rest.split_whitespace();
+                let field = words.next()?.to_string();
+                let _on = words.next()?;
+                Some((words.next()?.to_string(), field))
+            })
+            .collect();
+        assert!(links.iter().any(|(t, f)| t == "invite" && f == "team"));
+        for (t, f) in &links {
+            let deleted = DELETE_TEAM.contains(&format!("DELETE {t} WHERE {f} = $t"))
+                || DELETE_TEAM.contains(&format!("DELETE {t} WHERE id IN $"));
+            let unlinked =
+                DELETE_TEAM.contains(&format!("UPDATE {t} SET {f} = NONE WHERE {f} = $t"));
+            assert!(
+                deleted || unlinked,
+                "{t}.{f} links a team but DELETE_TEAM leaves it"
+            );
         }
     }
 }

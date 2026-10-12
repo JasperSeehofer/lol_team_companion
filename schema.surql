@@ -312,7 +312,14 @@ DEFINE FIELD IF NOT EXISTS uses ON invite TYPE int DEFAULT 0 ASSERT $value >= 0;
 DEFINE FIELD IF NOT EXISTS expires_at ON invite TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS disabled ON invite TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS note ON invite TYPE option<string>;
+-- Team-bound invites (polish pass, migration 15): registering with such a
+-- code puts the account in this team, a member not placed yet, at `position`
+-- if set. Deleted with the team.
+DEFINE FIELD IF NOT EXISTS team ON invite TYPE option<record<team>>;
+DEFINE FIELD IF NOT EXISTS position ON invite TYPE option<string>
+  ASSERT $value = NONE OR $value IN ['top', 'jungle', 'mid', 'bot', 'support'];
 DEFINE INDEX IF NOT EXISTS invite_code_unique ON invite FIELDS code UNIQUE;
+DEFINE INDEX IF NOT EXISTS invite_team ON invite FIELDS team;
 
 -- Ranked snapshots
 DEFINE TABLE IF NOT EXISTS ranked_snapshot SCHEMAFULL;
