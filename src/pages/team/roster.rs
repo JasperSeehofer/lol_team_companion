@@ -45,9 +45,15 @@ pub async fn list_teams() -> Result<Vec<Team>, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    // Signed-in users only: the team list is not public.
-    let authz::Ctx { db, .. } = authz::authed().await?;
-    db::list_all_teams(&db).await.map_err(authz::server_err)
+    // Signed-in users only: the team list is not public. Members cannot
+    // join another team, so they get an empty list: the page creates this
+    // resource for everyone (before its first Suspense) and members must
+    // not pay for reading every team.
+    let ctx = authz::authed().await?;
+    if ctx.team().await?.is_some() {
+        return Ok(Vec::new());
+    }
+    db::list_all_teams(&ctx.db).await.map_err(authz::server_err)
 }
 
 #[server]
