@@ -1038,23 +1038,6 @@ pub async fn update_team(
     Ok(())
 }
 
-pub async fn update_member_role(
-    db: &Surreal<Db>,
-    team_id: &str,
-    user_id: &str,
-    role: String,
-) -> DbResult<()> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE team_member SET role=$role WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
-        .bind(("team_key", team_key))
-        .bind(("user_key", user_key))
-        .bind(("role", role))
-        .await?
-        .check()?;
-    Ok(())
-}
-
 pub async fn remove_team_member(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<()> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
