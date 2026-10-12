@@ -678,11 +678,23 @@ pub fn GamePlanPage() -> impl IntoView {
         },
     );
     let prefilled = StoredValue::new(false);
+    // A plan opened from `?draft_id=` can be saved once that draft has
+    // loaded, so a quick save never drops the link to it.
+    let prefill_pending = RwSignal::new(
+        query
+            .read_untracked()
+            .get("draft_id")
+            .is_some_and(|d| !d.is_empty()),
+    );
     Effect::new(move |_| {
+        let result = prefill.get();
+        if result.is_some() {
+            prefill_pending.set(false);
+        }
         if prefilled.get_value() {
             return;
         }
-        if let Some(Ok(Some(d))) = prefill.get() {
+        if let Some(Ok(Some(d))) = result {
             // Start from a clean editor unless this is already a new plan
             // (then keep what the user typed while the draft loaded).
             if ed.id.get_untracked().is_some() {
@@ -784,7 +796,7 @@ pub fn GamePlanPage() -> impl IntoView {
 
     let name_error = RwSignal::new(None::<String>);
     let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
-        if saving.get_untracked() {
+        if saving.get_untracked() || prefill_pending.get_untracked() {
             return;
         }
         let plan = ed.build(false);
@@ -894,7 +906,7 @@ pub fn GamePlanPage() -> impl IntoView {
                         <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="plan-share">"Share"</Button>
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
-                    <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="plan-save">"Save plan"</Button>
+                    <Button variant=ButtonVariant::Primary on_click=do_save loading=Signal::derive(move || saving.get() || prefill_pending.get()) attr:data-testid="plan-save">"Save plan"</Button>
                 }
             />
             <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::GamePlan target=Signal::derive(move || ed.id.get()) />
