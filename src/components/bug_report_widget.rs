@@ -201,6 +201,12 @@ fn WidgetInner() -> impl IntoView {
     };
 
     let start_select = move || {
+        // A second click on the trigger while selecting must not register a
+        // second pair of listeners (replacing the stored closures would drop
+        // ones the browser still calls).
+        if state.get_untracked() == WidgetState::Selecting {
+            return;
+        }
         state.set(WidgetState::Selecting);
         error.set(None);
         #[cfg(feature = "hydrate")]
@@ -265,6 +271,20 @@ fn WidgetInner() -> impl IntoView {
             esc_handle.set_value(Some(esc_cb));
         }
     };
+
+    // Following a link that is not a report target (the nav, the footer)
+    // ends select mode instead of carrying it to the next page.
+    let location = leptos_router::hooks::use_location();
+    Effect::new(move |prev: Option<String>| {
+        let path = location.pathname.get();
+        if prev.as_deref().is_some_and(|p| p != path)
+            && state.get_untracked() == WidgetState::Selecting
+        {
+            state.set(WidgetState::Idle);
+            exit_select();
+        }
+        path
+    });
 
     // Closing the dialog (Cancel, Escape, the close button) ends editing.
     Effect::new(move |_| {
