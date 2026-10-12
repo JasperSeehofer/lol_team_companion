@@ -868,7 +868,18 @@ pub async fn join_team_from_invite(
     let Some(team_id) = grant.team_id.as_deref() else {
         return Ok(());
     };
+    // Under the lock that team deletion also takes: the team must still
+    // exist (a `record<team>` link does not check that), or the account
+    // would be a member of a team that is gone (M10 review).
     let _guard = invariant_lock().await;
+    let mut r = db
+        .query("SELECT VALUE id FROM type::record('team', $team_key)")
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let ids: Vec<RecordId> = r.take(0)?;
+    if ids.is_empty() {
+        return Err(DbError::NotFound);
+    }
     db.query(
         "CREATE team_member SET team = type::record('team', $team_key), \
              user = type::record('user', $user_key), role = $role, roster_type = 'member'",

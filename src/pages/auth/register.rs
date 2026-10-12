@@ -62,17 +62,21 @@ pub async fn register_action(
     // A team-bound code also puts the new account in its team.
     let gate = config::get().closed_beta;
     let code = db::normalize_invite_code(&invite_code);
-    let grant = if gate {
-        match db::consume_invite_grant(&db, &code)
+    // With the gate off (dev only) a code is optional, but a usable one is
+    // still used, so a team code puts the account in its team as the page
+    // promises.
+    let used = if gate || !code.is_empty() {
+        db::consume_invite_grant(&db, &code)
             .await
             .map_err(authz::server_err)?
-        {
-            Some(g) => g,
-            None => return Err(ServerFnError::new(db::GENERIC_REGISTRATION_ERROR)),
-        }
     } else {
-        db::InviteGrant::default()
+        None
     };
+    if gate && used.is_none() {
+        return Err(ServerFnError::new(db::GENERIC_REGISTRATION_ERROR));
+    }
+    let consumed = used.is_some();
+    let grant = used.unwrap_or_default();
 
     let created = match hash_password_async(password).await {
         Ok(password_hash) => db::create_user(&db, username, email, password_hash)
@@ -83,7 +87,7 @@ pub async fn register_action(
     let user_id = match created {
         Ok(id) => id,
         Err(e) => {
-            if gate {
+            if consumed {
                 if let Err(re) = db::release_invite(&db, &code).await {
                     tracing::warn!("could not release invite use: {re}");
                 }
@@ -207,16 +211,6 @@ pub fn RegisterPage() -> impl IntoView {
         }
     });
 
-    // The server sends user-safe messages only (generic for invite and
-    // duplicate-account failures, specific for password rules).
-    let error = move || {
-        register
-            .value()
-            .get()
-            .and_then(|r| r.err())
-            .map(|e| crate::models::utils::error_text(&e))
-    };
-
     let join = Callback::new(move |_| {
         joining.set(true);
         join_error.set(None);
@@ -238,71 +232,99 @@ pub fn RegisterPage() -> impl IntoView {
         });
     });
 
+    // Signed in (orchestrator decision, M10 review): no sign-up form, only
+    // "Join TEAM" for a usable team invite, or why the link cannot be used.
+    // Signed out, or when the preview fails: the form, with the team named.
     view! {
         <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
-            <PageHeader title="Create your account" eyebrow="Closed beta \u{00b7} invitation" meta=move || view! { <span>"You were invited to the closed beta. Pick a username your team will recognise."</span> } />
             <Suspense fallback=|| ()>
-                {move || preview.get().and_then(|r| r.ok()).map(|p| {
-                    let team = p.team_name.clone();
-                    let signed_in = p.signed_in_as.clone();
-                    match (team, signed_in) {
+                {move || preview.get().map(|r| {
+                    let p = r.unwrap_or_default();
+                    match (p.team_name.clone(), p.signed_in_as.clone()) {
                         (Some(team), Some(name)) if !p.signed_in_has_team => view! {
-                            <div class="mb-6" data-testid="invite-join-existing">
-                                <Callout tone=CalloutTone::Info title=format!("You are signed in as {name}")>
-                                    <p>{format!("This link is an invite to {team}. Join it with the account you have instead of creating another one.")}</p>
-                                    <div class="mt-3">
-                                        <Button variant=ButtonVariant::Secondary loading=joining on_click=join attr:data-testid="invite-join-button">{format!("Join {team}")}</Button>
-                                    </div>
-                                    {move || join_error.get().map(|e| view! { <p class="mt-2 text-label text-danger" role="alert">{e}</p> })}
-                                </Callout>
+                            <PageHeader title=format!("Join {team}") eyebrow="Team invite" meta=move || view! { <span>{format!("You are signed in as {name}.")}</span> } />
+                            <div data-testid="invite-join-existing">
+                                <p class="text-body text-secondary">{format!("This link is an invite to {team}. Join it with the account you have instead of creating another one.")}</p>
+                                <div class="mt-4">
+                                    <Button variant=ButtonVariant::Primary loading=joining on_click=join attr:data-testid="invite-join-button">{format!("Join {team}")}</Button>
+                                </div>
+                                {move || join_error.get().map(|e| view! { <p class="mt-2 text-label text-danger" role="alert">{e}</p> })}
                             </div>
                         }.into_any(),
                         (Some(team), Some(name)) => view! {
-                            <div class="mb-6" data-testid="invite-in-team">
-                                <Callout tone=CalloutTone::Warning title=format!("You are signed in as {name}")>
+                            <PageHeader title="You are already on a team" eyebrow="Team invite" meta=move || view! { <span>{format!("You are signed in as {name}.")}</span> } />
+                            <div data-testid="invite-in-team">
+                                <Callout tone=CalloutTone::Warning title="You are already on a team">
                                     {format!("This link is an invite to {team}, but your account already belongs to a team. Leave that team first to use it, or sign out to create a new account.")}
                                 </Callout>
+                                <p class="mt-4 text-body"><A href="/" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Go to Match Day"</A></p>
                             </div>
                         }.into_any(),
-                        (Some(team), None) => view! {
-                            <p class="mb-6 text-body text-primary" data-testid="invite-team">{format!("This invite signs you up for {team}. You join the team as soon as your account exists.")}</p>
+                        (None, Some(name)) => view! {
+                            <PageHeader title="You are already signed in" eyebrow="Closed beta \u{00b7} invitation" meta=move || view! { <span>{format!("You are signed in as {name}.")}</span> } />
+                            <div data-testid="invite-signed-in">
+                                <p class="text-body text-secondary">"This invite link creates a new account. To create another one, sign out first."</p>
+                                <p class="mt-4 text-body"><A href="/" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Go to Match Day"</A></p>
+                            </div>
                         }.into_any(),
-                        (None, _) => ().into_any(),
+                        (team, None) => view! {
+                            <PageHeader title="Create your account" eyebrow="Closed beta \u{00b7} invitation" meta=move || view! { <span>"You were invited to the closed beta. Pick a username your team will recognise."</span> } />
+                            {team.map(|team| view! {
+                                <p class="mb-6 text-body text-primary" data-testid="invite-team">{format!("This invite signs you up for {team}. You join the team as soon as your account exists.")}</p>
+                            })}
+                            <RegisterForm register=register invite=invite />
+                        }.into_any(),
                     }
                 })}
             </Suspense>
-
-            <ActionForm action=register>
-                <div class="flex flex-col gap-5">
-                    {move || error().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
-
-                    // The invite code travels with the form; the server checks it.
-                    // `value`, not `prop:value`: the attribute is rendered on the
-                    // server, so a form sent before hydration carries the code.
-                    <input type="hidden" name="invite_code" value=move || invite.get() />
-
-                    <Field id="register-username" label="Username">
-                        <TextField name="username" required=true autocomplete="username" />
-                    </Field>
-                    <Field id="register-email" label="Email">
-                        <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
-                    </Field>
-                    <Field id="register-password" label="Password" hint="Use 10 or more characters.">
-                        <TextField kind=InputKind::Password name="password" required=true minlength=10 autocomplete="new-password" />
-                    </Field>
-
-                    <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Lg full_width=true>
-                        "Create account"
-                    </Button>
-
-                    <p class="border-t border-rule pt-5 text-body text-secondary">
-                        "Already have an account? "
-                        <A href="/auth/login" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
-                            "Sign in"
-                        </A>
-                    </p>
-                </div>
-            </ActionForm>
         </PageShell>
+    }
+}
+
+/// The sign-up form (signed-out visitors only).
+#[component]
+fn RegisterForm(register: ServerAction<RegisterAction>, invite: Signal<String>) -> impl IntoView {
+    // The server sends user-safe messages only (generic for invite and
+    // duplicate-account failures, specific for password rules).
+    let error = move || {
+        register
+            .value()
+            .get()
+            .and_then(|r| r.err())
+            .map(|e| crate::models::utils::error_text(&e))
+    };
+
+    view! {
+        <ActionForm action=register>
+            <div class="flex flex-col gap-5">
+                {move || error().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
+
+                // The invite code travels with the form; the server checks it.
+                // `value`, not `prop:value`: the attribute is rendered on the
+                // server, so a form sent before hydration carries the code.
+                <input type="hidden" name="invite_code" value=move || invite.get() />
+
+                <Field id="register-username" label="Username">
+                    <TextField name="username" required=true autocomplete="username" />
+                </Field>
+                <Field id="register-email" label="Email">
+                    <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
+                </Field>
+                <Field id="register-password" label="Password" hint="Use 10 or more characters.">
+                    <TextField kind=InputKind::Password name="password" required=true minlength=10 autocomplete="new-password" />
+                </Field>
+
+                <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Lg full_width=true>
+                    "Create account"
+                </Button>
+
+                <p class="border-t border-rule pt-5 text-body text-secondary">
+                    "Already have an account? "
+                    <A href="/auth/login" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                        "Sign in"
+                    </A>
+                </p>
+            </div>
+        </ActionForm>
     }
 }

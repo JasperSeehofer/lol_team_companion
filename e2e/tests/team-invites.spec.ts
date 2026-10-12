@@ -79,7 +79,11 @@ test("a signed-in player joins with the link; one already in a team cannot", asy
   await createTeam(other, `Other_${STAMP}`);
   await other.goto(link);
   await expect(other.getByTestId("invite-in-team")).toContainText("already belongs to a team");
+  await expect(other.getByRole("heading", { level: 1 })).toHaveText("You are already on a team");
   await expect(other.getByTestId("invite-join-button")).toHaveCount(0);
+  // Signed in: no sign-up form (M10 review, orchestrator decision).
+  await expect(other.locator("input[name=username]")).toHaveCount(0);
+  await shot(other, "team-invite-in-team");
 
   // Signed in without a team: one click joins.
   const loner = await (await browser.newContext()).newPage();
@@ -87,7 +91,12 @@ test("a signed-in player joins with the link; one already in a team cannot", asy
   await loner.goto(link);
   const box = loner.getByTestId("invite-join-existing");
   await expect(box).toContainText(`This link is an invite to ${teamName}`);
+  await expect(loner.getByRole("heading", { level: 1 })).toHaveText(`Join ${teamName}`);
+  await expect(loner.locator("input[name=username]")).toHaveCount(0);
   await shot(loner, "team-invite-signed-in");
+  // The button acts only once the page is hydrated (CI run 106 clicked
+  // before that and timed out waiting for Home).
+  await loner.waitForLoadState("networkidle");
   await box.getByTestId("invite-join-button").click();
   await waitForHome(loner);
   await loner.goto("/team/roster");

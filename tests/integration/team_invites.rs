@@ -178,3 +178,38 @@ async fn deleting_the_team_removes_its_codes() {
         .unwrap()
         .is_none());
 }
+
+/// M10 review: a use taken just before the team is deleted must not put
+/// the new account into a team that no longer exists.
+#[tokio::test]
+async fn joining_a_team_deleted_after_the_use_was_taken_is_refused() {
+    let db = common::test_db().await;
+    let lead = db::create_user(&db, "lead".into(), "lead@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let team = db::create_team(&db, &lead, "Brief".into(), "EUW".into())
+        .await
+        .unwrap();
+    db::create_team_invite(&db, &lead, &team, "LAST-ONE".into(), 1, soon(), None, None)
+        .await
+        .unwrap();
+    let grant = db::consume_invite_grant(&db, "LAST-ONE")
+        .await
+        .unwrap()
+        .unwrap();
+    lol_team_companion::server::account::delete_account(&db, &lead)
+        .await
+        .unwrap();
+    let dana = db::create_user(&db, "dana".into(), "dana@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    assert!(matches!(
+        db::join_team_from_invite(&db, &dana, &grant).await,
+        Err(DbError::NotFound)
+    ));
+    assert_eq!(db::get_user_team_id(&db, &dana).await.unwrap(), None);
+    // A grant without a team is a no-op.
+    db::join_team_from_invite(&db, &dana, &InviteGrant::default())
+        .await
+        .unwrap();
+}
