@@ -4075,10 +4075,11 @@ pub async fn delete_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) ->
     Ok(())
 }
 
-/// Bring back a note deleted within the last day.
+/// Bring back a note deleted within the last day. Older deletes stay
+/// deleted (and are purged hourly, `purge_deleted_team_notes`).
 pub async fn restore_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
     let mut r = db
-        .query("UPDATE type::record('team_note', $note_key) SET deleted_at = NONE WHERE team = type::record('team', $team_key) AND deleted_at != NONE RETURN id")
+        .query(format!("UPDATE type::record('team_note', $note_key) SET deleted_at = NONE WHERE team = type::record('team', $team_key) AND deleted_at != NONE AND deleted_at >= time::now() - {NOTE_UNDO_WINDOW} RETURN id"))
         .bind(("note_key", record_key(note_id, "team_note")))
         .bind(("team_key", record_key(team_id, "team")))
         .await?;
@@ -4086,6 +4087,17 @@ pub async fn restore_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) -
     if rows.is_empty() {
         return Err(DbError::NotFound);
     }
+    Ok(())
+}
+
+/// Delete notes of every team that were deleted longer ago than the Undo
+/// window. Runs hourly from the server's purge task.
+pub async fn purge_deleted_team_notes(db: &Surreal<Db>) -> DbResult<()> {
+    db.query(format!(
+        "DELETE team_note WHERE deleted_at != NONE AND deleted_at < time::now() - {NOTE_UNDO_WINDOW};"
+    ))
+    .await?
+    .check()?;
     Ok(())
 }
 

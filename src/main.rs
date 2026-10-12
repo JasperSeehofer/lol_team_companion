@@ -144,15 +144,20 @@ async fn main() {
     // Sessions
     let session_store = SurrealSessionStore::new(Arc::clone(&surreal_db), "sessions".to_string());
 
-    // Purge expired sessions now and every hour.
+    // Purge expired sessions, and team notes deleted longer ago than their
+    // Undo window, now and every hour.
     {
         let store = session_store.clone();
+        let db = Arc::clone(&surreal_db);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
             loop {
                 interval.tick().await;
                 if let Err(e) = store.delete_expired().await {
                     tracing::warn!("Session purge failed: {e}");
+                }
+                if let Err(e) = db::purge_deleted_team_notes(&db).await {
+                    tracing::warn!("Deleted team note purge failed: {e}");
                 }
             }
         });

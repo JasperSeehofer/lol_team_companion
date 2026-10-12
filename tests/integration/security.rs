@@ -599,6 +599,27 @@ async fn team_note_edits_and_deletes_can_be_undone() {
         db::update_team_note(&db, &t.team1, &note, "   ".into(), "bob").await,
         Err(db::DbError::Invalid(_))
     ));
+
+    // A delete older than the Undo window cannot be restored, and the purge
+    // removes it for good.
+    db::delete_team_note(&db, &t.team1, &note).await.unwrap();
+    db.query("UPDATE team_note SET deleted_at = time::now() - 2d")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_not_found(
+        db::restore_team_note(&db, &t.team1, &note).await,
+        "restore after the Undo window",
+    );
+    db::purge_deleted_team_notes(&db).await.unwrap();
+    // Gone, not hidden: clearing every delete mark brings nothing back.
+    db.query("UPDATE team_note SET deleted_at = NONE")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert!(db::list_team_notes(&db, &t.team1).await.unwrap().is_empty());
 }
 
 // ---------------------------------------------------------------------------
