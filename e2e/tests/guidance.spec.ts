@@ -116,7 +116,9 @@ test("the profile switch hides every piece of guidance", async ({ teamPage }) =>
 
 test("admin pages get no guidance", async ({ adminPage }) => {
   const page = adminPage;
-  await navigateTo(page, "/admin");
+  // The post-sign-in hard navigation can abort the first goto (rule 56).
+  await navigateTo(page, "/admin").catch(() => navigateTo(page, "/admin"));
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page.locator("[data-guidance-hint], [data-guidance-intro], [data-welcome]")).toHaveCount(0);
 });
