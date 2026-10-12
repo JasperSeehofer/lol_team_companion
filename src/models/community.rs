@@ -922,7 +922,7 @@ pub fn paragraphs(body: &str) -> Vec<String> {
         .collect()
 }
 
-/// Words never used for the act of supporting Companion (MISSION section 4).
+/// Words never used for the act of supporting Team Companion (MISSION section 4).
 /// "donation" is allowed only inside "no donation receipt is issued".
 pub const FORBIDDEN_MONEY_WORDS: &[&str] = &[
     "donation",
@@ -1331,7 +1331,7 @@ mod tests {
         assert_eq!(forbidden_money_words("Eine Spende"), vec!["spende"]);
         assert_eq!(forbidden_money_words("supporter perks"), vec!["perks"]);
         assert!(forbidden_money_words("multiple tooltips; tipping point").is_empty());
-        assert!(forbidden_money_words("Support Companion").is_empty());
+        assert!(forbidden_money_words("Support Team Companion").is_empty());
     }
 
     #[test]

@@ -23,7 +23,7 @@ test("first sign-in shows the welcome once; Skip keeps the checklist", async ({ 
   await navigateTo(page, "/");
   const welcome = page.locator("[data-welcome]");
   await expect(welcome).toBeVisible();
-  await expect(welcome.getByRole("heading", { level: 2 })).toContainText("Welcome to Companion");
+  await expect(welcome.getByRole("heading", { level: 2 })).toContainText("Welcome to Team Companion");
   await expect(welcome.getByRole("list", { name: "The loop" })).toContainText("Review");
   await expect(page.getByTestId("welcome-start")).toHaveAttribute("href", "/team/roster");
   const checklist = page.locator("[data-checklist]");

@@ -2,7 +2,7 @@ use leptos::prelude::*;
 
 /// Riot Games' required legal disclaimer, verbatim, with the product name
 /// the nav shows. Change only when the product is renamed.
-pub const RIOT_DISCLAIMER: &str = "Companion isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.";
+pub const RIOT_DISCLAIMER: &str = "Team Companion isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.";
 
 /// Community links for everyone: (label, path).
 pub const PUBLIC_COMMUNITY: &[(&str, &str)] = &[
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn disclaimer_is_riots_exact_wording() {
-        assert!(RIOT_DISCLAIMER.starts_with("Companion isn't endorsed by Riot Games"));
+        assert!(RIOT_DISCLAIMER.starts_with("Team Companion isn't endorsed by Riot Games"));
         assert!(RIOT_DISCLAIMER.ends_with(
             "Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc."
         ));

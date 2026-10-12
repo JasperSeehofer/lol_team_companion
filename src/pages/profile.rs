@@ -349,7 +349,7 @@ fn DataSettings(username: String, card_hidden: bool) -> impl IntoView {
             </div>
             <div class="flex flex-col gap-2">
                 <h3 class="font-display text-heading font-semibold text-primary">"Download my data"</h3>
-                <p class="max-w-prose text-body text-secondary">"A JSON file with everything Companion stores about you: your account and Riot link, team membership, champion pool and notes, learnings, goals, synced games, notes you wrote, bug reports, votes and survey answers. Team records you created are listed by name; their content belongs to the team."</p>
+                <p class="max-w-prose text-body text-secondary">"A JSON file with everything Team Companion stores about you: your account and Riot link, team membership, champion pool and notes, learnings, goals, synced games, notes you wrote, bug reports, votes and survey answers. Team records you created are listed by name; their content belongs to the team."</p>
                 <div>
                     <Button href="/account/export" variant=ButtonVariant::Secondary attr:download="" attr:data-testid="export-data">"Download my data"</Button>
                 </div>

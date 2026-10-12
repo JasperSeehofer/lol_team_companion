@@ -1,6 +1,6 @@
 # Riot registration check
 
-Companion is already registered on the Riot Developer Portal. This page describes what the code does today (branch state at M8, October 2026) so the owner can compare it with the registered product description and update the registration where it differs. It replaces a fresh application. Nothing here has been sent to Riot.
+Team Companion is already registered on the Riot Developer Portal. This page describes what the code does today (branch state at M8, October 2026) so the owner can compare it with the registered product description and update the registration where it differs. It replaces a fresh application. Nothing here has been sent to Riot.
 
 How to use it: open the product on the portal next to this page and walk the sections in order. Every place where the registration says something else is either a registration update or a question for the maintainer.
 
@@ -9,8 +9,9 @@ How to use it: open the product on the portal next to this page and walk the sec
 - **What it is:** a private coaching workspace for one amateur or semi-pro team (players, substitutes, coach): scouting an opponent, planning the draft (including a branching draft tree and the Draft Graph, which explains why picks fit from a curated trait table and the team's own notes), the game plan, the post-game review, action items and lessons.
 - **Who can use it:** closed beta, registration only with an invite code. One team per account. No public pages with game data except share links a team creates on purpose (one plan, review or player card, expiring after 1, 7 or 30 days, revocable; a player can keep their card out of share links).
 - **What it is not:** no public stats site, no leaderboard, no public player search, no AI pick bot, no live-game or champion-select assistance, no betting.
-- **Name:** "Companion" is a working title. The final name must not contain "League of Legends", "LoL" or "Riot" ([OWNER: final product name]).
-- **Money:** [OWNER: the registration's monetisation answer. The code has no paid features; a support link appears on /transparency only once the owner sets `SUPPORT_URL` and approves the money texts on /admin/texts.]
+- **Name:** "Team Companion" (owner's decision, 12 October 2026). It contains neither "League of Legends", "LoL" nor "Riot", and no Riot IP. Public address: `https://app.team-companion.eu`.
+- **Money:** using Team Companion costs nothing; support is voluntary. The support link stays off at launch (`SUPPORT_URL` unset).
+  [OWNER: compare with the registration's monetisation answer. The code has no paid features; a support link appears on /transparency only once the owner sets `SUPPORT_URL` and approves the money texts on /admin/texts.]
 
 ## 2. Riot API endpoints the code calls
 
@@ -25,7 +26,7 @@ All calls go through one server-side client (`src/server/riot.rs`, riven 2.x). T
 | LEAGUE-V4 | `league_v4().get_league_entries_by_puuid` | `/lol/league/v4/entries/by-puuid/{puuid}` | Ranked standing of the signed-in player | 1 per sync | `me.rs` |
 | CHAMPION-MASTERY-V4 | `champion_mastery_v4().get_all_champion_masteries_by_puuid` | `/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}` | Champion pool of a scouted opponent's player | 1 per lookup | `opponents.rs` |
 
-Not used: SUMMONER-V4, SPECTATOR-V5, CLASH, TOURNAMENT, Riot Sign-On. Data Dragon (patch versions, champion list, champion and item images) is fetched by the server once per patch and served from Companion's own domain.
+Not used: SUMMONER-V4, SPECTATOR-V5, CLASH, TOURNAMENT, Riot Sign-On. Data Dragon (patch versions, champion list, champion and item images) is fetched by the server once per patch and served from Team Companion's own domain.
 
 Request sizes: a player sync is 1 + 20 match requests (+ 1 ranked); a team sync about five times that; an opponent lookup 1 + 20 + 1 (mastery); opening a game 2 (match + timeline), cached afterwards.
 
@@ -63,11 +64,11 @@ Account holders can download everything about themselves and delete their accoun
 
 ## 6. Verification file
 
-`public/riot.txt` is served at `https://<domain>/riot.txt` (cargo-leptos copies `public/` into the site root; `e2e/tests/legal.spec.ts` checks it answers as plain text). Today it holds the placeholder `[OWNER: paste the verification code ...]`.
+`public/riot.txt` is served at `https://app.team-companion.eu/riot.txt` (cargo-leptos copies `public/` into the site root; `e2e/tests/legal.spec.ts` checks it answers as plain text). Today it holds the placeholder `[OWNER: paste the verification code ...]`.
 
 1. Copy the verification code from the product page on the portal.
 2. Replace the whole content of `public/riot.txt` with it (no other text, one line).
-3. Commit, deploy, and check `curl -s https://<domain>/riot.txt` prints exactly the code.
+3. Commit, deploy, and check `curl -s https://app.team-companion.eu/riot.txt` prints exactly the code.
 
 ## 7. Production key, if the registration still needs one
 

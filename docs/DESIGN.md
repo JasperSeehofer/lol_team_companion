@@ -1,6 +1,6 @@
 # Design system
 
-The single source of truth for how Companion looks and behaves. `input.css` implements the tokens, `src/components/ui/` the primitives, `/design` shows both (the gallery), and `scripts/lint_design.sh` plus two Rust tests keep the code honest. When this file and the code disagree, fix one of them in the same change.
+The single source of truth for how Team Companion looks and behaves. `input.css` implements the tokens, `src/components/ui/` the primitives, `/design` shows both (the gallery), and `scripts/lint_design.sh` plus two Rust tests keep the code honest. When this file and the code disagree, fix one of them in the same change.
 
 Status: M2 complete (stage A: tokens, type, fonts, lint gates, gallery, batch 1; stage B: batches 2 and 3, hard-zero lint, the page sweep). Every page is on the system since M5; the compatibility shims and legacy colour names are gone.
 
@@ -25,7 +25,7 @@ Condensed from the M2 research (14 principles, binding) and the owner's decision
 
 ## 2. Direction: "Survey"
 
-Companion is the team's field survey of the Rift and of every opponent. The map is the organising idea, but only where something is spatial:
+Team Companion is the team's field survey of the Rift and of every opponent. The map is the organising idea, but only where something is spatial:
 
 - **Canvases** (Sand Table map, Draft Graph, map insets) carry a coordinate frame, a legend and, at most, a faint contour or grid texture.
 - **Everything else** is plain type on hairlines: Match Day's prep list, action items, tables, settings, the community strip. No textures, no compass roses, no parchment.

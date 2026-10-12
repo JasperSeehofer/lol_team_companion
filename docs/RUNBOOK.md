@@ -1,6 +1,6 @@
 # Runbook
 
-How to run Companion in production: one small VM, Docker Compose, Caddy for HTTPS, nightly backups to S3-compatible object storage with 30-day retention (MISSION section 4). The owner holds the VM, the domain, the Riot key and the bucket; nothing here adds a paid service beyond those.
+How to run Team Companion in production: one small VM, Docker Compose, Caddy for HTTPS, nightly backups to S3-compatible object storage with 30-day retention (MISSION section 4). The owner holds the VM, the domain, the Riot key and the bucket; nothing here adds a paid service beyond those.
 
 Files: `Dockerfile`, `.dockerignore`, `compose.yaml`, `deploy/Caddyfile`, `deploy/env.production.example`, `deploy/backup.env.example`, `deploy/backup/{Dockerfile,entrypoint.sh}`, `scripts/backup.sh`, `scripts/restore.sh`, `scripts/restore-drill.md`, `scripts/smoke_signin.sh`. What is verified where: section 12.
 

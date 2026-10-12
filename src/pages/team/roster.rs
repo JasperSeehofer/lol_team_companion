@@ -281,7 +281,7 @@ fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoV
                         Ok(list) => {
                             let q = query.get().trim().to_lowercase();
                             if q.is_empty() {
-                                return view! { <p class="mt-4 text-body text-muted">{format!("{} teams on Companion. Search to find yours.", list.len())}</p> }.into_any();
+                                return view! { <p class="mt-4 text-body text-muted">{format!("{} teams on Team Companion. Search to find yours.", list.len())}</p> }.into_any();
                             }
                             let found: Vec<Team> = list.into_iter().filter(|t| t.name.to_lowercase().contains(&q)).collect();
                             if found.is_empty() {

@@ -49,7 +49,7 @@ pub fn ChangelogPage() -> impl IntoView {
             <PageHeader
                 title="Changelog"
                 eyebrow="Community"
-                meta=|| view! { <span>"What changed in Companion, newest first."</span> }
+                meta=|| view! { <span>"What changed in Team Companion, newest first."</span> }
             />
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading the changelog"><Skeleton lines=8 /></SkeletonGroup> }>
                 {move || data.get().map(|r| match r {
@@ -90,7 +90,7 @@ fn Changelog(data: ChangelogView) -> impl IntoView {
         <div class="grid gap-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <div class="min-w-0">
                 {if entries.is_empty() {
-                    view! { <EmptyState message="No changes recorded yet. Each update to Companion will be listed here." /> }.into_any()
+                    view! { <EmptyState message="No changes recorded yet. Each update to Team Companion will be listed here." /> }.into_any()
                 } else {
                     entries.into_iter().map(|e| {
                         let extras = links.iter().find(|l| l.slug == e.slug).cloned();

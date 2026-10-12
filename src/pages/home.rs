@@ -1,4 +1,4 @@
-//! Home. Signed out: the landing (what Companion is, the closed beta, sign
+//! Home. Signed out: the landing (what Team Companion is, the closed beta, sign
 //! in). Signed in with a team: Match Day, the guidance flow for the next
 //! scrim or match: the preparation sequence (brief read, draft plans, game
 //! plan, open action items, review after the game), the opponent brief, open

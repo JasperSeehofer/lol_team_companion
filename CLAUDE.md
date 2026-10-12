@@ -2,9 +2,9 @@
 
 Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-# Companion (working name)
+# Team Companion
 
-A private coaching workspace for one League of Legends team: scouting, drafting, game planning, review and lessons in one loop. The product name is a working title; it must never contain "League of Legends", "LoL" or "Riot".
+A private coaching workspace for one League of Legends team: scouting, drafting, game planning, review and lessons in one loop. The product name is "Team Companion" (owner's decision, 12 October 2026; public address `https://app.team-companion.eu`); it must never contain "League of Legends", "LoL" or "Riot". The crate and internal identifiers keep the old `lol_team_companion` / `COMPANION_*` names.
 
 **Stack:** Rust stable · Leptos 0.8 · Axum 0.8 · SurrealDB 3.x (embedded SurrealKV) · Tailwind CSS v4 (standalone CLI, no npm)
 

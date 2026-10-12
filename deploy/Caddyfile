@@ -1,4 +1,4 @@
-# Companion reverse proxy (M8). Caddy obtains and renews the TLS certificate
+# Team Companion reverse proxy (M8). Caddy obtains and renews the TLS certificate
 # automatically (Let's Encrypt / ZeroSSL) and redirects HTTP to HTTPS.
 # COMPANION_DOMAIN and ACME_EMAIL come from compose.yaml (.env).
 {
@@ -71,7 +71,7 @@
 		handle @down {
 			header Retry-After "60"
 			header Cache-Control "no-store"
-			respond "Companion is restarting (nightly backup or an update). Please try again in a minute." 503
+			respond "Team Companion is restarting (nightly backup or an update). Please try again in a minute." 503
 		}
 	}
 

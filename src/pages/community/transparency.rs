@@ -1,4 +1,4 @@
-//! `/transparency` (public): where support for Companion goes, month by
+//! `/transparency` (public): where support for Team Companion goes, month by
 //! month. Every money sentence and label comes from an admin-approved site
 //! text; until the owner approves them, the page says only "No months
 //! published yet." and nothing about money. The support link appears only
@@ -105,7 +105,7 @@ fn Ledger(data: LedgerView) -> impl IntoView {
         <PageHeader
             title="Transparency"
             eyebrow="Community"
-            meta=|| view! { <span>"Where support for Companion goes, month by month."</span> }
+            meta=|| view! { <span>"Where support for Team Companion goes, month by month."</span> }
         />
         <section aria-labelledby="policy-h" class="max-w-[70ch]">
             <SectionHeader title="How support is used" id="policy-h" />
@@ -159,12 +159,12 @@ fn SupportButton(url: String) -> impl IntoView {
         <Button
             href=url
             variant=ButtonVariant::Secondary
-            aria_label="Support Companion (opens an external site)"
+            aria_label="Support Team Companion (opens an external site)"
             attr:target="_blank"
             attr:rel="noopener noreferrer external"
             attr:data-testid="support-link"
         >
-            "Support Companion"
+            "Support Team Companion"
         </Button>
     }
 }

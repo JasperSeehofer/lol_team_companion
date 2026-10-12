@@ -23,7 +23,7 @@ pub fn ClosedBetaPage() -> impl IntoView {
     view! { <Landing /> }
 }
 
-/// What Companion is, the closed-beta note and the way in.
+/// What Team Companion is, the closed-beta note and the way in.
 ///
 /// A11y: one `<h1>`; the loop is an ordered list; "Sign in" is the page's
 /// one primary action.
@@ -58,7 +58,7 @@ pub fn Landing() -> impl IntoView {
                 "The coaching workspace for one team."
             </h1>
             <p class="mt-5 max-w-2xl text-reading text-secondary">
-                "Companion keeps a team's scouting, drafts, game plans and reviews in one loop, so every scrim adds to what the team knows. It is in a closed beta: teams join with an invite link from their captain or coach."
+                "Team Companion keeps a team's scouting, drafts, game plans and reviews in one loop, so every scrim adds to what the team knows. It is in a closed beta: teams join with an invite link from their captain or coach."
             </p>
             <div class="mt-8 flex flex-wrap items-center gap-3">
                 <Button href="/auth/login" variant=ButtonVariant::Primary size=ButtonSize::Lg>"Sign in"</Button>

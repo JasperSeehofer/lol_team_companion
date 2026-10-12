@@ -1,4 +1,4 @@
-# Companion production stack (M8): app + Caddy (HTTPS) + nightly backup.
+# Team Companion production stack (M8): app + Caddy (HTTPS) + nightly backup.
 #
 #   cp deploy/env.production.example .env           # fill it in
 #   cp deploy/backup.env.example deploy/backup.env  # object storage + rclone

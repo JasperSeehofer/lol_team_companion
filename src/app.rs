@@ -77,7 +77,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/pkg/lol_team_companion.css" />
-        <Title text="Companion" />
+        <Title text="Team Companion" />
 
         <Router>
             <ToastProvider>

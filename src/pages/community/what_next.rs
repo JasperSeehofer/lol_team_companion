@@ -44,7 +44,7 @@ pub fn WhatNextPage() -> impl IntoView {
             <PageHeader
                 title="What next"
                 eyebrow="Community"
-                meta=|| view! { <span>"Vote for what Companion should build. One vote per idea, and you can take it back."</span> }
+                meta=|| view! { <span>"Vote for what Team Companion should build. One vote per idea, and you can take it back."</span> }
             />
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading ideas"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || proposals.get().map(|r| match r {

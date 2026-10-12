@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Companion backup: consistent cold copy of the SurrealKV data directory,
+# Team Companion backup: consistent cold copy of the SurrealKV data directory,
 # uploaded to S3-compatible object storage with rclone.
 #
 #   backup.sh            one backup now (the backup container runs this nightly)

@@ -57,7 +57,7 @@ check() {
     fi
 }
 
-echo "=== LoL Team Companion API Tests ==="
+echo "=== Team Companion API Tests ==="
 echo "Server: $BASE_URL"
 echo ""
 

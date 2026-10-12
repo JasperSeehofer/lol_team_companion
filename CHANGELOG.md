@@ -8,6 +8,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Polish before launch (2026-10-12)
+
+#### Changed
+- The app has its name: Team Companion. It replaces the working title in the browser tab, the navigation, the footer's Riot disclaimer, the legal pages and every page that named the app.
+
 ### Milestone M9: Welcome and guidance (2026-10-12)
 
 Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudges off here, or show the checklist, hints and nudges again.

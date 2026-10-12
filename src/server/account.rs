@@ -470,7 +470,7 @@ pub async fn export_user_data(db: &Surreal<Db>, user_id: &str) -> DbResult<serde
     Ok(serde_json::json!({
         "format": "companion-export-1",
         "exported_at": chrono::Utc::now().to_rfc3339(),
-        "about": "Everything Companion stores about your account. Team records you created are listed by kind, id, name and date; their content belongs to the team and is not part of this file.",
+        "about": "Everything Team Companion stores about your account. Team records you created are listed by kind, id, name and date; their content belongs to the team and is not part of this file.",
         "not_included": [
             "Your password: only an Argon2 hash is stored, and it is never exported.",
             "Other people's data: teammates, their pages, admin notes on your bug reports.",

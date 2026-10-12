@@ -1,6 +1,6 @@
 # Architecture
 
-How Companion is built today (state after milestone M8). For goals and scope see `MISSION.md`; for the design system see `docs/DESIGN.md`.
+How Team Companion is built today (state after milestone M8). For goals and scope see `MISSION.md`; for the design system see `docs/DESIGN.md`.
 
 ## One crate, two targets
 

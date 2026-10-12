@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Companion restore: fetch a backup made by scripts/backup.sh, verify it, and
+# Team Companion restore: fetch a backup made by scripts/backup.sh, verify it, and
 # either test it in a throwaway container (drill) or put it back into the
 # production volume (apply). Runs on the VM host or on any machine with docker,
 # rclone, curl and zstd (a drill on a laptop also proves the backups are usable

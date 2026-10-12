@@ -413,10 +413,10 @@ pub fn WelcomePanel(
         <section class="mb-10 border-y border-rule bg-ink-1 px-5 py-6 sm:px-8" aria-labelledby="welcome-h" data-welcome>
             <p class="eyebrow">"Welcome"</p>
             <h2 id="welcome-h" class="mt-1 break-words font-display text-title font-semibold text-primary">
-                {format!("Welcome to Companion, {}", welcome.username)}
+                {format!("Welcome to Team Companion, {}", welcome.username)}
             </h2>
             <p class="mt-3 max-w-prose text-reading text-secondary">
-                "Companion keeps your team's week in one loop:"
+                "Team Companion keeps your team's week in one loop:"
             </p>
             <ol class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-label text-primary" aria-label="The loop">
                 {["Scout", "Draft", "Plan", "Play", "Review"].into_iter().enumerate().map(|(i, s)| view! {
@@ -521,7 +521,7 @@ pub fn GettingStarted(
             {forced.then(|| view! {
                 <p class="-mt-2 mb-3 text-label text-muted">"Shown because you asked for it. It stays hidden on Match Day otherwise."</p>
             })}
-            <PrepSequence label="Getting started with Companion" steps=steps emphasis=emphasis />
+            <PrepSequence label="Getting started with Team Companion" steps=steps emphasis=emphasis />
         </section>
     }
 }
