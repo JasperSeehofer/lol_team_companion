@@ -253,22 +253,33 @@ apply() {
 
   ts="$(date -u +%Y%m%dT%H%M%SZ)"
   log "stopping $container"
+  # From here on, any failure starts the app again (on whatever data is in
+  # place: the swap below either completed or left the old data untouched).
+  # shellcheck disable=SC2064 # expand $container now
+  trap "log 'restore failed; starting $container again'; \"$DOCKER\" start '$container' >/dev/null 2>&1 || true" ERR INT TERM
   "$DOCKER" stop -t 30 "$container" >/dev/null
   # Swap the data inside the volume with a one-off container from the app
-  # image (it has sh and cp). The old data stays in /data/pre-restore-<ts>;
-  # backup.sh only archives db/ and inbox/, so it is not backed up again.
+  # image (it has sh and cp). The backup is copied next to the live data
+  # first and swapped in with two renames, so a failed copy (disk full)
+  # leaves the old data in place. The old data stays in
+  # /data/pre-restore-<ts>; backup.sh only archives db/ and inbox/, so it is
+  # not backed up again (delete it within 30 days: privacy page retention).
   "$DOCKER" run --rm --user 0 --entrypoint sh \
     -v "$DATA_VOLUME:/data" -v "$dir/data:/restore:ro" "$image" -c "
       set -e
+      rm -rf /data/db.restoring
+      cp -a /restore/db /data/db.restoring
+      chown -R 10001:10001 /data/db.restoring
       mkdir -p /data/pre-restore-$ts
       if [ -d /data/db ]; then mv /data/db /data/pre-restore-$ts/db; fi
       if [ -d /data/inbox ]; then mv /data/inbox /data/pre-restore-$ts/inbox; fi
-      cp -a /restore/db /data/db
+      mv /data/db.restoring /data/db
       mkdir -p /data/inbox
-      chown -R 10001:10001 /data/db /data/inbox
+      chown 10001:10001 /data/inbox
     "
   log "starting $container"
   "$DOCKER" start "$container" >/dev/null
+  trap - ERR INT TERM
   until [[ "$("$DOCKER" inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container")" == "healthy" ]]; do
     sleep 2
     waited=$((waited + 2))
