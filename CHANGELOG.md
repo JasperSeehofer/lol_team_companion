@@ -35,6 +35,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - After opening an old address that redirects (the solo dashboard, analytics, team builder), pages could intermittently fail to load their scripts.
 - The phone menu stays a full-screen sheet over the page once its counts have loaded.
 - Wide tables on phones (such as the invite list) scroll inside their frame instead of widening the page.
+- The bug-report dialog has its dimmed backdrop again (it was transparent after the colour clean-up).
+- Deleting an opponent's dossier clears it from the next match instead of leaving a match that could not be saved; choosing another opponent resets who has read the brief, and "Read by" counts only current members.
+- A deleted team note can be restored for one day, as promised, and is then removed for good.
+- The privacy page now lists everything stored, including series, ban priorities, checklist templates, Sand Table boards and imported replays.
+- Shared pages ask search engines not to index them.
 
 #### Removed
 - The standalone solo dashboard (now My games and your profile; its address redirects), and the parked analytics and team builder pages (their addresses redirect to Team games and Draft).
