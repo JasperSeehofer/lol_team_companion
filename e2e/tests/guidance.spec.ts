@@ -41,6 +41,18 @@ test("first sign-in shows the welcome once; Skip keeps the checklist", async ({ 
   expect(filterRealErrors(errors)).toEqual([]);
 });
 
+test("Start records the welcome: it does not come back", async ({ authedPage }) => {
+  const page = authedPage;
+  await navigateTo(page, "/");
+  await expect(page.locator("[data-welcome]")).toBeVisible();
+  await page.getByTestId("welcome-start").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/team/roster", { timeout: 10000 });
+  await page.waitForTimeout(500);
+  await navigateTo(page, "/");
+  await expect(page.locator("[data-welcome]")).toHaveCount(0);
+  await expect(page.locator("[data-checklist]")).toBeVisible();
+});
+
 test("the checklist ticks after creating a team and a draft, and hides on request", async ({ teamPage }) => {
   const page = teamPage;
   await navigateTo(page, "/");
