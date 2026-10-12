@@ -1442,10 +1442,8 @@ async fn surrealkv_db() -> (std::sync::Arc<Surreal<Db>>, std::path::PathBuf) {
         std::process::id(),
         db::generate_invite_code()
     ));
-    let db = Surreal::new::<SurrealKv>(dir.to_string_lossy().to_string())
-        .await
-        .unwrap();
-    db.use_ns("test").use_db("test").await.unwrap();
+    let path = dir.to_string_lossy().to_string();
+    let db = crate::common::open_with_retry(|| Surreal::new::<SurrealKv>(path.clone())).await;
     // Baseline plus migrations, so the unique indexes added by migrations
     // (username_lc, team_member.user) exist as in production.
     db::prepare(&db).await.unwrap();

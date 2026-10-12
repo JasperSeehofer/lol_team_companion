@@ -11,8 +11,7 @@ use surrealdb::Surreal;
 /// a database created before M6 would look after the first M6 start applies
 /// `schema.surql`.
 async fn baseline_only() -> Surreal<Db> {
-    let db = Surreal::new::<Mem>(()).await.unwrap();
-    db.use_ns("test").use_db("test").await.unwrap();
+    let db = crate::common::open_with_retry(|| Surreal::new::<Mem>(())).await;
     db.query(include_str!("../../schema.surql"))
         .await
         .unwrap()
