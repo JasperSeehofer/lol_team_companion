@@ -15,9 +15,9 @@ use crate::components::ui::tokens::{
 use crate::components::ui::{
     AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, DraftBoard, Edge,
     Field, FieldSize, Force, HeadingLevel, InputKind, Keycap, Layer, Pad, PageHeader, PageShell,
-    PageWidth, PrepSequence, PrepState, PrepStep, RowLink, SectionHeader, Select, SelectOption,
-    Surface, TabItem, TabPanel, Table, Tabs, Td, Text, TextField, TextRole, Th, Tone, Tr,
-    UserAvatar,
+    PageWidth, PrepEmphasis, PrepSequence, PrepState, PrepStep, RowLink, SectionHeader, Select,
+    SelectOption, Surface, TabItem, TabPanel, Table, Tabs, Td, Text, TextField, TextRole, Th, Tone,
+    Tr, UserAvatar,
 };
 use crate::error_template::NotFound;
 use crate::pages::design_domain::{
@@ -802,11 +802,18 @@ fn PrepSection() -> impl IntoView {
             .status("3 open")
             .link("#prep", "Open action items"),
     ];
+    let quiet = steps.clone();
     view! {
-        <GallerySection id="prep" title="Prep sequence" lede="The Match Day pattern: what to do next, in order. Done steps recede, the next step is emphasised and links to where it is done, steps that need attention say why.">
-            <div class="max-w-2xl">
-                <p class="eyebrow mb-2">"Prep for 19:00 \u{00b7} scrim vs Beta Dragons"</p>
-                <PrepSequence label="Preparation steps" steps=steps />
+        <GallerySection id="prep" title="Prep sequence" lede="The Match Day pattern: what to do next, in order. Done steps recede, the next step is emphasised and links to where it is done, steps that need attention say why. Quiet emphasis outlines the next step for views that have their own primary action (the game plan's Save plan).">
+            <div class="grid max-w-5xl gap-10 lg:grid-cols-2">
+                <div>
+                    <p class="eyebrow mb-2">"Primary (Match Day) \u{00b7} scrim vs Beta Dragons"</p>
+                    <PrepSequence label="Preparation steps" steps=steps />
+                </div>
+                <div>
+                    <p class="eyebrow mb-2">"Quiet (inside an editor)"</p>
+                    <PrepSequence label="Preparation steps, quiet" steps=quiet emphasis=PrepEmphasis::Quiet />
+                </div>
             </div>
         </GallerySection>
     }

@@ -221,7 +221,7 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
         _ => false,
     };
     let read_by = m.brief_read_by.len();
-    let viewer_read = m.brief_read_by.iter().any(|u| *u == md.viewer_id);
+    let viewer_read = m.brief_read_by.contains(&md.viewer_id);
     let read_status = format!("Read by {read_by} of {}", md.member_count);
 
     let brief = match &md.brief {
@@ -442,7 +442,7 @@ fn MatchDayView(md: MatchDay, on_change: Callback<()>) -> impl IntoView {
     };
     let viewer_read = next
         .as_ref()
-        .is_some_and(|m| m.brief_read_by.iter().any(|u| *u == md.viewer_id));
+        .is_some_and(|m| m.brief_read_by.contains(&md.viewer_id));
     let match_id = next.as_ref().map(|m| m.id.clone());
     let editor_match = StoredValue::new(next.clone());
     let opponents = StoredValue::new(md.opponents.clone());
