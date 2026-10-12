@@ -8,7 +8,7 @@
 //! |---|---|---|---|
 //! | Synergy | 40 | ±20 | relations with the side's locked picks |
 //! | Counters | 30 | ±15 | relations with the other side's locked picks (and, for our picks, the opponent's scouted champions) |
-//! | Playstyle fit | 20 | ±10 | the draft's composition tags and what the comp still lacks |
+//! | Playstyle fit | 20 | ±10 | the draft's composition tags (our picks only) and what the comp still lacks |
 //! | Power spikes | 10 | ±5 | the candidate's curve against the comp's plan |
 //!
 //! Then the slot player's pool adds −8 to +6 (our side only), and the result
@@ -524,12 +524,15 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
     let synergy_scale = PER_PICK_SCALE * n_own.max(1) as f32;
     let counter_scale = PER_PICK_SCALE * enemy.len().max(1) as f32;
 
-    // The comp's plan: the draft's tags first, else the picks' curve.
-    let tags: Vec<&str> = {
+    // The comp's plan: the draft's tags first, else the picks' curve. The
+    // tags are our plan, so an enemy step ranks without them.
+    let tags: Vec<&str> = if ours {
         let mut t: Vec<&str> = state.tags.iter().map(|s| s.trim()).collect();
         t.sort_unstable();
         t.dedup();
         t
+    } else {
+        Vec::new()
     };
     let plan = if tags.contains(&"scaling") {
         Some(Scaling::Late)
@@ -1246,6 +1249,13 @@ mod tests {
         assert_eq!(target.side, "red");
         assert!(r.candidates.iter().all(|c| c.pool.is_none()));
         assert_eq!(r.own.picks, 2, "red's Syndra and Lee Sin");
+        // Our draft's tags are our plan, not theirs.
+        s.tags = vec!["teamfight".into(), "scaling".into()];
+        let r = rank(&t, &s, &knowledge(&[], &pools, &ev, &[]));
+        assert!(r.candidates.iter().all(|c| c
+            .reasons
+            .iter()
+            .all(|x| x.rule_id.as_deref() != Some("fit.tag_match"))));
     }
 
     #[test]

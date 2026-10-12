@@ -1,7 +1,8 @@
 //! Match evidence from the team's own stored games.
 //!
-//! - **Pairs**: two of our champions in the same game (two members' rows on
-//!   the same `match` record): games and wins.
+//! - **Pairs**: two of our champions in the same game on the same side (two
+//!   members' rows on the same `match` record with the same result): games
+//!   and wins.
 //! - **Matchups**: our champion against the enemy champion in the same
 //!   position, from cached match details (all ten participants) where a
 //!   member's PUUID identifies our side. Only games whose detail was opened
@@ -110,7 +111,9 @@ pub fn compute(
         for i in 0..members.len() {
             for j in i + 1..members.len() {
                 let (a, b) = (&members[i].1, &members[j].1);
-                if a == b {
+                // Teammates share the result; two members on opposite
+                // sides of the same game (solo queue) are not a pair.
+                if a == b || members[i].2 != members[j].2 {
                     continue;
                 }
                 let key = if a < b {
@@ -243,11 +246,14 @@ mod tests {
             row("3", "c", "FiddleSticks", true),
             // A solo game: no pair.
             row("4", "a", "Jinx", true),
+            // Two members on opposite sides of one game: not a pair.
+            row("6", "a", "Jinx", true),
+            row("6", "b", "Thresh", false),
             row("5", "a", "Unknown", true),
             row("5", "b", "Thresh", true),
         ];
         let ev = compute(&rows, &[], &HashSet::new(), resolve);
-        assert_eq!(ev.games, 5);
+        assert_eq!(ev.games, 6);
         assert_eq!(ev.pair("Thresh", "Jinx"), Some(Tally { games: 2, wins: 1 }));
         assert_eq!(
             ev.pair("Jinx", "Fiddlesticks"),
