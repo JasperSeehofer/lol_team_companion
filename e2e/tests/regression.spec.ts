@@ -112,18 +112,11 @@ test.describe("BUG-03", () => {
     // and creates a team for them. The creator is the team leader.
     // Their username should appear in the page (in the roster area).
 
-    // The "Bench" section should show the leader since they were just
-    // created — they won't have a role slot assigned yet.
-    const benchSection = page.locator('h2', { hasText: /^Bench$/ });
-    await expect(benchSection).toBeVisible({ timeout: 5000 });
-
-    // The bench section should NOT show "No players on the bench"
-    // because the leader (who created the team) should be in it.
-    const emptyBench = page.locator('p:has-text("No players on the bench")');
-    const isEmptyBench = await emptyBench
-      .isVisible({ timeout: 1000 })
-      .catch(() => false);
-    expect(isEmptyBench).toBe(false);
+    // A new team's creator is not placed yet: they appear under
+    // "Not placed yet" (M5 roster places), never nowhere.
+    const unplaced = page.locator('[data-roster-group="unplaced"]');
+    await expect(unplaced).toBeVisible({ timeout: 5000 });
+    await expect(unplaced.locator("[data-roster-row]")).toHaveCount(1);
 
     // The leader's name should be somewhere in the page
     // The fixture creates users with name "pagesuser_<timestamp>_<id>"

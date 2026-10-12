@@ -139,11 +139,11 @@ test.describe("Full auth flow", () => {
     await page.waitForLoadState("load");
     await page.waitForTimeout(500);
 
-    // Navigate to profile where there's a visible "Log Out" button
+    // Navigate to profile, which has a visible "Sign out" button
     await page.goto("/profile", { waitUntil: "networkidle" });
 
-    // Click the profile page's "Log Out" button
-    const logoutBtn = page.locator("button").filter({ hasText: /log\s*out/i }).first();
+    // Click the profile page's "Sign out" button
+    const logoutBtn = page.locator("main button").filter({ hasText: /sign\s*out|log\s*out/i }).first();
     await expect(logoutBtn).toBeVisible({ timeout: 5000 });
     await logoutBtn.click();
 

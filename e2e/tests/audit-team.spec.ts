@@ -44,9 +44,9 @@ test("bench: the leader starts, benches and unbenches a player", async ({ authed
   await authenticatePage(player);
   await navigateTo(player, "/team/roster");
   await player.locator("#team-search").fill(teamName);
-  const row = player.locator("li", { hasText: teamName });
+  const row = player.locator("[data-join-team] li", { hasText: teamName });
   await row.getByRole("button", { name: "Ask to join" }).click();
-  await expect(row.getByText("Request sent")).toBeVisible({ timeout: 10000 });
+  await expect(row.getByText("Request sent", { exact: true })).toBeVisible({ timeout: 10000 });
 
   // The leader accepts on the team page.
   await navigateTo(leader, "/team/dashboard");

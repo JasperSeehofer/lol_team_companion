@@ -80,7 +80,7 @@ test("post-game: no console errors during form interactions", async ({ teamPage 
   }
 
   // Check for any dropdowns (draft_id or game_plan_id selects)
-  const selects = page.locator("select");
+  const selects = page.locator("main select:visible");
   const selectCount = await selects.count();
   if (selectCount > 0) {
     // Just verify the dropdown exists and can be interacted with

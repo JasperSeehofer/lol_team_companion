@@ -24,8 +24,10 @@ for (const { path, title } of PUBLIC_PAGES) {
     await page.goto(path);
     await expect(page).toHaveTitle(title);
 
-    // Primary nav is present (rendered by Leptos SSR)
-    await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
+    // The site header is present (rendered by Leptos SSR). Signed-out
+    // visitors get the brand and the sign-in links; the hub links
+    // (nav "Primary") are for signed-in users only.
+    await expect(page.locator("header").getByRole("link", { name: "Companion", exact: true })).toBeVisible();
 
     // Footer carries Riot's legal disclaimer on every page
     await expect(page.getByTestId("riot-disclaimer")).toContainText(

@@ -35,7 +35,8 @@ export async function waitForHome(page: Page, timeout = 20000): Promise<void> {
  * `/team/roster`.
  */
 export async function authenticatePage(page: Page): Promise<void> {
-  const id = ++userCounter;
+  // The worker index keeps parallel workers (same TIMESTAMP) apart.
+  const id = `${process.env.TEST_WORKER_INDEX ?? "0"}x${++userCounter}`;
   const email = `pages_${TIMESTAMP}_${id}@test.invalid`;
   const username = `pagesuser_${TIMESTAMP}_${id}`;
 
