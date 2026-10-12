@@ -2,10 +2,12 @@
 //! (owner decision for Release 1: there is no email provider, so admins are
 //! not invited by mail).
 //!
-//!     cargo run --features ssr --bin promote -- someone@example.com
-//!     cargo run --features ssr --bin promote -- --revoke someone@example.com
-//!     cargo run --features ssr --bin promote -- --list
-//!     /app/lol_team_companion promote someone@example.com   # the server binary (container)
+//! ```text
+//! cargo run --features ssr --bin promote -- someone@example.com
+//! cargo run --features ssr --bin promote -- --revoke someone@example.com
+//! cargo run --features ssr --bin promote -- --list
+//! /app/lol_team_companion promote someone@example.com   # the server binary (container)
+//! ```
 //!
 //! A promoted account is an admin whether or not `ADMIN_EMAILS` lists it,
 //! until it is revoked here. `ADMIN_EMAILS` keeps working as before. The
