@@ -242,7 +242,11 @@ fn visit_page() -> Option<String> {
     if !path.starts_with("/api/") {
         return Some(path.to_string());
     }
-    let referer = parts.headers.get(axum::http::header::REFERER)?.to_str().ok()?;
+    let referer = parts
+        .headers
+        .get(axum::http::header::REFERER)?
+        .to_str()
+        .ok()?;
     let uri: axum::http::Uri = referer.parse().ok()?;
     Some(uri.path().to_string())
 }

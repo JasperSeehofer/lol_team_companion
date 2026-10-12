@@ -1203,7 +1203,13 @@ mod tests {
         let ids: Vec<String> = t.rows.iter().map(|r| r.traits.champion.clone()).collect();
         // Every role has a player whose pool holds most champions at a
         // random tier, so pool points differ between candidates.
-        let tiers = ["comfort", "match_ready", "scrim_ready", "practicing", "to_practice"];
+        let tiers = [
+            "comfort",
+            "match_ready",
+            "scrim_ready",
+            "practicing",
+            "to_practice",
+        ];
         let pools: Vec<PoolPlayer> = Role::ALL
             .iter()
             .map(|r| PoolPlayer {
@@ -1211,8 +1217,11 @@ mod tests {
                 role: Some(*r),
                 entries: ids
                     .iter()
-                    .filter(|_| rng.below(4) != 0)
-                    .map(|c| (c.clone(), tiers[rng.below(tiers.len())].to_string()))
+                    .filter_map(|c| {
+                        let roll = rng.below(4 * tiers.len());
+                        (roll >= tiers.len())
+                            .then(|| (c.clone(), tiers[roll % tiers.len()].to_string()))
+                    })
                     .collect(),
             })
             .collect();

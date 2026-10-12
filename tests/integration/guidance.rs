@@ -353,6 +353,8 @@ async fn visits_count_for_the_returning_rule() {
     )
     .await;
     let f = g::nudge_facts(&db, &a, &team, Utc::now()).await.unwrap();
-    assert!(f.prev_seen.is_some_and(|t| Utc::now() - t < Duration::days(2)));
+    assert!(f
+        .prev_seen
+        .is_some_and(|t| Utc::now() - t < Duration::days(2)));
     assert!(pick_nudge(true, &f, &[], None).is_none_or(|n| n.kind != NudgeKind::Returning));
 }

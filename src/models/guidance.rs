@@ -859,7 +859,13 @@ mod tests {
 
     #[test]
     fn public_pages_do_not_count_as_visits() {
-        for p in ["/", "/draft", "/team/dashboard", "/profile", "/admin/invites"] {
+        for p in [
+            "/",
+            "/draft",
+            "/team/dashboard",
+            "/profile",
+            "/admin/invites",
+        ] {
             assert!(counts_as_visit(p), "{p}");
         }
         for p in [
