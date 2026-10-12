@@ -466,7 +466,7 @@ fn NoTeamHome(username: String, guide: HomeGuide, on_change: Callback<()>) -> im
     view! {
         <PageShell width=PageWidth::Standard>
             <PageHeader title="Match Day" eyebrow=format!("Signed in as {username}") />
-            {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w on_change=on_change /> })}
+            {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=true on_change=on_change /> })}
             {guide.checklist.clone().map(|items| view! {
                 <GettingStarted
                     items=items
@@ -585,7 +585,7 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             <p class="-mt-3 mb-6 text-caption text-muted md:hidden" data-testid="phone-read-only">
                 "Read-only on the phone. Edit the match on a larger screen."
             </p>
-            {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w on_change=on_change /> })}
+            {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=false on_change=on_change /> })}
             // Match Day has its own primary action (the prep sequence's
             // next step or "Add the next match"): the checklist stays quiet.
             {guide.checklist.clone().map(|items| view! {

@@ -221,8 +221,13 @@ pub fn FirstUseHint(
         return ().into_any();
     };
     let visible = move || {
-        g.state
-            .with(|s| guidance::page_hint(s, &location.pathname.get()) == Some(hint))
+        let path = location.pathname.get();
+        let intro_here = g
+            .current_intro
+            .with(|c| c.as_ref().is_some_and(|i| i.route == path));
+        !intro_here
+            && g.state
+                .with(|s| guidance::page_hint(s, &path) == Some(hint))
     };
     let title = StoredValue::new(title);
     let children = StoredValue::new(children);
@@ -339,9 +344,14 @@ pub fn CommandBarHint() -> impl IntoView {
     let Some(g) = ctx() else {
         return ().into_any();
     };
+    // The page's introduction stays on screen after it was recorded as
+    // seen (it left the state then): no second piece of guidance beside it.
     let visible = move || {
-        g.state
-            .with(|s| guidance::nav_hint(s, &location.pathname.get()))
+        let path = location.pathname.get();
+        let intro_here = g
+            .current_intro
+            .with(|c| c.as_ref().is_some_and(|i| i.route == path));
+        !intro_here && g.state.with(|s| guidance::nav_hint(s, &path))
     };
     view! {
         <Show when=visible>
@@ -378,7 +388,13 @@ fn mark_then(key: &'static str, mute: bool, after: impl FnOnce() + 'static) {
 /// real link (the page's one primary action) and "Skip, I'll find my way"
 /// a button. Nothing moves focus.
 #[component]
-pub fn WelcomePanel(welcome: Welcome, on_change: Callback<()>) -> impl IntoView {
+pub fn WelcomePanel(
+    welcome: Welcome,
+    /// Start is the page's primary action (no other chalk action on the
+    /// page); otherwise it is a secondary button.
+    primary: bool,
+    on_change: Callback<()>,
+) -> impl IntoView {
     let start_href = welcome.start_href.clone();
     let start = Callback::new(move |_| {
         // Record the start first, then follow the link (a click that leaves
@@ -394,7 +410,7 @@ pub fn WelcomePanel(welcome: Welcome, on_change: Callback<()>) -> impl IntoView 
     view! {
         <section class="mb-10 border-y border-rule bg-ink-1 px-5 py-6 sm:px-8" aria-labelledby="welcome-h" data-welcome>
             <p class="eyebrow">"Welcome"</p>
-            <h2 id="welcome-h" class="mt-1 font-display text-title font-semibold text-primary">
+            <h2 id="welcome-h" class="mt-1 break-words font-display text-title font-semibold text-primary">
                 {format!("Welcome to Companion, {}", welcome.username)}
             </h2>
             <p class="mt-3 max-w-prose text-reading text-secondary">
@@ -417,7 +433,7 @@ pub fn WelcomePanel(welcome: Welcome, on_change: Callback<()>) -> impl IntoView 
                 </p>
             })}
             <div class="mt-5 flex flex-wrap items-center gap-3">
-                <Button href=start_href variant=ButtonVariant::Primary on_click=start attr:data-testid="welcome-start">"Start"</Button>
+                <Button href=start_href variant=if primary { ButtonVariant::Primary } else { ButtonVariant::Secondary } on_click=start attr:data-testid="welcome-start">"Start"</Button>
                 <Button variant=ButtonVariant::Quiet on_click=skip attr:data-testid="welcome-skip">"Skip, I\u{2019}ll find my way"</Button>
             </div>
         </section>
@@ -438,9 +454,14 @@ pub fn checklist_steps(items: &[ChecklistItem]) -> Vec<PrepStep> {
             } else {
                 PrepState::Todo
             };
+            let status = if state == PrepState::Next {
+                "Next".to_string()
+            } else {
+                it.status.clone()
+            };
             let mut s = PrepStep::new(it.title.clone(), state)
                 .detail(it.detail.clone())
-                .status(it.status.clone());
+                .status(status);
             if let Some(h) = &it.href {
                 s = s.link(h.clone(), it.action.clone());
             }
