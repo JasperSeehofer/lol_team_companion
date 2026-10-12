@@ -73,6 +73,53 @@ impl SurrealSessionStore {
     }
 }
 
+impl SurrealSessionStore {
+    /// Delete every session signed in as `user_id` (account deletion). The
+    /// user id lives inside the MessagePack record (axum-login's
+    /// `axum-login.data` entry), so each row is decoded; rows that do not
+    /// decode are left to the expiry purge. Returns how many were deleted.
+    pub async fn delete_for_user(&self, user_id: &str) -> session_store::Result<usize> {
+        #[derive(Debug, Deserialize, SurrealValue)]
+        struct Row {
+            id: surrealdb::types::RecordId,
+            data: Vec<u8>,
+        }
+        let mut result = self
+            .db
+            .query("SELECT id, data FROM type::table($tb)")
+            .bind(("tb", self.table.clone()))
+            .await
+            .map_err(backend)?;
+        let rows: Vec<Row> = result.take(0).map_err(backend)?;
+        let mut ids = Vec::new();
+        for row in rows {
+            let Ok(record) = rmp_serde::from_slice::<Record>(&row.data) else {
+                continue;
+            };
+            let owner = record
+                .data
+                .get("axum-login.data")
+                .and_then(|d| d.get("user_id"))
+                .and_then(|u| u.as_str());
+            if owner == Some(user_id) {
+                ids.push(row.id);
+            }
+        }
+        let n = ids.len();
+        if n > 0 {
+            self.db
+                .query("DELETE type::table($tb) WHERE id IN $ids")
+                .bind(("tb", self.table.clone()))
+                .bind(("ids", ids))
+                .await
+                .map_err(backend)?
+                .check()
+                .map_err(backend)?;
+        }
+        Ok(n)
+    }
+}
+
 #[async_trait]
 impl SessionStore for SurrealSessionStore {
     async fn create(&self, record: &mut Record) -> session_store::Result<()> {

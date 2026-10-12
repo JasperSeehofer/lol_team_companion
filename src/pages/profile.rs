@@ -94,6 +94,77 @@ pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
+/// Whether the user keeps their player card out of share links (M8).
+#[server]
+pub async fn get_share_card_hidden() -> Result<bool, ServerFnError> {
+    use crate::server::{account, authz};
+    let ctx = authz::authed().await?;
+    account::share_card_hidden(&ctx.db, &ctx.user.id)
+        .await
+        .map_err(authz::server_err)
+}
+
+/// Keep the player card out of share links (or allow it again). Hiding also
+/// revokes the live links to the card.
+#[server]
+pub async fn set_share_card_hidden(hidden: bool) -> Result<(), ServerFnError> {
+    use crate::server::rate_limit::Bucket;
+    use crate::server::{account, authz};
+    let ctx = authz::authed().await?;
+    authz::rate_limit_user(Bucket::Community, &ctx.user)?;
+    account::set_share_card_hidden(&ctx.db, &ctx.user.id, hidden)
+        .await
+        .map_err(authz::server_err)
+}
+
+/// Delete the signed-in account (`server::account::delete_account`). Needs
+/// the username typed again and the password; rate limited per user. Ends
+/// every session of the account, this one included.
+#[server]
+pub async fn delete_my_account(
+    confirm_username: String,
+    password: String,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::{verify_password_async, AuthSession};
+    use crate::server::rate_limit::Bucket;
+    use crate::server::session_store::SurrealSessionStore;
+    use crate::server::{account, authz, db};
+
+    let ctx = authz::authed().await?;
+    authz::rate_limit_user(Bucket::Account, &ctx.user)?;
+    if confirm_username.trim() != ctx.user.username {
+        return Err(ServerFnError::new(
+            "Type your username exactly as shown to confirm.",
+        ));
+    }
+    let hash = db::password_hash_of(&ctx.db, &ctx.user.id)
+        .await
+        .map_err(authz::server_err)?;
+    if !verify_password_async(password, hash).await {
+        return Err(ServerFnError::new("That password is not right."));
+    }
+    let deleted = account::delete_account(&ctx.db, &ctx.user.id)
+        .await
+        .map_err(authz::server_err)?;
+    tracing::info!(
+        user = %ctx.user.id,
+        team_deleted = deleted.team_deleted,
+        "account deleted"
+    );
+    let store = SurrealSessionStore::new(ctx.db.clone(), "sessions".to_string());
+    match store.delete_for_user(&ctx.user.id).await {
+        Ok(n) => tracing::info!(user = %ctx.user.id, sessions = n, "sessions ended"),
+        Err(e) => tracing::warn!("could not end the deleted account's sessions: {e}"),
+    }
+    let mut auth: AuthSession = leptos_axum::extract()
+        .await
+        .map_err(|e| authz::internal_error("extract auth session", e))?;
+    if let Err(e) = auth.logout().await {
+        tracing::warn!("logout after account deletion failed: {e}");
+    }
+    Ok(())
+}
+
 const REGIONS: &[(&str, &str)] = &[
     ("EUW", "EUW (Europe West)"),
     ("EUNE", "EUNE (Europe Nordic & East)"),
@@ -113,9 +184,7 @@ const REGIONS: &[(&str, &str)] = &[
 ];
 
 fn clean_error(e: ServerFnError) -> String {
-    e.to_string()
-        .trim_start_matches("error running server function: ")
-        .to_string()
+    crate::models::utils::error_text(&e)
 }
 
 #[component]
@@ -125,6 +194,7 @@ pub fn ProfilePage() -> impl IntoView {
         || (),
         |_| crate::components::survey_prompt::get_survey_opt_out(),
     );
+    let card_hidden = Resource::new(|| (), |_| get_share_card_hidden());
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
             #[cfg(feature = "hydrate")]
@@ -145,6 +215,12 @@ pub fn ProfilePage() -> impl IntoView {
             </Suspense>
             <Suspense fallback=|| ()>
                 {move || surveys_off.get().and_then(|r| r.ok()).map(|off| view! { <SurveySettings off=off /> })}
+            </Suspense>
+            <Suspense fallback=|| ()>
+                {move || Suspend::new(async move {
+                    let hidden = card_hidden.await.unwrap_or(false);
+                    user.await.ok().flatten().map(|u| view! { <DataSettings username=u.username card_hidden=hidden /> })
+                })}
             </Suspense>
         </PageShell>
     }
@@ -187,6 +263,126 @@ fn SurveySettings(off: bool) -> impl IntoView {
             <Switch label="Ask me short survey questions" checked=ask on_change=on_change />
             <p class="mt-2 text-caption text-muted">"At most one question a week, always right after something you just did. You can dismiss any question."</p>
         </section>
+    }
+}
+
+/// Your data (M8): the player-card switch, the export and account deletion.
+#[component]
+fn DataSettings(username: String, card_hidden: bool) -> impl IntoView {
+    use crate::components::ui::{Dialog, DialogSize, InputKind, Switch, ToastKind};
+    let toast = use_context::<ToastContext>();
+    let hide = RwSignal::new(card_hidden);
+    let on_hide = Callback::new(move |on: bool| {
+        leptos::task::spawn_local(async move {
+            match set_share_card_hidden(on).await {
+                Ok(()) => {
+                    if let Some(t) = toast {
+                        t.show.run((
+                            ToastKind::Success,
+                            if on {
+                                "Your card is out of share links; live links to it were revoked."
+                            } else {
+                                "Teammates can share your card again."
+                            }
+                            .into(),
+                        ));
+                    }
+                }
+                Err(e) => {
+                    hide.set(!on);
+                    if let Some(t) = toast {
+                        t.show.run((ToastKind::Error, clean_error(e)));
+                    }
+                }
+            }
+        });
+    });
+
+    let delete_open = RwSignal::new(false);
+    let typed = RwSignal::new(String::new());
+    let password = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let deleting = RwSignal::new(false);
+    let name = StoredValue::new(username.clone());
+    let matches = Signal::derive(move || typed.get().trim() == name.get_value());
+    let open_delete = Callback::new(move |_| {
+        typed.set(String::new());
+        password.set(String::new());
+        error.set(None);
+        delete_open.set(true);
+    });
+    let confirm = Callback::new(move |_| {
+        if !matches.get_untracked() || deleting.get_untracked() {
+            return;
+        }
+        deleting.set(true);
+        leptos::task::spawn_local(async move {
+            match delete_my_account(typed.get_untracked(), password.get_untracked()).await {
+                Ok(()) =>
+                {
+                    #[cfg(feature = "hydrate")]
+                    if let Some(window) = web_sys::window() {
+                        let _ = window.location().set_href("/?account=deleted");
+                    }
+                }
+                Err(e) => {
+                    error.set(Some(clean_error(e)));
+                    deleting.set(false);
+                }
+            }
+        });
+    });
+    let hint = format!("Type {username} to confirm.");
+
+    view! {
+        <section class="mt-12 scroll-mt-20 flex flex-col gap-4" id="your-data" aria-labelledby="data-h" data-your-data>
+            <SectionHeader title="Your data" id="data-h" />
+            <div>
+                <Switch label="Keep my player card out of share links" checked=hide on_change=on_hide />
+                <p class="mt-2 text-caption text-muted">"Teammates still see your card inside the team. When it is off, a teammate can make a read-only link to it that works without signing in."</p>
+            </div>
+            <div class="flex flex-col gap-2">
+                <h3 class="font-display text-heading font-semibold text-primary">"Download my data"</h3>
+                <p class="max-w-prose text-body text-secondary">"A JSON file with everything Companion stores about you: your account and Riot link, team membership, champion pool and notes, learnings, goals, synced games, notes you wrote, bug reports, votes and survey answers. Team records you created are listed by name; their content belongs to the team."</p>
+                <div>
+                    <Button href="/account/export" variant=ButtonVariant::Secondary attr:download="" attr:data-testid="export-data">"Download my data"</Button>
+                </div>
+            </div>
+            <div class="flex flex-col gap-2">
+                <h3 class="font-display text-heading font-semibold text-primary">"Delete my account"</h3>
+                <p class="max-w-prose text-body text-secondary">"Deletes your account, your personal pages, your synced games and your votes and survey answers, and signs you out everywhere. Drafts, plans, reviews and notes you wrote for your team stay with the team, shown as written by a former member. If you lead a team with other members, hand leadership to one of them on the team page first; if you are its only member, the team is deleted too. Backups keep a copy for up to 30 days."</p>
+                <div>
+                    <Button variant=ButtonVariant::Danger on_click=open_delete attr:data-testid="delete-account">"Delete my account"</Button>
+                </div>
+            </div>
+        </section>
+        <Dialog
+            id="delete-account"
+            open=delete_open
+            title="Delete your account?"
+            description="This cannot be undone. Your team keeps what you wrote for it, without your name."
+            size=DialogSize::Sm
+            dismiss_on_scrim=false
+            footer=move || view! {
+                <Button variant=ButtonVariant::Secondary on_click=Callback::new(move |_| delete_open.set(false)) attr:autofocus=true attr:data-confirm="cancel">"Cancel"</Button>
+                <Button
+                    variant=ButtonVariant::Danger
+                    on_click=confirm
+                    loading=deleting
+                    disabled=Signal::derive(move || !matches.get())
+                    attr:data-confirm="confirm"
+                >"Delete my account"</Button>
+            }
+        >
+            <div class="flex flex-col gap-4">
+                <Field id="delete-confirm-name" label="Username" hint=hint.clone()>
+                    <TextField value=typed name="confirm_username" />
+                </Field>
+                <Field id="delete-password" label="Password" error=Signal::derive(move || error.get())>
+                    <TextField value=password name="password" kind=InputKind::Password />
+                </Field>
+            </div>
+        </Dialog>
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod account;
 pub mod auth;
 pub mod authz;
 pub mod bug_report_export;

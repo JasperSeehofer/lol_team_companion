@@ -676,6 +676,9 @@ DEFINE FIELD IF NOT EXISTS proposal ON bug_report TYPE option<record<proposal>>;
 
 -- user: true = never ask survey questions (absent = ask).
 DEFINE FIELD IF NOT EXISTS survey_opt_out ON user TYPE option<bool>;
+-- user: true = the player card cannot be shared by link (M8; absent = it
+-- can). Teammates still see the card inside the app.
+DEFINE FIELD IF NOT EXISTS share_card_hidden ON user TYPE option<bool>;
 
 -- Transparency ledger: one row per month (record id ledger_month:⟨YYYY-MM⟩
 -- plus a UNIQUE index on `month`). Amounts are euro cents; "to the

@@ -117,6 +117,9 @@ pub struct PlayerCard {
     pub form: Vec<bool>,
     /// (champion, games, wins) for the most played champions in stored games.
     pub most_played: Vec<(String, u32, u32)>,
+    /// The player keeps their card out of share links (profile switch, M8).
+    #[serde(default)]
+    pub share_hidden: bool,
 }
 
 /// What a share link opens.

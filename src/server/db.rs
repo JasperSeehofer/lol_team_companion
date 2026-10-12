@@ -159,6 +159,16 @@ pub async fn ensure_user_record(
     ensure_owned(db, table, id, "user", "user", user_id).await
 }
 
+/// The stored password hash of a user (to confirm a destructive action).
+pub async fn password_hash_of(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
+    let mut r = db
+        .query("SELECT VALUE password_hash FROM ONLY type::record('user', $user_key)")
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let hash: Option<String> = r.take(0)?;
+    hash.ok_or(DbError::NotFound)
+}
+
 /// True when the user is a member of the team.
 pub async fn is_team_member(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<bool> {
     let mut r = db
@@ -7651,11 +7661,15 @@ async fn ensure_share_target(
         ShareKind::GamePlan => ensure_team_record(db, "game_plan", target_id, team_id).await,
         ShareKind::Review => ensure_team_record(db, "post_game_learning", target_id, team_id).await,
         ShareKind::Player => {
-            if is_team_member(db, target_id, team_id).await? {
-                Ok(())
-            } else {
-                Err(DbError::NotFound)
+            if !is_team_member(db, target_id, team_id).await? {
+                return Err(DbError::NotFound);
             }
+            if crate::server::account::share_card_hidden(db, target_id).await? {
+                return Err(DbError::Invalid(
+                    "This player keeps their card out of share links.".into(),
+                ));
+            }
+            Ok(())
         }
     }
 }
@@ -7773,6 +7787,7 @@ pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbRe
         role: String,
         roster_type: String,
         team_name: String,
+        share_hidden: Option<bool>,
     }
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Pool {
@@ -7789,7 +7804,7 @@ pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbRe
     let mut r = db
         .query(
             "LET $u = type::record('user', $user_key); \
-             SELECT user.username AS username, role, roster_type, team.name AS team_name FROM team_member WHERE team = type::record('team', $team_key) AND user = $u LIMIT 1; \
+             SELECT user.username AS username, role, roster_type, team.name AS team_name, user.share_card_hidden AS share_hidden FROM team_member WHERE team = type::record('team', $team_key) AND user = $u LIMIT 1; \
              SELECT champion, tier FROM champion_pool WHERE user = $u; \
              SELECT champion, win, match.game_end AS game_end FROM player_match WHERE user = $u ORDER BY game_end DESC LIMIT 50;",
         )
@@ -7833,6 +7848,7 @@ pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbRe
     played.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     played.truncate(3);
     Ok(PlayerCard {
+        share_hidden: member.share_hidden.unwrap_or(false),
         username: member.username,
         team_name: member.team_name,
         role: member.role,

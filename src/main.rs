@@ -104,6 +104,63 @@ async fn wait_for_db_close(data_dir: &std::path::Path, limit: Duration) -> bool 
     }
 }
 
+/// `GET /account/export`: everything stored about the signed-in user as a
+/// JSON download (`server::account::export_user_data`). 401 when signed out,
+/// 429 over the per-user `Bucket::Account` limit. A plain route (not a
+/// server function) so the browser saves it as a file; the session cookie is
+/// SameSite=Strict, so another site cannot trigger it with the cookie.
+async fn export_handler(
+    auth: lol_team_companion::server::auth::AuthSession,
+    State(state): State<AppState>,
+) -> axum::response::Response {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+    use lol_team_companion::server::rate_limit::{slow_down_message, Bucket, Limiter};
+
+    let Some(user) = auth.user else {
+        return (StatusCode::UNAUTHORIZED, "Sign in to download your data.").into_response();
+    };
+    if let Err(wait) = Limiter::global().hit(Bucket::Account, &user.id) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            [(header::RETRY_AFTER, wait.as_secs().max(1).to_string())],
+            slow_down_message(wait),
+        )
+            .into_response();
+    }
+    match lol_team_companion::server::account::export_user_data(&state.db, &user.id).await {
+        Ok(doc) => {
+            let body = serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into());
+            let file = format!(
+                "attachment; filename=\"companion-data-{}.json\"",
+                chrono::Utc::now().format("%Y-%m-%d")
+            );
+            tracing::info!(user = %user.id, "data export downloaded");
+            (
+                StatusCode::OK,
+                [
+                    (
+                        header::CONTENT_TYPE,
+                        "application/json; charset=utf-8".to_string(),
+                    ),
+                    (header::CONTENT_DISPOSITION, file),
+                    (header::CACHE_CONTROL, "no-store".to_string()),
+                ],
+                body,
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::error!(user = %user.id, "data export failed: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "The export failed. Try again in a moment.",
+            )
+                .into_response()
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Load .env file (if present)
@@ -267,6 +324,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/healthz", get(health_handler))
+        .route("/account/export", get(export_handler))
         // Champion and item images, cached server-side (never a browser CDN call).
         .route("/img/champion/{key}", get(images::champion_portrait))
         .route("/img/champion/{key}/icon", get(images::champion_icon))
