@@ -350,7 +350,7 @@ fn WidgetInner() -> impl IntoView {
         </div>
 
         <Show when=move || state.get() == WidgetState::Selecting fallback=|| ()>
-            <div class="fixed inset-x-0 top-14 z-(--z-popover) mx-auto w-[min(40rem,calc(100vw-2rem))]" data-feedback-hint>
+            <div class="fixed inset-x-0 top-14 z-(--z-popover) mx-auto w-[min(40rem,calc(100vw-2rem))] bg-ink-1 shadow-overlay" data-feedback-hint>
                 <Callout
                     tone=CalloutTone::Info
                     action=move || view! {
@@ -362,7 +362,7 @@ fn WidgetInner() -> impl IntoView {
                             >
                                 "Skip"
                             </Button>
-                            <span class="flex items-center gap-1 text-caption text-secondary">
+                            <span class="hidden items-center gap-1 text-caption text-secondary sm:flex">
                                 <Keycap keys="Esc" />
                                 " to cancel"
                             </span>

@@ -16,6 +16,7 @@ use crate::components::ui::{
 use crate::error_template::NotFound;
 use crate::models::bug_report::{category_label, BugReportAdmin, BugStatus, BugTriage};
 use crate::models::community::{short_date, ChangelogChoice};
+use crate::pages::admin::ListRow;
 
 #[server]
 pub async fn admin_list_bug_reports(
@@ -112,8 +113,6 @@ fn Triage(
     selected: Signal<Option<String>>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
-    let navigate = use_navigate();
-    let navigate = StoredValue::new(navigate);
     let rows = StoredValue::new(rows);
     let choices = StoredValue::new(choices);
     let mut segments: Vec<Segment> = BugStatus::ALL
@@ -147,20 +146,12 @@ fn Triage(
                                 });
                                 view! {
                                     <li class="border-b border-rule">
-                                        <Button
-                                            variant=ButtonVariant::Quiet
-                                            full_width=true
-                                            pressed=is_sel
-                                            on_click=Callback::new(move |_| {
-                                                let url = format!("/admin/bugs?id={}", id);
-                                                navigate.with_value(|n| n(&url, leptos_router::NavigateOptions { replace: true, scroll: false, ..Default::default() }));
-                                            })
-                                        >
+                                        <ListRow href=format!("/admin/bugs?id={}", id) selected=is_sel>
                                             <span class="flex w-full flex-col items-start gap-0.5 py-1 text-left">
                                                 <span class="text-body text-primary">{first_line(&r.description)}</span>
                                                 <span class="text-caption text-muted">{format!("{} · {} · {}", category_label(&r.category), crate::models::bug_report::status_label(&r.status), short_date(&r.created_at))}</span>
                                             </span>
-                                        </Button>
+                                        </ListRow>
                                     </li>
                                 }
                             }).collect_view()}

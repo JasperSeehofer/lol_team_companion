@@ -18,6 +18,7 @@ use crate::models::community::{
     ProposalView,
 };
 use crate::pages::admin::bugs::err_text;
+use crate::pages::admin::ListRow;
 use crate::pages::community::ProposalStatusBadge;
 
 #[server]
@@ -94,7 +95,6 @@ fn Proposals(
     selected: Signal<Option<String>>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
-    let navigate = StoredValue::new(use_navigate());
     let list = StoredValue::new(list);
     let choices = StoredValue::new(choices);
     view! {
@@ -113,10 +113,7 @@ fn Proposals(
                                 });
                                 view! {
                                     <li class="border-b border-rule">
-                                        <Button variant=ButtonVariant::Quiet full_width=true pressed=is_sel on_click=Callback::new(move |_| {
-                                            let url = format!("/admin/proposals?id={id}");
-                                            navigate.with_value(|n| n(&url, leptos_router::NavigateOptions { replace: true, scroll: false, ..Default::default() }));
-                                        })>
+                                        <ListRow href=format!("/admin/proposals?id={id}") selected=is_sel>
                                             <span class="flex w-full flex-col items-start gap-1 py-1 text-left">
                                                 <span class="text-body text-primary">{p.title.clone()}</span>
                                                 <span class="flex flex-wrap items-center gap-2 text-caption text-muted">
@@ -129,7 +126,7 @@ fn Proposals(
                                                     <span class="figures">{votes_label(p.votes)}</span>
                                                 </span>
                                             </span>
-                                        </Button>
+                                        </ListRow>
                                     </li>
                                 }
                             }).collect_view()}

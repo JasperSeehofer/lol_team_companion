@@ -20,6 +20,7 @@ use crate::models::community::{
     SurveyStatus, SurveyTrigger,
 };
 use crate::pages::admin::bugs::err_text;
+use crate::pages::admin::ListRow;
 
 #[server]
 pub async fn admin_list_surveys() -> Result<Vec<Survey>, ServerFnError> {
@@ -151,7 +152,6 @@ fn Surveys(
     results: Resource<Option<SurveyResults>>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
-    let navigate = StoredValue::new(use_navigate());
     let list = StoredValue::new(list);
     view! {
         <div class="grid gap-8 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
@@ -171,10 +171,7 @@ fn Surveys(
                                 let trigger = SurveyTrigger::parse(&s.trigger).map(|t| t.label()).unwrap_or("");
                                 view! {
                                     <li class="border-b border-rule">
-                                        <Button variant=ButtonVariant::Quiet full_width=true pressed=is_sel on_click=Callback::new(move |_| {
-                                            let url = format!("/admin/surveys?id={id}");
-                                            navigate.with_value(|n| n(&url, leptos_router::NavigateOptions { replace: true, scroll: false, ..Default::default() }));
-                                        })>
+                                        <ListRow href=format!("/admin/surveys?id={id}") selected=is_sel>
                                             <span class="flex w-full flex-col items-start gap-1 py-1 text-left">
                                                 <span class="text-body text-primary">{q}</span>
                                                 <span class="flex flex-wrap items-center gap-2 text-caption text-muted">
@@ -182,7 +179,7 @@ fn Surveys(
                                                     <span>{trigger}</span>
                                                 </span>
                                             </span>
-                                        </Button>
+                                        </ListRow>
                                     </li>
                                 }
                             }).collect_view()}
