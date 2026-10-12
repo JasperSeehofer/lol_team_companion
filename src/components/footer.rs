@@ -10,7 +10,7 @@ pub const RIOT_DISCLAIMER: &str = "Companion isn't endorsed by Riot Games and do
 pub fn SiteFooter() -> impl IntoView {
     let link = "text-muted underline decoration-rule underline-offset-4 transition-colors hover:text-primary hover:decoration-accent";
     view! {
-        <footer class="mt-16 border-t border-rule">
+        <footer class="mt-6 border-t border-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 sm:flex-row sm:items-start sm:justify-between sm:gap-10 sm:px-8">
                 <p class="max-w-3xl text-caption leading-relaxed text-muted" data-testid="riot-disclaimer">{RIOT_DISCLAIMER}</p>
                 <nav class="flex shrink-0 gap-5 text-caption" aria-label="Legal">

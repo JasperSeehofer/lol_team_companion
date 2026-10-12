@@ -94,6 +94,8 @@ pub enum InputKind {
     Search,
     Number,
     Date,
+    /// A clock time (`HH:MM`), paired with a `Date` field.
+    Time,
     Url,
 }
 
@@ -106,6 +108,7 @@ impl InputKind {
             InputKind::Search => "search",
             InputKind::Number => "number",
             InputKind::Date => "date",
+            InputKind::Time => "time",
             InputKind::Url => "url",
         }
     }

@@ -6,6 +6,7 @@ pub mod footer;
 pub mod graph_canvas;
 pub mod graph_layout;
 pub mod icon;
+pub mod local_time;
 pub mod nav;
 pub mod region;
 pub mod skeleton;

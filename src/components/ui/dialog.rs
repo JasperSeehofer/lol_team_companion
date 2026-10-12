@@ -16,19 +16,22 @@ pub enum DialogSize {
     Md,
     /// 44rem: longer forms, previews.
     Lg,
+    /// The whole viewport: the phone menu.
+    Sheet,
 }
 
 impl DialogSize {
     pub fn class(self) -> &'static str {
         match self {
-            DialogSize::Sm => "w-[min(24rem,calc(100vw-2rem))]",
-            DialogSize::Md => "w-[min(32rem,calc(100vw-2rem))]",
-            DialogSize::Lg => "w-[min(44rem,calc(100vw-2rem))]",
+            DialogSize::Sm => "m-auto max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100vw-2rem))]",
+            DialogSize::Md => "m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))]",
+            DialogSize::Lg => "m-auto max-h-[calc(100dvh-2rem)] w-[min(44rem,calc(100vw-2rem))]",
+            DialogSize::Sheet => "m-0 h-dvh max-h-dvh w-screen max-w-none border-0",
         }
     }
 }
 
-const DIALOG: &str = "m-auto max-h-[calc(100dvh-2rem)] overflow-visible border border-outline bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim open:flex open:flex-col";
+const DIALOG: &str = "overflow-visible border border-outline bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim open:flex open:flex-col";
 
 /// A modal dialog. Open and close it through `open`; Escape, the close
 /// button and a click on the scrim set it back to `false`.

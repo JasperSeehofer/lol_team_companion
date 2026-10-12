@@ -372,18 +372,17 @@ fn BugReportWidgetInner(
         // Floating button (UI-SPEC line 583). Single click enters
         // select-mode directly — no intermediate menu, per D-08 (no
         // multi-step nags).
-        // On phones the button docks under the footer as a labelled text
-        // button, so it never covers content; from `sm` it floats.
-        <div class="mx-auto flex max-w-7xl justify-end px-4 pb-6 sm:contents">
+        // Docked at every width: a labelled button in the page flow, just
+        // above the footer, so it never covers content (M7 rebuilds it).
+        <div class="mx-auto flex max-w-7xl justify-end px-4 pt-10 sm:px-8" data-bug-report-dock>
             <button
                 type="button"
-                class="inline-flex h-9 items-center gap-2 rounded-ctl border border-outline bg-ink-1 px-3 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary sm:fixed sm:bottom-6 sm:right-6 sm:z-50 sm:size-11 sm:justify-center sm:px-0 sm:shadow-overlay"
-                title="Report a bug or wishlist item"
+                class="inline-flex h-8 items-center gap-2 rounded-ctl border border-outline bg-ink-1 px-3 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary"
                 aria-label="Report a bug or wishlist item"
                 on:click=move |_| start_select_mode()
             >
-                <Icon name="feather" size=18 class="text-muted" />
-                <span class="sm:sr-only" aria-hidden="true">"Report a bug"</span>
+                <Icon name="feather" size=16 class="text-muted" />
+                <span aria-hidden="true">"Report a bug"</span>
             </button>
         </div>
 
