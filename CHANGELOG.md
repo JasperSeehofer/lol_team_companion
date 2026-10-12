@@ -28,6 +28,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - Champion pool positions are stored in one spelling, and duplicates that differed only in spelling were merged.
 - Team pages load faster for larger teams.
 
+#### Fixed
+- Creating an account before the page had finished loading failed with "Registration failed" even with a valid invite link.
+- Saving a game plan started from a draft before the draft had loaded saved it without the link to that draft; "Save plan" now waits for the draft.
+- An empty state right under a page title no longer draws a second line under the title's own.
+
 #### Removed
 - The standalone solo dashboard (now My games and your profile; its address redirects), and the parked analytics and team builder pages (their addresses redirect to Team games and Draft).
 - An invented "14 days" log retention on the privacy page; the operator's details and the legal sections are marked placeholders until they are filled in.
