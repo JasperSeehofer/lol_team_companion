@@ -150,7 +150,7 @@ pub async fn delete_my_account(
         team_deleted = deleted.team_deleted,
         "account deleted"
     );
-    let store = SurrealSessionStore::new(ctx.db.clone(), "sessions".to_string());
+    let store = SurrealSessionStore::new(ctx.db.arc(), "sessions".to_string());
     match store.delete_for_user(&ctx.user.id).await {
         Ok(n) => tracing::info!(user = %ctx.user.id, sessions = n, "sessions ended"),
         Err(e) => tracing::warn!("could not end the deleted account's sessions: {e}"),

@@ -24,6 +24,9 @@ Introduce: /team/dashboard | Invite a player | Team leaders: create a link here 
 - Transparency: support is shown as what supporters paid, before the payment platform's fees, and the fees appear as their own running cost. The new column label needs an admin's approval like every money text.
 - Draft Graph: early in a draft one strong link with the only pick no longer fills synergy or counters, so the top candidates stop tying; the canvas draws lines only for the champion in focus instead of a web of every relation; the ranking loads less data (full explanations for the top eight and the focused candidate, the rest when you focus them).
 
+#### Fixed
+- The server closes the database within a second of a stop even after a long busy day; before, requests whose page never finished loading could keep it open, and a stop then took the full wait and ended with an error code (no data was lost).
+
 ### Milestone M9: Welcome and guidance (2026-10-12)
 
 Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudges off here, or show the checklist, hints and nudges again.

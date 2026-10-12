@@ -50,7 +50,8 @@ services:
       # SurrealKV after a long run (seen in M8/M9 testing; data is safe
       # either way). 15 s gives a slow close time to finish; drain 10 s +
       # 15 s still fits stop_grace_period (30 s). It cannot help while the
-      # log says "database handle(s) still held". docs/RUNBOOK.md section 4.
+      # log says "database handle(s) still held" (fixed in the polish pass;
+      # the log then names the holders). docs/RUNBOOK.md section 4.
       SHUTDOWN_DB_SECS: "15"
     volumes:
       - data:/data

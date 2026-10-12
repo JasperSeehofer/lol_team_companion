@@ -273,6 +273,24 @@ impl From<DbJoinRequest> for JoinRequest {
 /// and shutdown empties it with [`release_shared`].
 static SHARED: std::sync::RwLock<Option<Arc<Surreal<Db>>>> = std::sync::RwLock::new(None);
 
+/// A handle that does not keep the database open: long-lived holders that
+/// requests clone (the auth backend, the session store) keep this instead of
+/// an `Arc`, so a request that outlives the server (its owner still pending)
+/// cannot hold SurrealKV open at shutdown. `get` fails once the server let go.
+#[derive(Clone)]
+pub struct WeakDb(std::sync::Weak<Surreal<Db>>);
+
+impl WeakDb {
+    pub fn new(db: &Arc<Surreal<Db>>) -> Self {
+        Self(Arc::downgrade(db))
+    }
+
+    /// The database, while the server (or a test) still holds it.
+    pub fn get(&self) -> Option<Arc<Surreal<Db>>> {
+        self.0.upgrade()
+    }
+}
+
 /// Make `db` the handle server functions get from `authz::db()`.
 pub fn install_shared(db: Arc<Surreal<Db>>) {
     let mut slot = SHARED.write().unwrap_or_else(|p| p.into_inner());

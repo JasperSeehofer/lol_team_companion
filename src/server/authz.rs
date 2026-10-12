@@ -20,7 +20,75 @@ use crate::server::auth::{AppUser, AuthSession};
 use crate::server::db::{self, DbError};
 use crate::server::rate_limit::{slow_down_message, Bucket, Limiter};
 
-pub type DbHandle = Arc<Surreal<Db>>;
+/// A server function's database handle: the shared handle plus the request
+/// path that borrowed it. Live handles are counted per path, so a shutdown
+/// that still finds handles can say which requests hold them
+/// ([`held_handles`]). Derefs to `Surreal<Db>`.
+pub struct DbHandle {
+    db: Arc<Surreal<Db>>,
+    path: Arc<str>,
+}
+
+fn holders() -> &'static std::sync::Mutex<std::collections::HashMap<Arc<str>, usize>> {
+    static HOLDERS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<Arc<str>, usize>>,
+    > = std::sync::OnceLock::new();
+    HOLDERS.get_or_init(Default::default)
+}
+
+impl DbHandle {
+    fn new(db: Arc<Surreal<Db>>, path: Arc<str>) -> Self {
+        *holders()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .entry(Arc::clone(&path))
+            .or_insert(0) += 1;
+        Self { db, path }
+    }
+
+    /// The `Arc` itself, for an API that keeps one (it is not counted).
+    pub fn arc(&self) -> Arc<Surreal<Db>> {
+        Arc::clone(&self.db)
+    }
+}
+
+impl Clone for DbHandle {
+    fn clone(&self) -> Self {
+        Self::new(Arc::clone(&self.db), Arc::clone(&self.path))
+    }
+}
+
+impl Drop for DbHandle {
+    fn drop(&mut self) {
+        let mut map = holders().lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(n) = map.get_mut(&self.path) {
+            *n -= 1;
+            if *n == 0 {
+                map.remove(&self.path);
+            }
+        }
+    }
+}
+
+impl std::ops::Deref for DbHandle {
+    type Target = Surreal<Db>;
+    fn deref(&self) -> &Surreal<Db> {
+        &self.db
+    }
+}
+
+/// The request paths whose server functions still hold a database handle,
+/// with how many (logged at shutdown when handles are left).
+pub fn held_handles() -> Vec<(String, usize)> {
+    let mut v: Vec<(String, usize)> = holders()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .map(|(k, n)| (k.to_string(), *n))
+        .collect();
+    v.sort();
+    v
+}
 
 pub const NOT_SIGNED_IN: &str = "Not signed in";
 pub const NO_TEAM: &str = "Create or join your team first";
@@ -120,8 +188,13 @@ pub fn server_err<E: IntoServerError>(e: E) -> ServerFnError {
 /// clone in a request's owner could outlive the request and keep the
 /// database open at shutdown.)
 pub fn db() -> Result<DbHandle, ServerFnError> {
-    crate::server::db::shared()
-        .ok_or_else(|| internal_error("server fn context", "no DB handle (shutting down)"))
+    let db = crate::server::db::shared()
+        .ok_or_else(|| internal_error("server fn context", "no DB handle (shutting down)"))?;
+    let path: Arc<str> = use_context::<axum::http::request::Parts>()
+        .map(|p| p.uri.path().to_string())
+        .unwrap_or_else(|| "(no request)".to_string())
+        .into();
+    Ok(DbHandle::new(db, path))
 }
 
 /// The shared Riot API client provided to every server function.
