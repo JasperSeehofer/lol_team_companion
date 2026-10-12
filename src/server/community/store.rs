@@ -759,6 +759,33 @@ async fn note_trigger_locked(
     Ok(())
 }
 
+/// After a draft is created: note the "3rd draft" trigger once the user
+/// has created three or more drafts. Best effort: errors are logged.
+pub async fn note_draft_saved(db: &Surreal<Db>, user_id: &str) {
+    let result = async {
+        let mut r = db
+            .query("SELECT count() AS n FROM draft WHERE created_by = type::record('user', $u) GROUP ALL")
+            .bind(("u", user_key(user_id)))
+            .await?;
+        let n: Option<CountRow> = r.take(0)?;
+        if n.is_some_and(|n| n.n >= 3) {
+            note_trigger(db, user_id, SurveyTrigger::DraftSaved3, "").await?;
+        }
+        Ok::<(), DbError>(())
+    }
+    .await;
+    if let Err(e) = result {
+        tracing::warn!(user = %user_id, error = %e, "survey trigger (draft) failed");
+    }
+}
+
+/// After a review is created. Best effort: errors are logged.
+pub async fn note_review_saved(db: &Surreal<Db>, user_id: &str) {
+    if let Err(e) = note_trigger(db, user_id, SurveyTrigger::ReviewSaved, "").await {
+        tracing::warn!(user = %user_id, error = %e, "survey trigger (review) failed");
+    }
+}
+
 #[derive(Debug, Deserialize, SurrealValue)]
 struct DbPromptRow {
     id: RecordId,
@@ -1444,7 +1471,7 @@ pub async fn admin_save_ledger_month(
     .bind(("published", existing.as_ref().is_some_and(|e| e.published)))
     .bind((
         "published_at",
-        existing.as_ref().and_then(|e| e.published_at.clone()),
+        existing.as_ref().and_then(|e| e.published_at),
     ))
     .bind(("admin", user_key(admin_id)))
     .await?

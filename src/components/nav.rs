@@ -177,6 +177,13 @@ fn route_commands(is_admin: bool) -> Vec<Command> {
             .hint("You")
             .keywords("write journal lesson"),
     );
+    for (label, path, keywords) in COMMUNITY_LINKS {
+        out.push(
+            Command::go(*label, *path)
+                .hint("Community")
+                .keywords(*keywords),
+        );
+    }
     out.push(Command::go("Impressum", "/legal/impressum").hint("Legal"));
     out.push(
         Command::go("Privacy", "/legal/datenschutz")
@@ -184,6 +191,9 @@ fn route_commands(is_admin: bool) -> Vec<Command> {
             .keywords("datenschutz data stored"),
     );
     if is_admin {
+        for (label, path) in ADMIN_LINKS {
+            out.push(Command::go(*label, *path).hint("Admin"));
+        }
         out.push(Command::go("Invites", "/admin/invites").hint("Admin"));
         out.push(
             Command::go("Champion traits", "/admin/traits")
@@ -199,10 +209,47 @@ fn route_commands(is_admin: bool) -> Vec<Command> {
     out
 }
 
+/// Community pages (M7): footer, command bar and phone menu. They are not
+/// a hub: (label, path, command-bar keywords).
+pub const COMMUNITY_LINKS: &[(&str, &str, &str)] = &[
+    ("Changelog", "/changelog", "release notes updates new patch"),
+    (
+        "Transparency",
+        "/transparency",
+        "money costs support ledger",
+    ),
+    ("What next", "/what-next", "roadmap vote ideas"),
+    ("Bug board", "/bugs", "issues known problems"),
+    ("Your reports", "/bugs?tab=mine", "my bug reports status"),
+];
+
+/// Admin pages added in M7 (the command bar lists each; the account menu
+/// has one "Admin" entry).
+pub const ADMIN_LINKS: &[(&str, &str)] = &[
+    ("Admin", "/admin"),
+    ("Bug triage", "/admin/bugs"),
+    ("Surveys", "/admin/surveys"),
+    ("What next proposals", "/admin/proposals"),
+    ("Transparency ledger", "/admin/ledger"),
+    ("Public texts", "/admin/texts"),
+];
+
+/// "Your reports" with the number of reports that changed since last seen.
+pub fn reports_label(updates: usize) -> String {
+    if updates == 0 {
+        "Your reports".to_string()
+    } else {
+        format!("Your reports ({updates} updated)")
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Notifications {
     pub pending_requests: Vec<JoinRequest>,
     pub is_leader: bool,
+    /// The user's bug reports whose status changed since they last looked.
+    #[serde(default)]
+    pub report_updates: usize,
 }
 
 #[server]
@@ -215,17 +262,24 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
         None => return Ok(Notifications::default()),
     };
     let db = authz::db()?;
+    let report_updates = crate::server::community::store::count_my_report_updates(&db, &user.id)
+        .await
+        .unwrap_or(0);
+    let base = Notifications {
+        report_updates,
+        ..Default::default()
+    };
     let Some(team_id) = db::get_user_team_id(&db, &user.id)
         .await
         .map_err(authz::server_err)?
     else {
-        return Ok(Notifications::default());
+        return Ok(base);
     };
     if !db::is_team_leader(&db, &user.id, &team_id)
         .await
         .map_err(authz::server_err)?
     {
-        return Ok(Notifications::default());
+        return Ok(base);
     }
     let pending = db::list_pending_join_requests(&db, &team_id)
         .await
@@ -233,6 +287,7 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
     Ok(Notifications {
         pending_requests: pending,
         is_leader: true,
+        report_updates,
     })
 }
 
@@ -418,10 +473,24 @@ fn PhoneMenu(
                         </ul>
                     }
                 }).collect_view()}
+                <h3 id="phone-menu-community" class="eyebrow px-5 pb-2 pt-5">"Community"</h3>
+                <ul aria-labelledby="phone-menu-community">
+                    {COMMUNITY_LINKS.iter().map(|(label, path, _)| view! {
+                        <li>
+                            <A
+                                href=*path
+                                attr:class="grid min-h-12 items-center border-b border-rule px-5 text-reading text-primary transition-colors hover:bg-ink-2"
+                                on:click=move |_| open.set(false)
+                            >
+                                {*label}
+                            </A>
+                        </li>
+                    }).collect_view()}
+                </ul>
                 {is_admin.then(|| view! {
                     <h3 id="phone-menu-admin" class="eyebrow px-5 pb-2 pt-5">"Admin"</h3>
                     <ul aria-labelledby="phone-menu-admin">
-                        {[("/admin/invites", "Invites"), ("/admin/traits", "Champion traits"), ("/design", "Design system")].into_iter().map(|(path, label)| view! {
+                        {[("/admin", "Admin")].into_iter().map(|(path, label)| view! {
                             <li>
                                 <A
                                     href=path
@@ -627,6 +696,10 @@ pub fn Nav() -> impl IntoView {
                             {move || Suspend::new(async move {
                                 match user.await {
                                     Ok(Some(u)) => {
+                                        let updates = notifications
+                                            .await
+                                            .map(|n| n.report_updates)
+                                            .unwrap_or(0);
                                         let name = u.username.clone();
                                         let name_for_trigger = StoredValue::new(name.clone());
                                         let mut items = vec![
@@ -634,11 +707,10 @@ pub fn Nav() -> impl IntoView {
                                             MenuItem::link("my-games", "My games", "/me"),
                                             MenuItem::link("pool", "Champion pool", "/champion-pool"),
                                         ];
-                                        // Admin links only for admins; the pages check on the server too.
+                                        items.push(MenuItem::link("reports", reports_label(updates), "/bugs?tab=mine"));
+                                        // One admin entry for admins; the pages check on the server too.
                                         if u.is_admin {
-                                            items.push(MenuItem::link("invites", "Invites", "/admin/invites"));
-                                            items.push(MenuItem::link("traits", "Champion traits", "/admin/traits"));
-                                            items.push(MenuItem::link("design", "Design system", "/design"));
+                                            items.push(MenuItem::link("admin", "Admin", "/admin"));
                                         }
                                         items.push(MenuItem::new("sign-out", "Sign out").danger());
                                         let on_select = Callback::new(move |id: String| {
@@ -796,6 +868,28 @@ mod tests {
         assert!(!route_commands(false)
             .iter()
             .any(|c| c.href.as_deref() == Some("/admin/invites")));
+    }
+
+    #[test]
+    fn community_and_admin_commands() {
+        let cmds = route_commands(true);
+        for (_, path, _) in COMMUNITY_LINKS {
+            assert!(
+                cmds.iter().any(|c| c.href.as_deref() == Some(*path)),
+                "{path}"
+            );
+        }
+        for (_, path) in ADMIN_LINKS {
+            assert!(
+                cmds.iter().any(|c| c.href.as_deref() == Some(*path)),
+                "{path}"
+            );
+        }
+        assert!(!route_commands(false)
+            .iter()
+            .any(|c| c.href.as_deref() == Some("/admin")));
+        assert_eq!(reports_label(0), "Your reports");
+        assert_eq!(reports_label(2), "Your reports (2 updated)");
     }
 
     #[test]

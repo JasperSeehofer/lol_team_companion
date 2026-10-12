@@ -8,15 +8,26 @@ use leptos_router::{
 use crate::components::bug_report_widget::BugReportWidget;
 use crate::components::footer::SiteFooter;
 use crate::components::nav::Nav;
+use crate::components::survey_prompt::SurveyPrompt;
 use crate::components::ui::ToastProvider;
 use crate::error_template::NotFound;
 use crate::pages::{
     action_items::ActionItemsPage,
+    admin::bugs::AdminBugsPage,
+    admin::hub::AdminHubPage,
     admin::invites::AdminInvitesPage,
+    admin::ledger::AdminLedgerPage,
+    admin::proposals::AdminProposalsPage,
+    admin::surveys::AdminSurveysPage,
+    admin::texts::AdminTextsPage,
     admin::traits::AdminTraitsPage,
     auth::{login::LoginPage, register::RegisterPage},
     champion_pool::ChampionPoolPage,
     closed_beta::ClosedBetaPage,
+    community::{
+        bugs::BugBoardPage, changelog::ChangelogPage, transparency::TransparencyPage,
+        what_next::WhatNextPage,
+    },
     design::DesignGalleryPage,
     draft::DraftPage,
     game_plan::GamePlanPage,
@@ -77,6 +88,8 @@ pub fn App() -> impl IntoView {
                 </a>
                 <Nav />
                 <main id="main" tabindex="-1">
+                    // One short survey question, at most weekly (browser only).
+                    <SurveyPrompt />
                     <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=HomePage />
                         <Route path=path!("/profile") view=ProfilePage />
@@ -100,6 +113,16 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/personal-learnings") view=PersonalLearningsPage />
                         <Route path=path!("/personal-learnings/new") view=NewLearningPage />
                         <Route path=path!("/closed-beta") view=ClosedBetaPage />
+                        <Route path=path!("/bugs") view=BugBoardPage />
+                        <Route path=path!("/what-next") view=WhatNextPage />
+                        <Route path=path!("/changelog") view=ChangelogPage />
+                        <Route path=path!("/transparency") view=TransparencyPage />
+                        <Route path=path!("/admin") view=AdminHubPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/bugs") view=AdminBugsPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/surveys") view=AdminSurveysPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/proposals") view=AdminProposalsPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/ledger") view=AdminLedgerPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/texts") view=AdminTextsPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/traits") view=AdminTraitsPage ssr=SsrMode::Async />
                         <Route path=path!("/design") view=DesignGalleryPage ssr=SsrMode::Async />

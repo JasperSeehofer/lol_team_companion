@@ -80,7 +80,7 @@ pub async fn save_draft(
             .map_err(authz::server_err)?;
     }
 
-    db::save_draft(
+    let draft_id = db::save_draft(
         &db,
         &resolved_team_id,
         &user.id,
@@ -98,7 +98,10 @@ pub async fn save_draft(
         game_number,
     )
     .await
-    .map_err(authz::server_err)
+    .map_err(authz::server_err)?;
+    // A live survey may ask about drafting after the 3rd draft (M7).
+    crate::server::community::store::note_draft_saved(&db, &user.id).await;
+    Ok(draft_id)
 }
 
 #[server]

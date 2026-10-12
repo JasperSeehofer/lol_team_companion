@@ -76,6 +76,7 @@ pub fn proposals() -> Vec<SeedProposal> {
 }
 
 /// The four proposed surveys with their wording hashes.
+#[allow(clippy::type_complexity)]
 pub fn surveys(hash: impl Fn(&SurveyWording) -> String) -> Vec<SeedSurvey> {
     let rows: [(
         &str,
