@@ -444,6 +444,51 @@ The page exposes the last run as attributes on `[data-graph-canvas]`: `data-sim-
 
 **Admin list and editor.** Admin pages share one layout: a list of `ListRow` links on the left (selection by `?id=`, accent edge and `aria-current` on the selected row), the editor on the right; approval states are `Callout`s (warning "Not approved...", success "Approved by NAME on DATE.").
 
+### 6.11 Guidance (M9)
+
+Owner's intent (MISSION section 8, 12 October 2026): new users feel welcomed and never lost; someone back after a month finds the way; new features are introduced where they are used; every piece of guidance can be muted. Good pages stay self-explanatory; guidance is a safety net on top. A step counts as done only when the data says so.
+
+**Rules for every piece of guidance.**
+- Inline, in the page flow. Never a modal, a tour, a spotlight, a floating overlay, a video or anything that covers content or blocks an action.
+- At most one hint or introduction per page (an introduction wins over a hint; the command-bar line yields to both), at most one nudge on Match Day.
+- Every piece can be muted where it appears ("Got it", "Skip, I'll find my way", "Hide this checklist", "Don't show this again"), and the profile's **Guidance** switch turns all of it off, "New" marks included. "Show the checklist again" and "Show hints again" undo the mutes.
+- Done means done in the records: checklist steps, "used" hints and nudges are computed on the server from the user's and the team's data, never from clicks alone (the two exceptions record a real use: picking a Draft Graph candidate and opening the command bar).
+- None on admin pages, the gallery, sign-in, legal pages, the closed-beta page and share links (`is_quiet_path`).
+- Never a second chalk action: the welcome's Start is primary only on the start page without a team; with a team, Match Day's own next step stays the one primary action (Start is secondary and the checklist `PrepEmphasis::Quiet`).
+- Plain product language, no exclamation marks, no mascots, no emoji.
+
+**Welcome.** One panel at the top of Match Day for accounts younger than 14 days that have not started or skipped it: eyebrow "Welcome", an `h2`, the loop as a mono list (Scout, Draft, Plan, Play, Review), what to do first (your team, or "You are on TEAM"), the optional Riot link as a sentence, then **Start** (a link to the first open checklist step, primary only without a team; records `welcome` as seen) and **Skip, I'll find my way** (quiet; mutes `welcome`, keeps the checklist). `ink-1` ground with hairlines top and bottom, no art.
+
+**Getting-started checklist.** "Getting started" on Match Day above the prep sequence (`PrepSequence`, `N of 7 done` in the meta, "Hide this checklist" as a quiet action): join or create your team, fill the starting five (five positions with a starter), add a first opponent dossier, make a draft, write a game plan, review a game, invite a teammate (members > 1 or a join request waiting). Steps after the first wait for a team ("After step 1"); the first open step with a link is Next. A member of an established team finds the team's steps ticked. Gone when complete or hidden; **Guide me** in the command bar (`/?guide=1#getting-started`) shows it anyway, with a caption saying so.
+
+**First-use hints** (`FirstUseHint`: an info `Callout` with a bold first line and "Got it"):
+
+| Key | Where (only while on screen) | Gone when |
+|---|---|---|
+| `hint.draft_keys` | Above the draft board | the user created a draft |
+| `hint.draft_graph` | Above the Draft Graph, when it ranks candidates | the user picked a candidate in the list |
+| `hint.tree_branching` | Under "Branches" of an open tree | the team's tree has a branch |
+| `hint.share_links` | Game plan and review (saved), player card (shareable) | the user made a share link |
+| `hint.note_undo` | Above the team notes, when there are notes | a team note was edited or deleted |
+| `hint.pool_tiers` | Under the champion pool header | the user moved a champion out of Comfort |
+| `hint.command_bar` | A caption line in the bar, from `lg`, on pages with no other guidance (not Match Day) | the user opened the command bar |
+
+"Got it" mutes the key for that user; the data rule ends it for good.
+
+**Nudges** (`NudgeLine`: one quiet line with its action link and "Don't show this again", under the prep sequence or the "No upcoming match" state). Rules in `models::guidance::pick_nudge`, first match wins, skipping muted kinds and a nudge whose link is the prep sequence's next step:
+
+| Order | Mute key | Rule | Action |
+|---|---|---|---|
+| 1 | `nudge.returning` | No write by the user for 14 days (account age if nothing written) | "Open the checklist" (`/?guide=1`) |
+| 2 | `nudge.match_without_review` | The last match of the past 21 days had a game plan and has no review | "Write the review" |
+| 3 | `nudge.old_action_items` | Open action items older than 7 days | "Go through them" |
+| 4 | `nudge.draft_without_plan` | A draft of the last 21 days has no game plan | "Write the game plan" |
+| 5 | `nudge.dossier_without_draft` | A dossier added or refreshed in the last 21 days has no draft against it in that time | "Start a draft" |
+
+**New-feature introductions.** A changelog line `Introduce: /route | Feature | How to try it.` makes a one-time `Callout` "New: Feature" at the top of that page (with "What changed", a link to the entry, and "Got it") for accounts created before the entry's date, within 180 days of it. The visit records it as seen. Until then the page name carries a small "New" (caption, semibold, info ink, text only, read as ", new") in the phone menu, the sub-navigation and on its hub.
+
+**Never build.** Product tours, coach marks pointing at controls, modal welcome screens, progress percentages or streaks, badges for using features, confetti or celebration, red dots or counters for guidance, guidance that reappears after being muted, guidance on admin pages, and any step ticked by a click rather than by the record it asks for.
+
 ## 7. Champion images
 
 Portraits are real (owner's decision) and never load from a third party in the browser. `GET /img/champion/{key}` (loading-screen portrait) and `GET /img/champion/{key}/icon` (square icon) are served by the app: the key must be a champion id or name known to the Data Dragon cache (unknown keys are 404; nothing from the URL touches the filesystem), the image is fetched once per patch from Data Dragon, kept in memory, and sent with `Cache-Control: public, max-age=604800`, an `ETag` and `If-None-Match` support. Cache misses are rate limited per client IP, keys Data Dragon does not have are remembered apart from the images, and a transient upstream failure is a 502 that is retried next time. `models::ddragon::champion_icon_url` points at the endpoint and `ChampionAvatar` uses it, with a monogram fallback. Role icons are typographic (`RoleLabel`); the browser loads no image from a third party (the gallery spec checks it).
