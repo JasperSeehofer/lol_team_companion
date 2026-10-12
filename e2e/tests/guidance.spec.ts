@@ -174,7 +174,15 @@ test.describe("seeded returning user", () => {
     // the page is visited (desktop: the You hub and its sub-navigation).
     const mark = page.locator('[data-new-mark="/profile"], [data-new-hub="you"]');
     const intro = page.locator('[data-guidance-intro="/profile"]');
-    if ((await mark.count()) > 0) {
+    // The marks render after hydration from a browser-side fetch: wait for
+    // them instead of sampling once (a single early count would take the
+    // "already seen" branch and hide a broken mark).
+    const hasMark = await mark
+      .first()
+      .waitFor({ state: "visible", timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    if (hasMark) {
       await shot(page, "new-mark-1280");
       await navigateTo(page, "/profile");
       await expect(intro).toBeVisible({ timeout: 10000 });
