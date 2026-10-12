@@ -1805,6 +1805,11 @@ async fn guidance_is_isolated_between_users_and_teams() {
         .await
         .unwrap();
     assert!(nb.draft_without_plan.is_none());
+    // Another team's id is refused, not read.
+    assert!(matches!(
+        g::nudge_facts(&db, &t.b, &t.team1, chrono::Utc::now()).await,
+        Err(lol_team_companion::server::db::DbError::NotFound)
+    ));
     let home = g::home_guide(&db, &t.b, "bob", false, false, None, chrono::Utc::now())
         .await
         .unwrap();

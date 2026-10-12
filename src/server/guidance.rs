@@ -61,7 +61,9 @@ pub async fn rows(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<GuidanceRow>>
         .query("SELECT key, seen_at, muted_at FROM user_guidance WHERE user = type::record('user', $uk)")
         .bind(("uk", record_key(user_id, "user")))
         .await?;
-    let rows: Vec<Row> = r.take(0).unwrap_or_default();
+    // An error here must not read as "nothing seen, nothing muted": that
+    // would bring back everything the user turned off.
+    let rows: Vec<Row> = r.take(0)?;
     Ok(rows
         .into_iter()
         .map(|r| GuidanceRow {
@@ -246,21 +248,32 @@ async fn last_write(
         .await?;
     let mut newest: Option<DateTime<Utc>> = None;
     for i in 2..=12 {
-        let v: Vec<Datetime> = r.take(i).unwrap_or_default();
-        if let Some(t) = v.first().and_then(parse_dt) {
+        // A failed read must not look like "no write" (that would show
+        // "Picking up again?" to someone who was here yesterday).
+        let v: Vec<Option<Datetime>> = r.take(i)?;
+        if let Some(t) = v.into_iter().flatten().next().as_ref().and_then(parse_dt) {
             newest = Some(newest.map_or(t, |n| n.max(t)));
         }
     }
     Ok(newest)
 }
 
-/// What the nudge rules read for the user's team.
+/// What the nudge rules read for the user's team. `team_id` must be the
+/// user's own team (checked: anything else is `NotFound`).
 pub async fn nudge_facts(
     db: &Surreal<Db>,
     user_id: &str,
     team_id: &str,
     now: DateTime<Utc>,
 ) -> DbResult<NudgeFacts> {
+    if team_of(db, user_id)
+        .await?
+        .as_deref()
+        .map(|t| record_key(t, "team"))
+        != Some(record_key(team_id, "team"))
+    {
+        return Err(DbError::NotFound);
+    }
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Opp {
         id: RecordId,
@@ -432,12 +445,17 @@ pub async fn home_guide(
         && (guidance::is_muted(&rows, guidance::CHECKLIST)
             || guidance::checklist_complete(&items)
             || !enabled);
+    // A nudge is optional: a failure there leaves the welcome and the
+    // checklist in place.
     let nudge = match team_of(db, user_id).await? {
-        Some(team) => {
-            let f = nudge_facts(db, user_id, &team, now).await?;
-            pick_nudge(enabled, &f, &rows, skip_href)
-        }
-        None => None,
+        Some(team) if enabled => match nudge_facts(db, user_id, &team, now).await {
+            Ok(f) => pick_nudge(enabled, &f, &rows, skip_href),
+            Err(e) => {
+                tracing::warn!(user = %user_id, error = %e, "nudge facts failed");
+                None
+            }
+        },
+        _ => None,
     };
     Ok(HomeGuide {
         welcome,
