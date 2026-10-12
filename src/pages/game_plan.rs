@@ -8,9 +8,9 @@ use crate::components::ui::a11y::focus_id;
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar, Checkbox,
     ConfirmDialog, ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell,
-    PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment, SegmentSize,
-    SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Table, Td,
-    TextField, Th, Toast, ToastContext, Tr,
+    PrepEmphasis, PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment,
+    SegmentSize, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
+    Table, Td, TextField, Th, Toast, ToastContext, Tr,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -304,6 +304,8 @@ pub async fn start_post_game_review(
     }
 
     let review = PostGameLearning {
+        draft_deleted: false,
+        created_at: None,
         id: None,
         team_id,
         match_riot_id: None,
@@ -471,6 +473,8 @@ struct PlanEd {
     tag: RwSignal<String>,
     /// Picks came from the linked draft (shown read-only until edited).
     from_draft: RwSignal<bool>,
+    /// The draft this plan was linked to was deleted.
+    draft_deleted: RwSignal<bool>,
 }
 
 impl PlanEd {
@@ -490,6 +494,7 @@ impl PlanEd {
             notes: s(),
             tag: s(),
             from_draft: RwSignal::new(false),
+            draft_deleted: RwSignal::new(false),
         }
     }
 
@@ -516,6 +521,7 @@ impl PlanEd {
             sig.set(String::new());
         }
         self.from_draft.set(false);
+        self.draft_deleted.set(false);
     }
 
     fn load(&self, p: &GamePlan) {
@@ -546,6 +552,7 @@ impl PlanEd {
         self.tag
             .set(p.win_condition_tag.clone().unwrap_or_default());
         self.from_draft.set(false);
+        self.draft_deleted.set(p.draft_deleted);
     }
 
     /// Seed picks (and, for a new plan, name, tag, win conditions and role
@@ -599,6 +606,7 @@ impl PlanEd {
     fn build(&self, tracked: bool) -> GamePlan {
         let g = |s: RwSignal<String>| if tracked { s.get() } else { s.get_untracked() };
         GamePlan {
+            draft_deleted: false,
             id: if tracked {
                 self.id.get()
             } else {
@@ -670,11 +678,23 @@ pub fn GamePlanPage() -> impl IntoView {
         },
     );
     let prefilled = StoredValue::new(false);
+    // A plan opened from `?draft_id=` can be saved once that draft has
+    // loaded, so a quick save never drops the link to it.
+    let prefill_pending = RwSignal::new(
+        query
+            .read_untracked()
+            .get("draft_id")
+            .is_some_and(|d| !d.is_empty()),
+    );
     Effect::new(move |_| {
+        let result = prefill.get();
+        if result.is_some() {
+            prefill_pending.set(false);
+        }
         if prefilled.get_value() {
             return;
         }
-        if let Some(Ok(Some(d))) = prefill.get() {
+        if let Some(Ok(Some(d))) = result {
             // Start from a clean editor unless this is already a new plan
             // (then keep what the user typed while the draft loaded).
             if ed.id.get_untracked().is_some() {
@@ -776,7 +796,7 @@ pub fn GamePlanPage() -> impl IntoView {
 
     let name_error = RwSignal::new(None::<String>);
     let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
-        if saving.get_untracked() {
+        if saving.get_untracked() || prefill_pending.get_untracked() {
             return;
         }
         let plan = ed.build(false);
@@ -834,6 +854,7 @@ pub fn GamePlanPage() -> impl IntoView {
         name_error.set(None);
     });
     let confirm_delete = RwSignal::new(false);
+    let share_open = RwSignal::new(false);
     let do_delete = Callback::new(move |_| {
         let Some(id) = ed.id.get_untracked() else {
             return;
@@ -882,11 +903,13 @@ pub fn GamePlanPage() -> impl IntoView {
                 actions=move || view! {
                     <Button variant=ButtonVariant::Quiet on_click=new_plan>"New plan"</Button>
                     {move || ed.id.get().map(|_| view! {
+                        <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="plan-share">"Share"</Button>
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
-                    <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="plan-save">"Save plan"</Button>
+                    <Button variant=ButtonVariant::Primary on_click=do_save loading=Signal::derive(move || saving.get() || prefill_pending.get()) attr:data-testid="plan-save">"Save plan"</Button>
                 }
             />
+            <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::GamePlan target=Signal::derive(move || ed.id.get()) />
             <ConfirmDialog
                 id="delete-plan"
                 open=confirm_delete
@@ -982,7 +1005,7 @@ fn PlanSteps(ed: PlanEd) -> impl IntoView {
                         if state == PrepState::Next { step.link(*href, "Go there") } else { step }
                     })
                     .collect();
-                view! { <PrepSequence label="Plan steps" steps=items /> }
+                view! { <PrepSequence label="Plan steps" steps=items emphasis=PrepEmphasis::Quiet /> }
             }}
         </section>
     }
@@ -1039,9 +1062,15 @@ fn BasicsSection(
                     </Suspense>
                     {move || {
                         let d = ed.draft_id.get();
-                        (!d.is_empty()).then(|| view! {
-                            <div><Button variant=ButtonVariant::Quiet size=ButtonSize::Sm href=format!("/draft?draft_id={d}")>"Open the draft"</Button></div>
-                        })
+                        if d.is_empty() {
+                            ed.draft_deleted.get().then(|| view! {
+                                <p class="text-caption text-muted" data-testid="plan-draft-deleted">"Draft deleted: the draft this plan was linked to no longer exists. Choose another to link it again."</p>
+                            }.into_any())
+                        } else {
+                            Some(view! {
+                                <div><Button variant=ButtonVariant::Quiet size=ButtonSize::Sm href=format!("/draft?draft_id={d}")>"Open the draft"</Button></div>
+                            }.into_any())
+                        }
                     }}
                 </div>
             </div>
@@ -1434,12 +1463,25 @@ fn HistorySection(
             .and_then(|d| d.opponent)
             .filter(|o| !o.is_empty())
     });
+    // The source reads only signals; the drafts resource is awaited inside
+    // the fetcher, so nothing reads a resource outside a Suspense.
     let vs = Resource::new(
-        move || (scope.get(), opponent.get()),
-        |(s, o)| async move {
-            match (s.as_str(), o) {
-                ("vs", Some(o)) => get_strategy_win_rates_vs_opponent(o).await,
-                _ => Ok(Vec::new()),
+        move || (scope.get(), ed.draft_id.get()),
+        move |(s, id)| async move {
+            if s != "vs" {
+                return Ok(Vec::new());
+            }
+            let opp = drafts
+                .await
+                .ok()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|d| d.id.as_deref() == Some(id.as_str()))
+                .and_then(|d| d.opponent)
+                .filter(|o| !o.is_empty());
+            match opp {
+                Some(o) => get_strategy_win_rates_vs_opponent(o).await,
+                None => Ok(Vec::new()),
             }
         },
     );

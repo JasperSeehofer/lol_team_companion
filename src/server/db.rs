@@ -20,9 +20,11 @@ use crate::models::{
         PostGamePreview, StrategyTagSummary,
     },
     match_data::PlayerMatchStats,
+    match_day::{LinkRef, ScheduledMatch, ScheduledMatchInput},
     opponent::{Opponent, OpponentPlayer},
     personal_learning::PersonalLearning,
     series::Series,
+    share::{tier_rank, CardChampion, PlayerCard, ShareKind, ShareLink, SHARE_DAYS},
     team::Team,
     team_note::TeamNote,
     user::{JoinRequest, TeamMember},
@@ -699,6 +701,10 @@ pub async fn add_to_champion_pool(
     role: String,
 ) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
+    // One spelling per position (migration 9 normalised the older rows).
+    let role = crate::components::ui::Role::parse(&role)
+        .map(|r| r.key().to_string())
+        .unwrap_or(role);
     // Skip if already exists
     let mut check = db
         .query("SELECT id FROM champion_pool WHERE user = type::record('user', $user_key) AND champion = $champion AND role = $role LIMIT 1")
@@ -987,7 +993,7 @@ pub async fn create_team(
         .query(
             "BEGIN TRANSACTION; \
              LET $t = (CREATE ONLY team SET name = $name, region = $region, created_by = type::record('user', $user_key)); \
-             CREATE team_member SET team = $t.id, user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'; \
+             CREATE team_member SET team = $t.id, user = type::record('user', $user_key), role = 'unassigned', roster_type = 'member'; \
              RETURN { id: $t.id }; \
              COMMIT TRANSACTION;",
         )
@@ -1032,23 +1038,6 @@ pub async fn update_team(
     Ok(())
 }
 
-pub async fn update_member_role(
-    db: &Surreal<Db>,
-    team_id: &str,
-    user_id: &str,
-    role: String,
-) -> DbResult<()> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE team_member SET role=$role WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
-        .bind(("team_key", team_key))
-        .bind(("user_key", user_key))
-        .bind(("role", role))
-        .await?
-        .check()?;
-    Ok(())
-}
-
 pub async fn remove_team_member(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<()> {
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
@@ -1060,10 +1049,40 @@ pub async fn remove_team_member(db: &Surreal<Db>, team_id: &str, user_id: &str) 
     Ok(())
 }
 
+/// Every team with its member count (the join list). Two statements, not a
+/// subquery per team: with a few thousand teams the correlated count took
+/// seconds.
 pub async fn list_all_teams(db: &Surreal<Db>) -> DbResult<Vec<Team>> {
-    let mut r = db.query("SELECT *, (SELECT count() FROM team_member WHERE team = $parent.id GROUP ALL)[0].count AS member_count FROM team ORDER BY name ASC").await?;
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct MemberCount {
+        team: RecordId,
+        n: i64,
+    }
+    let mut r = db
+        .query(
+            "SELECT * FROM team ORDER BY name ASC; \
+             SELECT team, count() AS n FROM team_member GROUP BY team;",
+        )
+        .await?;
     let teams: Vec<DbTeam> = r.take(0).unwrap_or_default();
-    Ok(teams.into_iter().map(Team::from).collect())
+    let counts: Vec<MemberCount> = r.take(1).unwrap_or_default();
+    let counts: std::collections::HashMap<String, u32> = counts
+        .into_iter()
+        .map(|c| (c.team.to_sql(), c.n.max(0) as u32))
+        .collect();
+    Ok(teams
+        .into_iter()
+        .map(|t| {
+            let mut team = Team::from(t);
+            team.member_count = Some(
+                team.id
+                    .as_ref()
+                    .and_then(|id| counts.get(id).copied())
+                    .unwrap_or(0),
+            );
+            team
+        })
+        .collect())
 }
 
 pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<()> {
@@ -1083,7 +1102,7 @@ pub async fn join_team(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResu
         ));
     }
     // The unique index on team_member.user rejects a second team.
-    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'sub'")
+    db.query("CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'member'")
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
         .await?
@@ -1273,7 +1292,7 @@ pub async fn respond_to_join_request(
                  IF array::len($flipped) = 0 { THROW 'JOIN_NOT_PENDING' }; \
                  IF array::len((SELECT id FROM team_member WHERE user = type::record('user', $user_key))) > 0 \
                      { THROW 'JOIN_ALREADY_MEMBER' }; \
-                 CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'sub'; \
+                 CREATE team_member SET team = type::record('team', $team_key), user = type::record('user', $user_key), role = 'unassigned', roster_type = 'member'; \
                  COMMIT TRANSACTION;",
             )
             .bind(("req_key", req_key))
@@ -1326,10 +1345,14 @@ pub async fn assign_to_slot(
 ) -> DbResult<()> {
     // Bench the current starter for that role and promote this member in one
     // transaction, so a role never ends up with two starters or none.
+    if crate::components::ui::Role::parse(role).map(|r| r.key()) != Some(role) {
+        return Err(DbError::Invalid("Unknown position".into()));
+    }
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             UPDATE team_member SET roster_type = 'sub' WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter'; \
+             IF array::len((SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key))) = 0 { THROW 'NOT_MEMBER' }; \
+             UPDATE team_member SET roster_type = 'substitute' WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter'; \
              UPDATE team_member SET role = $role, roster_type = 'starter' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key); \
              COMMIT TRANSACTION;",
         )
@@ -1337,18 +1360,61 @@ pub async fn assign_to_slot(
         .bind(("user_key", record_key(user_id, "user")))
         .bind(("role", role.to_string()))
         .await?;
-    check_tx(response)?;
-    Ok(())
+    match check_tx(response) {
+        Err(e) if thrown_tag(&e).as_deref() == Some("NOT_MEMBER") => Err(DbError::NotFound),
+        other => other.map(|_| ()),
+    }
 }
 
+/// Take a starter out of the starting five onto the bench (substitute).
 pub async fn remove_from_slot(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<()> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE team_member SET roster_type = 'sub' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key)")
-        .bind(("team_key", team_key))
-        .bind(("user_key", user_key))
-        .await?
-        .check()?;
+    set_member_place(db, team_id, user_id, RosterPlace::Substitute).await
+}
+
+/// Where a member stands on the roster, outside the starting five (starting
+/// is `assign_to_slot`, which needs a position).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RosterPlace {
+    /// Benched: plays when needed, not in the starting five.
+    Substitute,
+    Coach,
+    /// Not placed yet (new members).
+    Member,
+}
+
+impl RosterPlace {
+    pub fn key(self) -> &'static str {
+        match self {
+            RosterPlace::Substitute => "substitute",
+            RosterPlace::Coach => "coach",
+            RosterPlace::Member => "member",
+        }
+    }
+}
+
+/// Move a member of `team_id` to a place outside the starting five. A coach
+/// keeps no position; a substitute keeps theirs (their usual position).
+pub async fn set_member_place(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    place: RosterPlace,
+) -> DbResult<()> {
+    let query = if place == RosterPlace::Coach {
+        "UPDATE team_member SET roster_type = $place, role = 'unassigned' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) RETURN id"
+    } else {
+        "UPDATE team_member SET roster_type = $place WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) RETURN id"
+    };
+    let mut r = db
+        .query(query)
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("place", place.key().to_string()))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
     Ok(())
 }
 
@@ -2033,18 +2099,21 @@ pub async fn get_team_match_stats(db: &Surreal<Db>, team_id: &str) -> DbResult<V
     let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
 
     // All player_match records for team members, enriched via the match link.
+    // The member list is bound once: `user IN (SELECT ...)` re-ran the
+    // subquery for every row (see the Draft Graph budget in ARCHITECTURE.md).
     let mut result = db
-        .query("SELECT *, match.match_id as riot_match_id, match.queue_id as queue_id, match.game_duration as game_duration, match.game_end as game_end, user.username as username FROM player_match WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)) ORDER BY match.game_end DESC LIMIT 200")
+        .query("LET $users = (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)); \
+                SELECT id, match AS match_ref, user, champion, kills, deaths, assists, cs, vision_score, damage, win, match.match_id AS riot_match_id, match.queue_id AS queue_id, match.game_duration AS game_duration, match.game_end AS game_end, user.username AS username FROM player_match WHERE user IN $users ORDER BY game_end DESC LIMIT 200")
         .bind(("team_key", team_key))
         .await?;
-    let rows: Vec<DbTeamMatchRow> = result.take(0).unwrap_or_default();
+    let rows: Vec<DbTeamMatchRow> = result.take(1).unwrap_or_default();
     Ok(rows.into_iter().map(TeamMatchRow::from).collect())
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct DbTeamMatchRow {
+    #[allow(dead_code)]
     id: RecordId,
-    #[serde(rename = "match")]
     match_ref: Option<RecordId>,
     user: RecordId,
     username: String,
@@ -2197,7 +2266,7 @@ pub async fn update_game_plan(db: &Surreal<Db>, team_id: &str, plan: GamePlan) -
     let plan_id = plan.id.as_deref().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "game_plan", plan_id, team_id).await?;
     let plan_key = record_key(plan_id, "game_plan");
-    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag")
+    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag")
         .bind(("plan_key", plan_key))
         .bind(("name", plan.name))
         .bind(("draft_key", opt_key(plan.draft_id, "draft")))
@@ -2238,11 +2307,14 @@ struct DbGamePlan {
     support_strategy: Option<String>,
     notes: Option<String>,
     win_condition_tag: Option<String>,
+    #[serde(default)]
+    draft_deleted: Option<bool>,
 }
 
 impl From<DbGamePlan> for GamePlan {
     fn from(p: DbGamePlan) -> Self {
         GamePlan {
+            draft_deleted: p.draft_deleted.unwrap_or(false),
             id: Some(p.id.to_sql()),
             team_id: p.team.to_sql(),
             draft_id: opt_link(p.draft),
@@ -2460,7 +2532,7 @@ pub async fn update_review_with_action_items(
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating; \
+             UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating; \
              FOR $t IN $items { CREATE action_item SET team = type::record('team', $team_key), text = $t, source_review = type::record('post_game_learning', $key); }; \
              COMMIT TRANSACTION;",
         )
@@ -2491,7 +2563,7 @@ pub async fn update_post_game_learning(
     let id = learning.id.as_deref().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", id, team_id).await?;
     let key = record_key(id, "post_game_learning");
-    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
+    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
         .bind(("key", key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("plan_key", opt_key(learning.game_plan_id, "game_plan")))
@@ -2523,11 +2595,17 @@ struct DbPostGameLearning {
     win_loss: Option<String>,
     #[serde(default)]
     rating: Option<u8>,
+    #[serde(default)]
+    draft_deleted: Option<bool>,
+    #[serde(default)]
+    created_at: Option<Datetime>,
 }
 
 impl From<DbPostGameLearning> for PostGameLearning {
     fn from(p: DbPostGameLearning) -> Self {
         PostGameLearning {
+            draft_deleted: p.draft_deleted.unwrap_or(false),
+            created_at: opt_dt(p.created_at),
             id: Some(p.id.to_sql()),
             team_id: p.team.to_sql(),
             match_riot_id: p.match_riot_id,
@@ -2861,6 +2939,8 @@ pub async fn delete_draft(db: &Surreal<Db>, team_id: &str, draft_id: &str) -> Db
         .query(
             "BEGIN TRANSACTION; \
              DELETE draft_action WHERE draft = type::record('draft', $draft_key); \
+             UPDATE game_plan SET draft = NONE, draft_deleted = true WHERE draft = type::record('draft', $draft_key); \
+             UPDATE post_game_learning SET draft_id = NONE, draft_deleted = true WHERE draft_id = type::record('draft', $draft_key); \
              DELETE type::record('draft', $draft_key); \
              COMMIT TRANSACTION;",
         )
@@ -3073,6 +3153,7 @@ pub async fn delete_opponent(db: &Surreal<Db>, team_id: &str, opponent_id: &str)
         .query(
             "BEGIN TRANSACTION; \
              DELETE opponent_player WHERE opponent = type::record('opponent', $opp_key); \
+             UPDATE scheduled_match SET opponent = NONE, brief_read_by = [] WHERE opponent = type::record('opponent', $opp_key); \
              DELETE type::record('opponent', $opp_key); \
              COMMIT TRANSACTION;",
         )
@@ -3847,6 +3928,9 @@ struct DbTeamNote {
     content: String,
     pinned: bool,
     created_at: Option<Datetime>,
+    edited_at: Option<Datetime>,
+    edited_by_name: Option<String>,
+    previous_content: Option<String>,
 }
 
 impl From<DbTeamNote> for TeamNote {
@@ -3859,8 +3943,30 @@ impl From<DbTeamNote> for TeamNote {
             content: n.content,
             pinned: n.pinned,
             created_at: opt_dt(n.created_at),
+            edited_at: opt_dt(n.edited_at),
+            edited_by_name: n.edited_by_name,
+            can_undo_edit: n.previous_content.is_some(),
         }
     }
+}
+
+const TEAM_NOTE_FIELDS: &str =
+    "id, team, author, author_name, content, pinned, created_at, edited_at, edited_by_name, previous_content";
+
+/// Longest team note, in characters.
+pub const TEAM_NOTE_MAX: usize = 4000;
+
+fn checked_note(content: String) -> DbResult<String> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Err(DbError::Invalid("A note needs some text.".into()));
+    }
+    if trimmed.chars().count() > TEAM_NOTE_MAX {
+        return Err(DbError::Invalid(format!(
+            "Notes are at most {TEAM_NOTE_MAX} characters."
+        )));
+    }
+    Ok(trimmed.to_string())
 }
 
 pub async fn create_team_note(
@@ -3870,13 +3976,11 @@ pub async fn create_team_note(
     username: &str,
     content: String,
 ) -> DbResult<String> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-
+    let content = checked_note(content)?;
     let mut response = db
         .query("CREATE team_note SET team = type::record('team', $team_key), author = type::record('user', $user_key), author_name = $author_name, content = $content")
-        .bind(("team_key", team_key))
-        .bind(("user_key", user_key))
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
         .bind(("author_name", username.to_string()))
         .bind(("content", content))
         .await?;
@@ -3888,12 +3992,12 @@ pub async fn create_team_note(
     }
 }
 
+/// The team's notes, pinned first, newest first. Deleted notes (kept a day
+/// for Undo) are left out.
 pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-
     let mut response = db
-        .query("SELECT * FROM team_note WHERE team = type::record('team', $team_key) ORDER BY pinned DESC, created_at DESC")
-        .bind(("team_key", team_key))
+        .query(format!("SELECT {TEAM_NOTE_FIELDS} FROM team_note WHERE team = type::record('team', $team_key) AND deleted_at = NONE ORDER BY pinned DESC, created_at DESC"))
+        .bind(("team_key", record_key(team_id, "team")))
         .await?;
 
     let rows: Vec<DbTeamNote> = response.take(0).unwrap_or_default();
@@ -3901,31 +4005,51 @@ pub async fn list_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Te
 }
 
 pub async fn list_pinned_team_notes(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<TeamNote>> {
-    let team_key = team_id.strip_prefix("team:").unwrap_or(team_id).to_string();
-
     let mut response = db
-        .query("SELECT * FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true ORDER BY created_at DESC")
-        .bind(("team_key", team_key))
+        .query(format!("SELECT {TEAM_NOTE_FIELDS} FROM team_note WHERE team = type::record('team', $team_key) AND pinned = true AND deleted_at = NONE ORDER BY created_at DESC"))
+        .bind(("team_key", record_key(team_id, "team")))
         .await?;
 
     let rows: Vec<DbTeamNote> = response.take(0).unwrap_or_default();
     Ok(rows.into_iter().map(TeamNote::from).collect())
 }
 
+/// Replace a note's text (any member may). The text it replaces is kept so
+/// the edit can be undone (`undo_team_note_edit`).
 pub async fn update_team_note(
     db: &Surreal<Db>,
     team_id: &str,
     note_id: &str,
     content: String,
+    editor_name: &str,
 ) -> DbResult<()> {
-    ensure_team_record(db, "team_note", note_id, team_id).await?;
-    let note_key = record_key(note_id, "team_note");
-
-    db.query("UPDATE type::record('team_note', $note_key) SET content = $content")
-        .bind(("note_key", note_key))
+    let content = checked_note(content)?;
+    let mut r = db
+        .query("UPDATE type::record('team_note', $note_key) SET previous_content = content, content = $content, edited_at = time::now(), edited_by_name = $editor WHERE team = type::record('team', $team_key) AND deleted_at = NONE RETURN id")
+        .bind(("note_key", record_key(note_id, "team_note")))
+        .bind(("team_key", record_key(team_id, "team")))
         .bind(("content", content))
-        .await?
-        .check()?;
+        .bind(("editor", editor_name.to_string()))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// Put back the text the last edit replaced. Only one step: the restored
+/// text cannot be undone again.
+pub async fn undo_team_note_edit(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
+    let mut r = db
+        .query("UPDATE type::record('team_note', $note_key) SET content = previous_content, previous_content = NONE WHERE team = type::record('team', $team_key) AND previous_content != NONE AND deleted_at = NONE RETURN id")
+        .bind(("note_key", record_key(note_id, "team_note")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
     Ok(())
 }
 
@@ -3946,14 +4070,47 @@ pub async fn toggle_pin_team_note(
     Ok(())
 }
 
+/// How long a deleted note can be restored.
+const NOTE_UNDO_WINDOW: &str = "1d";
+
+/// Delete a note so that it can still be restored for a day
+/// (`restore_team_note`). Notes deleted longer ago are purged here.
 pub async fn delete_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
     ensure_team_record(db, "team_note", note_id, team_id).await?;
-    let note_key = record_key(note_id, "team_note");
+    db.query(format!(
+        "UPDATE type::record('team_note', $note_key) SET deleted_at = time::now(); \
+         DELETE team_note WHERE team = type::record('team', $team_key) AND deleted_at != NONE AND deleted_at < time::now() - {NOTE_UNDO_WINDOW};"
+    ))
+    .bind(("note_key", record_key(note_id, "team_note")))
+    .bind(("team_key", record_key(team_id, "team")))
+    .await?
+    .check()?;
+    Ok(())
+}
 
-    db.query("DELETE type::record('team_note', $note_key)")
-        .bind(("note_key", note_key))
-        .await?
-        .check()?;
+/// Bring back a note deleted within the last day. Older deletes stay
+/// deleted (and are purged hourly, `purge_deleted_team_notes`).
+pub async fn restore_team_note(db: &Surreal<Db>, team_id: &str, note_id: &str) -> DbResult<()> {
+    let mut r = db
+        .query(format!("UPDATE type::record('team_note', $note_key) SET deleted_at = NONE WHERE team = type::record('team', $team_key) AND deleted_at != NONE AND deleted_at >= time::now() - {NOTE_UNDO_WINDOW} RETURN id"))
+        .bind(("note_key", record_key(note_id, "team_note")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// Delete notes of every team that were deleted longer ago than the Undo
+/// window. Runs hourly from the server's purge task.
+pub async fn purge_deleted_team_notes(db: &Surreal<Db>) -> DbResult<()> {
+    db.query(format!(
+        "DELETE team_note WHERE deleted_at != NONE AND deleted_at < time::now() - {NOTE_UNDO_WINDOW};"
+    ))
+    .await?
+    .check()?;
     Ok(())
 }
 
@@ -4640,12 +4797,12 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
              SELECT id, improvements, created_at FROM post_game_learning \
              WHERE team = type::record('team', $team_key) \
              ORDER BY created_at DESC LIMIT 5; \
+             LET $planned = (SELECT VALUE draft FROM game_plan WHERE team = type::record('team', $team_key) AND draft != NONE); \
+             LET $reviewed = (SELECT VALUE game_plan_id FROM post_game_learning WHERE team = type::record('team', $team_key) AND game_plan_id != NONE); \
              SELECT count() as n FROM draft WHERE team = type::record('team', $team_key) \
-             AND id NOT IN (SELECT VALUE draft FROM game_plan WHERE team = type::record('team', $team_key) AND draft != NONE) \
-             GROUP ALL; \
+             AND id NOT IN $planned GROUP ALL; \
              SELECT count() as n FROM game_plan WHERE team = type::record('team', $team_key) \
-             AND id NOT IN (SELECT VALUE game_plan_id FROM post_game_learning WHERE team = type::record('team', $team_key) AND game_plan_id != NONE) \
-             GROUP ALL",
+             AND id NOT IN $reviewed GROUP ALL",
         )
         .bind(("team_key", team_key.clone()))
         .await?;
@@ -4673,8 +4830,8 @@ pub async fn get_dashboard_summary(db: &Surreal<Db>, team_id: &str) -> DbResult<
     let db_action_items: Vec<DbActionItemPreview> = result.take(0).unwrap_or_default();
     let action_count_rows: Vec<CountResult> = result.take(1).unwrap_or_default();
     let db_post_games: Vec<DbPostGamePreview> = result.take(2).unwrap_or_default();
-    let drafts_no_plan_rows: Vec<CountResult> = result.take(3).unwrap_or_default();
-    let plans_no_postgame_rows: Vec<CountResult> = result.take(4).unwrap_or_default();
+    let drafts_no_plan_rows: Vec<CountResult> = result.take(5).unwrap_or_default();
+    let plans_no_postgame_rows: Vec<CountResult> = result.take(6).unwrap_or_default();
 
     let open_action_item_count = action_count_rows.first().map(|r| r.n as usize).unwrap_or(0);
     let drafts_without_game_plan = drafts_no_plan_rows
@@ -4766,10 +4923,11 @@ async fn compute_pool_gaps_for_team(
     }
 
     let mut pr = db
-        .query("SELECT user, champion, role, tier FROM champion_pool WHERE user IN (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key))")
+        .query("LET $users = (SELECT VALUE user FROM team_member WHERE team = type::record('team', $team_key)); \
+                SELECT user, champion, role, tier FROM champion_pool WHERE user IN $users")
         .bind(("team_key", team_key.to_string()))
         .await?;
-    let pool_rows: Vec<PoolRow> = pr.take(0).unwrap_or_default();
+    let pool_rows: Vec<PoolRow> = pr.take(1).unwrap_or_default();
 
     let pool_entries: Vec<ChampionPoolEntry> = pool_rows
         .into_iter()
@@ -4787,7 +4945,8 @@ async fn compute_pool_gaps_for_team(
 
     // Get opponent champion lists for escalation detection
     let mut opp_r = db
-        .query("SELECT recent_champions FROM opponent_player WHERE opponent IN (SELECT VALUE id FROM opponent WHERE team = type::record('team', $team_key))")
+        .query("LET $opps = (SELECT VALUE id FROM opponent WHERE team = type::record('team', $team_key)); \
+                SELECT recent_champions FROM opponent_player WHERE opponent IN $opps")
         .bind(("team_key", team_key.to_string()))
         .await?;
 
@@ -4796,7 +4955,7 @@ async fn compute_pool_gaps_for_team(
         recent_champions: Vec<String>,
     }
 
-    let opp_rows: Vec<RecentChamps> = opp_r.take(0).unwrap_or_default();
+    let opp_rows: Vec<RecentChamps> = opp_r.take(1).unwrap_or_default();
     let opponent_champions: Vec<String> = opp_rows
         .into_iter()
         .flat_map(|r| r.recent_champions)
@@ -4910,99 +5069,6 @@ pub async fn get_user_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> 
 pub async fn set_user_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     db.query("UPDATE type::record('user', $user_key) SET mode = $mode")
-        .bind(("user_key", user_key))
-        .bind(("mode", mode.to_string()))
-        .await?
-        .check()?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Phase 18: per-route mode preferences (draft_mode, team_dashboard_mode, solo_mode)
-// ---------------------------------------------------------------------------
-
-/// Read the user's draft mode preference. Returns "auto" if the field is not set
-/// (legacy users created before Phase 18 have NONE from the schema DEFAULT).
-pub async fn get_user_draft_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct DraftModeRecord {
-        draft_mode: Option<String>,
-    }
-    let mut result = db
-        .query("SELECT draft_mode FROM type::record('user', $user_key)")
-        .bind(("user_key", user_key))
-        .await?;
-    let row: Option<DraftModeRecord> = result.take(0)?;
-    Ok(row
-        .and_then(|r| r.draft_mode)
-        .unwrap_or_else(|| "auto".to_string()))
-}
-
-/// Persist the user's draft mode preference. App-layer validation handles allowlist.
-pub async fn set_user_draft_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE type::record('user', $user_key) SET draft_mode = $mode")
-        .bind(("user_key", user_key))
-        .bind(("mode", mode.to_string()))
-        .await?
-        .check()?;
-    Ok(())
-}
-
-/// Read the user's team dashboard mode preference. Returns "auto" if not set.
-pub async fn get_user_team_dashboard_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct TeamDashboardModeRecord {
-        team_dashboard_mode: Option<String>,
-    }
-    let mut result = db
-        .query("SELECT team_dashboard_mode FROM type::record('user', $user_key)")
-        .bind(("user_key", user_key))
-        .await?;
-    let row: Option<TeamDashboardModeRecord> = result.take(0)?;
-    Ok(row
-        .and_then(|r| r.team_dashboard_mode)
-        .unwrap_or_else(|| "auto".to_string()))
-}
-
-/// Persist the user's team dashboard mode preference.
-pub async fn set_user_team_dashboard_mode(
-    db: &Surreal<Db>,
-    user_id: &str,
-    mode: &str,
-) -> DbResult<()> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE type::record('user', $user_key) SET team_dashboard_mode = $mode")
-        .bind(("user_key", user_key))
-        .bind(("mode", mode.to_string()))
-        .await?
-        .check()?;
-    Ok(())
-}
-
-/// Read the user's solo mode preference. Returns "auto" if not set.
-pub async fn get_user_solo_mode(db: &Surreal<Db>, user_id: &str) -> DbResult<String> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct SoloModeRecord {
-        solo_mode: Option<String>,
-    }
-    let mut result = db
-        .query("SELECT solo_mode FROM type::record('user', $user_key)")
-        .bind(("user_key", user_key))
-        .await?;
-    let row: Option<SoloModeRecord> = result.take(0)?;
-    Ok(row
-        .and_then(|r| r.solo_mode)
-        .unwrap_or_else(|| "auto".to_string()))
-}
-
-/// Persist the user's solo mode preference.
-pub async fn set_user_solo_mode(db: &Surreal<Db>, user_id: &str, mode: &str) -> DbResult<()> {
-    let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    db.query("UPDATE type::record('user', $user_key) SET solo_mode = $mode")
         .bind(("user_key", user_key))
         .bind(("mode", mode.to_string()))
         .await?
@@ -7209,4 +7275,561 @@ mod tests {
             "create_bug_report must reject whitespace-only description"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Match Day (M5): the next scrim or match, and the facts around it
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbScheduledMatch {
+    id: RecordId,
+    starts_at: Datetime,
+    kind: String,
+    format: String,
+    opponent: Option<RecordId>,
+    opponent_name: Option<String>,
+    notes: Option<String>,
+    #[serde(default)]
+    brief_read_by: Vec<RecordId>,
+}
+
+impl From<DbScheduledMatch> for ScheduledMatch {
+    fn from(m: DbScheduledMatch) -> Self {
+        ScheduledMatch {
+            id: m.id.to_sql(),
+            starts_at: dt_to_string(&m.starts_at),
+            kind: m.kind,
+            format: m.format,
+            opponent_id: opt_link(m.opponent),
+            opponent_name: m.opponent_name,
+            notes: m.notes,
+            brief_read_by: m.brief_read_by.iter().map(|u| u.to_sql()).collect(),
+        }
+    }
+}
+
+/// A match stays "next" for this long after it started, so Match Day can
+/// ask for the review.
+const MATCH_DAY_GRACE_HOURS: i64 = 12;
+
+/// The team's next scrim or match: the earliest one that started less than
+/// twelve hours ago or lies ahead.
+pub async fn next_scheduled_match(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Option<ScheduledMatch>> {
+    let cutoff = (chrono::Utc::now() - chrono::Duration::hours(MATCH_DAY_GRACE_HOURS)).to_rfc3339();
+    let mut r = db
+        .query("SELECT id, starts_at, kind, format, opponent, opponent.name AS opponent_name, notes, brief_read_by FROM scheduled_match WHERE team = type::record('team', $team_key) AND starts_at >= <datetime>$cutoff ORDER BY starts_at ASC LIMIT 1")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("cutoff", cutoff))
+        .await?;
+    let row: Option<DbScheduledMatch> = r.take(0)?;
+    Ok(row.map(ScheduledMatch::from))
+}
+
+/// Longest match note, in characters.
+pub const MATCH_NOTES_MAX: usize = 500;
+
+/// Create or update the team's next match. Kind, format and time are
+/// checked; the opponent must be one of the team's dossiers.
+pub async fn save_scheduled_match(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    input: ScheduledMatchInput,
+) -> DbResult<String> {
+    use crate::models::match_day::{FORMATS, KINDS};
+    if !KINDS.iter().any(|(k, _)| *k == input.kind) {
+        return Err(DbError::Invalid("Choose scrim or official match.".into()));
+    }
+    if !FORMATS.iter().any(|(k, _)| *k == input.format) {
+        return Err(DbError::Invalid("Choose best of 1, 3 or 5.".into()));
+    }
+    let starts = chrono::DateTime::parse_from_rfc3339(input.starts_at.trim())
+        .map_err(|_| DbError::Invalid("Enter a date and a time.".into()))?
+        .with_timezone(&chrono::Utc);
+    let now = chrono::Utc::now();
+    if input.id.is_none() && starts < now - chrono::Duration::hours(MATCH_DAY_GRACE_HOURS) {
+        return Err(DbError::Invalid("That time has already passed.".into()));
+    }
+    if starts > now + chrono::Duration::days(366) {
+        return Err(DbError::Invalid("Pick a date within the next year.".into()));
+    }
+    let notes = input
+        .notes
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+    if notes
+        .as_ref()
+        .is_some_and(|n| n.chars().count() > MATCH_NOTES_MAX)
+    {
+        return Err(DbError::Invalid(format!(
+            "Notes are at most {MATCH_NOTES_MAX} characters."
+        )));
+    }
+    let opponent = input.opponent_id.filter(|o| !o.trim().is_empty());
+    if let Some(o) = &opponent {
+        ensure_team_record(db, "opponent", o, team_id).await?;
+    }
+    let opp_key = opt_key(opponent, "opponent");
+    match input.id {
+        Some(id) => {
+            ensure_team_record(db, "scheduled_match", &id, team_id).await?;
+            // A different opponent is a different brief: who read the old
+            // one has not read this one.
+            db.query("LET $opp = IF $opp_key = NONE { NONE } ELSE { type::record('opponent', $opp_key) }; \
+                      UPDATE type::record('scheduled_match', $key) SET brief_read_by = IF opponent = $opp { brief_read_by } ELSE { [] }, starts_at = <datetime>$starts, kind = $kind, format = $format, opponent = $opp, notes = $notes, updated_at = time::now()")
+                .bind(("key", record_key(&id, "scheduled_match")))
+                .bind(("starts", starts.to_rfc3339()))
+                .bind(("kind", input.kind))
+                .bind(("format", input.format))
+                .bind(("opp_key", opp_key))
+                .bind(("notes", notes))
+                .await?
+                .check()?;
+            Ok(id)
+        }
+        None => {
+            let mut r = db
+                .query("CREATE scheduled_match SET team = type::record('team', $team_key), starts_at = <datetime>$starts, kind = $kind, format = $format, opponent = IF $opp_key = NONE { NONE } ELSE { type::record('opponent', $opp_key) }, notes = $notes, created_by = type::record('user', $user_key)")
+                .bind(("team_key", record_key(team_id, "team")))
+                .bind(("user_key", record_key(user_id, "user")))
+                .bind(("starts", starts.to_rfc3339()))
+                .bind(("kind", input.kind))
+                .bind(("format", input.format))
+                .bind(("opp_key", opp_key))
+                .bind(("notes", notes))
+                .await?;
+            let row: Option<IdRecord> = r.take(0)?;
+            row.map(|r| r.id.to_sql())
+                .ok_or_else(|| DbError::Other("Failed to save the match".into()))
+        }
+    }
+}
+
+pub async fn delete_scheduled_match(db: &Surreal<Db>, team_id: &str, id: &str) -> DbResult<()> {
+    ensure_team_record(db, "scheduled_match", id, team_id).await?;
+    db.query("DELETE type::record('scheduled_match', $key)")
+        .bind(("key", record_key(id, "scheduled_match")))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// Mark the opponent brief of a match read (or unread) for one member.
+pub async fn set_brief_read(
+    db: &Surreal<Db>,
+    team_id: &str,
+    match_id: &str,
+    user_id: &str,
+    read: bool,
+) -> DbResult<()> {
+    let query = if read {
+        "UPDATE type::record('scheduled_match', $key) SET brief_read_by = array::union(brief_read_by, [type::record('user', $user_key)]) WHERE team = type::record('team', $team_key) RETURN id"
+    } else {
+        "UPDATE type::record('scheduled_match', $key) SET brief_read_by = array::complement(brief_read_by, [type::record('user', $user_key)]) WHERE team = type::record('team', $team_key) RETURN id"
+    };
+    let mut r = db
+        .query(query)
+        .bind(("key", record_key(match_id, "scheduled_match")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// Drafts against an opponent, the plans linked to them, and a review of a
+/// match that started at `starts_at` (linked to those drafts or plans and
+/// written after the start).
+#[derive(Clone, Debug, Default)]
+pub struct MatchPrepFacts {
+    pub drafts: Vec<LinkRef>,
+    pub plans: Vec<LinkRef>,
+    pub review_after: Option<LinkRef>,
+}
+
+pub async fn match_prep_facts(
+    db: &Surreal<Db>,
+    team_id: &str,
+    opponent_id: &str,
+    opponent_name: &str,
+    starts_at: &str,
+) -> DbResult<MatchPrepFacts> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct NameRow {
+        id: RecordId,
+        #[serde(default)]
+        name: Option<String>,
+        #[allow(dead_code)]
+        created_at: Option<Datetime>,
+    }
+    // Drafts store the opponent's id (older ones its name).
+    let mut r = db
+        .query(
+            "LET $t = type::record('team', $team_key); \
+             LET $drafts = (SELECT id, name, created_at FROM draft WHERE team = $t AND (opponent = $opp_id OR string::lowercase(opponent ?? '') = $opp_name) ORDER BY created_at DESC); \
+             LET $draft_ids = $drafts.id; \
+             LET $plans = (SELECT id, name, created_at FROM game_plan WHERE team = $t AND draft != NONE AND draft IN $draft_ids ORDER BY created_at DESC); \
+             LET $plan_ids = $plans.id; \
+             RETURN $drafts; \
+             RETURN $plans; \
+             SELECT id, created_at FROM post_game_learning WHERE team = $t AND ((draft_id != NONE AND draft_id IN $draft_ids) OR (game_plan_id != NONE AND game_plan_id IN $plan_ids)) AND created_at >= <datetime>$starts ORDER BY created_at DESC LIMIT 1;",
+        )
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("opp_id", opponent_id.to_string()))
+        .bind(("opp_name", opponent_name.trim().to_lowercase()))
+        .bind(("starts", starts_at.to_string()))
+        .await?;
+    let link = |r: NameRow, fallback: &str| LinkRef {
+        id: r.id.to_sql(),
+        name: r
+            .name
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| fallback.to_string()),
+    };
+    let drafts: Vec<NameRow> = r.take(5).unwrap_or_default();
+    let plans: Vec<NameRow> = r.take(6).unwrap_or_default();
+    let review: Option<NameRow> = r.take(7).unwrap_or_default();
+    Ok(MatchPrepFacts {
+        drafts: drafts
+            .into_iter()
+            .map(|d| link(d, "Untitled draft"))
+            .collect(),
+        plans: plans
+            .into_iter()
+            .map(|p| link(p, "Untitled plan"))
+            .collect(),
+        review_after: review.map(|v| link(v, "Review")),
+    })
+}
+
+/// The team's newest reviews, newest first.
+pub async fn recent_reviews(
+    db: &Surreal<Db>,
+    team_id: &str,
+    limit: i64,
+) -> DbResult<Vec<PostGameLearning>> {
+    let mut r = db
+        .query("SELECT * FROM post_game_learning WHERE team = type::record('team', $team_key) ORDER BY created_at DESC LIMIT $limit")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("limit", limit))
+        .await?;
+    let rows: Vec<DbPostGameLearning> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(PostGameLearning::from).collect())
+}
+
+/// One review of the team.
+pub async fn get_post_game_learning(
+    db: &Surreal<Db>,
+    team_id: &str,
+    review_id: &str,
+) -> DbResult<Option<PostGameLearning>> {
+    let mut r = db
+        .query("SELECT * FROM type::record('post_game_learning', $key) WHERE team = type::record('team', $team_key)")
+        .bind(("key", record_key(review_id, "post_game_learning")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let row: Option<DbPostGameLearning> = r.take(0)?;
+    Ok(row.map(PostGameLearning::from))
+}
+
+/// Counts for the phone menu and the command bar.
+#[derive(Clone, Debug, Default)]
+pub struct TeamCounts {
+    pub opponents: usize,
+    pub drafts: usize,
+    pub plans: usize,
+    pub open_items: usize,
+    pub members: usize,
+    pub reviews: usize,
+}
+
+pub async fn team_counts(db: &Surreal<Db>, team_id: &str) -> DbResult<TeamCounts> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Count {
+        n: i64,
+    }
+    let mut r = db
+        .query(
+            "LET $t = type::record('team', $team_key); \
+             SELECT count() AS n FROM opponent WHERE team = $t GROUP ALL; \
+             SELECT count() AS n FROM draft WHERE team = $t GROUP ALL; \
+             SELECT count() AS n FROM game_plan WHERE team = $t GROUP ALL; \
+             SELECT count() AS n FROM action_item WHERE team = $t AND status IN ['open', 'in_progress'] GROUP ALL; \
+             SELECT count() AS n FROM team_member WHERE team = $t GROUP ALL; \
+             SELECT count() AS n FROM post_game_learning WHERE team = $t GROUP ALL;",
+        )
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let mut n = |i: usize| -> usize {
+        let row: Option<Count> = r.take(i).unwrap_or_default();
+        row.map(|c| c.n.max(0) as usize).unwrap_or(0)
+    };
+    Ok(TeamCounts {
+        opponents: n(1),
+        drafts: n(2),
+        plans: n(3),
+        open_items: n(4),
+        members: n(5),
+        reviews: n(6),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Share links and player cards (M5)
+// ---------------------------------------------------------------------------
+
+/// A share token: 32 characters from a 32-letter alphabet (160 bits).
+pub fn generate_share_token() -> String {
+    use password_hash::rand_core::{OsRng, RngCore};
+    const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    bytes
+        .iter()
+        .map(|b| ALPHABET[(*b as usize) % ALPHABET.len()] as char)
+        .collect()
+}
+
+/// A token as it may appear in a URL: 32 characters of the alphabet.
+pub fn plausible_share_token(token: &str) -> bool {
+    token.len() == 32
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct DbShareLink {
+    id: RecordId,
+    token: String,
+    kind: String,
+    created_by_name: Option<String>,
+    created_at: Option<Datetime>,
+    expires_at: Datetime,
+    revoked: bool,
+}
+
+impl DbShareLink {
+    fn into_model(self) -> Option<ShareLink> {
+        Some(ShareLink {
+            id: self.id.to_sql(),
+            token: self.token,
+            kind: ShareKind::parse(&self.kind)?,
+            created_by_name: self.created_by_name.unwrap_or_default(),
+            created_at: opt_dt(self.created_at),
+            expires_at: dt_to_string(&self.expires_at),
+            revoked: self.revoked,
+        })
+    }
+}
+
+/// The target must be the team's: its plan, its review, or one of its
+/// members (player cards).
+async fn ensure_share_target(
+    db: &Surreal<Db>,
+    team_id: &str,
+    kind: ShareKind,
+    target_id: &str,
+) -> DbResult<()> {
+    match kind {
+        ShareKind::GamePlan => ensure_team_record(db, "game_plan", target_id, team_id).await,
+        ShareKind::Review => ensure_team_record(db, "post_game_learning", target_id, team_id).await,
+        ShareKind::Player => {
+            if is_team_member(db, target_id, team_id).await? {
+                Ok(())
+            } else {
+                Err(DbError::NotFound)
+            }
+        }
+    }
+}
+
+/// Create a read-only link to one of the team's plans, reviews or player
+/// cards, valid for `days` (1, 7 or 30).
+pub async fn create_share_link(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    kind: ShareKind,
+    target_id: &str,
+    days: u32,
+) -> DbResult<ShareLink> {
+    if !SHARE_DAYS.contains(&days) {
+        return Err(DbError::Invalid(
+            "A link lasts one day, a week or a month.".into(),
+        ));
+    }
+    ensure_share_target(db, team_id, kind, target_id).await?;
+    let expires = (chrono::Utc::now() + chrono::Duration::days(days as i64)).to_rfc3339();
+    let token = generate_share_token();
+    let mut r = db
+        .query("CREATE share_link SET token = $tok, team = type::record('team', $team_key), kind = $kind, target = type::record($tb, $target_key), created_by = type::record('user', $user_key), expires_at = <datetime>$expires RETURN id, token, kind, created_by.username AS created_by_name, created_at, expires_at, revoked")
+        .bind(("tok", token))
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("kind", kind.key().to_string()))
+        .bind(("tb", kind.table().to_string()))
+        .bind(("target_key", record_key(target_id, kind.table())))
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("expires", expires))
+        .await?;
+    let row: Option<DbShareLink> = r.take(0)?;
+    row.and_then(DbShareLink::into_model)
+        .ok_or_else(|| DbError::Other("Failed to create the link".into()))
+}
+
+/// The live (not revoked, not expired) links to one target of the team.
+pub async fn list_share_links(
+    db: &Surreal<Db>,
+    team_id: &str,
+    kind: ShareKind,
+    target_id: &str,
+) -> DbResult<Vec<ShareLink>> {
+    let mut r = db
+        .query("SELECT id, token, kind, created_by.username AS created_by_name, created_at, expires_at, revoked FROM share_link WHERE team = type::record('team', $team_key) AND target = type::record($tb, $target_key) AND revoked = false AND expires_at > time::now() ORDER BY created_at DESC")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("tb", kind.table().to_string()))
+        .bind(("target_key", record_key(target_id, kind.table())))
+        .await?;
+    let rows: Vec<DbShareLink> = r.take(0).unwrap_or_default();
+    Ok(rows
+        .into_iter()
+        .filter_map(DbShareLink::into_model)
+        .collect())
+}
+
+/// Revoke one of the team's links. Revoked links open nothing.
+pub async fn revoke_share_link(db: &Surreal<Db>, team_id: &str, link_id: &str) -> DbResult<()> {
+    let mut r = db
+        .query("UPDATE type::record('share_link', $key) SET revoked = true WHERE team = type::record('team', $team_key) RETURN id")
+        .bind(("key", record_key(link_id, "share_link")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// What a live token points at: (team id, kind, target id, expires at).
+#[derive(Clone, Debug)]
+pub struct ResolvedShare {
+    pub team_id: String,
+    pub kind: ShareKind,
+    pub target_id: String,
+    pub expires_at: String,
+}
+
+/// Look up a token. Unknown, revoked and expired tokens are all `None`.
+pub async fn resolve_share_token(db: &Surreal<Db>, token: &str) -> DbResult<Option<ResolvedShare>> {
+    if !plausible_share_token(token) {
+        return Ok(None);
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        team: RecordId,
+        kind: String,
+        target: RecordId,
+        expires_at: Datetime,
+    }
+    let mut r = db
+        .query("SELECT team, kind, target, expires_at FROM share_link WHERE token = $tok AND revoked = false AND expires_at > time::now() LIMIT 1")
+        .bind(("tok", token.to_string()))
+        .await?;
+    let row: Option<Row> = r.take(0)?;
+    Ok(row.and_then(|r| {
+        Some(ResolvedShare {
+            team_id: r.team.to_sql(),
+            kind: ShareKind::parse(&r.kind)?,
+            target_id: r.target.to_sql(),
+            expires_at: dt_to_string(&r.expires_at),
+        })
+    }))
+}
+
+/// A member's player card: position and place on the roster, best pool
+/// champions, form over their last five stored games and most played
+/// champions. `NotFound` when the user is not in the team.
+pub async fn player_card(db: &Surreal<Db>, team_id: &str, user_id: &str) -> DbResult<PlayerCard> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Member {
+        username: String,
+        role: String,
+        roster_type: String,
+        team_name: String,
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Pool {
+        champion: String,
+        tier: String,
+    }
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Game {
+        champion: String,
+        win: bool,
+        #[allow(dead_code)]
+        game_end: Option<Datetime>,
+    }
+    let mut r = db
+        .query(
+            "LET $u = type::record('user', $user_key); \
+             SELECT user.username AS username, role, roster_type, team.name AS team_name FROM team_member WHERE team = type::record('team', $team_key) AND user = $u LIMIT 1; \
+             SELECT champion, tier FROM champion_pool WHERE user = $u; \
+             SELECT champion, win, match.game_end AS game_end FROM player_match WHERE user = $u ORDER BY game_end DESC LIMIT 50;",
+        )
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let member: Option<Member> = r.take(1)?;
+    let Some(member) = member else {
+        return Err(DbError::NotFound);
+    };
+    let mut pool: Vec<Pool> = r.take(2).unwrap_or_default();
+    let games: Vec<Game> = r.take(3).unwrap_or_default();
+
+    pool.sort_by(|a, b| {
+        tier_rank(&a.tier)
+            .cmp(&tier_rank(&b.tier))
+            .then(a.champion.cmp(&b.champion))
+    });
+    let mut seen = std::collections::HashSet::new();
+    let champions: Vec<CardChampion> = pool
+        .into_iter()
+        .filter(|p| seen.insert(p.champion.to_lowercase()))
+        .take(5)
+        .map(|p| CardChampion {
+            champion: p.champion,
+            tier: p.tier,
+        })
+        .collect();
+    let mut form: Vec<bool> = games.iter().take(5).map(|g| g.win).collect();
+    form.reverse();
+    let mut played: Vec<(String, u32, u32)> = Vec::new();
+    for g in &games {
+        match played.iter_mut().find(|(c, _, _)| *c == g.champion) {
+            Some(e) => {
+                e.1 += 1;
+                e.2 += g.win as u32;
+            }
+            None => played.push((g.champion.clone(), 1, g.win as u32)),
+        }
+    }
+    played.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    played.truncate(3);
+    Ok(PlayerCard {
+        username: member.username,
+        team_name: member.team_name,
+        role: member.role,
+        place: member.roster_type,
+        champions,
+        form,
+        most_played: played,
+    })
 }

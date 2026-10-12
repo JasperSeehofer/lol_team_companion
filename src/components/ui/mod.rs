@@ -8,8 +8,6 @@
 //! Batch 3 (domain): ChampionAvatar/UserAvatar, RoleLabel, SideMarker,
 //! ResultGlyph, StatReadout, LegendBlock, CanvasFrame/ScaleBar,
 //! Annotation, TimelineScrub.
-//! `ErrorBanner`, `StatusMessage` and `SkeletonLine/Card/Grid` remain as
-//! compatibility names that render the batch 2 primitives.
 //!
 //! Rules for every component here: typed variants (enums, no strings),
 //! class names written out in full (Tailwind only sees literals), identical
@@ -45,7 +43,7 @@ pub mod tooltip;
 pub use avatar::{AvatarShape, AvatarSize, AvatarState, ChampionAvatar, UserAvatar};
 pub use badge::{Badge, BadgeTone};
 pub use button::{Button, ButtonSize, ButtonType, ButtonVariant, Force, Keycap};
-pub use callout::{Callout, CalloutTone, ErrorBanner, StatusMessage};
+pub use callout::{Callout, CalloutTone};
 pub use canvas::{
     Annotation, CanvasFrame, FrameGrid, LegendBlock, LegendEntry, LineStyle, LineWeight,
     NotePlacement, ScaleBar, Swatch, SwatchInk,
@@ -68,11 +66,9 @@ pub use markers::{
     GameResult, GlyphSize, ResultGlyph, Role, RoleLabel, RoleLabelStyle, SideMarker, SideText,
 };
 pub use menu::{Menu, MenuAlign, MenuItem};
-pub use prep::{PrepSequence, PrepState, PrepStep};
+pub use prep::{PrepEmphasis, PrepSequence, PrepState, PrepStep};
 pub use readout::{Delta, ReadoutSize, Sentiment, StatReadout, Trend};
-pub use skeleton::{
-    Skeleton, SkeletonCard, SkeletonGrid, SkeletonGroup, SkeletonLine, SkeletonShape,
-};
+pub use skeleton::{Skeleton, SkeletonGroup, SkeletonShape};
 pub use table::{Align, RowLink, SortDir, Table, Td, Th, Tr};
 pub use tabs::{TabItem, TabPanel, Tabs};
 pub use text::{Text, TextRole, TextTag, Tone};

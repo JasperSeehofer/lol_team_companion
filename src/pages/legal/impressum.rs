@@ -1,47 +1,61 @@
-//! Phase 17 plan 17-06 — Impressum route stub.
-//!
-//! D-13 utility tier. Full content (§5 DDG operator block,
-//! Steuernummer, Verantwortlicher, Berufsbezeichnung) lands in
-//! Phase 21 per guardrail G-03. Phase 17 only ensures the route
-//! returns 200 with chrome so it exists in the router
-//! before deploy.
+//! Impressum (provider information). The operator's details are the
+//! owner's to fill in before launch (M8); until then every item is a
+//! clearly marked placeholder. Nothing here is invented.
 
+use crate::components::ui::{
+    Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
+};
 use leptos::prelude::*;
+
+/// A placeholder the owner replaces: shown in mono, in the warning tone,
+/// with the words "[OWNER: ...]".
+#[component]
+pub fn OwnerPlaceholder(#[prop(into)] what: String) -> impl IntoView {
+    view! { <span class="font-mono text-label text-warning" data-owner-placeholder>{format!("[OWNER: {what}]")}</span> }
+}
 
 #[component]
 pub fn ImpressumPage() -> impl IntoView {
+    let rows: [(&str, &str); 6] = [
+        (
+            "Operator",
+            "full name of the person or organisation running Companion",
+        ),
+        ("Address", "street and number, postcode, city, country"),
+        ("Email", "contact email address"),
+        (
+            "Second contact",
+            "phone number or another fast way to reach the operator, if required",
+        ),
+        (
+            "Responsible for content",
+            "name and address, if different from the operator",
+        ),
+        ("Registration or VAT ID", "only if applicable"),
+    ];
     view! {
-        <div class="bg-base min-h-screen px-8 py-12">
-            <div class="max-w-2xl mx-auto flex flex-col gap-6">
-                <header>
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                        "Legal"
-                    </div>
-                    <h1 lang="de" class="font-display text-headline sm:text-display leading-tight text-primary mt-2 break-words hyphens-auto">
-                        "Impressum"
-                    </h1>
-                    <div class="mt-3"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
-                </header>
-
-                <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <p class="text-secondary text-sm leading-relaxed">
-                        "Content to be added in Phase 21 \u{2014} will cite \u{00a7}5 DDG \
-                         (Digitale-Dienste-Gesetz) per guardrail G-03. The operator block, \
-                         Steuernummer, and Verantwortlicher entries are populated when the \
-                         hosting and registration details are finalised before the closed-beta \
-                         launch."
-                    </p>
-                </section>
-
-                <section class="bg-surface border border-divider rounded-xl p-6">
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                        "Contact"
-                    </div>
-                    <p class="text-secondary text-sm mt-2">
-                        "For inquiries about this beta, contact the captain who issued your invite."
-                    </p>
-                </section>
+        <PageShell width=PageWidth::Reading>
+            <PageHeader title="Impressum" eyebrow="Legal" meta=move || view! { <span>"Who runs Companion and how to reach them."</span> } />
+            <div class="mb-8">
+                <Callout tone=CalloutTone::Warning title="Not filled in yet">
+                    "The operator's details below are placeholders. They are completed before Companion opens beyond the closed beta."
+                </Callout>
             </div>
-        </div>
+            <section aria-labelledby="provider-h">
+                <SectionHeader title="Provider" id="provider-h" />
+                <dl class="grid gap-x-6 gap-y-3 border-t border-rule pt-3 text-body sm:grid-cols-[12rem_minmax(0,1fr)]">
+                    {rows.into_iter().map(|(label, what)| view! {
+                        <dt class="text-muted">{label}</dt>
+                        <dd><OwnerPlaceholder what=what /></dd>
+                    }).collect_view()}
+                </dl>
+            </section>
+            <section class="mt-10" aria-labelledby="beta-h">
+                <SectionHeader title="During the closed beta" id="beta-h" />
+                <p class="max-w-prose text-body text-secondary">
+                    "Questions about the beta can also go to the captain or coach who sent your invite, or through the bug-report button on any page after signing in."
+                </p>
+            </section>
+        </PageShell>
     }
 }

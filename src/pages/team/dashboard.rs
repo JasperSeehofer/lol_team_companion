@@ -1,10 +1,20 @@
+//! The team page: the roster (starting five, substitutes on the bench,
+//! coaches, members not placed yet) with the leader's tools, join requests,
+//! team notes every member can edit with Undo, recent games and pool gaps.
+//! Real data only; every empty part says how it fills.
+
+use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{
-    Badge, BadgeTone, Button, ButtonVariant, PageHeader, PageShell, PageWidth,
+    AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
+    Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, Menu, MenuAlign, MenuItem,
+    NoTeamState, PageHeader, PageShell, ResultGlyph, Role, RoleLabel, SectionHeader, Select,
+    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
+    UserAvatar,
 };
-use crate::components::ui::{ErrorBanner, NoTeamState, SkeletonCard, ToastContext, ToastKind};
+use crate::models::game_plan::PoolGapWarning;
 use crate::models::team::Team;
+use crate::models::team_note::TeamNote;
 use crate::models::user::{JoinRequest, TeamMember};
-use crate::models::utils::format_timestamp;
 use leptos::prelude::*;
 use leptos_router::components::A;
 
@@ -33,45 +43,48 @@ pub async fn update_team_info(name: String, region: String) -> Result<(), Server
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
-        return Err(ServerFnError::new(
-            "Only the team leader can edit team details",
-        ));
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    let name = name.trim().to_string();
+    if name.is_empty() || name.chars().count() > 60 {
+        return Err(ServerFnError::new("A team name has 1 to 60 characters."));
     }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::update_team(&db, &team_id, name, region)
+    if !TEAM_REGIONS.contains(&region.as_str()) {
+        return Err(ServerFnError::new("Unknown region"));
+    }
+    db::update_team(&ctx.db, &team_id, name, region)
         .await
         .map_err(authz::server_err)
 }
 
+/// Place a member (leader only): `top` ... `support` starts them in that
+/// position (the starter there moves to the bench), `substitute` benches
+/// them, `coach` makes them a coach, `member` leaves them unplaced.
 #[server]
-pub async fn set_member_role(member_user_id: String, role: String) -> Result<(), ServerFnError> {
+pub async fn set_member_place(member_user_id: String, place: String) -> Result<(), ServerFnError> {
     use crate::server::authz;
-    use crate::server::db;
+    use crate::server::db::{self, RosterPlace};
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
-        return Err(ServerFnError::new("Only the team leader can assign roles"));
-    }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::update_member_role(&db, &team_id, &member_user_id, role)
-        .await
-        .map_err(authz::server_err)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    let result = match place.as_str() {
+        "substitute" => {
+            db::set_member_place(&ctx.db, &team_id, &member_user_id, RosterPlace::Substitute).await
+        }
+        "coach" => {
+            db::set_member_place(&ctx.db, &team_id, &member_user_id, RosterPlace::Coach).await
+        }
+        "member" => {
+            db::set_member_place(&ctx.db, &team_id, &member_user_id, RosterPlace::Member).await
+        }
+        position => match Role::parse(position) {
+            Some(r) if r.key() == position => {
+                db::assign_to_slot(&ctx.db, &team_id, &member_user_id, position).await
+            }
+            _ => return Err(ServerFnError::new("Unknown roster place")),
+        },
+    };
+    result.map_err(authz::server_err)
 }
 
 #[server]
@@ -79,25 +92,14 @@ pub async fn kick_member(member_user_id: String) -> Result<(), ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    if member_user_id == ctx.user.id {
         return Err(ServerFnError::new(
-            "Only the team leader can remove members",
+            "The team leader cannot remove themselves.",
         ));
     }
-
-    if member_user_id == user.id {
-        return Err(ServerFnError::new("Team leader cannot remove themselves"));
-    }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::remove_team_member(&db, &team_id, &member_user_id)
+    db::remove_team_member(&ctx.db, &team_id, &member_user_id)
         .await
         .map_err(authz::server_err)
 }
@@ -107,21 +109,15 @@ pub async fn leave_team() -> Result<(), ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    if db::is_team_leader(&ctx.db, &ctx.user.id, &team_id)
         .await
         .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by == user.id {
-        return Err(ServerFnError::new(
-            "Team leader cannot leave the team. Transfer leadership or delete the team first.",
-        ));
+    {
+        return Err(ServerFnError::new("The team leader cannot leave the team."));
     }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::remove_team_member(&db, &team_id, &user.id)
+    db::remove_team_member(&ctx.db, &team_id, &ctx.user.id)
         .await
         .map_err(authz::server_err)
 }
@@ -131,19 +127,17 @@ pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
+    };
+    if !db::is_team_leader(&ctx.db, &ctx.user.id, &team_id)
         .await
         .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
-        return Ok(Vec::new()); // non-leaders see empty list
+    {
+        return Ok(Vec::new()); // non-leaders see an empty list
     }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::list_pending_join_requests(&db, &team_id)
+    db::list_pending_join_requests(&ctx.db, &team_id)
         .await
         .map_err(authz::server_err)
 }
@@ -153,84 +147,17 @@ pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(),
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
-        return Err(ServerFnError::new(
-            "Only the team leader can respond to requests",
-        ));
-    }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::respond_to_join_request(&db, &request_id, accept, &team_id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader().await?;
+    db::respond_to_join_request(&ctx.db, &request_id, accept, &team_id)
         .await
         .map_err(authz::server_err)
 }
 
-#[server]
-pub async fn assign_member_to_slot(
-    member_user_id: String,
-    role: String,
-) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
-        return Err(ServerFnError::new("Only the team leader can assign slots"));
-    }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::assign_to_slot(&db, &team_id, &member_user_id, &role)
-        .await
-        .map_err(authz::server_err)
-}
-
-#[server]
-pub async fn unassign_member_from_slot(member_user_id: String) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (team, _) = db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    if team.created_by != user.id {
-        return Err(ServerFnError::new(
-            "Only the team leader can unassign slots",
-        ));
-    }
-
-    let team_id = team.id.ok_or_else(|| ServerFnError::new("No team id"))?;
-    db::remove_from_slot(&db, &team_id, &member_user_id)
-        .await
-        .map_err(authz::server_err)
-}
-
-const MEMBER_ROLES: &[&str] = &[
-    "top",
-    "jungle",
-    "mid",
-    "bot",
-    "support",
-    "coach",
-    "unassigned",
+/// Regions a team can play in.
+pub const TEAM_REGIONS: &[&str] = &[
+    "EUW", "EUNE", "NA", "KR", "BR", "LAN", "LAS", "OCE", "TR", "RU", "JP",
 ];
-const STARTER_ROLES: &[&str] = &["top", "jungle", "mid", "bot", "support"];
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RecentMatch {
@@ -244,34 +171,26 @@ pub struct RecentMatch {
     pub username: String,
 }
 
+/// The team's five most recent stored games (one row per game; the first
+/// member found in it).
 #[server]
 pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let team_id = match db::get_user_team_id(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
     };
-
-    let rows = db::get_team_match_stats(&db, &team_id)
+    let rows = db::get_team_match_stats(&ctx.db, &team_id)
         .await
         .map_err(authz::server_err)?;
-
-    // Group by riot_match_id, take most recent 3 unique matches
     let mut seen = std::collections::HashSet::new();
-    let mut recent: Vec<RecentMatch> = Vec::new();
-    for r in rows {
-        if seen.contains(&r.riot_match_id) {
-            continue;
-        }
-        seen.insert(r.riot_match_id.clone());
-        recent.push(RecentMatch {
+    Ok(rows
+        .into_iter()
+        .filter(|r| seen.insert(r.riot_match_id.clone()))
+        .take(5)
+        .map(|r| RecentMatch {
             riot_match_id: r.riot_match_id,
             champion: r.champion,
             kills: r.kills,
@@ -280,35 +199,24 @@ pub async fn get_recent_team_matches() -> Result<Vec<RecentMatch>, ServerFnError
             win: r.win,
             game_end: r.game_end,
             username: r.username,
-        });
-        if recent.len() >= 3 {
-            break;
-        }
-    }
-    Ok(recent)
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
-// Team Notebook server functions
+// Team notes: every member may write, edit, pin and delete, with Undo
 // ---------------------------------------------------------------------------
 
 #[server]
-pub async fn get_all_team_notes() -> Result<Vec<crate::models::team_note::TeamNote>, ServerFnError>
-{
+pub async fn get_all_team_notes() -> Result<Vec<TeamNote>, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let team_id = match db::get_user_team_id(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
     };
-
-    db::list_team_notes(&db, &team_id)
+    db::list_team_notes(&ctx.db, &team_id)
         .await
         .map_err(authz::server_err)
 }
@@ -318,14 +226,9 @@ pub async fn add_team_note(content: String) -> Result<String, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let team_id = db::get_user_team_id(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-        .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
-
-    db::create_team_note(&db, &team_id, &user.id, &user.username, content)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::create_team_note(&ctx.db, &team_id, &ctx.user.id, &ctx.user.username, content)
         .await
         .map_err(authz::server_err)
 }
@@ -335,10 +238,9 @@ pub async fn toggle_note_pin(note_id: String, pinned: bool) -> Result<(), Server
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-    let team_id = authz::require_team(&db, &user).await?;
-
-    db::toggle_pin_team_note(&db, &team_id, &note_id, pinned)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::toggle_pin_team_note(&ctx.db, &team_id, &note_id, pinned)
         .await
         .map_err(authz::server_err)
 }
@@ -348,10 +250,21 @@ pub async fn edit_team_note(note_id: String, content: String) -> Result<(), Serv
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-    let team_id = authz::require_team(&db, &user).await?;
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::update_team_note(&ctx.db, &team_id, &note_id, content, &ctx.user.username)
+        .await
+        .map_err(authz::server_err)
+}
 
-    db::update_team_note(&db, &team_id, &note_id, content)
+#[server]
+pub async fn undo_note_edit(note_id: String) -> Result<(), ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::undo_team_note_edit(&ctx.db, &team_id, &note_id)
         .await
         .map_err(authz::server_err)
 }
@@ -361,1139 +274,814 @@ pub async fn remove_team_note(note_id: String) -> Result<(), ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db, user } = authz::authed().await?;
-    let team_id = authz::require_team(&db, &user).await?;
-
-    db::delete_team_note(&db, &team_id, &note_id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::delete_team_note(&ctx.db, &team_id, &note_id)
         .await
         .map_err(authz::server_err)
 }
 
 #[server]
-pub async fn get_open_action_items_summary(
-) -> Result<(usize, Vec<crate::models::action_item::ActionItem>), ServerFnError> {
+pub async fn restore_note(note_id: String) -> Result<(), ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db: surreal, user } = authz::authed().await?;
-
-    let team_id = match db::get_user_team_id(&surreal, &user.id)
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    db::restore_team_note(&ctx.db, &team_id, &note_id)
         .await
-        .map_err(authz::server_err)?
-    {
-        Some(id) => id,
-        None => return Ok((0, Vec::new())),
-    };
-
-    let items = db::list_open_action_items(&surreal, &team_id)
-        .await
-        .map_err(authz::server_err)?;
-
-    let total = items.len();
-    let top3: Vec<_> = items.into_iter().take(3).collect();
-    Ok((total, top3))
+        .map_err(authz::server_err)
 }
 
 #[server]
-pub async fn get_post_game_panel(
-) -> Result<Vec<crate::models::game_plan::PostGamePreview>, ServerFnError> {
+pub async fn get_pool_gap_panel() -> Result<Vec<PoolGapWarning>, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    let authz::Ctx { db: surreal, user } = authz::authed().await?;
-
-    let team_id = match db::get_user_team_id(&surreal, &user.id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
     };
-
-    let summary = db::get_dashboard_summary(&surreal, &team_id)
+    let summary = db::get_dashboard_summary(&ctx.db, &team_id)
         .await
         .map_err(authz::server_err)?;
-
-    Ok(summary.recent_post_games)
-}
-
-#[server]
-pub async fn get_pool_gap_panel(
-) -> Result<Vec<crate::models::game_plan::PoolGapWarning>, ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let authz::Ctx { db: surreal, user } = authz::authed().await?;
-
-    let team_id = match db::get_user_team_id(&surreal, &user.id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
-    };
-
-    let summary = db::get_dashboard_summary(&surreal, &team_id)
-        .await
-        .map_err(authz::server_err)?;
-
     Ok(summary.pool_gap_warnings)
 }
 
 // ---------------------------------------------------------------------------
-// Phase 18-08: Mode toggle persistence
+// Roster helpers
 // ---------------------------------------------------------------------------
 
-/// Persist the user's team dashboard mode preference. Validates against allowlist.
-/// Mitigates T-18-08-01 (tampering via arbitrary mode string injection).
-#[server]
-pub async fn set_team_dashboard_mode_pref(mode: String) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    // App-layer validation — DB has no ASSERT per Research Pitfall 4
-    const VALID: &[&str] = &["auto", "dashboard", "brief"];
-    if !VALID.contains(&mode.as_str()) {
-        return Err(ServerFnError::new("Invalid team dashboard mode"));
-    }
-
-    let authz::Ctx { db, user } = authz::authed().await?;
-    db::set_user_team_dashboard_mode(&db, &user.id, &mode)
-        .await
-        .map_err(authz::server_err)?;
-    Ok(())
+/// The roster split by place: starting five by position, substitutes,
+/// coaches, not placed yet.
+pub struct RosterGroups {
+    pub starters: [Option<TeamMember>; 5],
+    pub substitutes: Vec<TeamMember>,
+    pub coaches: Vec<TeamMember>,
+    pub unplaced: Vec<TeamMember>,
 }
 
-/// Top-level team dashboard page.
+pub fn group_roster(members: &[TeamMember]) -> RosterGroups {
+    let mut starters: [Option<TeamMember>; 5] = Default::default();
+    let mut substitutes = Vec::new();
+    let mut coaches = Vec::new();
+    let mut unplaced = Vec::new();
+    for m in members {
+        match m.roster_type.as_str() {
+            "starter" => match Role::parse(&m.role) {
+                Some(r) => {
+                    let i = Role::ALL.iter().position(|x| *x == r).unwrap_or(0);
+                    if starters[i].is_none() {
+                        starters[i] = Some(m.clone());
+                    } else {
+                        substitutes.push(m.clone());
+                    }
+                }
+                None => unplaced.push(m.clone()),
+            },
+            "substitute" => substitutes.push(m.clone()),
+            "coach" => coaches.push(m.clone()),
+            _ => unplaced.push(m.clone()),
+        }
+    }
+    for list in [&mut substitutes, &mut coaches, &mut unplaced] {
+        list.sort_by_key(|m| m.username.to_lowercase());
+    }
+    RosterGroups {
+        starters,
+        substitutes,
+        coaches,
+        unplaced,
+    }
+}
+
+/// A `&'static str` for a DOM id prefix (the `Menu` primitive takes one).
+/// Each distinct string is leaked once, so the set stays as small as the
+/// number of distinct members seen.
+fn intern(s: String) -> &'static str {
+    use std::collections::HashSet;
+    use std::sync::{Mutex, OnceLock};
+    static SEEN: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+    let mut set = match SEEN.get_or_init(|| Mutex::new(HashSet::new())).lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    if let Some(found) = set.get(s.as_str()) {
+        return found;
+    }
+    let leaked: &'static str = Box::leak(s.into_boxed_str());
+    set.insert(leaked);
+    leaked
+}
+
+/// The leader's actions on one member, as menu items.
+fn member_actions(m: &TeamMember, is_self: bool) -> Vec<MenuItem> {
+    let mut items: Vec<MenuItem> = Role::ALL
+        .iter()
+        .filter(|r| !(m.roster_type == "starter" && Role::parse(&m.role) == Some(**r)))
+        .map(|r| MenuItem::new(r.key(), format!("Start as {}", r.label())))
+        .collect();
+    if m.roster_type != "substitute" {
+        items.push(MenuItem::new("substitute", "Move to the bench"));
+    }
+    if m.roster_type != "coach" {
+        items.push(MenuItem::new("coach", "Make coach"));
+    }
+    if m.roster_type != "member" {
+        items.push(MenuItem::new("member", "Take off the roster"));
+    }
+    if !is_self {
+        items.push(MenuItem::new("kick", "Remove from team").danger());
+    }
+    items
+}
+
+/// The team page's resources (see `TeamDashboard`).
+#[derive(Clone, Copy)]
+struct TeamResources {
+    requests: Resource<Result<Vec<JoinRequest>, ServerFnError>>,
+    notes: Resource<Result<Vec<TeamNote>, ServerFnError>>,
+    games: Resource<Result<Vec<RecentMatch>, ServerFnError>>,
+    gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>,
+}
+
 #[component]
 pub fn TeamDashboard() -> impl IntoView {
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-
-    let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-    Effect::new(move || match auth_user.get() {
-        Some(Ok(None)) =>
-        {
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
             #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
                 let _ = window.location().set_href("/auth/login");
             }
         }
-        Some(Ok(Some(u))) => {
-            is_solo_mode.set(u.mode == "solo");
-        }
-        _ => {}
+    });
+    let team = Resource::new(|| (), |_| get_team_dashboard());
+    // Every resource of the page is created here, before any Suspense, so
+    // the server and the browser register them in the same order.
+    let res = TeamResources {
+        requests: Resource::new(|| (), |_| get_pending_requests()),
+        notes: Resource::new(|| (), |_| get_all_team_notes()),
+        games: Resource::new(|| (), |_| get_recent_team_matches()),
+        gaps: Resource::new(|| (), |_| get_pool_gap_panel()),
+    };
+    let reload = Callback::new(move |_| {
+        team.refetch();
+        res.requests.refetch();
     });
 
-    let dashboard = Resource::new(|| (), |_| get_team_dashboard());
-    let requests = Resource::new(|| (), |_| get_pending_requests());
-    let recent_matches = Resource::new(|| (), |_| get_recent_team_matches());
-    let action_items_res = Resource::new(|| (), |_| get_open_action_items_summary());
-    let post_game_panel = Resource::new(|| (), |_| get_post_game_panel());
-    let pool_gap_panel = Resource::new(|| (), |_| get_pool_gap_panel());
-
     view! {
-        <PageShell width=PageWidth::Standard attr:data-feedback-label="Team dashboard">
-            <Suspense fallback=|| view! { <SkeletonCard height="h-32" /> }>
-                {move || {
-                    if is_solo_mode.get() {
-                        return Some(view! {
-                            <div class="max-w-2xl">
-                                <PageHeader eyebrow="Team" title="Team dashboard" />
-                                <p class="text-reading text-secondary">"You are in solo mode. Switch to team mode to see your team's dashboard, roster and notes."</p>
-                                <div class="mt-6">
-                                    <Button
-                                        variant=ButtonVariant::Primary
-                                        on_click=Callback::new(move |_| {
-                                            leptos::task::spawn_local(async move {
-                                                let _ = crate::components::nav::set_user_mode("team".to_string()).await;
-                                                #[cfg(feature = "hydrate")]
-                                                if let Some(window) = web_sys::window() {
-                                                    let _ = window.location().reload();
-                                                }
-                                            });
-                                        })
-                                    >
-                                        "Switch to Team Mode"
-                                    </Button>
-                                </div>
-                            </div>
-                        }.into_any());
+        <PageShell attr:data-feedback-label="Team">
+            <Suspense fallback=|| view! {
+                <SkeletonGroup label="Loading the team">
+                    <Skeleton width="w-64 max-w-full" size="h-10" />
+                    <Skeleton shape=SkeletonShape::Block size="h-64" />
+                </SkeletonGroup>
+            }>
+                {move || Suspend::new(async move {
+                    match team.await {
+                        Ok(Some((t, members, me))) => view! { <TeamView team=t members=members me=me reload=reload res=res /> }.into_any(),
+                        Ok(None) => view! {
+                            <PageHeader title="Team" />
+                            <NoTeamState />
+                        }.into_any(),
+                        Err(_) => view! {
+                            <PageHeader title="Team" />
+                            <EmptyState title="The team did not load" message="The server did not answer. Reload the page in a moment." />
+                        }.into_any(),
                     }
-                    dashboard.get().map(|result| match result {
-                    Ok(Some((team, members, current_user_id))) => {
-                        {
-                            let is_leader = team.created_by == current_user_id;
-                            let created_by = team.created_by.clone();
-                            let (edit_name, set_edit_name) = signal(team.name.clone());
-                        let (edit_region, set_edit_region) = signal(team.region.clone());
-                        let (show_edit_modal, set_show_edit_modal) = signal(false);
-                        let (leave_confirm, set_leave_confirm) = signal(false);
-
-                        // Check if current user has riot account linked
-                        let current_user_riot_linked = members.iter()
-                            .find(|m| m.user_id == current_user_id)
-                            .map(|m| m.riot_summoner_name.is_some())
-                            .unwrap_or(false);
-
-                        // Partition members
-                        let starters: Vec<TeamMember> = members.iter()
-                            .filter(|m| m.roster_type == "starter")
-                            .cloned()
-                            .collect();
-                        let coaches: Vec<TeamMember> = members.iter()
-                            .filter(|m| m.role == "coach" && m.roster_type != "starter")
-                            .cloned()
-                            .collect();
-                        let mut subs: Vec<TeamMember> = members.iter()
-                            .filter(|m| m.roster_type != "starter" && m.role != "coach")
-                            .cloned()
-                            .collect();
-
-                        // BUG-03: Ensure the team leader is always visible in the bench section.
-                        // The leader may be absent if their team_member record has an unexpected state.
-                        // If not found in any partition, insert them at the top of the bench.
-                        let leader_in_any = starters.iter().any(|m| m.user_id == created_by)
-                            || coaches.iter().any(|m| m.user_id == created_by)
-                            || subs.iter().any(|m| m.user_id == created_by);
-                        if !leader_in_any {
-                            if let Some(leader_member) = members.iter().find(|m| m.user_id == created_by) {
-                                subs.insert(0, leader_member.clone());
-                            }
-                        }
-
-                        let created_by_for_starters = created_by.clone();
-                        let created_by_for_coaches = created_by.clone();
-                        let created_by_for_subs = created_by.clone();
-
-                        view! {
-                            <div class="flex flex-col gap-6">
-                                // Page header: team name, region, role, next action.
-                                {
-                                    let team_name = team.name.clone();
-                                    let team_region = team.region.clone();
-                                    view! {
-                                        <PageHeader
-                                            eyebrow="Team"
-                                            title=team_name
-                                            meta=move || {
-                                                let team_region = team_region.clone();
-                                                view! {
-                                                    <span>"Region " <span class="figures text-primary">{team_region}</span></span>
-                                                    {is_leader.then(|| view! { <Badge tone=BadgeTone::Accent>"Team leader"</Badge> })}
-                                                }
-                                            }
-                                            actions=move || view! {
-                                                {is_leader.then(|| view! {
-                                                    <Button
-                                                        variant=ButtonVariant::Quiet
-                                                        on_click=Callback::new(move |_| set_show_edit_modal.set(true))
-                                                    >
-                                                        "Edit team"
-                                                    </Button>
-                                                })}
-                                                <Button href="/draft" variant=ButtonVariant::Primary>"Open draft"</Button>
-                                            }
-                                        />
-                                    }
-                                }
-                                {(!current_user_riot_linked).then(|| view! {
-                                    <p class="-mt-2 text-body text-secondary">
-                                        "Your Riot account is not linked yet. "
-                                        <A href="/profile" attr:class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Link it on your profile"</A>
-                                        " so your games count for the team."
-                                    </p>
-                                })}
-
-                                // Edit team modal (leader only)
-                                {move || if show_edit_modal.get() {
-                                    view! {
-                                        // Backdrop
-                                        <div
-                                            class="fixed inset-0 bg-overlay-strong z-50 flex items-center justify-center"
-                                            on:click=move |_| set_show_edit_modal.set(false)
-                                        >
-                                            // Modal content — stop click propagation
-                                            <div
-                                                class="bg-elevated border border-outline rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
-                                                on:click=move |ev| ev.stop_propagation()
-                                            >
-                                                <h3 class="font-display text-primary text-xl mb-4">"Edit Team"</h3>
-                                                <div class="flex flex-col gap-4">
-                                                    <div>
-                                                        <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Team Name"</label>
-                                                        <input
-                                                            type="text"
-                                                            prop:value=move || edit_name.get()
-                                                            on:input=move |ev| set_edit_name.set(event_target_value(&ev))
-                                                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
-                                                        <select
-                                                            prop:value=move || edit_region.get()
-                                                            on:change=move |ev| set_edit_region.set(event_target_value(&ev))
-                                                            class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                        >
-                                                            {["EUW","EUNE","NA","KR","BR"].iter().map(|&r| view! {
-                                                                <option value=r>{r}</option>
-                                                            }).collect_view()}
-                                                        </select>
-                                                    </div>
-                                                    <div class="flex justify-end gap-3 pt-2">
-                                                        <button
-                                                            class="text-secondary hover:text-primary text-sm px-4 py-2 rounded-lg transition-colors cursor-pointer hover:bg-overlay focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                            on:click=move |_| {
-                                                                set_show_edit_modal.set(false);
-                                                            }
-                                                        >
-                                                            "Cancel"
-                                                        </button>
-                                                        <button
-                                                            class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                            on:click=move |_| {
-                                                                let name = edit_name.get_untracked();
-                                                                let region = edit_region.get_untracked();
-                                                                leptos::task::spawn_local(async move {
-                                                                    match update_team_info(name, region).await {
-                                                                        Ok(_) => {
-                                                                            toast.show.run((ToastKind::Success, "Team info updated".into()));
-                                                                            dashboard.refetch();
-                                                                            // Close modal after a brief delay to show success
-                                                                            #[cfg(feature = "hydrate")]
-                                                                            {
-                                                                                use wasm_bindgen::prelude::*;
-                                                                                let cb = Closure::once(move || {
-                                                                                    set_show_edit_modal.set(false);
-                                                                                });
-                                                                                if let Some(win) = web_sys::window() {
-                                                                                    let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
-                                                                                        cb.as_ref().unchecked_ref(), 800,
-                                                                                    );
-                                                                                }
-                                                                                cb.forget();
-                                                                            }
-                                                                        }
-                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                                                                    }
-                                                                });
-                                                            }
-                                                        >
-                                                            "Save"
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }}
-
-                                // Join requests (leader only)
-                                {if is_leader {
-                                    view! {
-                                        <div data-feedback-label="Team dashboard → Join requests">
-                                            <Suspense fallback=|| view! { <span></span> }>
-                                                {move || requests.get().map(|res| {
-                                                    let reqs = res.unwrap_or_default();
-                                                    if reqs.is_empty() {
-                                                        view! { <span></span> }.into_any()
-                                                    } else {
-                                                        view! {
-                                                            <div class="bg-elevated border border-accent/30 rounded-xl p-5">
-                                                                <h3 class="font-display text-accent text-xl mb-3 flex items-center gap-2">
-                                                                    "Join Requests"
-                                                                    <span class="bg-accent text-accent-contrast text-xs font-bold rounded-ctl w-5 h-5 flex items-center justify-center tabular-nums">
-                                                                        {reqs.len()}
-                                                                    </span>
-                                                                </h3>
-                                                                <div class="flex flex-col gap-2">
-                                                                    {reqs.into_iter().map(|req| {
-                                                                        let req_id_accept = req.id.clone();
-                                                                        let req_id_decline = req.id.clone();
-                                                                        let (req_error, set_req_error) = signal(Option::<String>::None);
-                                                                        view! {
-                                                                            <div class="flex flex-col gap-1">
-                                                                                <div class="flex items-center justify-between bg-surface border border-outline rounded-lg px-4 py-3">
-                                                                                <div>
-                                                                                    <span class="text-primary font-medium">{req.username}</span>
-                                                                                    {req.riot_summoner_name.map(|n| view! {
-                                                                                        <span class="text-muted text-sm ml-2 font-mono">{n}</span>
-                                                                                    })}
-                                                                                </div>
-                                                                                <div class="flex gap-2">
-                                                                                    <button
-                                                                                        class="bg-success/15 text-success border border-success/30 hover:bg-success/25 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-success/50 focus-visible:outline-none"
-                                                                                        on:click=move |_| {
-                                                                                            let id = req_id_accept.clone();
-                                                                                            leptos::task::spawn_local(async move {
-                                                                                                match handle_join_request(id, true).await {
-                                                                                                    Ok(_) => {
-                                                                                                        set_req_error.set(None);
-                                                                                                        dashboard.refetch();
-                                                                                                        requests.refetch();
-                                                                                                    }
-                                                                                                    Err(e) => set_req_error.set(Some(format!("Error: {e}"))),
-                                                                                                }
-                                                                                            });
-                                                                                        }
-                                                                                    >"Accept"</button>
-                                                                                    <button
-                                                                                        class="bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
-                                                                                        on:click=move |_| {
-                                                                                            let id = req_id_decline.clone();
-                                                                                            leptos::task::spawn_local(async move {
-                                                                                                let _ = handle_join_request(id, false).await;
-                                                                                                requests.refetch();
-                                                                                            });
-                                                                                        }
-                                                                                    >"Decline"</button>
-                                                                                </div>
-                                                                            </div>
-                                                                            {move || req_error.get().map(|e| view! {
-                                                                                <p class="text-danger text-xs px-1" role="alert">{e}</p>
-                                                                            })}
-                                                                            </div>
-                                                                        }
-                                                                    }).collect_view()}
-                                                                </div>
-                                                            </div>
-                                                        }.into_any()
-                                                    }
-                                                })}
-                                            </Suspense>
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }}
-
-                                // Starting roster — 5 role slots
-                                <div data-feedback-label="Team dashboard → Roster">
-                                    <h2 class="font-display text-title font-semibold text-primary mb-3">"Starting roster"</h2>
-                                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                                        {STARTER_ROLES.iter().map(|&role| {
-                                            let assigned = starters.iter().find(|m| m.role == role).cloned();
-                                            let role_label = role.to_string();
-                                            let role_label2 = role_label.clone();
-                                            let (drag_over, set_drag_over) = signal(false);
-                                            let leader_id = created_by_for_starters.clone();
-
-                                            view! {
-                                                <div
-                                                    class=move || format!(
-                                                        "relative overflow-hidden bg-elevated border rounded-xl p-3 flex flex-col items-center gap-2 min-h-[120px] transition-colors {}",
-                                                        if drag_over.get() { "border-accent bg-overlay" } else { "border-outline" }
-                                                    )
-                                                    on:dragover=move |ev| {
-                                                        ev.prevent_default();
-                                                        set_drag_over.set(true);
-                                                    }
-                                                    on:dragleave=move |_| set_drag_over.set(false)
-                                                    on:drop=move |ev| {
-                                                        ev.prevent_default();
-                                                        set_drag_over.set(false);
-                                                        let Some(dt) = ev.data_transfer() else { return };
-                                                        let uid = dt.get_data("text/plain").unwrap_or_default();
-                                                        if !uid.is_empty() {
-                                                            let r = role_label.clone();
-                                                            leptos::task::spawn_local(async move {
-                                                                let _ = assign_member_to_slot(uid, r).await;
-                                                                dashboard.refetch();
-                                                            });
-                                                        }
-                                                    }
-                                                >
-                                                    // Role mark (typographic; no third-party icons)
-                                                    {match crate::components::ui::Role::parse(role) {
-                                                        Some(r) => view! {
-                                                            <crate::components::ui::RoleLabel role=r style=crate::components::ui::RoleLabelStyle::Boxed />
-                                                        }.into_any(),
-                                                        None => view! { <span class="text-muted text-xs capitalize">{role_label2}</span> }.into_any(),
-                                                    }}
-
-                                                    // Assigned player or empty slot
-                                                    {if let Some(m) = assigned {
-                                                        let uid_for_unassign = m.user_id.clone();
-                                                        let is_member_leader = m.user_id == leader_id;
-                                                        view! {
-                                                            <div class="flex-1 flex flex-col items-center justify-center gap-1 w-full">
-                                                                <div class="flex items-center gap-1">
-                                                                    <span class="text-primary text-sm font-medium text-center truncate">{m.username.clone()}</span>
-                                                                    {is_member_leader.then(|| view! {
-                                                                        <span class="text-accent text-xs" title="Team Leader">"★"</span>
-                                                                    })}
-                                                                </div>
-                                                                {if is_leader {
-                                                                    view! {
-                                                                        <button
-                                                                            class="text-muted hover:text-danger text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
-                                                                            title="Remove from slot"
-                                                                            aria-label="Remove from slot"
-                                                                            on:click=move |_| {
-                                                                                let uid = uid_for_unassign.clone();
-                                                                                leptos::task::spawn_local(async move {
-                                                                                    let _ = unassign_member_from_slot(uid).await;
-                                                                                    dashboard.refetch();
-                                                                                });
-                                                                            }
-                                                                        >"✕"</button>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! { <span></span> }.into_any()
-                                                                }}
-                                                            </div>
-                                                        }.into_any()
-                                                    } else {
-                                                        view! {
-                                                            <div class="flex-1 flex items-center justify-center">
-                                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-dimmed">"Empty"</span>
-                                                            </div>
-                                                        }.into_any()
-                                                    }}
-                                                </div>
-                                            }
-                                        }).collect_view()}
-                                    </div>
-                                    {if is_leader {
-                                        view! { <p class="text-dimmed text-xs mt-2">"Drag players from the bench below to assign them to role slots."</p> }.into_any()
-                                    } else {
-                                        view! { <span></span> }.into_any()
-                                    }}
-                                </div>
-
-                                // Coaches section
-                                <div data-feedback-label="Team dashboard → Coaches">
-                                    <h2 class="font-display text-title font-semibold text-primary mb-3">"Coaches"</h2>
-                                    {if coaches.is_empty() {
-                                        view! { <p class="text-dimmed text-sm">"No coaches assigned. Set a member's role to \"coach\" from the bench."</p> }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="grid grid-cols-2 gap-3">
-                                                {coaches.into_iter().map(|m| {
-                                                    let is_member_leader = m.user_id == created_by_for_coaches;
-                                                    view! {
-                                                        <div class="relative overflow-hidden bg-elevated border border-outline rounded-xl p-3 flex items-center gap-3">
-                                                            // Watermark clipboard icon for coach
-                                                            <div class="absolute inset-0 overflow-hidden pointer-events-none">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"
-                                                                     class="absolute bottom-0 right-0 w-14 h-14 opacity-10 text-muted pointer-events-none select-none translate-x-2 translate-y-2"
-                                                                     aria-hidden="true">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
-                                                                </svg>
-                                                            </div>
-                                                            <span class="bg-info/20 text-info rounded-ctl w-8 h-8 flex items-center justify-center text-xs font-bold uppercase">
-                                                                {m.username.chars().next().unwrap_or('?').to_string()}
-                                                            </span>
-                                                            <div>
-                                                                <div class="flex items-center gap-1">
-                                                                    <span class="text-primary text-sm font-medium">{m.username}</span>
-                                                                    {is_member_leader.then(|| view! {
-                                                                        <span class="text-accent text-xs" title="Team Leader" aria-hidden="true">"★"</span>
-                                                                    })}
-                                                                </div>
-                                                                <span class="font-mono uppercase tracking-[0.18em] text-caption text-info">"Coach"</span>
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </div>
-
-                                // Substitute bench
-                                <div>
-                                    <h2 class="font-display text-title font-semibold text-primary mb-3">"Bench"</h2>
-                                    {if subs.is_empty() {
-                                        view! { <p class="text-dimmed text-sm">"No players on the bench."</p> }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="flex flex-col gap-2">
-                                                {subs.into_iter().map(|m| {
-                                                    let uid_drag = m.user_id.clone();
-                                                    let uid_kick = m.user_id.clone();
-                                                    let is_self = m.user_id == current_user_id;
-                                                    let is_member_leader = m.user_id == created_by_for_subs;
-                                                    let current_role = m.role.clone();
-                                                    let display_name = m.username.clone();
-                                                    let (role_msg, set_role_msg) = signal(Option::<String>::None);
-
-                                                    view! {
-                                                        <div
-                                                            class="relative bg-elevated border border-outline rounded-xl px-4 py-3 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing"
-                                                            draggable="true"
-                                                            on:dragstart=move |ev| {
-                                                                if let Some(dt) = ev.data_transfer() {
-                                                                    let _ = dt.set_data("text/plain", &uid_drag);
-                                                                }
-                                                            }
-                                                        >
-                                                            <div class="flex items-center gap-2 min-w-0">
-                                                                <span class="text-muted text-xs select-none" title="Drag to assign to a role slot">"⠿"</span>
-                                                                <span class="text-primary font-medium truncate">{display_name}</span>
-                                                                {is_member_leader.then(|| view! {
-                                                                    <span class="text-accent text-xs" title="Team Leader">"★"</span>
-                                                                })}
-                                                                {m.riot_summoner_name.map(|n| view! {
-                                                                    <span class="text-dimmed text-sm truncate">{n}</span>
-                                                                })}
-                                                                {move || role_msg.get().map(|msg| view! {
-                                                                    <span class="text-xs text-success">{msg}</span>
-                                                                })}
-                                                            </div>
-                                                            <div class="flex items-center gap-2 flex-shrink-0">
-                                                                {if is_leader {
-                                                                    let mid = m.user_id.clone();
-                                                                    view! {
-                                                                        <select
-                                                                            class="bg-surface/50 border border-outline rounded-lg px-2 py-1 text-secondary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                                            on:change=move |ev| {
-                                                                                let role = event_target_value(&ev);
-                                                                                let uid = mid.clone();
-                                                                                leptos::task::spawn_local(async move {
-                                                                                    match set_member_role(uid, role).await {
-                                                                                        Ok(_) => {
-                                                                                            set_role_msg.set(Some("✓".into()));
-                                                                                            dashboard.refetch();
-                                                                                        }
-                                                                                        Err(e) => set_role_msg.set(Some(e.to_string())),
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        >
-                                                                            {MEMBER_ROLES.iter().map(|&r| {
-                                                                                let selected = r == current_role.as_str();
-                                                                                view! {
-                                                                                    <option value=r selected=selected>{r}</option>
-                                                                                }
-                                                                            }).collect_view()}
-                                                                        </select>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! {
-                                                                        <span class="text-muted text-sm capitalize">{current_role}</span>
-                                                                    }.into_any()
-                                                                }}
-
-                                                                {if is_leader && !is_self {
-                                                                    view! {
-                                                                        <button
-                                                                            class="text-muted hover:text-danger text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
-                                                                            title="Remove from team"
-                                                                            aria-label="Remove from team"
-                                                                            on:click=move |_| {
-                                                                                let uid = uid_kick.clone();
-                                                                                leptos::task::spawn_local(async move {
-                                                                                    let _ = kick_member(uid).await;
-                                                                                    dashboard.refetch();
-                                                                                });
-                                                                            }
-                                                                        >
-                                                                            "✕"
-                                                                        </button>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! { <span></span> }.into_any()
-                                                                }}
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </div>
-
-                                // Recent games
-                                <div>
-                                    <div class="flex items-center justify-between mb-3">
-                                        <div>
-                                            <h2 class="font-display text-title font-semibold text-primary">"Recent games"</h2>
-                                        </div>
-                                        <A href="/stats" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all stats \u{2192}"</A>
-                                    </div>
-                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
-                                        {move || recent_matches.get().map(|res| match res {
-                                            Ok(matches) if matches.is_empty() => {
-                                                view! { <p class="text-dimmed text-sm">"No matches synced yet. Go to Stats to sync match history."</p> }.into_any()
-                                            }
-                                            Ok(matches) => {
-                                                view! {
-                                                    <div class="flex flex-col gap-2">
-                                                        {matches.into_iter().map(|m| {
-                                                            let champ_img =
-                                                                crate::models::ddragon::champion_icon_url(&m.champion);
-                                                            let kda = format!("{}/{}/{}", m.kills, m.deaths, m.assists);
-                                                            let win = m.win;
-                                                            let date_str = m.game_end.unwrap_or_else(|| "Unknown".into());
-                                                            view! {
-                                                                <div class=if win {
-                                                                    "flex items-center gap-3 border border-win/50 rounded-ctl px-4 py-2.5"
-                                                                } else {
-                                                                    "flex items-center gap-3 border border-rule rounded-ctl px-4 py-2.5"
-                                                                }>
-                                                                    <img src=champ_img alt=m.champion.clone() class="w-8 h-8 rounded-ctl" />
-                                                                    <div class="flex-1 min-w-0">
-                                                                        <div class="flex items-center gap-2">
-                                                                            <span class="text-primary text-sm font-medium">{m.champion}</span>
-                                                                            <span class="text-muted text-xs">{m.username}</span>
-                                                                        </div>
-                                                                        <span class="text-dimmed text-xs font-mono">{date_str}</span>
-                                                                    </div>
-                                                                    <span class="text-secondary text-sm font-mono tabular-nums">{kda}</span>
-                                                                    <crate::components::ui::ResultGlyph result=crate::components::ui::GameResult::from_win(win) />
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                            Err(_) => view! { <p class="text-dimmed text-sm">"Could not load recent matches."</p> }.into_any(),
-                                        })}
-                                    </Suspense>
-                                </div>
-
-                                // Team Notebook
-                                <TeamNotebook current_user_id=current_user_id.clone() is_leader=is_leader />
-
-                                // Action Items widget
-                                <div>
-                                    <div class="flex items-center justify-between mb-3">
-                                        <div>
-                                            <h2 class="font-display text-title font-semibold text-primary">"Open action items"</h2>
-                                        </div>
-                                        <A href="/action-items" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all \u{2192}"</A>
-                                    </div>
-                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
-                                        {move || action_items_res.get().map(|result| match result {
-                                            Ok((total, top_items)) => {
-                                                if total == 0 {
-                                                    view! {
-                                                        <p class="text-dimmed text-sm">"No open action items. "</p>
-                                                    }.into_any()
-                                                } else {
-                                                    view! {
-                                                        <div class="space-y-2">
-                                                            <p class="text-secondary text-sm mb-2">{total}" open item(s)"</p>
-                                                            {top_items.into_iter().map(|item| {
-                                                                let status_dot = match item.status.as_str() {
-                                                                    "in_progress" => "w-2.5 h-2.5 rounded-ctl bg-warning shrink-0",
-                                                                    _ => "w-2.5 h-2.5 rounded-ctl bg-success shrink-0",
-                                                                };
-                                                                view! {
-                                                                    <div class="flex items-center gap-2 bg-elevated border border-outline rounded-lg px-3 py-2">
-                                                                        <span class=status_dot aria-hidden="true"></span>
-                                                                        <span class="text-primary text-sm truncate">{item.text}</span>
-                                                                        {item.assigned_to.map(|a| view! {
-                                                                            <span class="text-xs bg-surface text-muted rounded-md px-2 py-0.5 shrink-0">{a}</span>
-                                                                        })}
-                                                                    </div>
-                                                                }
-                                                            }).collect_view()}
-                                                        </div>
-                                                    }.into_any()
-                                                }
-                                            }
-                                            Err(_) => view! { <p class="text-dimmed text-sm">"Could not load action items."</p> }.into_any(),
-                                        })}
-                                    </Suspense>
-                                </div>
-
-                                // Post-Game Summaries Panel
-                                <div>
-                                    <div class="flex items-center justify-between mb-3">
-                                        <div>
-                                            <h2 class="font-display text-title font-semibold text-primary">"Recent reviews"</h2>
-                                        </div>
-                                        <A href="/post-game" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"View all reviews"</A>
-                                    </div>
-                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
-                                        {move || post_game_panel.get().map(|result| match result {
-                                            Ok(previews) if previews.is_empty() => view! {
-                                                <p class="text-dimmed text-sm">
-                                                    "No post-game reviews yet. "
-                                                    <A href="/post-game" attr:class="text-accent hover:underline">"Start your first review"</A>
-                                                </p>
-                                            }.into_any(),
-                                            Ok(previews) => view! {
-                                                <div class="space-y-2">
-                                                    {previews.into_iter().map(|preview| {
-                                                        let extra = if preview.improvements.len() > 2 {
-                                                            Some(preview.improvements.len() - 2)
-                                                        } else {
-                                                            None
-                                                        };
-                                                        let top_improvements: Vec<String> = preview.improvements.into_iter().take(2).collect();
-                                                        view! {
-                                                            <div class="bg-elevated border border-outline rounded-xl p-3">
-                                                                {preview.created_at.map(|d| view! {
-                                                                    <p class="text-xs text-muted mb-1 font-mono">{format_timestamp(&d)}</p>
-                                                                })}
-                                                                {top_improvements.into_iter().map(|imp| view! {
-                                                                    <p class="text-sm text-secondary truncate">{imp}</p>
-                                                                }).collect_view()}
-                                                                {extra.map(|n| view! {
-                                                                    <p class="text-xs text-muted mt-1">{"+"}{n}{" more"}</p>
-                                                                })}
-                                                            </div>
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }.into_any(),
-                                            Err(_) => view! {
-                                                <p class="text-dimmed text-sm">"Could not load post-game reviews."</p>
-                                            }.into_any(),
-                                        })}
-                                    </Suspense>
-                                </div>
-
-                                // Pool Gap Warnings Panel
-                                <div>
-                                    <div class="flex items-center justify-between mb-3">
-                                        <div>
-                                            <h2 class="font-display text-title font-semibold text-primary">"Pool gaps"</h2>
-                                        </div>
-                                        <A href="/champion-pool" attr:class="text-accent text-sm hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md">"Manage pools"</A>
-                                    </div>
-                                    <Suspense fallback=|| view! { <SkeletonCard height="h-24" /> }>
-                                        {move || pool_gap_panel.get().map(|result| match result {
-                                            Ok(warnings) if warnings.is_empty() => view! {
-                                                <p class="text-dimmed text-sm">
-                                                    "No pool gaps detected. "
-                                                    <A href="/champion-pool" attr:class="text-accent hover:underline">"Manage champion pools"</A>
-                                                </p>
-                                            }.into_any(),
-                                            Ok(warnings) => view! {
-                                                <div class="space-y-2">
-                                                    {warnings.into_iter().map(|warning| {
-                                                        let label = if warning.opponent_escalated {
-                                                            format!("{} ({}) — opponent threat", warning.username, warning.role)
-                                                        } else {
-                                                            format!("{} ({})", warning.username, warning.role)
-                                                        };
-                                                        let missing = warning.missing_classes.join(", ");
-                                                        view! {
-                                                            <div class="flex items-start gap-2 bg-elevated border border-warning/30 rounded-lg px-3 py-2">
-                                                                <span class="text-warning shrink-0 font-bold" aria-hidden="true">"!"</span>
-                                                                <div>
-                                                                    <p class="text-primary text-sm">{label}</p>
-                                                                    <p class="text-xs text-muted">{"Missing: "}{missing}</p>
-                                                                    {warning.dominant_class.map(|dc| view! {
-                                                                        <span class="text-xs bg-surface text-muted rounded-md px-2 py-0.5">{"Dominant: "}{dc}</span>
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }.into_any(),
-                                            Err(_) => view! {
-                                                <p class="text-dimmed text-sm">"Could not load pool gap warnings."</p>
-                                            }.into_any(),
-                                        })}
-                                    </Suspense>
-                                </div>
-
-                                // Leave team (non-leaders only)
-                                {if !is_leader {
-                                    view! {
-                                        <div class="border-t border-divider pt-4">
-                                            {move || if leave_confirm.get() {
-                                                view! {
-                                                    <div class="flex items-center gap-3">
-                                                        <span class="text-secondary text-sm">"Are you sure you want to leave this team?"</span>
-                                                        <button
-                                                            class="bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
-                                                            on:click=move |_| {
-                                                                leptos::task::spawn_local(async move {
-                                                                    match leave_team().await {
-                                                                        Ok(_) => {
-                                                                            toast.show.run((ToastKind::Success, "You have left the team".into()));
-                                                                            dashboard.refetch();
-                                                                        }
-                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                                                                    }
-                                                                });
-                                                                set_leave_confirm.set(false);
-                                                            }
-                                                        >"Yes, leave"</button>
-                                                        <button
-                                                            class="bg-surface hover:bg-overlay text-secondary text-sm rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                            on:click=move |_| set_leave_confirm.set(false)
-                                                        >"Cancel"</button>
-                                                    </div>
-                                                }.into_any()
-                                            } else {
-                                                view! {
-                                                    <button
-                                                        class="text-danger hover:opacity-80 text-sm transition-colors border border-danger/30 hover:border-danger/50 rounded-lg px-3 py-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none"
-                                                        on:click=move |_| set_leave_confirm.set(true)
-                                                    >"Leave Team"</button>
-                                                }.into_any()
-                                            }}
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }}
-                            </div>
-                        }.into_any()
-                        }
-                    },
-                    Ok(None) => view! {
-                        <NoTeamState />
-                    }.into_any(),
-                    Err(e) => view! {
-                        <ErrorBanner message=format!("Failed to load team data: {e}") />
-                    }.into_any(),
-                })}}
+                })}
             </Suspense>
         </PageShell>
     }
 }
 
 #[component]
-fn TeamNotebook(current_user_id: String, is_leader: bool) -> impl IntoView {
+fn TeamView(
+    team: Team,
+    members: Vec<TeamMember>,
+    me: String,
+    reload: Callback<()>,
+    res: TeamResources,
+) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
-    let notes_resource = Resource::new(|| (), |_| get_all_team_notes());
-    let (expanded, set_expanded) = signal(false);
-    let (new_note, set_new_note) = signal(String::new());
-    let (editing_id, set_editing_id) = signal(Option::<String>::None);
-    let (edit_content, set_edit_content) = signal(String::new());
+    let is_leader = team.created_by == me;
+    let leader_name = members
+        .iter()
+        .find(|m| m.user_id == team.created_by)
+        .map(|m| m.username.clone())
+        .unwrap_or_default();
+    let groups = group_roster(&members);
+    let edit_open = RwSignal::new(false);
+    let leave_open = RwSignal::new(false);
+    let kick_target = RwSignal::new(None::<(String, String)>);
+    let kick_open = RwSignal::new(false);
+    let member_count = members.len();
+    let region = team.region.clone();
+
+    let on_action = Callback::new(move |(user_id, name, action): (String, String, String)| {
+        if action == "kick" {
+            kick_target.set(Some((user_id, name)));
+            kick_open.set(true);
+            return;
+        }
+        leptos::task::spawn_local(async move {
+            match set_member_place(user_id, action.clone()).await {
+                Ok(()) => {
+                    let what = match action.as_str() {
+                        "substitute" => format!("{name} is on the bench"),
+                        "coach" => format!("{name} is a coach"),
+                        "member" => format!("{name} is off the roster"),
+                        pos => format!(
+                            "{name} starts as {}",
+                            Role::parse(pos).map(|r| r.label()).unwrap_or(pos)
+                        ),
+                    };
+                    toast.push.run(Toast::success(what));
+                    reload.run(());
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    let kick = Callback::new(move |_| {
+        let Some((id, name)) = kick_target.get_untracked() else {
+            return;
+        };
+        leptos::task::spawn_local(async move {
+            match kick_member(id).await {
+                Ok(()) => {
+                    toast
+                        .push
+                        .run(Toast::success(format!("{name} was removed from the team")));
+                    reload.run(());
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    let leave = Callback::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match leave_team().await {
+                Ok(()) =>
+                {
+                    #[cfg(feature = "hydrate")]
+                    if let Some(w) = web_sys::window() {
+                        let _ = w.location().set_href("/team/roster");
+                    }
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+
+    let me_row = StoredValue::new(me.clone());
+    let row = move |m: Option<TeamMember>, position: Option<Role>| -> AnyView {
+        match m {
+            None => view! {
+                <li class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-3 border-t border-rule py-2.5" data-roster-row="open">
+                    <span>{position.map(|r| view! { <RoleLabel role=r /> })}</span>
+                    <span class="text-body text-muted">"Open: no starter in this position"</span>
+                </li>
+            }
+            .into_any(),
+            Some(m) => {
+                let is_self = m.user_id == me_row.get_value();
+                let items = member_actions(&m, is_self);
+                let uid = m.user_id.clone();
+                let uname = m.username.clone();
+                let card_href = format!("/team/player/{}", m.user_id);
+                let shown_role = position.or_else(|| Role::parse(&m.role));
+                let menu_id = intern(format!("member-{}", m.user_id.replace(':', "-")));
+                view! {
+                    <li class="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-rule py-2" data-roster-row=m.user_id.clone() data-place=m.roster_type.clone()>
+                        <span>{shown_role.map(|r| view! { <RoleLabel role=r /> })}</span>
+                        <span class="flex min-w-0 items-center gap-2.5">
+                            <UserAvatar name=m.username.clone() size=AvatarSize::Sm />
+                            <span class="min-w-0">
+                                <A href=card_href attr:class="block truncate font-medium text-primary underline decoration-transparent underline-offset-4 hover:decoration-outline">{m.username.clone()}</A>
+                                <span class="block truncate text-caption text-muted">
+                                    {m.riot_summoner_name.clone().unwrap_or_else(|| "No Riot account linked".to_string())}
+                                    {is_self.then_some(" \u{00b7} you")}
+                                </span>
+                            </span>
+                        </span>
+                        {is_leader.then(|| view! {
+                            <Menu
+                                id=menu_id
+                                label=format!("Roster actions for {uname}")
+                                items=items
+                                align=MenuAlign::End
+                                variant=ButtonVariant::Quiet
+                                size=ButtonSize::Sm
+                                trigger=move || view! {
+                                    <span>"Actions"</span>
+                                    <svg class="size-3.5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                }
+                                on_select=Callback::new(move |a: String| on_action.run((uid.clone(), uname.clone(), a)))
+                            />
+                        })}
+                    </li>
+                }
+                .into_any()
+            }
+        }
+    };
+
+    let starters_view = groups
+        .starters
+        .clone()
+        .into_iter()
+        .zip(Role::ALL)
+        .map(|(m, r)| row(m, Some(r)))
+        .collect_view();
+    let group_list = move |title: &'static str,
+                           id: &'static str,
+                           list: Vec<TeamMember>,
+                           empty: &'static str| {
+        view! {
+            <div class="mt-8" data-roster-group=id>
+                <h3 id=format!("roster-{id}") class="mb-2 flex items-baseline justify-between font-display text-heading font-semibold text-primary">
+                    {title}
+                    <span class="figures text-label font-normal text-muted">{list.len()}</span>
+                </h3>
+                {if list.is_empty() {
+                    view! { <p class="border-t border-rule py-2.5 text-body text-muted">{empty}</p> }.into_any()
+                } else {
+                    view! {
+                        <ul aria-labelledby=format!("roster-{id}") class="border-b border-rule">
+                            {list.into_iter().map(|m| row(Some(m), None)).collect_view()}
+                        </ul>
+                    }.into_any()
+                }}
+            </div>
+        }
+    };
+    let unplaced = groups.unplaced.clone();
 
     view! {
-        <div>
-            <div class="flex items-center justify-between mb-3">
-                <div>
-                    <h2 class="font-display text-title font-semibold text-primary">"Team notes"</h2>
-                </div>
-                <button
-                    class="text-muted hover:text-accent text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-2 py-1"
-                    on:click=move |_| set_expanded.update(|v| *v = !*v)
-                >
-                    {move || if expanded.get() { "Collapse" } else { "Show all" }}
-                </button>
+        <PageHeader
+            title=team.name.clone()
+            eyebrow="Team"
+            meta=move || view! {
+                <span class="figures">{region.clone()}</span>
+                <span aria-hidden="true" class="text-muted">"/"</span>
+                <span>{if member_count == 1 { "1 member".to_string() } else { format!("{member_count} members") }}</span>
+                <span aria-hidden="true" class="text-muted">"/"</span>
+                <span>{if is_leader { "You lead this team".to_string() } else { format!("Led by {leader_name}") }}</span>
+            }
+            actions=move || view! {
+                <Button href="/team/roster">"Roster and joining"</Button>
+                {if is_leader {
+                    view! { <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| edit_open.set(true))>"Edit team"</Button> }.into_any()
+                } else {
+                    view! { <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| leave_open.set(true))>"Leave team"</Button> }.into_any()
+                }}
+            }
+        />
+        <div class="grid gap-x-12 gap-y-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+            <div class="flex min-w-0 flex-col gap-12">
+                <section aria-labelledby="roster-h" data-roster>
+                    <SectionHeader title="Roster" id="roster-h" meta=if is_leader { "Use a player's actions to start, bench or make them coach." } else { "The leader places players." } />
+                    <h3 id="roster-starters" class="mb-2 font-display text-heading font-semibold text-primary">"Starting five"</h3>
+                    <ul aria-labelledby="roster-starters" class="border-b border-rule" data-roster-group="starters">{starters_view}</ul>
+                    {group_list("Substitutes", "substitutes", groups.substitutes.clone(), "No one on the bench. Substitutes play when needed and see everything the team does.")}
+                    {group_list("Coaches", "coaches", groups.coaches.clone(), "No coach on the roster yet.")}
+                    {(!unplaced.is_empty()).then(|| group_list("Not placed yet", "unplaced", unplaced.clone(), ""))}
+                </section>
+                <RecentGames games=res.games />
+                <PoolGaps gaps=res.gaps />
             </div>
+            <div class="flex min-w-0 flex-col gap-12">
+                {is_leader.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
+                <TeamNotes notes=res.notes />
+            </div>
+        </div>
+        {is_leader.then(|| view! { <EditTeam open=edit_open name=team.name.clone() team_region=team.region.clone() reload=reload /> })}
+        <ConfirmDialog
+            id="leave-team"
+            open=leave_open
+            title="Leave the team?"
+            message="You lose access to the team's drafts, plans, reviews and notes. Your own pages stay. To come back, ask the leader again."
+            confirm_label="Leave team"
+            tone=ConfirmTone::Destructive
+            on_confirm=leave
+        />
+        <ConfirmDialog
+            id="kick-member"
+            open=kick_open
+            title="Remove this player?"
+            message="They lose access to the team's drafts, plans, reviews and notes. They can ask to join again."
+            confirm_label="Remove from team"
+            tone=ConfirmTone::Destructive
+            on_confirm=kick
+        />
+    }
+}
 
-            // Add note form
-            <div class="flex gap-2 mb-4">
-                <textarea
-                    prop:value=move || new_note.get()
-                    on:input=move |ev| set_new_note.set(event_target_value(&ev))
-                    placeholder="Write a note for the team..."
-                    rows="2"
-                    class="flex-1 bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
-                />
-                <button
-                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer self-end focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    on:click=move |_| {
-                        let content = new_note.get_untracked();
-                        if content.trim().is_empty() {
-                            return;
-                        }
-                        leptos::task::spawn_local(async move {
-                            match add_team_note(content).await {
-                                Ok(_) => {
-                                    set_new_note.set(String::new());
-                                    notes_resource.refetch();
-                                }
-                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                            }
-                        });
+#[component]
+fn EditTeam(
+    open: RwSignal<bool>,
+    name: String,
+    team_region: String,
+    reload: Callback<()>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let name = RwSignal::new(name);
+    let region = RwSignal::new(team_region);
+    let error = RwSignal::new(None::<String>);
+    let save = Callback::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match update_team_info(name.get_untracked(), region.get_untracked()).await {
+                Ok(()) => {
+                    open.set(false);
+                    toast.push.run(Toast::success("Team saved"));
+                    reload.run(());
+                }
+                Err(e) => error.set(Some(e.to_string())),
+            }
+        });
+    });
+    let options: Vec<SelectOption> = TEAM_REGIONS
+        .iter()
+        .map(|r| SelectOption::new(*r, *r))
+        .collect();
+    let options = StoredValue::new(options);
+    view! {
+        <Dialog
+            id="edit-team"
+            open=open
+            title="Edit team"
+            footer=move || view! {
+                <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| open.set(false))>"Cancel"</Button>
+                <Button variant=ButtonVariant::Primary on_click=save>"Save team"</Button>
+            }
+        >
+            <div class="flex flex-col gap-4">
+                <Field id="team-name" label="Team name" required=true error=Signal::derive(move || error.get())>
+                    <TextField value=name maxlength=60 required=true />
+                </Field>
+                <Field id="team-region" label="Region" hint="Riot calls for team syncs and scouting use it.">
+                    <Select value=region options=options.get_value() />
+                </Field>
+            </div>
+        </Dialog>
+    }
+}
+
+#[component]
+fn JoinRequests(
+    reload: Callback<()>,
+    requests: Resource<Result<Vec<JoinRequest>, ServerFnError>>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let answer = Callback::new(move |(id, name, accept): (String, String, bool)| {
+        leptos::task::spawn_local(async move {
+            match handle_join_request(id, accept).await {
+                Ok(()) => {
+                    toast.push.run(Toast::success(if accept {
+                        format!("{name} joined the team")
+                    } else {
+                        format!("Declined {name}'s request")
+                    }));
+                    requests.refetch();
+                    reload.run(());
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    view! {
+        <section aria-labelledby="requests-h" data-join-requests>
+            <SectionHeader title="Join requests" id="requests-h" />
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading requests"><Skeleton lines=2 /></SkeletonGroup> }>
+                {move || requests.get().map(|r| {
+                    let list = r.unwrap_or_default();
+                    if list.is_empty() {
+                        view! { <p class="text-body text-secondary">"No requests waiting. Players ask to join from the roster page; their requests appear here."</p> }.into_any()
+                    } else {
+                        view! {
+                            <ul class="border-b border-rule">
+                                {list.into_iter().map(|req| {
+                                    let (a_id, d_id) = (req.id.clone(), req.id.clone());
+                                    let (a_n, d_n) = (req.username.clone(), req.username.clone());
+                                    view! {
+                                        <li class="flex flex-wrap items-center justify-between gap-3 border-t border-rule py-2.5">
+                                            <span class="min-w-0">
+                                                <span class="block font-medium text-primary">{req.username.clone()}</span>
+                                                <span class="block text-caption text-muted">{req.riot_summoner_name.clone().unwrap_or_else(|| "No Riot account linked".to_string())}</span>
+                                            </span>
+                                            <span class="flex gap-2">
+                                                <Button size=ButtonSize::Sm on_click=Callback::new(move |_| answer.run((a_id.clone(), a_n.clone(), true)))>"Accept"</Button>
+                                                <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| answer.run((d_id.clone(), d_n.clone(), false)))>"Decline"</Button>
+                                            </span>
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
                     }
-                >"Add"</button>
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+/// Team notes: open to every member, edits and deletes undoable from the
+/// toast (the server keeps the replaced text and soft-deletes for a day).
+#[component]
+fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let draft = RwSignal::new(String::new());
+    let editing = RwSignal::new(None::<String>);
+    let edit_text = RwSignal::new(String::new());
+    let adding = RwSignal::new(false);
+
+    let add = Callback::new(move |_| {
+        let content = draft.get_untracked();
+        if content.trim().is_empty() {
+            return;
+        }
+        adding.set(true);
+        leptos::task::spawn_local(async move {
+            match add_team_note(content).await {
+                Ok(_) => {
+                    draft.set(String::new());
+                    notes.refetch();
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+            adding.set(false);
+        });
+    });
+    let save_edit = Callback::new(move |id: String| {
+        let content = edit_text.get_untracked();
+        leptos::task::spawn_local(async move {
+            match edit_team_note(id.clone(), content).await {
+                Ok(()) => {
+                    editing.set(None);
+                    notes.refetch();
+                    let undo_id = id.clone();
+                    toast.push.run(Toast::success("Note saved").with_action(
+                        "Undo",
+                        Callback::new(move |_| {
+                            let id = undo_id.clone();
+                            leptos::task::spawn_local(async move {
+                                match undo_note_edit(id).await {
+                                    Ok(()) => notes.refetch(),
+                                    Err(e) => toast.push.run(Toast::error(e.to_string())),
+                                }
+                            });
+                        }),
+                    ));
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    let delete = Callback::new(move |id: String| {
+        leptos::task::spawn_local(async move {
+            match remove_team_note(id.clone()).await {
+                Ok(()) => {
+                    notes.refetch();
+                    let undo_id = id.clone();
+                    toast.push.run(Toast::success("Note deleted").with_action(
+                        "Undo",
+                        Callback::new(move |_| {
+                            let id = undo_id.clone();
+                            leptos::task::spawn_local(async move {
+                                match restore_note(id).await {
+                                    Ok(()) => notes.refetch(),
+                                    Err(e) => toast.push.run(Toast::error(e.to_string())),
+                                }
+                            });
+                        }),
+                    ));
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    let pin = Callback::new(move |(id, pinned): (String, bool)| {
+        leptos::task::spawn_local(async move {
+            match toggle_note_pin(id, pinned).await {
+                Ok(()) => notes.refetch(),
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+
+    view! {
+        <section aria-labelledby="notes-h" data-team-notes>
+            <SectionHeader title="Team notes" id="notes-h" meta="Everyone on the team can edit them." />
+            <div class="flex flex-col gap-2">
+                <Field id="new-team-note" label="New note">
+                    <TextField value=draft rows=3 maxlength=4000 placeholder="Something the whole team should know" />
+                </Field>
+                <div>
+                    <Button on_click=add loading=adding attr:data-testid="add-team-note">"Add note"</Button>
+                </div>
             </div>
-
-            <Suspense fallback=|| view! { <div class="flex flex-col gap-1"><SkeletonCard height="h-10" /><SkeletonCard height="h-10" /></div> }>
-                {move || {
-                    let uid = current_user_id.clone();
-                    let leader = is_leader;
-                    notes_resource.get().map(move |res| match res {
-                        Ok(notes) if notes.is_empty() => {
-                            view! { <p class="text-dimmed text-sm">"No notes yet. Be the first to write one!"</p> }.into_any()
-                        }
-                        Ok(notes) => {
-                            let show_expanded = expanded.get();
-                            let display_notes: Vec<_> = if show_expanded {
-                                notes
-                            } else {
-                                // Collapsed: show only pinned notes
-                                notes.into_iter().filter(|n| n.pinned).collect()
-                            };
-
-                            if display_notes.is_empty() && !show_expanded {
-                                view! {
-                                    <p class="text-dimmed text-sm">"No pinned notes. Click \"Show all\" to see all notes."</p>
-                                }.into_any()
-                            } else {
-                                let uid2 = uid.clone();
-                                view! {
-                                    <div class="flex flex-col gap-2">
-                                        {display_notes.into_iter().map(|note| {
-                                            let note_id = note.id.clone().unwrap_or_default();
-                                            let note_id_pin = note_id.clone();
-                                            let note_id_del = note_id.clone();
-                                            let note_id_edit = note_id.clone();
-                                            let note_id_save = note_id.clone();
-                                            let is_author = note.author_id == uid2;
-                                            let can_delete = is_author || leader;
-                                            let pinned = note.pinned;
-                                            let initial = note.author_name.chars().next().unwrap_or('?').to_uppercase().to_string();
-                                            let content_for_edit = note.content.clone();
-
-                                            view! {
-                                                <div class=if pinned {
-                                                    "bg-accent/10 border border-accent/30 rounded-xl p-4"
-                                                } else {
-                                                    "bg-elevated border border-outline rounded-xl p-4"
-                                                }>
-                                                    <div class="flex items-start gap-3">
-                                                        // Author avatar
-                                                        <span class="bg-accent/20 text-accent rounded-ctl w-8 h-8 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                                            {initial}
-                                                        </span>
-                                                        <div class="flex-1 min-w-0">
-                                                            <div class="flex items-center gap-2 mb-1">
-                                                                <span class="text-primary text-sm font-medium">{note.author_name.clone()}</span>
-                                                                {if pinned {
-                                                                    view! {
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                                                                        </svg>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! { <span></span> }.into_any()
-                                                                }}
-                                                                <span class="text-dimmed text-xs ml-auto font-mono">
-                                                                    {note.created_at.as_deref().map(format_timestamp).unwrap_or_default()}
-                                                                </span>
-                                                            </div>
-
-                                                            // Content: show edit form or text
-                                                            {
-                                                                let note_id_for_display = note_id_edit.clone();
-                                                                let note_id_for_save = note_id_save.clone();
-                                                                let content_text = content_for_edit.clone();
-                                                                move || {
-                                                                    let nid = note_id_for_display.clone();
-                                                                    let nid_save = note_id_for_save.clone();
-                                                                    let ct = content_text.clone();
-                                                                    if editing_id.get() == Some(nid) {
-                                                                        view! {
-                                                                            <div class="flex flex-col gap-2">
-                                                                                <textarea
-                                                                                    prop:value=move || edit_content.get()
-                                                                                    on:input=move |ev| set_edit_content.set(event_target_value(&ev))
-                                                                                    rows="3"
-                                                                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none resize-none"
-                                                                                />
-                                                                                <div class="flex gap-2">
-                                                                                    <button
-                                                                                        class="bg-accent hover:bg-accent-hover text-accent-contrast text-xs font-bold rounded-lg px-3 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                                                        on:click=move |_| {
-                                                                                            let id = nid_save.clone();
-                                                                                            let content = edit_content.get_untracked();
-                                                                                            leptos::task::spawn_local(async move {
-                                                                                                match edit_team_note(id, content).await {
-                                                                                                    Ok(_) => {
-                                                                                                        set_editing_id.set(None);
-                                                                                                        notes_resource.refetch();
-                                                                                                    }
-                                                                                                    Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                                                                                                }
-                                                                                            });
-                                                                                        }
-                                                                                    >"Save"</button>
-                                                                                    <button
-                                                                                        class="text-secondary hover:text-primary text-xs rounded-lg px-3 py-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                                                        on:click=move |_| set_editing_id.set(None)
-                                                                                    >"Cancel"</button>
-                                                                                </div>
-                                                                            </div>
-                                                                        }.into_any()
-                                                                    } else {
-                                                                        view! {
-                                                                            <p class="text-secondary text-sm whitespace-pre-wrap">{ct}</p>
-                                                                        }.into_any()
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            // Action buttons
-                                                            <div class="flex items-center gap-2 mt-2">
-                                                                // Pin/Unpin
-                                                                <button
-                                                                    class="text-muted hover:text-accent text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-1"
-                                                                    title=if pinned { "Unpin" } else { "Pin" }
-                                                                    on:click=move |_| {
-                                                                        let id = note_id_pin.clone();
-                                                                        let new_pinned = !pinned;
-                                                                        leptos::task::spawn_local(async move {
-                                                                            match toggle_note_pin(id, new_pinned).await {
-                                                                                Ok(_) => notes_resource.refetch(),
-                                                                                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                >
-                                                                    {if pinned { "Unpin" } else { "Pin" }}
-                                                                </button>
-
-                                                                // Edit (author only)
-                                                                {if is_author {
-                                                                    let content_for_btn = note.content.clone();
-                                                                    let nid = note_id.clone();
-                                                                    view! {
-                                                                        <button
-                                                                            class="text-muted hover:text-accent text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded-md px-1"
-                                                                            on:click=move |_| {
-                                                                                set_edit_content.set(content_for_btn.clone());
-                                                                                set_editing_id.set(Some(nid.clone()));
-                                                                            }
-                                                                        >"Edit"</button>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! { <span></span> }.into_any()
-                                                                }}
-
-                                                                // Delete (author or leader)
-                                                                {if can_delete {
-                                                                    view! {
-                                                                        <button
-                                                                            class="text-muted hover:text-danger text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded-md px-1"
-                                                                            on:click=move |_| {
-                                                                                let id = note_id_del.clone();
-                                                                                leptos::task::spawn_local(async move {
-                                                                                    match remove_team_note(id).await {
-                                                                                        Ok(_) => notes_resource.refetch(),
-                                                                                        Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        >"Delete"</button>
-                                                                    }.into_any()
-                                                                } else {
-                                                                    view! { <span></span> }.into_any()
-                                                                }}
-                                                            </div>
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading notes"><Skeleton lines=3 /></SkeletonGroup> }>
+                {move || notes.get().map(|r| {
+                    let list = r.unwrap_or_default();
+                    if list.is_empty() {
+                        view! { <div class="mt-6"><EmptyState size=EmptySize::Compact message="No notes yet. Notes you add appear here for the whole team, pinned ones first." /></div> }.into_any()
+                    } else {
+                        view! {
+                            <ul class="mt-6 border-b border-rule">
+                                {list.into_iter().map(|n| {
+                                    let id = n.id.clone().unwrap_or_default();
+                                    let (id_edit, id_save, id_del, id_pin, id_cmp, id_cmp2) = (id.clone(), id.clone(), id.clone(), id.clone(), id.clone(), id.clone());
+                                    let content = n.content.clone();
+                                    let content_for_edit = n.content.clone();
+                                    let pinned = n.pinned;
+                                    view! {
+                                        <li class="border-t border-rule py-3" data-team-note=id.clone()>
+                                            <p class="mb-1 flex flex-wrap items-baseline gap-x-2 text-caption text-muted">
+                                                {pinned.then(|| view! { <span class="eyebrow text-secondary">"Pinned"</span> })}
+                                                <span class="font-medium text-secondary">{n.author_name.clone()}</span>
+                                                {n.created_at.clone().map(|c| view! { <LocalTime iso=c style=TimeStyle::DayMonth /> })}
+                                                {n.edited_by_name.clone().map(|by| view! { <span>{format!("edited by {by}")}</span> })}
+                                            </p>
+                                            {move || if editing.get().as_deref() == Some(id_cmp.as_str()) {
+                                                let id_save = id_save.clone();
+                                                view! {
+                                                    <div class="flex flex-col gap-2">
+                                                        <TextField value=edit_text rows=4 maxlength=4000 aria_label="Edit note" />
+                                                        <div class="flex gap-2">
+                                                            <Button size=ButtonSize::Sm on_click=Callback::new(move |_| save_edit.run(id_save.clone()))>"Save note"</Button>
+                                                            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| editing.set(None))>"Cancel"</Button>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            }
-                                        }).collect_view()}
-                                    </div>
-                                }.into_any()
-                            }
-                        }
-                        Err(e) => view! {
-                            <p class="text-danger text-sm" role="alert">{format!("Could not load notes: {e}")}</p>
-                        }.into_any(),
-                    })
-                }}
+                                                }.into_any()
+                                            } else {
+                                                view! { <p class="whitespace-pre-line text-body text-primary" data-note-text>{content.clone()}</p> }.into_any()
+                                            }}
+                                            <div class="mt-1 flex gap-1" class:hidden=move || editing.get().as_deref() == Some(id_cmp2.as_str())>
+                                                <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| { edit_text.set(content_for_edit.clone()); editing.set(Some(id_edit.clone())); })>"Edit"</Button>
+                                                <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| pin.run((id_pin.clone(), !pinned)))>
+                                                    {if pinned { "Unpin" } else { "Pin" }}
+                                                </Button>
+                                                <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| delete.run(id_del.clone()))>"Delete"</Button>
+                                            </div>
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }
+                })}
             </Suspense>
-        </div>
+        </section>
+    }
+}
+
+#[component]
+fn RecentGames(games: Resource<Result<Vec<RecentMatch>, ServerFnError>>) -> impl IntoView {
+    view! {
+        <section aria-labelledby="games-h" data-recent-games>
+            <SectionHeader
+                title="Recent games"
+                id="games-h"
+                actions=move || view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href="/stats">"All team games"</Button> }
+            />
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading games"><Skeleton lines=3 /></SkeletonGroup> }>
+                {move || games.get().map(|r| {
+                    let list = r.unwrap_or_default();
+                    if list.is_empty() {
+                        view! { <EmptyState size=EmptySize::Compact message="No games stored yet. Members who link their Riot account can sync their games on Team games; the latest appear here." /> }.into_any()
+                    } else {
+                        view! {
+                            <ul class="border-b border-rule">
+                                {list.into_iter().map(|g| {
+                                    let href = format!("/match/{}", g.riot_match_id);
+                                    view! {
+                                        <li class="grid grid-cols-[1.5rem_1.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-rule py-2">
+                                            <ResultGlyph result=GameResult::from_win(g.win) size=GlyphSize::Sm />
+                                            <ChampionAvatar name=g.champion.clone() size=AvatarSize::Sm decorative=true />
+                                            <A href=href attr:class="min-w-0 truncate text-body text-primary underline decoration-transparent underline-offset-4 hover:decoration-outline">
+                                                {format!("{} on {}", g.username, g.champion)}
+                                            </A>
+                                            <span class="figures text-label text-muted">
+                                                {format!("{}/{}/{}", g.kills, g.deaths, g.assists)}
+                                                {g.game_end.clone().map(|d| view! { " \u{00b7} " <LocalTime iso=d style=TimeStyle::DayMonth /> })}
+                                            </span>
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+#[component]
+fn PoolGaps(gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>) -> impl IntoView {
+    view! {
+        <section aria-labelledby="gaps-h" data-pool-gaps>
+            <SectionHeader
+                title="Pool gaps"
+                id="gaps-h"
+                actions=move || view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href="/champion-pool">"Champion pools"</Button> }
+            />
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading pool gaps"><Skeleton lines=2 /></SkeletonGroup> }>
+                {move || gaps.get().map(|r| {
+                    let list = r.unwrap_or_default();
+                    if list.is_empty() {
+                        view! { <p class="text-body text-secondary">"No gaps found. A warning appears when a player's pool for a position leans on one champion class, or lacks a class the scouted opponents play."</p> }.into_any()
+                    } else {
+                        view! {
+                            <ul class="border-b border-rule">
+                                {list.into_iter().map(|w| {
+                                    let role = Role::parse(&w.role);
+                                    let mut parts = Vec::new();
+                                    if let Some(c) = &w.dominant_class {
+                                        parts.push(format!("mostly {c}"));
+                                    }
+                                    if !w.missing_classes.is_empty() {
+                                        parts.push(format!("no {}, which scouted opponents play", w.missing_classes.join(", ")));
+                                    }
+                                    view! {
+                                        <li class="grid grid-cols-[3rem_minmax(0,1fr)] items-baseline gap-3 border-t border-rule py-2">
+                                            <span>{role.map(|r| view! { <RoleLabel role=r /> })}</span>
+                                            <span class="text-body text-primary">
+                                                <span class="font-medium">{w.username.clone()}</span>
+                                                <span class="text-secondary">{format!(": {}", parts.join("; "))}</span>
+                                                {w.opponent_escalated.then(|| view! { <span class="ml-2 text-label text-warning"><span aria-hidden="true">"! "</span>"Matters against your opponents"</span> })}
+                                            </span>
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+        </section>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn m(name: &str, role: &str, place: &str) -> TeamMember {
+        TeamMember {
+            user_id: format!("user:{name}"),
+            username: name.into(),
+            role: role.into(),
+            roster_type: place.into(),
+            riot_summoner_name: None,
+        }
+    }
+
+    #[test]
+    fn roster_groups_by_place() {
+        let g = group_roster(&[
+            m("a", "mid", "starter"),
+            m("b", "mid", "starter"),
+            m("c", "jungle", "substitute"),
+            m("d", "unassigned", "coach"),
+            m("e", "unassigned", "member"),
+            m("f", "unassigned", "starter"),
+        ]);
+        assert_eq!(
+            g.starters[2].as_ref().map(|x| x.username.as_str()),
+            Some("a")
+        );
+        assert!(g.starters[0].is_none());
+        // A second starter in one position shows on the bench, not lost.
+        assert_eq!(
+            g.substitutes
+                .iter()
+                .map(|x| x.username.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "c"]
+        );
+        assert_eq!(g.coaches.len(), 1);
+        assert_eq!(
+            g.unplaced
+                .iter()
+                .map(|x| x.username.as_str())
+                .collect::<Vec<_>>(),
+            vec!["e", "f"]
+        );
+    }
+
+    #[test]
+    fn leader_actions_skip_the_current_place() {
+        let items = member_actions(&m("a", "mid", "starter"), false);
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert!(!ids.contains(&"mid"));
+        assert!(ids.contains(&"top") && ids.contains(&"substitute") && ids.contains(&"coach"));
+        assert_eq!(ids.last(), Some(&"kick"));
+        let own = member_actions(&m("a", "unassigned", "member"), true);
+        assert!(!own.iter().any(|i| i.id == "kick" || i.id == "member"));
     }
 }

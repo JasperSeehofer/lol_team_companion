@@ -18,12 +18,12 @@ pub struct User {
 pub struct PublicUser {
     pub id: String,
     pub username: String,
+    /// The address the user signs in with (shown on their own profile only).
+    pub email: String,
     pub riot_summoner_name: Option<String>,
+    /// Stored "solo" / "team" (kept for compatibility; nothing gates on it).
     pub mode: String,
     pub riot_region: Option<String>,
-    pub draft_mode: String,
-    pub team_dashboard_mode: String,
-    pub solo_mode: String,
     /// Admins see the invite management page.
     #[serde(default)]
     pub is_admin: bool,

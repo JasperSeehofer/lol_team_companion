@@ -12,11 +12,11 @@
  *   Public:  /closed-beta, /auth/login, /auth/register (with invite query),
  *            /legal/impressum, /legal/datenschutz
  *   Utility authed (flat baselines, Phase 17, unchanged):
- *            /profile, /team/roster, /team-builder, /game-plan,
- *            /opponents, /action-items, /stats, /analytics,
+ *            /profile, /team/roster, /game-plan,
+ *            /opponents, /action-items, /stats,
  *            /personal-learnings, /admin/invites
  *   Scoped authed (subfolder baselines, Phase 18):
- *            /draft (one board), /solo (3 modes), /team/dashboard,
+ *            /draft (one board), /me, / (no team), /team/dashboard,
  *            /tree-drafter, /champion-pool, /match/:id, /post-game
  *
  * M0 removed the second theme and the Game Day Brief, so their
@@ -25,7 +25,7 @@
  * M3 re-captured the rebuilt strategy pages (draft, tree drafter, champion
  * pool, game plan, post-game, opponents, action items).
  */
-import { test, expect, setMode } from "./fixtures";
+import { test, expect } from "./fixtures";
 
 const VR_OPTS = {
   maxDiffPixelRatio: 0.02,
@@ -92,13 +92,6 @@ test.describe("utility auth-required routes", () => {
     await expect(authedPage).toHaveScreenshot("authed-team-roster.png", VR_OPTS);
   });
 
-  test("/team-builder visual baseline", async ({ authedPage }) => {
-    await authedPage.goto("/team-builder");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot("authed-team-builder.png", VR_OPTS);
-  });
-
   test("/game-plan visual baseline", async ({ authedPage }) => {
     await authedPage.goto("/game-plan");
     await authedPage.waitForLoadState("networkidle");
@@ -125,13 +118,6 @@ test.describe("utility auth-required routes", () => {
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
     await expect(authedPage).toHaveScreenshot("authed-stats.png", VR_OPTS);
-  });
-
-  test("/analytics visual baseline", async ({ authedPage }) => {
-    await authedPage.goto("/analytics");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot("authed-analytics.png", VR_OPTS);
   });
 
   test("/personal-learnings visual baseline", async ({ authedPage }) => {
@@ -165,40 +151,20 @@ test.describe("scoped routes - /draft (1 baseline)", () => {
   });
 });
 
-test.describe("scoped routes - /solo (3 baselines)", () => {
-  test("/solo constellation baseline", async ({ authedPage }) => {
-    await authedPage.goto("/solo");
-    await setMode(authedPage, "constellation");
+test.describe("personal layer (2 baselines)", () => {
+  test("/me baseline", async ({ authedPage }) => {
+    await authedPage.goto("/me");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-solo", "constellation.png"],
-      VR_OPTS
-    );
+    await expect(authedPage).toHaveScreenshot("authed-me.png", VR_OPTS);
   });
 
-  test("/solo forge baseline", async ({ authedPage }) => {
-    await authedPage.goto("/solo");
-    await setMode(authedPage, "forge");
+  test("/ home (no team) baseline", async ({ authedPage }) => {
+    await authedPage.goto("/");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-solo", "forge.png"],
-      VR_OPTS
-    );
+    await expect(authedPage).toHaveScreenshot("authed-home-no-team.png", VR_OPTS);
   });
-
-  test("/solo journal baseline", async ({ authedPage }) => {
-    await authedPage.goto("/solo");
-    await setMode(authedPage, "journal");
-    await authedPage.waitForLoadState("networkidle");
-    await authedPage.waitForTimeout(500);
-    await expect(authedPage).toHaveScreenshot(
-      ["authed-solo", "journal.png"],
-      VR_OPTS
-    );
-  });
-
 });
 
 test.describe("scoped routes - /team/dashboard (1 baseline)", () => {

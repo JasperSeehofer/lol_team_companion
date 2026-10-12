@@ -92,9 +92,15 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 50. **Protected pages redirect to `/auth/login`** — All protected page components fetch `get_current_user()` on mount and redirect via `window.location().set_href()` if the user is `None`. The redirect is client-side only (`#[cfg(feature = "hydrate")]`).
 
-51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, then returns `/solo` (new users start in solo mode) and the page hard-navigates there.
+51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, redirects on the server (`leptos_axum::redirect("/")`, for a submit before hydration) and returns `/`, where the hydrated page hard-navigates. Sign-in does the same. Home is Match Day for team members and a start page otherwise; `user.mode` is stored but unused.
 
-52. **Auth-aware nav** — The nav's user cluster (mode toggle, notifications, user menu) derives from the `user` Resource; hub links are static (`HUB_ROUTES` in `nav.rs`).
+52. **Auth-aware nav** — The nav's user cluster (join requests, account menu, phone "Menu" button) derives from the `user` Resource; hub links show only when signed in. One table, `PAGES` in `nav.rs` (+ `MENU_GROUPS` for the phone menu), drives the hubs, the sub-nav, the phone menu and the command bar.
+
+58. **Create every Resource before the first Suspense/Suspend** — A `Resource` created inside `Suspend::new(async { x.await ... })`, or in a component rendered there, gets its id after an await on the server but at hydration time in the browser. That shifts the ids of every later resource on the page and breaks hydration ("expected a marker node"), depending on timing. Create such resources in the page component before any `<Suspense>` and pass them down as props (M5: team page, roster, My games, phone menu counts).
+
+59. **Do not read a resource inside an open `<dialog>` that lives in a Suspense** — The read suspends the enclosing Suspense when the resource refetches, which remounts the open dialog; a re-inserted `<dialog>` keeps `open` but leaves the top layer (no scrim, not modal). Copy the value into a signal with an Effect and read the signal (the phone menu counts in `nav.rs`).
+
+60. **No server-rendered `<Redirect>`** — A Leptos `<Redirect>` rendered during SSR left its 302 status in a response context that later static-file responses on the same worker picked up (`/pkg/*.js` and `.wasm` returned 302 at random). Redirect old addresses as axum routes in `main.rs`, or from a server function with `leptos_axum::redirect`.
 
 ## Toolchain
 

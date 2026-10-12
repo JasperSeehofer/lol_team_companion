@@ -1,5 +1,5 @@
 //! Closed-beta landing: the first page invited visitors without a link
-//! see. Signed-in users are sent to `/team/dashboard`. Plain type on the
+//! see (also the signed-out home page). Signed-in users are sent to `/`. Plain type on the
 //! page ground, no imagery: what the product is, who it is for, how to get
 //! in.
 
@@ -11,17 +11,24 @@ use leptos::prelude::*;
 pub fn ClosedBetaPage() -> impl IntoView {
     let user = Resource::new(|| (), |_| get_current_user());
 
-    // D-15: redirect authenticated users to /team/dashboard. The
-    // public landing is for unauthenticated incognito visitors only.
+    // Signed-in users go to Match Day; the landing is for visitors.
     Effect::new(move |_| {
         if let Some(Ok(Some(_))) = user.get() {
             #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/team/dashboard");
+                let _ = window.location().set_href("/");
             }
         }
     });
+    view! { <Landing /> }
+}
 
+/// What Companion is, the closed-beta note and the way in.
+///
+/// A11y: one `<h1>`; the loop is an ordered list; "Sign in" is the page's
+/// one primary action.
+#[component]
+pub fn Landing() -> impl IntoView {
     let loop_steps = [
         (
             "01",

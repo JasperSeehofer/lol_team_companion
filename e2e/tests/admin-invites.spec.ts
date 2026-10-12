@@ -48,7 +48,7 @@ test("admin can mint a code that registers a new account, then disable it", asyn
   await guest.fill("input[name=email]", `invited_${TIMESTAMP}@test.invalid`);
   await guest.fill("input[name=password]", TEST_PASSWORD);
   await guest.click("button[type=submit]");
-  await guest.waitForURL("**/solo", { timeout: 20000 });
+  await guest.waitForURL((u) => new URL(u).pathname === "/", { timeout: 20000 });
   await ctx.close();
 
   const ctx2 = await browser.newContext();

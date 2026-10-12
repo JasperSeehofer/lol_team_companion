@@ -9,8 +9,8 @@
 //! redirect Effect (leptos rules 8, 51). Visual layer only.
 
 use crate::components::ui::{
-    Button, ButtonSize, ButtonType, ButtonVariant, ErrorBanner, Field, InputKind, PageShell,
-    PageWidth, TextField,
+    Button, ButtonSize, ButtonType, ButtonVariant, Callout, CalloutTone, Field, InputKind,
+    PageHeader, PageShell, PageWidth, TextField,
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -102,10 +102,10 @@ pub async fn register_action(
         Err(e) => tracing::warn!("auto-login lookup failed: {e}"),
     }
 
-    // New users default to solo mode (D-03). Redirect on the server too, so a
-    // form submitted before hydration still lands on /solo.
-    leptos_axum::redirect("/solo");
-    Ok("/solo".to_string())
+    // New users land on Home (no team yet: create or join one). Redirect on
+    // the server too, so a form submitted before hydration still lands there.
+    leptos_axum::redirect("/");
+    Ok("/".to_string())
 }
 
 #[component]
@@ -157,20 +157,16 @@ pub fn RegisterPage() -> impl IntoView {
 
     view! {
         <PageShell width=PageWidth::Narrow class="pt-12 sm:pt-20">
-            <p class="eyebrow">"Closed beta \u{00b7} invitation"</p>
-            <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">
-                "Create your account"
-            </h1>
-            <p class="mt-2 text-body text-secondary">
-                "You were invited to the closed beta. Pick a username your team will recognise."
-            </p>
+            <PageHeader title="Create your account" eyebrow="Closed beta \u{00b7} invitation" meta=move || view! { <span>"You were invited to the closed beta. Pick a username your team will recognise."</span> } />
 
             <ActionForm action=register>
-                <div class="mt-8 flex flex-col gap-5">
-                    {move || error().map(|e| view! { <ErrorBanner message=e /> })}
+                <div class="flex flex-col gap-5">
+                    {move || error().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
 
                     // The invite code travels with the form; the server checks it.
-                    <input type="hidden" name="invite_code" prop:value=move || invite.get() />
+                    // `value`, not `prop:value`: the attribute is rendered on the
+                    // server, so a form sent before hydration carries the code.
+                    <input type="hidden" name="invite_code" value=move || invite.get() />
 
                     <Field id="register-username" label="Username">
                         <TextField name="username" required=true autocomplete="username" />

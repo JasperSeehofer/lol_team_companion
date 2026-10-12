@@ -499,10 +499,13 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             <div class="flex flex-col gap-8">
                                 <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule pb-3">
                                     <p class="flex flex-wrap items-baseline gap-x-3">
-                                        <span class="font-display text-title font-semibold text-primary">
-                                            {move || tree_title().map(|t| t.name).unwrap_or_default()}
-                                        </span>
-                                        {move || tree_title().and_then(|t| t.opponent).map(|o| view! { <span class="text-body text-secondary">"vs " {o}</span> })}
+                                        // The tree list is a resource: read it inside a Suspense.
+                                        <Suspense fallback=|| ()>
+                                            <span class="font-display text-title font-semibold text-primary">
+                                                {move || tree_title().map(|t| t.name).unwrap_or_default()}
+                                            </span>
+                                            {move || tree_title().and_then(|t| t.opponent).map(|o| view! { <span class="text-body text-secondary">"vs " {o}</span> })}
+                                        </Suspense>
                                     </p>
                                     <Button variant=ButtonVariant::Danger size=ButtonSize::Sm on_click=Callback::new(move |_| confirm_delete.set(true))>
                                         "Delete tree"

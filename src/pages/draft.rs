@@ -999,6 +999,34 @@ impl Editor {
         })
     }
 
+    /// Exchange two slots (a drag onto a filled slot swaps; onto an empty
+    /// one it moves). Champion and note travel together; between two picks
+    /// the role goes along, and a guessed role dropped into a ban is
+    /// cleared.
+    fn swap(&self, a: usize, b: usize) {
+        if a == b || a >= 20 || b >= 20 {
+            return;
+        }
+        self.slots.update(|s| s.swap(a, b));
+        self.notes.update(|n| n.swap(a, b));
+        let same_kind = slot_meta(a).1 == slot_meta(b).1;
+        if same_kind {
+            self.roles.update(|r| r.swap(a, b));
+            self.guessed.update(|g| g.swap(a, b));
+        } else {
+            for slot in [a, b] {
+                if self.guessed.with_untracked(|g| g[slot]) {
+                    self.roles.update(|r| r[slot] = None);
+                    self.guessed.update(|g| g[slot] = false);
+                }
+            }
+        }
+        let next = self
+            .slots
+            .with_untracked(|s| s.iter().position(|c| c.is_none()));
+        self.active.set(next);
+    }
+
     /// Put back what [`Editor::clear`] took out.
     fn restore_slot(&self, slot: usize, c: Cleared) {
         self.slots.update(|s| s[slot] = Some(c.champion));
@@ -1534,6 +1562,7 @@ fn DraftEditor(
         focus_id(&slot_dom_id(BOARD_ID, slot));
     });
     let on_drop = Callback::new(move |(slot, name): (usize, String)| fill.run((slot, name)));
+    let on_move = Callback::new(move |(from, to): (usize, usize)| ed.swap(from, to));
     // A pick from the Draft Graph: the champion, and the role the graph
     // ranked it for (guessed unless the user chose the role there). A role
     // a person set on the slot stays.
@@ -1664,7 +1693,7 @@ fn DraftEditor(
             id="delete-draft"
             open=confirm_delete
             title="Delete this draft?"
-            message="The draft, its picks and its comments are deleted. Game plans made from it stay, without the link."
+            message="The draft, its picks and its comments are deleted. Game plans and reviews made from it stay and say the draft was deleted."
             confirm_label="Delete draft"
             tone=ConfirmTone::Destructive
             on_confirm=on_delete
@@ -1696,6 +1725,7 @@ fn DraftEditor(
                     on_open=on_open
                     on_clear=on_clear
                     on_drop=on_drop
+                    on_move=on_move
                     hints=true
                 />
                 <SlotInspector ed=ed on_clear=on_clear />

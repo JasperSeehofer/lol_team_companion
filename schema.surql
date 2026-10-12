@@ -26,11 +26,9 @@ DEFINE FIELD IF NOT EXISTS last_solo_sync ON user TYPE option<datetime>;
 -- user.theme (Demacia/Pandemonium) was removed by migration 7 (drop_user_theme):
 -- there is one theme, and nothing reads the field.
 
--- Phase 18 region-variants: per-route mode persistence (D-03)
--- No ASSERT constraint — value set is wider (route-scoped) + may grow in future phases
-DEFINE FIELD IF NOT EXISTS draft_mode ON user TYPE string DEFAULT 'auto';
-DEFINE FIELD IF NOT EXISTS team_dashboard_mode ON user TYPE string DEFAULT 'auto';
-DEFINE FIELD IF NOT EXISTS solo_mode ON user TYPE string DEFAULT 'auto';
+-- user.draft_mode, team_dashboard_mode and solo_mode (per-page view
+-- preferences of views that no longer exist) were removed by migration 8.
+-- user.mode stays stored for compatibility; since M5 nothing gates on it.
 
 -- M1: admin flag. option<bool> (NONE = not admin) so users created before
 -- this field existed stay valid on UPDATE; ADMIN_EMAILS promotes at login.
@@ -57,6 +55,10 @@ DEFINE FIELD IF NOT EXISTS team ON team_member TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS user ON team_member TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS role ON team_member TYPE string;
 DEFINE FIELD IF NOT EXISTS roster_type ON team_member TYPE string DEFAULT 'sub';
+-- M5: migration 8 (roster_places) mapped the old values and tightened both
+-- fields: roster_type is the member's place (starter, substitute, coach,
+-- member = not placed yet), role the position they play (top, jungle, mid,
+-- bot, support, unassigned).
 
 -- Join requests
 DEFINE TABLE IF NOT EXISTS join_request SCHEMAFULL;
@@ -136,6 +138,8 @@ DEFINE FIELD IF NOT EXISTS support_strategy ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS notes ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS win_condition_tag ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_by ON game_plan TYPE option<record<user>>;
+-- M5: the linked draft was deleted (the link is cleared; the page says so).
+DEFINE FIELD IF NOT EXISTS draft_deleted ON game_plan TYPE option<bool>;
 DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::now();
 
 -- Post-game learnings
@@ -152,6 +156,8 @@ DEFINE FIELD IF NOT EXISTS created_by ON post_game_learning TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS created_at ON post_game_learning TYPE datetime DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS win_loss ON post_game_learning TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS rating ON post_game_learning TYPE option<int>;
+-- M5: the linked draft was deleted (the link is cleared; the page says so).
+DEFINE FIELD IF NOT EXISTS draft_deleted ON post_game_learning TYPE option<bool>;
 
 -- Champion pool (personal champion pool per role)
 DEFINE TABLE IF NOT EXISTS champion_pool SCHEMAFULL;
@@ -262,6 +268,13 @@ DEFINE FIELD IF NOT EXISTS author_name ON team_note TYPE string DEFAULT '';
 DEFINE FIELD IF NOT EXISTS content ON team_note TYPE string;
 DEFINE FIELD IF NOT EXISTS pinned ON team_note TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS created_at ON team_note TYPE datetime DEFAULT time::now();
+-- M5: every member edits notes, with Undo. An edit keeps the text it
+-- replaced; a delete only marks the row (purged a day later), so both can be
+-- undone from any session.
+DEFINE FIELD IF NOT EXISTS previous_content ON team_note TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS edited_at ON team_note TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS edited_by_name ON team_note TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS deleted_at ON team_note TYPE option<datetime>;
 
 -- Checklist templates (reusable per team)
 DEFINE TABLE IF NOT EXISTS checklist_template SCHEMAFULL;
@@ -530,3 +543,34 @@ DEFINE FIELD IF NOT EXISTS author ON team_relation TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS author_name ON team_relation TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON team_relation TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS team_relation_team ON team_relation FIELDS team;
+
+-- Match Day (M5): the team's next scrim or match, entered by a member.
+-- starts_at is UTC (the browser converts from local time); the brief is
+-- marked read per member.
+DEFINE TABLE IF NOT EXISTS scheduled_match SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON scheduled_match TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS starts_at ON scheduled_match TYPE datetime;
+DEFINE FIELD IF NOT EXISTS kind ON scheduled_match TYPE string ASSERT $value IN ['scrim', 'match'];
+DEFINE FIELD IF NOT EXISTS format ON scheduled_match TYPE string ASSERT $value IN ['bo1', 'bo3', 'bo5'];
+DEFINE FIELD IF NOT EXISTS opponent ON scheduled_match TYPE option<record<opponent>>;
+DEFINE FIELD IF NOT EXISTS notes ON scheduled_match TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS brief_read_by ON scheduled_match TYPE array<record<user>> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS created_by ON scheduled_match TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON scheduled_match TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON scheduled_match TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS scheduled_match_team ON scheduled_match FIELDS team, starts_at;
+
+-- Share links (M5): a read-only link to one game plan, review or player
+-- card, readable without signing in while it is neither revoked nor
+-- expired. The token is the only secret; the row is team data.
+DEFINE TABLE IF NOT EXISTS share_link SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS token ON share_link TYPE string;
+DEFINE FIELD IF NOT EXISTS team ON share_link TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS kind ON share_link TYPE string ASSERT $value IN ['game_plan', 'review', 'player'];
+DEFINE FIELD IF NOT EXISTS target ON share_link TYPE record<game_plan | post_game_learning | user>;
+DEFINE FIELD IF NOT EXISTS created_by ON share_link TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS created_at ON share_link TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS expires_at ON share_link TYPE datetime;
+DEFINE FIELD IF NOT EXISTS revoked ON share_link TYPE bool DEFAULT false;
+DEFINE INDEX IF NOT EXISTS share_link_token ON share_link FIELDS token UNIQUE;
+DEFINE INDEX IF NOT EXISTS share_link_team ON share_link FIELDS team;

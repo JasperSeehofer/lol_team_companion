@@ -19,7 +19,8 @@ pub enum EmptySize {
 impl EmptySize {
     fn class(self) -> &'static str {
         match self {
-            EmptySize::Section => "flex flex-col items-start gap-3 border-t border-rule py-10",
+            // Right under a page header (which has its own rule), no second rule.
+            EmptySize::Section => "flex flex-col items-start gap-3 border-t border-rule py-10 [header+&]:border-t-0 [header+&]:pt-4",
             EmptySize::Compact => "flex flex-col items-start gap-2 py-4",
         }
     }

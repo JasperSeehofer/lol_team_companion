@@ -1,6 +1,6 @@
 #![recursion_limit = "512"]
 
-use axum::{extract::State, http::StatusCode, routing::get, Router};
+use axum::{extract::State, http::StatusCode, response::Redirect, routing::get, Router};
 use axum_login::{tower_sessions::SessionManagerLayer, AuthManagerLayerBuilder};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -144,15 +144,20 @@ async fn main() {
     // Sessions
     let session_store = SurrealSessionStore::new(Arc::clone(&surreal_db), "sessions".to_string());
 
-    // Purge expired sessions now and every hour.
+    // Purge expired sessions, and team notes deleted longer ago than their
+    // Undo window, now and every hour.
     {
         let store = session_store.clone();
+        let db = Arc::clone(&surreal_db);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
             loop {
                 interval.tick().await;
                 if let Err(e) = store.delete_expired().await {
                     tracing::warn!("Session purge failed: {e}");
+                }
+                if let Err(e) = db::purge_deleted_team_notes(&db).await {
+                    tracing::warn!("Deleted team note purge failed: {e}");
                 }
             }
         });
@@ -183,6 +188,18 @@ async fn main() {
         .route("/img/champion/{key}", get(images::champion_portrait))
         .route("/img/champion/{key}/icon", get(images::champion_icon))
         .route("/img/item/{id}", get(images::item_icon))
+        // Parked pages and the old solo dashboard redirect here, in axum: a
+        // Leptos `<Redirect>` rendered on the server left its 302 status
+        // behind for later static-file responses on the same worker thread.
+        .route("/solo", get(|| async { Redirect::temporary("/me") }))
+        .route(
+            "/analytics",
+            get(|| async { Redirect::temporary("/stats") }),
+        )
+        .route(
+            "/team-builder",
+            get(|| async { Redirect::temporary("/draft") }),
+        )
         .leptos_routes_with_context(
             &app_state,
             routes,

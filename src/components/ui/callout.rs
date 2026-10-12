@@ -135,31 +135,6 @@ pub fn Callout(
     }
 }
 
-/// An error line for page-level and resource errors (compatibility name).
-///
-/// A11y: a danger [`Callout`] (`role="alert"`). New code uses `Callout`;
-/// this shim keeps the 30-odd unmigrated call sites working until M3/M5.
-#[component]
-pub fn ErrorBanner(#[prop(into)] message: String) -> impl IntoView {
-    view! {
-        <Callout tone=CalloutTone::Danger>{message}</Callout>
-    }
-}
-
-/// A success or error line, chosen by whether the text starts with "Error"
-/// (compatibility name).
-///
-/// A11y: a success or danger [`Callout`]; the tone is in the words.
-#[component]
-pub fn StatusMessage(#[prop(into)] message: String) -> impl IntoView {
-    let tone = if message.starts_with("Error") {
-        CalloutTone::Danger
-    } else {
-        CalloutTone::Success
-    };
-    view! { <Callout tone=tone>{message}</Callout> }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

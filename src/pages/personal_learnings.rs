@@ -4,12 +4,21 @@
 // the API-layer refactor.
 #![allow(clippy::too_many_arguments)]
 
+//! Learnings: the personal journal. What happened, what I learned, what I
+//! do next time, by champion and matchup, with tags; written from scratch or
+//! from a match's timeline.
+
 use crate::components::champion_autocomplete::ChampionAutocomplete;
-use crate::components::ui::{ErrorBanner, ToastContext, ToastKind};
+use crate::components::local_time::{LocalTime, TimeStyle};
+use crate::components::ui::{
+    AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
+    ChampionAvatar, Checkbox, EmptySize, EmptyState, Field, GameResult, GlyphSize, PageHeader,
+    PageShell, PageWidth, ResultGlyph, SectionHeader, Segment, SegmentSize, SegmentedControl,
+    Select, SelectOption, Skeleton, SkeletonGroup, TextField, Toast, ToastContext,
+};
 use crate::models::champion::Champion;
 use crate::models::personal_learning::{PersonalLearning, LEARNING_TAGS};
 use leptos::prelude::*;
-use std::collections::BTreeMap;
 
 // ---------------------------------------------------------------------------
 // Server functions (defined before components per CLAUDE.md rule 34)
@@ -192,20 +201,29 @@ pub async fn get_champions_for_learnings() -> Result<Vec<Champion>, ServerFnErro
 }
 
 // ---------------------------------------------------------------------------
-// Helper: champion icon URL
+// Browse page
 // ---------------------------------------------------------------------------
 
-fn champion_icon_url(name: &str) -> String {
-    crate::models::ddragon::champion_icon_url(name)
+fn type_word(t: &str) -> &'static str {
+    match t {
+        "champion" => "Champion",
+        "matchup" => "Matchup",
+        _ => "General",
+    }
 }
 
-// ---------------------------------------------------------------------------
-// Browse Page: PersonalLearningsPage
-// ---------------------------------------------------------------------------
+/// Learnings that pass the type and tag filters ("all" passes everything).
+pub fn filter_learnings(list: &[PersonalLearning], kind: &str, tag: &str) -> Vec<PersonalLearning> {
+    list.iter()
+        .filter(|l| kind == "all" || l.learning_type == kind)
+        .filter(|l| tag == "all" || l.tags.iter().any(|t| t == tag))
+        .cloned()
+        .collect()
+}
 
 #[component]
 pub fn PersonalLearningsPage() -> impl IntoView {
-    // Auth guard
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -215,434 +233,180 @@ pub fn PersonalLearningsPage() -> impl IntoView {
             }
         }
     });
-
     let learnings = Resource::new(|| (), |_| list_learnings());
+    let kind = RwSignal::new("all".to_string());
+    let tag = RwSignal::new("all".to_string());
+    let mut tag_options = vec![SelectOption::new("all", "All tags")];
+    tag_options.extend(LEARNING_TAGS.iter().map(|t| SelectOption::new(*t, *t)));
 
-    let filter_type = RwSignal::new("all".to_string());
-    let filter_champion = RwSignal::new("all".to_string());
-    let filter_tag = RwSignal::new("all".to_string());
-    let sort_mode = RwSignal::new("newest".to_string());
-    let expanded_id: RwSignal<Option<String>> = RwSignal::new(None);
-
-    let toast = use_context::<ToastContext>();
+    let delete = Callback::new(move |l: PersonalLearning| {
+        let id = l.id.clone().unwrap_or_default();
+        leptos::task::spawn_local(async move {
+            match delete_learning(id).await {
+                Ok(()) => {
+                    learnings.refetch();
+                    let restore = l.clone();
+                    toast
+                        .push
+                        .run(Toast::success("Learning deleted").with_action(
+                            "Undo",
+                            Callback::new(move |_| {
+                                let r = restore.clone();
+                                leptos::task::spawn_local(async move {
+                                    let tags = serde_json::to_string(&r.tags)
+                                        .unwrap_or_else(|_| "[]".into());
+                                    let res = save_learning(
+                                        r.title,
+                                        r.learning_type,
+                                        r.champion.unwrap_or_default(),
+                                        r.opponent.unwrap_or_default(),
+                                        r.what_happened,
+                                        r.what_i_learned,
+                                        r.next_time,
+                                        tags,
+                                        r.win_loss.unwrap_or_default(),
+                                        r.match_riot_id.unwrap_or_default(),
+                                        r.game_timestamp_ms
+                                            .map(|t| t.to_string())
+                                            .unwrap_or_default(),
+                                        r.event_name.unwrap_or_default(),
+                                    )
+                                    .await;
+                                    match res {
+                                        Ok(_) => learnings.refetch(),
+                                        Err(e) => toast.push.run(Toast::error(e.to_string())),
+                                    }
+                                });
+                            }),
+                        ));
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
 
     view! {
-        <div class="bg-base min-h-screen">
-            <div class="max-w-7xl mx-auto px-6 py-10">
-                // Page header
-                <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
-                    <div class="flex flex-col gap-2">
-                        <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                            "History"
-                        </span>
-                        <h1 class="font-display text-primary text-3xl">"Personal learnings"</h1>
-                        <p class="text-muted text-sm">"Your private post-game reflections."</p>
-                    </div>
-                    <a
-                        href="/personal-learnings/new"
-                        class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                    >
-                        "+ New learning"
-                    </a>
-                </div>
-
-                <Suspense fallback=move || view! {
-                    <div class="text-muted text-sm">"Loading..."</div>
-                }>
-                    {move || {
-                        let data = learnings.get();
-                        match data {
-                            None => view! { <div></div> }.into_any(),
-                            Some(Err(e)) => view! {
-                                <ErrorBanner message=e.to_string() />
-                            }.into_any(),
-                            Some(Ok(all_learnings)) => {
-                                let all_learnings = StoredValue::new(all_learnings);
-
-                                // Unique champions for dropdown
-                                let unique_champions: Vec<String> = {
-                                    let mut set = std::collections::BTreeSet::new();
-                                    all_learnings.with_value(|ls| {
-                                        for l in ls {
-                                            if let Some(c) = &l.champion {
-                                                set.insert(c.clone());
-                                            }
-                                        }
-                                    });
-                                    set.into_iter().collect()
-                                };
-
-                                view! {
-                                    // Filter bar (Card.plain)
-                                    <div class="bg-elevated border border-divider rounded-xl p-4 flex items-center gap-3 mb-6 flex-wrap">
-                                        <span class="font-mono uppercase tracking-wider text-xs text-muted">"Filter"</span>
-                                        // Type filter
-                                        <select
-                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            on:change=move |ev| filter_type.set(event_target_value(&ev))
-                                        >
-                                            <option value="all">"All Types"</option>
-                                            <option value="general">"General"</option>
-                                            <option value="champion">"Champion"</option>
-                                            <option value="matchup">"Matchup"</option>
-                                        </select>
-                                        // Champion filter
-                                        <select
-                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            on:change=move |ev| filter_champion.set(event_target_value(&ev))
-                                        >
-                                            <option value="all">"All Champions"</option>
-                                            {unique_champions.into_iter().map(|c| {
-                                                let c2 = c.clone();
-                                                view! { <option value=c>{c2}</option> }
-                                            }).collect_view()}
-                                        </select>
-                                        // Tag filter
-                                        <select
-                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            on:change=move |ev| filter_tag.set(event_target_value(&ev))
-                                        >
-                                            <option value="all">"All Tags"</option>
-                                            {LEARNING_TAGS.iter().map(|t| {
-                                                let t = *t;
-                                                view! { <option value=t>{t}</option> }
-                                            }).collect_view()}
-                                        </select>
-                                        // Sort (right-aligned)
-                                        <select
-                                            class="bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors ml-auto"
-                                            on:change=move |ev| sort_mode.set(event_target_value(&ev))
-                                        >
-                                            <option value="newest">"Newest first"</option>
-                                            <option value="champion">"By champion"</option>
-                                        </select>
-                                    </div>
-
-                                    // Card grid
-                                    {move || {
-                                        let ft = filter_type.get();
-                                        let fc = filter_champion.get();
-                                        let ftag = filter_tag.get();
-                                        let sm = sort_mode.get();
-
-                                        let filtered: Vec<PersonalLearning> = all_learnings.with_value(|ls| {
-                                            ls.iter()
-                                                .filter(|l| {
-                                                    let type_ok = ft == "all" || l.learning_type == ft;
-                                                    let champ_ok = fc == "all"
-                                                        || l.champion.as_deref() == Some(fc.as_str());
-                                                    let tag_ok = ftag == "all"
-                                                        || l.tags.contains(&ftag);
-                                                    type_ok && champ_ok && tag_ok
-                                                })
-                                                .cloned()
-                                                .collect()
-                                        });
-
-                                        if all_learnings.with_value(|ls| ls.is_empty()) {
-                                            // No learnings at all
-                                            return view! {
-                                                <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
-                                                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">"Personal learnings"</span>
-                                                    <h2 class="font-display text-primary text-2xl mt-2">"No learnings yet"</h2>
-                                                    <p class="text-muted text-sm mt-3 mb-6 max-w-md mx-auto">
-                                                        "Write your first reflection after a game. Start from a match or create one here."
-                                                    </p>
-                                                    <a
-                                                        href="/personal-learnings/new"
-                                                        class="inline-flex items-center bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                    >
-                                                        "Write your first learning"
-                                                    </a>
-                                                </div>
-                                            }.into_any();
-                                        }
-
-                                        if filtered.is_empty() {
-                                            return view! {
-                                                <div class="bg-elevated border border-divider rounded-xl text-center py-16 px-6">
-                                                    <p class="text-muted text-sm mb-3">"No learnings match these filters."</p>
-                                                    <button
-                                                        class="text-accent text-sm hover:underline cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
-                                                        on:click=move |_| {
-                                                            filter_type.set("all".to_string());
-                                                            filter_champion.set("all".to_string());
-                                                            filter_tag.set("all".to_string());
-                                                        }
-                                                    >
-                                                        "Reset filters"
-                                                    </button>
-                                                </div>
-                                            }.into_any();
-                                        }
-
-                                        if sm == "champion" {
-                                            // Group by champion
-                                            let mut grouped: BTreeMap<String, Vec<PersonalLearning>> = BTreeMap::new();
-                                            for l in filtered {
-                                                let key = l.champion.clone().unwrap_or_else(|| "General".to_string());
-                                                grouped.entry(key).or_default().push(l);
-                                            }
-
-                                            view! {
-                                                <div>
-                                                    {grouped.into_iter().map(|(champ, items)| {
-                                                        view! {
-                                                            <div class="mb-6">
-                                                                <p class="font-mono uppercase tracking-wider text-xs text-muted py-2 mb-2 border-b border-divider/30">
-                                                                    {champ}
-                                                                </p>
-                                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                                    {items.into_iter().map(|l| {
-                                                                        view! {
-                                                                            <LearningCard
-                                                                                learning=l
-                                                                                expanded_id=expanded_id
-                                                                                learnings=learnings
-                                                                                toast=toast
-                                                                            />
-                                                                        }
-                                                                    }).collect_view()}
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! {
-                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {filtered.into_iter().map(|l| {
-                                                        view! {
-                                                            <LearningCard
-                                                                learning=l
-                                                                expanded_id=expanded_id
-                                                                learnings=learnings
-                                                                toast=toast
-                                                            />
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }.into_any()
-                                        }
-                                    }}
-                                }.into_any()
-                            }
-                        }
-                    }}
-                </Suspense>
+        <PageShell width=PageWidth::Standard attr:data-feedback-label="Learnings">
+            <PageHeader
+                title="Learnings"
+                eyebrow="You"
+                meta=move || view! {
+                    <Suspense fallback=|| ()>
+                        {move || learnings.get().map(|r| {
+                            let n = r.map(|l| l.len()).unwrap_or(0);
+                            view! { <span>{if n == 1 { "1 learning".to_string() } else { format!("{n} learnings") }}</span> }
+                        })}
+                    </Suspense>
+                }
+                actions=move || view! { <Button variant=ButtonVariant::Primary href="/personal-learnings/new" attr:data-testid="new-learning">"New learning"</Button> }
+            />
+            <div class="mb-6 flex flex-wrap items-end gap-4">
+                <SegmentedControl id="learning-kind" label="Kind of learning" options=vec![Segment::new("all", "All"), Segment::new("general", "General"), Segment::new("champion", "Champion"), Segment::new("matchup", "Matchup")] value=kind size=SegmentSize::Sm />
+                <Field id="learning-tag" label="Tag">
+                    <Select value=tag options=tag_options size=crate::components::ui::FieldSize::Sm />
+                </Field>
             </div>
-        </div>
+            <Suspense fallback=|| view! { <SkeletonGroup label="Loading learnings"><Skeleton lines=6 /></SkeletonGroup> }>
+                {move || learnings.get().map(|r| match r {
+                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"Your learnings did not load. Reload the page in a moment."</Callout> }.into_any(),
+                    Ok(list) if list.is_empty() => view! {
+                        <EmptyState
+                            title="No learnings yet"
+                            message="Write down what happened, what you learned and what you will do next time. Learnings from a match's timeline keep the moment they came from."
+                            cta_label="Write the first one"
+                            cta_href="/personal-learnings/new"
+                        />
+                    }.into_any(),
+                    Ok(list) => {
+                        let shown = filter_learnings(&list, &kind.get(), &tag.get());
+                        if shown.is_empty() {
+                            return view! { <EmptyState size=EmptySize::Compact message="No learning matches these filters. Choose All to see every learning." /> }.into_any();
+                        }
+                        view! {
+                            <ul class="border-b border-rule" data-learning-list>
+                                {shown.into_iter().map(|l| view! { <LearningRow l=l on_delete=delete /> }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }
+                })}
+            </Suspense>
+        </PageShell>
     }
 }
-
-// ---------------------------------------------------------------------------
-// Learning Card Component
-// ---------------------------------------------------------------------------
 
 #[component]
-fn LearningCard(
-    learning: PersonalLearning,
-    expanded_id: RwSignal<Option<String>>,
-    learnings: Resource<Result<Vec<PersonalLearning>, ServerFnError>>,
-    toast: Option<ToastContext>,
-) -> impl IntoView {
-    let id = learning.id.clone().unwrap_or_default();
-    let id_for_click = id.clone();
-    let id_for_delete = id.clone();
-    let id_for_edit = id.clone();
-
-    let learning = StoredValue::new(learning);
-
-    let id_for_expanded = id.clone();
-    let id_for_class = id.clone();
-    let is_expanded = move || expanded_id.get().as_deref() == Some(id_for_expanded.as_str());
-    let is_expanded2 = move || expanded_id.get().as_deref() == Some(id_for_class.as_str());
-
-    let card_class = move || {
-        if is_expanded2() {
-            "bg-elevated border border-accent/40 rounded-xl p-4 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-        } else {
-            "bg-elevated border border-divider rounded-xl p-4 hover:border-outline transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-        }
-    };
-
+fn LearningRow(l: PersonalLearning, on_delete: Callback<PersonalLearning>) -> impl IntoView {
+    let edit = format!(
+        "/personal-learnings/new?edit={}",
+        l.id.clone().unwrap_or_default()
+    );
+    let match_href = l
+        .match_riot_id
+        .clone()
+        .filter(|m| !m.is_empty())
+        .map(|m| format!("/match/{m}"));
+    let l_del = l.clone();
     view! {
-        <div
-            class=card_class
-            on:click=move |_| {
-                let current = expanded_id.get_untracked();
-                if current.as_deref() == Some(id_for_click.as_str()) {
-                    expanded_id.set(None);
-                } else {
-                    expanded_id.set(Some(id_for_click.clone()));
-                }
-            }
-        >
-            // Card header: badges + date
-            <div class="flex items-center gap-2 flex-wrap mb-2">
-                {learning.with_value(|l| {
-                    let type_label = match l.learning_type.as_str() {
-                        "champion" => "Champion",
-                        "matchup" => "Matchup",
-                        _ => "General",
-                    };
-                    view! {
-                        <span class="bg-surface text-muted text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5 border border-outline">
-                            {type_label}
-                        </span>
-                    }
-                })}
-                {learning.with_value(|l| {
-                    match l.win_loss.as_deref() {
-                        Some("win") => view! {
-                            <span class="bg-success/15 text-success border border-success/30 text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5">
-                                "Win"
+        <li class="border-t border-rule py-5" data-learning=l.id.clone().unwrap_or_default()>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="font-display text-heading font-semibold text-primary">{l.title.clone()}</h2>
+                    <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-muted">
+                        <span>{type_word(&l.learning_type)}</span>
+                        {l.champion.clone().filter(|c| !c.is_empty()).map(|c| view! {
+                            <span class="inline-flex items-center gap-1.5 text-secondary">
+                                <ChampionAvatar name=c.clone() size=AvatarSize::Xs decorative=true />
+                                {c.clone()}
                             </span>
-                        }.into_any(),
-                        Some("loss") => view! {
-                            <span class="bg-danger/15 text-danger border border-danger/30 text-caption font-mono uppercase tracking-wider rounded px-2 py-0.5">
-                                "Loss"
-                            </span>
-                        }.into_any(),
-                        _ => view! { <span></span> }.into_any(),
-                    }
-                })}
-                {learning.with_value(|l| {
-                    l.created_at.as_ref().map(|ts| {
-                        let date = ts.split('T').next().unwrap_or(ts.as_str()).to_string();
-                        view! {
-                            <span class="font-mono text-xs text-dimmed ml-auto tabular-nums">{date}</span>
-                        }
-                    })
-                })}
+                        })}
+                        {l.opponent.clone().filter(|c| !c.is_empty()).map(|c| view! { <span>{format!("vs {c}")}</span> })}
+                        {l.win_loss.as_deref().and_then(|w| match w { "win" => Some(true), "loss" => Some(false), _ => None }).map(|w| view! { <ResultGlyph result=GameResult::from_win(w) size=GlyphSize::Sm /> })}
+                        {l.created_at.clone().map(|c| view! { <LocalTime iso=c style=TimeStyle::DayMonth /> })}
+                        {l.event_name.clone().filter(|e| !e.is_empty()).map(|e| view! { <span>{format!("From the moment: {}", e.replace('+', " "))}</span> })}
+                    </p>
+                </div>
+                <div class="flex gap-1">
+                    {match_href.map(|h| view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=h>"Match"</Button> })}
+                    <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=edit>"Edit"</Button>
+                    <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| on_delete.run(l_del.clone()))>"Delete"</Button>
+                </div>
             </div>
-
-            // Title
-            <p class="font-display text-primary text-base leading-snug truncate mb-1">
-                {learning.with_value(|l| l.title.clone())}
-            </p>
-
-            // Champion icon (if champion or matchup type)
-            {learning.with_value(|l| {
-                let show = l.learning_type == "champion" || l.learning_type == "matchup";
-                if show {
-                    if let Some(champ) = &l.champion {
-                        let url = champion_icon_url(champ);
-                        let champ = champ.clone();
-                        return view! {
-                            <img src=url alt=champ class="w-6 h-6 rounded object-cover mb-1 border border-outline" />
-                        }.into_any();
-                    }
-                }
-                view! { <span></span> }.into_any()
+            <dl class="mt-3 grid gap-x-6 gap-y-2 text-body sm:grid-cols-[9rem_minmax(0,1fr)]">
+                <dt class="text-muted">"What happened"</dt>
+                <dd class="whitespace-pre-line text-primary">{l.what_happened.clone()}</dd>
+                <dt class="text-muted">"What I learned"</dt>
+                <dd class="whitespace-pre-line text-primary">{l.what_i_learned.clone()}</dd>
+                <dt class="text-muted">"Next time"</dt>
+                <dd class="whitespace-pre-line text-primary">{l.next_time.clone()}</dd>
+            </dl>
+            {(!l.tags.is_empty()).then(|| view! {
+                <p class="mt-3 flex flex-wrap gap-1.5">
+                    {l.tags.clone().into_iter().map(|t| view! { <Badge tone=BadgeTone::Neutral>{t}</Badge> }).collect_view()}
+                </p>
             })}
-
-            // Preview (first 80 chars of what_happened)
-            <p class="text-muted text-xs mb-2 line-clamp-2">
-                {learning.with_value(|l| {
-                    let preview = &l.what_happened;
-                    if preview.len() > 80 {
-                        format!("{}\u{2026}", &preview[..80])
-                    } else {
-                        preview.clone()
-                    }
-                })}
-            </p>
-
-            // Tags
-            <div class="flex flex-wrap gap-1 mb-2">
-                {learning.with_value(|l| {
-                    l.tags.iter().map(|tag| {
-                        let tag = tag.clone();
-                        view! {
-                            <span class="rounded-ctl px-2.5 py-0.5 text-caption font-medium bg-surface text-muted border border-outline">
-                                {tag}
-                            </span>
-                        }
-                    }).collect_view()
-                })}
-            </div>
-
-            // Expanded content
-            {move || {
-                if !is_expanded() {
-                    return view! { <span></span> }.into_any();
-                }
-
-                let what_happened = learning.with_value(|l| l.what_happened.clone());
-                let what_i_learned = learning.with_value(|l| l.what_i_learned.clone());
-                let next_time = learning.with_value(|l| l.next_time.clone());
-                let edit_href = format!("/personal-learnings/new?edit={id_for_edit}");
-                let del_id = id_for_delete.clone();
-
-                view! {
-                    <div class="border-t border-divider/40 pt-4 mt-2" on:click=move |ev| ev.stop_propagation()>
-                        <div class="space-y-3 mb-4">
-                            <div>
-                                <p class="font-mono uppercase tracking-wider text-caption text-muted mb-1">"What happened"</p>
-                                <p class="text-sm text-secondary">{what_happened}</p>
-                            </div>
-                            <div>
-                                <p class="font-mono uppercase tracking-wider text-caption text-muted mb-1">"What I learned"</p>
-                                <p class="text-sm text-secondary">{what_i_learned}</p>
-                            </div>
-                            <div>
-                                <p class="font-mono uppercase tracking-wider text-caption text-muted mb-1">"Next time I will..."</p>
-                                <p class="text-sm text-secondary">{next_time}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <a
-                                href=edit_href
-                                class="bg-surface border border-outline text-secondary hover:text-primary hover:border-outline px-3 py-1 rounded-lg text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                on:click=move |ev| ev.stop_propagation()
-                            >
-                                "Edit"
-                            </a>
-                            <button
-                                class="text-danger hover:text-primary text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:outline-none rounded"
-                                on:click=move |ev| {
-                                    ev.stop_propagation();
-                                    let id = del_id.clone();
-                                    let toast = toast;
-                                    leptos::task::spawn_local(async move {
-                                        match delete_learning(id).await {
-                                            Ok(()) => {
-                                                learnings.refetch();
-                                                if let Some(t) = toast {
-                                                    t.show.run((ToastKind::Success, "Learning deleted.".into()));
-                                                }
-                                                expanded_id.set(None);
-                                            }
-                                            Err(e) => {
-                                                if let Some(t) = toast {
-                                                    t.show.run((ToastKind::Error, format!("Failed to delete: {e}")));
-                                                }
-                                            }
-                                        }
-                                    });
-                                }
-                            >
-                                "Delete learning"
-                            </button>
-                        </div>
-                    </div>
-                }.into_any()
-            }}
-        </div>
+        </li>
     }
 }
 
 // ---------------------------------------------------------------------------
-// Form Page: NewLearningPage
+// New / edit page
 // ---------------------------------------------------------------------------
+
+/// A title when the writer gives none: "Ahri vs Zed, 12 Oct".
+pub fn auto_title(kind: &str, champion: &str, opponent: &str, day: &str) -> String {
+    match kind {
+        "matchup" if !champion.is_empty() && !opponent.is_empty() => {
+            format!("{champion} vs {opponent}, {day}")
+        }
+        "champion" | "matchup" if !champion.is_empty() => format!("{champion}, {day}"),
+        _ => format!("Learning, {day}"),
+    }
+}
 
 #[component]
 pub fn NewLearningPage() -> impl IntoView {
     use leptos_router::hooks::use_query_map;
-
-    // Auth guard
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
@@ -652,20 +416,10 @@ pub fn NewLearningPage() -> impl IntoView {
             }
         }
     });
-
     let query = use_query_map();
-
-    // Read URL params (once, eagerly)
-    let q_champion = query.read().get("champion").unwrap_or_default();
-    let q_opponent = query.read().get("opponent").unwrap_or_default();
-    let q_match_id = query.read().get("match_id").unwrap_or_default();
-    let q_result = query.read().get("result").unwrap_or_default();
-    let q_event_ts = query.read().get("event_ts").unwrap_or_default();
-    let q_event_name = query.read().get("event_name").unwrap_or_default();
-    let q_edit = query.read().get("edit").unwrap_or_default();
-    let q_tag_hint = query.read().get("tag_hint").unwrap_or_default();
-
-    // Determine default type from URL params
+    let q = |k: &str| query.read_untracked().get(k).unwrap_or_default();
+    let (q_champion, q_opponent, q_edit, q_tag_hint) =
+        (q("champion"), q("opponent"), q("edit"), q("tag_hint"));
     let default_type = if !q_champion.is_empty() && !q_opponent.is_empty() {
         "matchup"
     } else if !q_champion.is_empty() {
@@ -673,47 +427,36 @@ pub fn NewLearningPage() -> impl IntoView {
     } else {
         "general"
     };
-
-    // Form signals
-    let learning_type = RwSignal::new(default_type.to_string());
+    let kind = RwSignal::new(default_type.to_string());
     let champion = RwSignal::new(q_champion.clone());
     let opponent = RwSignal::new(q_opponent.clone());
     let what_happened = RwSignal::new(String::new());
     let what_i_learned = RwSignal::new(String::new());
     let next_time = RwSignal::new(String::new());
-
-    // Pre-select tag hint if present
-    let initial_tags: Vec<String> = if q_tag_hint.is_empty() {
-        Vec::new()
-    } else {
-        vec![q_tag_hint.clone()]
-    };
-    let selected_tags: RwSignal<Vec<String>> = RwSignal::new(initial_tags);
-
     let title = RwSignal::new(String::new());
-    let title_edited = RwSignal::new(false);
-    let win_loss = RwSignal::new(q_result.clone());
-    let match_riot_id = RwSignal::new(q_match_id.clone());
-    let game_timestamp_ms = RwSignal::new(q_event_ts.clone());
-    let event_name_signal = RwSignal::new(q_event_name.clone());
+    let result = RwSignal::new(q("result"));
+    let match_id = RwSignal::new(q("match_id"));
+    let event_ts = RwSignal::new(q("event_ts"));
+    let event_name = RwSignal::new(q("event_name").replace('+', " "));
+    let tag_checks: Vec<(String, RwSignal<bool>)> = LEARNING_TAGS
+        .iter()
+        .map(|t| {
+            (
+                t.to_string(),
+                RwSignal::new(q_tag_hint.replace('+', " ") == *t),
+            )
+        })
+        .collect();
+    let tag_checks = StoredValue::new(tag_checks);
+    let errors: [RwSignal<Option<String>>; 3] = std::array::from_fn(|_| RwSignal::new(None));
+    let saving = RwSignal::new(false);
+    let editing = !q_edit.is_empty();
+    let edit_id = StoredValue::new(q_edit.clone());
 
-    let save_error: RwSignal<Option<String>> = RwSignal::new(None);
-    let what_happened_error = RwSignal::new(false);
-    let what_i_learned_error = RwSignal::new(false);
-    let next_time_error = RwSignal::new(false);
-
-    let is_editing = RwSignal::new(!q_edit.is_empty());
-
-    let edit_id = q_edit.clone();
-
-    // Load champion list
     let champions = Resource::new(|| (), |_| get_champions_for_learnings());
-
-    // Load existing learning for edit mode
-    let edit_id_for_res = q_edit.clone();
-    let existing_learning = Resource::new(
-        move || edit_id_for_res.clone(),
-        move |id| async move {
+    let existing = Resource::new(
+        move || edit_id.get_value(),
+        |id| async move {
             if id.is_empty() {
                 Ok(None)
             } else {
@@ -721,407 +464,223 @@ pub fn NewLearningPage() -> impl IntoView {
             }
         },
     );
-
-    // Populate signals from existing learning when in edit mode
     Effect::new(move || {
-        if let Some(Ok(Some(l))) = existing_learning.get() {
-            learning_type.set(l.learning_type.clone());
+        if let Some(Ok(Some(l))) = existing.get() {
+            kind.set(l.learning_type.clone());
             champion.set(l.champion.clone().unwrap_or_default());
             opponent.set(l.opponent.clone().unwrap_or_default());
             what_happened.set(l.what_happened.clone());
             what_i_learned.set(l.what_i_learned.clone());
             next_time.set(l.next_time.clone());
-            selected_tags.set(l.tags.clone());
             title.set(l.title.clone());
-            title_edited.set(true);
-            win_loss.set(l.win_loss.clone().unwrap_or_default());
-            match_riot_id.set(l.match_riot_id.clone().unwrap_or_default());
-            if let Some(ts) = l.game_timestamp_ms {
-                game_timestamp_ms.set(ts.to_string());
-            }
-            event_name_signal.set(l.event_name.clone().unwrap_or_default());
-            is_editing.set(true);
+            result.set(l.win_loss.clone().unwrap_or_default());
+            match_id.set(l.match_riot_id.clone().unwrap_or_default());
+            event_ts.set(
+                l.game_timestamp_ms
+                    .map(|t| t.to_string())
+                    .unwrap_or_default(),
+            );
+            event_name.set(l.event_name.clone().unwrap_or_default());
+            tag_checks.with_value(|tc| {
+                for (t, sig) in tc {
+                    sig.set(l.tags.contains(t));
+                }
+            });
         }
     });
 
-    let toast = use_context::<ToastContext>();
-
-    let edit_id_for_save = edit_id.clone();
-
-    let handle_save = move |_: web_sys::MouseEvent| {
-        // Validate required fields
-        let wh = what_happened.get_untracked();
-        let wil = what_i_learned.get_untracked();
-        let nt = next_time.get_untracked();
-
-        let mut valid = true;
-        if wh.trim().is_empty() {
-            what_happened_error.set(true);
-            valid = false;
-        } else {
-            what_happened_error.set(false);
+    let save = Callback::new(move |_| {
+        let fields = [
+            what_happened.get_untracked(),
+            what_i_learned.get_untracked(),
+            next_time.get_untracked(),
+        ];
+        let mut ok = true;
+        for (i, f) in fields.iter().enumerate() {
+            if f.trim().is_empty() {
+                errors[i].set(Some("Write a sentence here.".into()));
+                ok = false;
+            } else {
+                errors[i].set(None);
+            }
         }
-        if wil.trim().is_empty() {
-            what_i_learned_error.set(true);
-            valid = false;
-        } else {
-            what_i_learned_error.set(false);
-        }
-        if nt.trim().is_empty() {
-            next_time_error.set(true);
-            valid = false;
-        } else {
-            next_time_error.set(false);
-        }
-
-        if !valid {
+        if !ok {
             return;
         }
-
-        // Compute title
-        let title_val = if title_edited.get_untracked() {
-            title.get_untracked()
+        let k = kind.get_untracked();
+        let champ = if k == "general" {
+            String::new()
         } else {
-            // Auto-generate
-            let lt = learning_type.get_untracked();
-            let champ = champion.get_untracked();
-            let opp = opponent.get_untracked();
-            match lt.as_str() {
-                "matchup" => format!("{} vs {} \u{2014} {}", champ, opp, current_date_short()),
-                "champion" => format!("{} \u{2014} {}", champ, current_date_short()),
-                _ => format!("General \u{2014} {}", current_date_short()),
-            }
+            champion.get_untracked()
         };
-
-        let tags = selected_tags.get_untracked();
-        let tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
-
-        let lt = learning_type.get_untracked();
-        let champ = champion.get_untracked();
-        let opp = opponent.get_untracked();
-        let wl = win_loss.get_untracked();
-        let mrid = match_riot_id.get_untracked();
-        let gts = game_timestamp_ms.get_untracked();
-        let en = event_name_signal.get_untracked();
-        let editing = is_editing.get_untracked();
-        let edit_id = edit_id_for_save.clone();
-
+        let opp = if k == "matchup" {
+            opponent.get_untracked()
+        } else {
+            String::new()
+        };
+        let day = chrono::Local::now().format("%-d %b").to_string();
+        let t = title.get_untracked();
+        let t = if t.trim().is_empty() {
+            auto_title(&k, &champ, &opp, &day)
+        } else {
+            t
+        };
+        let tags: Vec<String> = tag_checks.with_value(|tc| {
+            tc.iter()
+                .filter(|(_, s)| s.get_untracked())
+                .map(|(t, _)| t.clone())
+                .collect()
+        });
+        let tags = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".into());
+        let [wh, wl, nt] = fields;
+        let (res, mid, ts, en) = (
+            result.get_untracked(),
+            match_id.get_untracked(),
+            event_ts.get_untracked(),
+            event_name.get_untracked(),
+        );
+        saving.set(true);
         leptos::task::spawn_local(async move {
-            let result = if editing {
+            let r = if editing {
                 update_learning(
-                    edit_id, title_val, lt, champ, opp, wh, wil, nt, tags_json, wl, mrid, gts, en,
+                    edit_id.get_value(),
+                    t,
+                    k,
+                    champ,
+                    opp,
+                    wh,
+                    wl,
+                    nt,
+                    tags,
+                    res,
+                    mid,
+                    ts,
+                    en,
                 )
                 .await
-                .map(|_| String::new())
+                .map(|_| ())
             } else {
-                save_learning(
-                    title_val, lt, champ, opp, wh, wil, nt, tags_json, wl, mrid, gts, en,
-                )
-                .await
+                save_learning(t, k, champ, opp, wh, wl, nt, tags, res, mid, ts, en)
+                    .await
+                    .map(|_| ())
             };
-
-            match result {
-                Ok(_) => {
-                    if let Some(t) = toast {
-                        t.show.run((ToastKind::Success, "Learning saved.".into()));
-                    }
+            match r {
+                Ok(()) => {
+                    toast.push.run(Toast::success("Learning saved"));
                     #[cfg(feature = "hydrate")]
-                    if let Some(window) = web_sys::window() {
-                        let _ = window.location().set_href("/personal-learnings");
+                    if let Some(w) = web_sys::window() {
+                        let _ = w.location().set_href("/personal-learnings");
                     }
                 }
                 Err(e) => {
-                    save_error.set(Some(format!(
-                        "Failed to save. Check your connection and try again. ({e})"
-                    )));
+                    toast.push.run(Toast::error(e.to_string()));
+                    saving.set(false);
                 }
             }
         });
-    };
+    });
 
     view! {
-        <div class="bg-base min-h-screen">
-            <div class="max-w-2xl mx-auto px-6 py-10">
-                // Page heading
-                <div class="flex flex-col gap-2 mb-6">
-                    <span class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                        {move || if is_editing.get() { "Revise the entry" } else { "A new chapter" }}
-                    </span>
-                    <h1 class="font-display text-primary text-3xl">
-                        {move || if is_editing.get() { "Edit learning" } else { "New learning" }}
-                    </h1>
-                </div>
-
-                // Event context banner (from match timeline link)
-                {move || {
-                    let en = event_name_signal.get();
-                    let gts = game_timestamp_ms.get();
-                    if !en.is_empty() && !gts.is_empty() {
-                        // Format timestamp (ms -> mm:ss)
-                        let ts_ms: i64 = gts.parse().unwrap_or(0);
-                        let total_secs = ts_ms / 1000;
-                        let mins = total_secs / 60;
-                        let secs = total_secs % 60;
-                        let formatted = format!("{mins}:{secs:02}");
+        <PageShell width=PageWidth::Reading attr:data-feedback-label="New learning">
+            <PageHeader
+                title=if editing { "Edit learning" } else { "New learning" }
+                eyebrow="Learnings"
+                actions=move || view! {
+                    <Button variant=ButtonVariant::Quiet href="/personal-learnings">"Cancel"</Button>
+                    <Button variant=ButtonVariant::Primary on_click=save loading=saving attr:data-testid="save-learning">"Save learning"</Button>
+                }
+            />
+            {move || {
+                let (en, ts) = (event_name.get(), event_ts.get());
+                (!en.is_empty() && !ts.is_empty()).then(|| {
+                    let s = ts.parse::<i64>().unwrap_or(0) / 1000;
+                    view! { <div class="mb-6"><Callout tone=CalloutTone::Info title="From a match moment">{format!("{en} at {}:{:02}", s / 60, s % 60)}</Callout></div> }
+                })
+            }}
+            <div class="flex flex-col gap-6">
+                <SegmentedControl id="new-learning-kind" label="Kind of learning" options=vec![Segment::new("general", "General"), Segment::new("champion", "Champion"), Segment::new("matchup", "Matchup")] value=kind />
+                <Suspense fallback=|| view! { <Skeleton lines=1 /> }>
+                    {move || {
+                        let list: Vec<Champion> = champions.get().and_then(|r| r.ok()).unwrap_or_default();
+                        let k = kind.get();
+                        let list2 = list.clone();
                         view! {
-                            <div class="bg-elevated border border-divider rounded-lg p-3 text-sm text-secondary mb-4">
-                                <span class="font-mono uppercase tracking-wider text-caption text-muted">"From match"</span>
-                                <div class="mt-1">{format!("{en} at {formatted}")}</div>
-                            </div>
-                        }.into_any()
-                    } else {
-                        view! { <span></span> }.into_any()
-                    }
-                }}
-
-                // Save error banner
-                {move || {
-                    if let Some(err) = save_error.get() {
-                        view! { <div class="mb-4"><ErrorBanner message=err /></div> }.into_any()
-                    } else {
-                        view! { <span></span> }.into_any()
-                    }
-                }}
-
-                // Form Card.plain
-                <div class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="space-y-6">
-
-                        // Step 1: Type selector
-                        <div>
-                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Learning type"</label>
-                            <div class="flex gap-2 flex-wrap">
-                                {["general", "champion", "matchup"].iter().map(|&lt_val| {
-                                    let lt_val_str = lt_val.to_string();
-                                    let lt_val_str2 = lt_val.to_string();
-                                    let label = match lt_val {
-                                        "general" => "General",
-                                        "champion" => "Champion",
-                                        "matchup" => "Matchup",
-                                        _ => lt_val,
-                                    };
-                                    view! {
-                                        <button
-                                            class=move || {
-                                                if learning_type.get() == lt_val_str {
-                                                    "px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                } else {
-                                                    "px-4 py-2 rounded-lg text-sm bg-surface border border-outline text-secondary hover:text-primary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                }
-                                            }
-                                            on:click=move |_| learning_type.set(lt_val_str2.clone())
-                                        >
-                                            {label}
-                                        </button>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        </div>
-
-                        // Step 2: Conditional champion fields
-                        <Suspense fallback=move || view! { <div></div> }>
-                            {move || {
-                                let lt = learning_type.get();
-                                let champ_list = champions.get()
-                                    .and_then(|r| r.ok())
-                                    .unwrap_or_default();
-                                let champ_list2 = champ_list.clone();
-
-                                match lt.as_str() {
-                                    "champion" => view! {
-                                        <div>
-                                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Champion"</label>
-                                            <ChampionAutocomplete
-                                                champions=champ_list
-                                                value=champion
-                                                placeholder="Search champion..."
-                                            />
-                                        </div>
-                                    }.into_any(),
-                                    "matchup" => view! {
-                                        <div class="space-y-3">
-                                            <div>
-                                                <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Your champion"</label>
-                                                <ChampionAutocomplete
-                                                    champions=champ_list
-                                                    value=champion
-                                                    placeholder="Your champion..."
-                                                />
-                                            </div>
-                                            <div>
-                                                <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Opponent champion"</label>
-                                                <ChampionAutocomplete
-                                                    champions=champ_list2
-                                                    value=opponent
-                                                    placeholder="Opponent champion..."
-                                                />
-                                            </div>
-                                        </div>
-                                    }.into_any(),
-                                    _ => view! { <span></span> }.into_any(),
-                                }
-                            }}
-                        </Suspense>
-
-                        // Step 3: Three required text areas
-                        <div>
-                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"What happened"</label>
-                            <textarea
-                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                rows="4"
-                                placeholder="Describe what happened in the game..."
-                                prop:value=move || what_happened.get()
-                                on:input=move |ev| {
-                                    what_happened.set(event_target_value(&ev));
-                                    what_happened_error.set(false);
-                                }
-                            ></textarea>
-                            {move || {
-                                if what_happened_error.get() {
-                                    view! {
-                                        <p class="text-danger text-xs mt-1" role="alert">"This field is required to save."</p>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }
-                            }}
-                        </div>
-
-                        <div>
-                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"What I learned"</label>
-                            <textarea
-                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                rows="4"
-                                placeholder="What did you learn from this experience?"
-                                prop:value=move || what_i_learned.get()
-                                on:input=move |ev| {
-                                    what_i_learned.set(event_target_value(&ev));
-                                    what_i_learned_error.set(false);
-                                }
-                            ></textarea>
-                            {move || {
-                                if what_i_learned_error.get() {
-                                    view! {
-                                        <p class="text-danger text-xs mt-1" role="alert">"This field is required to save."</p>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }
-                            }}
-                        </div>
-
-                        <div>
-                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"Next time I will..."</label>
-                            <textarea
-                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                rows="4"
-                                placeholder="What will you do differently next time?"
-                                prop:value=move || next_time.get()
-                                on:input=move |ev| {
-                                    next_time.set(event_target_value(&ev));
-                                    next_time_error.set(false);
-                                }
-                            ></textarea>
-                            {move || {
-                                if next_time_error.get() {
-                                    view! {
-                                        <p class="text-danger text-xs mt-1" role="alert">"This field is required to save."</p>
-                                    }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }
-                            }}
-                        </div>
-
-                        // Step 4: Tag chips
-                        <div>
-                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-2">"Tags"</label>
-                            <div class="flex flex-wrap gap-2">
-                                {LEARNING_TAGS.iter().map(|&tag| {
-                                    let tag_str = tag.to_string();
-                                    let tag_str2 = tag.to_string();
-                                    view! {
-                                        <button
-                                            class=move || {
-                                                if selected_tags.get().contains(&tag_str) {
-                                                    "rounded-ctl px-3 py-1 text-xs font-semibold bg-accent text-accent-contrast cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                } else {
-                                                    "rounded-ctl px-3 py-1 text-xs font-medium bg-surface border border-outline text-muted hover:text-secondary hover:border-outline transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                }
-                                            }
-                                            on:click=move |_| {
-                                                let t = tag_str2.clone();
-                                                selected_tags.update(|tags| {
-                                                    if let Some(pos) = tags.iter().position(|x| x == &t) {
-                                                        tags.remove(pos);
-                                                    } else {
-                                                        tags.push(t);
-                                                    }
-                                                });
-                                            }
-                                        >
-                                            {tag}
-                                        </button>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        </div>
-
-                        // Step 5: Title field
-                        <div>
-                            <label class="font-mono uppercase tracking-wider text-caption text-muted block mb-1">"Title"</label>
-                            <input
-                                type="text"
-                                class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm placeholder-dimmed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                placeholder="Auto-generated from type and champion..."
-                                prop:value=move || {
-                                    if title_edited.get() {
-                                        title.get()
-                                    } else {
-                                        let lt = learning_type.get();
-                                        let champ = champion.get();
-                                        let opp = opponent.get();
-                                        match lt.as_str() {
-                                            "matchup" => format!("{} vs {} \u{2014} {}", champ, opp, current_date_short()),
-                                            "champion" => format!("{} \u{2014} {}", champ, current_date_short()),
-                                            _ => format!("General \u{2014} {}", current_date_short()),
-                                        }
-                                    }
-                                }
-                                on:input=move |ev| {
-                                    title.set(event_target_value(&ev));
-                                    title_edited.set(true);
-                                }
-                            />
-                        </div>
-
-                        // Save / Cancel buttons
-                        <div class="flex items-center gap-3 pt-2">
-                            <button
-                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold px-5 py-2 rounded-lg text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                on:click=handle_save
-                            >
-                                "Save learning"
-                            </button>
-                            <a
-                                href="/personal-learnings"
-                                class="bg-surface border border-outline text-secondary hover:text-primary hover:border-outline px-5 py-2 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            >
-                                "Discard changes"
-                            </a>
-                        </div>
+                            {(k != "general").then(|| view! {
+                                <Field id="learning-champion" label="Your champion">
+                                    <ChampionAutocomplete champions=list.clone() value=champion placeholder="Search a champion" />
+                                </Field>
+                            })}
+                            {(k == "matchup").then(|| view! {
+                                <Field id="learning-opponent" label="Against">
+                                    <ChampionAutocomplete champions=list2.clone() value=opponent placeholder="Search a champion" />
+                                </Field>
+                            })}
+                        }
+                    }}
+                </Suspense>
+                <SegmentedControl id="learning-result" label="Result of the game" options=vec![Segment::new("", "Not set"), Segment::new("win", "Win"), Segment::new("loss", "Loss")] value=result size=SegmentSize::Sm />
+                <Field id="learning-happened" label="What happened" required=true error=Signal::derive(move || errors[0].get())>
+                    <TextField value=what_happened rows=3 />
+                </Field>
+                <Field id="learning-learned" label="What I learned" required=true error=Signal::derive(move || errors[1].get())>
+                    <TextField value=what_i_learned rows=3 />
+                </Field>
+                <Field id="learning-next" label="Next time I will" required=true error=Signal::derive(move || errors[2].get())>
+                    <TextField value=next_time rows=2 />
+                </Field>
+                <Field id="learning-title" label="Title" hint="Left empty, it becomes the champion, the opponent and the date.">
+                    <TextField value=title maxlength=120 />
+                </Field>
+                <fieldset>
+                    <legend class="mb-2 text-label font-medium text-primary">"Tags"</legend>
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        {tag_checks.get_value().into_iter().map(|(t, sig)| view! { <Checkbox label=t checked=sig /> }).collect_view()}
                     </div>
-                </div>
+                </fieldset>
             </div>
-        </div>
+            <section class="mt-10" aria-labelledby="learning-why">
+                <SectionHeader title="Where it shows" id="learning-why" level=crate::components::ui::HeadingLevel::H3 />
+                <p class="max-w-prose text-body text-secondary">"Learnings stay yours: only you see them, here on your list. They never appear on the team pages."</p>
+            </section>
+        </PageShell>
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helper: current date as "Mar 27" string
-// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn current_date_short() -> String {
-    // Static fallback — auto-titles are user-editable, so approximate date is acceptable.
-    "Today".to_string()
+    fn l(kind: &str, tags: &[&str]) -> PersonalLearning {
+        PersonalLearning {
+            id: None,
+            user_id: "user:u".into(),
+            title: "t".into(),
+            learning_type: kind.into(),
+            champion: None,
+            opponent: None,
+            what_happened: String::new(),
+            what_i_learned: String::new(),
+            next_time: String::new(),
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            win_loss: None,
+            match_riot_id: None,
+            game_timestamp_ms: None,
+            event_name: None,
+            created_at: None,
+        }
+    }
+
+    #[test]
+    fn filters_and_titles() {
+        let list = vec![l("general", &["Vision"]), l("matchup", &["Laning"])];
+        assert_eq!(filter_learnings(&list, "all", "all").len(), 2);
+        assert_eq!(filter_learnings(&list, "matchup", "all").len(), 1);
+        assert_eq!(filter_learnings(&list, "all", "Vision").len(), 1);
+        assert_eq!(
+            auto_title("matchup", "Ahri", "Zed", "12 Oct"),
+            "Ahri vs Zed, 12 Oct"
+        );
+        assert_eq!(auto_title("champion", "Ahri", "", "12 Oct"), "Ahri, 12 Oct");
+        assert_eq!(auto_title("general", "", "", "12 Oct"), "Learning, 12 Oct");
+    }
 }

@@ -1,6 +1,21 @@
-use crate::components::ui::{EmptyState, SkeletonCard, ToastContext, ToastKind};
+//! The roster page. Members see their team's roster and how players join;
+//! people without a team create one or ask to join one. Leader tools
+//! (placing, benching, removing players, answering requests) live on the
+//! team page.
+
+use crate::components::ui::{
+    AvatarSize, Button, ButtonSize, ButtonVariant, EmptySize, EmptyState, Field, HeadingLevel,
+    InputKind, PageHeader, PageShell, PageWidth, Role, RoleLabel, SectionHeader, Select,
+    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Table, Td, TextField, Th, Toast,
+    ToastContext, Tr, UserAvatar,
+};
 use crate::models::team::Team;
+use crate::models::user::TeamMember;
+use crate::pages::team::dashboard::{
+    get_pending_requests, get_team_dashboard, group_roster, TEAM_REGIONS,
+};
 use leptos::prelude::*;
+use leptos_router::components::A;
 
 #[server]
 pub async fn create_team(name: String, region: String) -> Result<(), ServerFnError> {
@@ -9,42 +24,19 @@ pub async fn create_team(name: String, region: String) -> Result<(), ServerFnErr
     use leptos_axum::redirect;
 
     let authz::Ctx { db, user } = authz::authed().await?;
-
+    let name = name.trim().to_string();
+    if name.is_empty() || name.chars().count() > 60 {
+        return Err(ServerFnError::new("A team name has 1 to 60 characters."));
+    }
+    if !TEAM_REGIONS.contains(&region.as_str()) {
+        return Err(ServerFnError::new("Unknown region"));
+    }
     db::create_team(&db, &user.id, name, region)
         .await
         .map_err(authz::server_err)?;
+    // Compatibility: older clients read the stored mode.
+    let _ = db::set_user_mode(&db, &user.id, "team").await;
     redirect("/team/dashboard");
-    Ok(())
-}
-
-#[server]
-pub async fn link_riot_account(riot_id: String) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-    use crate::server::rate_limit::Bucket;
-    use crate::server::riot;
-
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let parts: Vec<&str> = riot_id.splitn(2, '#').collect();
-    if parts.len() != 2 {
-        return Err(ServerFnError::new(
-            "Invalid Riot ID format (use GameName#TAG)",
-        ));
-    }
-    authz::rate_limit(Bucket::Riot).await?;
-    let (game_name, tag_line) = (parts[0], parts[1]);
-
-    let platform = riot::platform_for(&[user.riot_region.as_deref()]);
-    let puuid = authz::riot()?
-        .get_puuid(game_name, tag_line, platform)
-        .await
-        .map_err(authz::server_err)?;
-
-    db::update_user_riot(&db, user.id, puuid, riot_id)
-        .await
-        .map_err(authz::server_err)?;
-
     Ok(())
 }
 
@@ -53,10 +45,15 @@ pub async fn list_teams() -> Result<Vec<Team>, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
-    // Signed-in users only: the team list is not public.
-    let authz::Ctx { db, .. } = authz::authed().await?;
-
-    db::list_all_teams(&db).await.map_err(authz::server_err)
+    // Signed-in users only: the team list is not public. Members cannot
+    // join another team, so they get an empty list: the page creates this
+    // resource for everyone (before its first Suspense) and members must
+    // not pay for reading every team.
+    let ctx = authz::authed().await?;
+    if ctx.team().await?.is_some() {
+        return Ok(Vec::new());
+    }
+    db::list_all_teams(&ctx.db).await.map_err(authz::server_err)
 }
 
 #[server]
@@ -65,7 +62,6 @@ pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
     use crate::server::db;
 
     let authz::Ctx { db, user } = authz::authed().await?;
-
     db::create_join_request(&db, &user.id, &team_id)
         .await
         .map_err(authz::server_err)
@@ -73,239 +69,253 @@ pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
 
 #[component]
 pub fn RosterPage() -> impl IntoView {
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
-    // Auth redirect + mode detection
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-    let is_solo_mode: RwSignal<bool> = RwSignal::new(false);
-    Effect::new(move || match auth_user.get() {
-        Some(Ok(None)) =>
-        {
+    Effect::new(move || {
+        if let Some(Ok(None)) = auth_user.get() {
             #[cfg(feature = "hydrate")]
             if let Some(window) = web_sys::window() {
                 let _ = window.location().set_href("/auth/login");
             }
         }
-        Some(Ok(Some(u))) => {
-            is_solo_mode.set(u.mode == "solo");
-        }
-        _ => {}
     });
+    let team = Resource::new(|| (), |_| get_team_dashboard());
+    // Created before any Suspense, so server and browser agree on them.
+    let requests = Resource::new(|| (), |_| get_pending_requests());
+    let teams = Resource::new(|| (), |_| list_teams());
+    view! {
+        <PageShell width=PageWidth::Standard attr:data-feedback-label="Roster">
+            <Suspense fallback=|| view! {
+                <SkeletonGroup label="Loading the roster">
+                    <Skeleton width="w-56 max-w-full" size="h-10" />
+                    <Skeleton shape=SkeletonShape::Block size="h-48" />
+                </SkeletonGroup>
+            }>
+                {move || Suspend::new(async move {
+                    match team.await {
+                        Ok(Some((t, members, me))) => view! { <MemberRoster team=t members=members me=me requests=requests /> }.into_any(),
+                        Ok(None) => view! { <NoTeamRoster teams=teams /> }.into_any(),
+                        Err(_) => view! {
+                            <PageHeader title="Roster" />
+                            <EmptyState title="The roster did not load" message="The server did not answer. Reload the page in a moment." />
+                        }.into_any(),
+                    }
+                })}
+            </Suspense>
+        </PageShell>
+    }
+}
 
-    // Toast for create_team errors (success redirects to dashboard)
-    Effect::new(move || {
-        if let Some(Err(e)) = ServerAction::<CreateTeam>::new().value().get() {
-            toast.show.run((ToastKind::Error, format!("{e}")));
+/// A member's view: the roster by place and how new players join.
+#[component]
+fn MemberRoster(
+    team: Team,
+    members: Vec<TeamMember>,
+    me: String,
+    requests: Resource<Result<Vec<crate::models::user::JoinRequest>, ServerFnError>>,
+) -> impl IntoView {
+    let is_leader = team.created_by == me;
+    let groups = group_roster(&members);
+    let place_word = |m: &TeamMember| -> &'static str {
+        match m.roster_type.as_str() {
+            "starter" => "Starting five",
+            "substitute" => "Substitute",
+            "coach" => "Coach",
+            _ => "Not placed yet",
         }
-    });
-
-    let (search_query, set_search_query) = signal(String::new());
-    let create_team_action = ServerAction::<CreateTeam>::new();
-    let link_riot = ServerAction::<LinkRiotAccount>::new();
-    let teams_resource = Resource::new(|| (), |_| list_teams());
-
-    // Toast for link_riot
-    Effect::new(move || {
-        if let Some(result) = link_riot.value().get() {
-            match result {
-                Ok(()) => toast
-                    .show
-                    .run((ToastKind::Success, "Riot account linked".into())),
-                Err(e) => toast.show.run((ToastKind::Error, format!("{e}"))),
+    };
+    let mut ordered: Vec<TeamMember> = groups.starters.iter().flatten().cloned().collect();
+    ordered.extend(groups.substitutes.iter().cloned());
+    ordered.extend(groups.coaches.iter().cloned());
+    ordered.extend(groups.unplaced.iter().cloned());
+    let count = ordered.len();
+    let team_name = team.name.clone();
+    view! {
+        <PageHeader
+            title="Roster"
+            eyebrow="Team"
+            meta=move || view! {
+                <span>{team_name.clone()}</span>
+                <span aria-hidden="true" class="text-muted">"/"</span>
+                <span>{if count == 1 { "1 member".to_string() } else { format!("{count} members") }}</span>
             }
+            actions=move || view! { <Button href="/team/dashboard">"Team page"</Button> }
+        />
+        <section aria-labelledby="members-h" data-roster-members>
+            <SectionHeader title="Members" id="members-h" meta=if is_leader { "Place, bench or remove players on the team page." } else { "The leader places players on the team page." } />
+            <Table caption="Team members" caption_hidden=true>
+                <thead>
+                    <tr>
+                        <Th>"Player"</Th>
+                        <Th>"Position"</Th>
+                        <Th>"Place"</Th>
+                        <Th>"Riot account"</Th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {ordered.into_iter().map(|m| {
+                        let role = Role::parse(&m.role);
+                        let href = format!("/team/player/{}", m.user_id);
+                        let place = place_word(&m);
+                        let is_me = m.user_id == me;
+                        view! {
+                            <Tr>
+                                <Td>
+                                    <span class="flex items-center gap-2">
+                                        <UserAvatar name=m.username.clone() size=AvatarSize::Xs />
+                                        <A href=href attr:class="font-medium text-primary underline decoration-transparent underline-offset-4 hover:decoration-outline">{m.username.clone()}</A>
+                                        {is_me.then(|| view! { <span class="text-caption text-muted">"you"</span> })}
+                                    </span>
+                                </Td>
+                                <Td>{match role { Some(r) => view! { <RoleLabel role=r /> }.into_any(), None => view! { <span class="text-muted">"None"</span> }.into_any() }}</Td>
+                                <Td>{place}</Td>
+                                <Td muted=true>{m.riot_summoner_name.clone().unwrap_or_else(|| "Not linked".to_string())}</Td>
+                            </Tr>
+                        }
+                    }).collect_view()}
+                </tbody>
+            </Table>
+        </section>
+        <section class="mt-12 max-w-prose" aria-labelledby="joining-h" data-roster-joining>
+            <SectionHeader title="How players join" id="joining-h" />
+            <p class="text-body text-secondary">
+                {format!("New players sign up with an invite link, open this page, find {} under \u{201c}Join a team\u{201d} and ask to join. The team leader answers on the team page; accepted players start as \u{201c}not placed yet\u{201d} until the leader puts them in the starting five, on the bench or with the coaches.", team.name)}
+            </p>
+            {is_leader.then(|| view! {
+                <Suspense fallback=|| ()>
+                    {move || requests.get().map(|r| {
+                        let n = r.map(|l| l.len()).unwrap_or(0);
+                        view! {
+                            <p class="mt-3 text-body text-primary" data-pending-requests=n>
+                                {match n {
+                                    0 => "No requests waiting right now.".to_string(),
+                                    1 => "1 request is waiting.".to_string(),
+                                    n => format!("{n} requests are waiting."),
+                                }}
+                                " "
+                                <A href="/team/dashboard" attr:class="underline decoration-outline underline-offset-4 hover:decoration-accent">"Answer on the team page"</A>
+                            </p>
+                        }
+                    })}
+                </Suspense>
+            })}
+        </section>
+    }
+}
+
+/// No team yet: create one, or ask to join one.
+#[component]
+fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let name = RwSignal::new(String::new());
+    let region = RwSignal::new("EUW".to_string());
+    let create_error = RwSignal::new(None::<String>);
+    let creating = RwSignal::new(false);
+    let query = RwSignal::new(String::new());
+    let requested = RwSignal::new(Vec::<String>::new());
+
+    let create = Callback::new(move |_| {
+        if name.get_untracked().trim().is_empty() {
+            create_error.set(Some("Give the team a name.".into()));
+            return;
         }
+        creating.set(true);
+        create_error.set(None);
+        leptos::task::spawn_local(async move {
+            match create_team(name.get_untracked(), region.get_untracked()).await {
+                Ok(()) =>
+                {
+                    #[cfg(feature = "hydrate")]
+                    if let Some(w) = web_sys::window() {
+                        let _ = w.location().set_href("/team/dashboard");
+                    }
+                }
+                Err(e) => {
+                    create_error.set(Some(e.to_string()));
+                    creating.set(false);
+                }
+            }
+        });
     });
+    let ask = Callback::new(move |(id, team_name): (String, String)| {
+        leptos::task::spawn_local(async move {
+            match request_to_join(id.clone()).await {
+                Ok(()) => {
+                    requested.update(|r| r.push(id));
+                    toast
+                        .push
+                        .run(Toast::success(format!("Request sent to {team_name}")));
+                }
+                Err(e) => toast.push.run(Toast::error(e.to_string())),
+            }
+        });
+    });
+    let region_options: Vec<SelectOption> = TEAM_REGIONS
+        .iter()
+        .map(|r| SelectOption::new(*r, *r))
+        .collect();
 
     view! {
-        <div class="bg-base min-h-screen px-8 py-6">
-            <div class="max-w-3xl mx-auto">
-                <header class="mb-6">
-                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-accent">
-                        "Team"
+        <PageHeader title="Roster" eyebrow="Team" meta=move || view! { <span>"You are not on a team yet. Create one, or ask to join one."</span> } />
+        <div class="grid gap-x-12 gap-y-12 lg:grid-cols-2">
+            <section aria-labelledby="create-h" data-create-team>
+                <SectionHeader title="Create a team" id="create-h" />
+                <p class="mb-4 text-body text-secondary">"You lead the team you create: you place players and answer join requests."</p>
+                <div class="flex max-w-md flex-col gap-4">
+                    <Field id="create-team-name" label="Team name" required=true error=Signal::derive(move || create_error.get())>
+                        <TextField value=name name="name" maxlength=60 required=true />
+                    </Field>
+                    <Field id="create-team-region" label="Region">
+                        <Select value=region name="region" options=region_options />
+                    </Field>
+                    <div>
+                        <Button variant=ButtonVariant::Primary on_click=create loading=creating attr:data-testid="create-team">"Create team"</Button>
                     </div>
-                    <h1 class="font-display text-[40px] leading-tight text-primary mt-1">
-                        "Team Roster"
-                    </h1>
-                </header>
-                // Mode gate: show CTA for solo-mode users instead of team content
-                {move || if is_solo_mode.get() {
-                    view! {
-                        <div class="py-8 text-center">
-                            <div class="bg-elevated border border-outline rounded-xl p-6">
-                                <h2 class="font-display text-2xl text-primary mb-2">"Team feature"</h2>
-                                <p class="text-secondary text-sm mb-4">"Switch to team mode to use this feature."</p>
-                                <button
-                                    class="bg-accent hover:bg-accent-hover text-accent-contrast font-semibold rounded-lg px-4 py-2 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                    on:click=move |_| {
-                                        leptos::task::spawn_local(async move {
-                                            let _ = crate::components::nav::set_user_mode("team".to_string()).await;
-                                            #[cfg(feature = "hydrate")]
-                                            if let Some(window) = web_sys::window() {
-                                                let _ = window.location().reload();
-                                            }
-                                        });
-                                    }
-                                >
-                                    "Switch to Team Mode"
-                                </button>
-                            </div>
-                        </div>
-                    }.into_any()
-                } else {
-                    view! {
-            <div class="flex flex-col gap-8">
-                // No-team context message
-                <EmptyState
-                    message="You're not part of a team yet — create a new team or join an existing one"
-                />
-
-                // Create Team — Card.plain
-                <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="eyebrow">"New team"</div>
-                    <h2 class="font-display text-2xl text-primary mb-4">"Create a New Team"</h2>
-                    <ActionForm action=create_team_action>
-                        <div class="flex flex-col gap-4">
-                            {move || create_team_action.value().get().and_then(|r| r.err()).map(|e| view! {
-                                <div class="bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-3 text-sm" role="alert">
-                                    {e.to_string()}
-                                </div>
-                            })}
-                            <div>
-                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Team Name"</label>
-                                <input
-                                    type="text"
-                                    name="name"
-                                    required
-                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">"Region"</label>
-                                <select
-                                    name="region"
-                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                >
-                                    <option value="EUW">"EUW"</option>
-                                    <option value="EUNE">"EUNE"</option>
-                                    <option value="NA">"NA"</option>
-                                    <option value="KR">"KR"</option>
-                                    <option value="BR">"BR"</option>
-                                </select>
-                            </div>
-                            <button
-                                type="submit"
-                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            >
-                                "Create Team"
-                            </button>
-                        </div>
-                    </ActionForm>
-                </section>
-
-                // Join Existing Team — Card.plain
-                <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <div class="eyebrow">"Join"</div>
-                    <h2 class="font-display text-2xl text-primary mb-1">"Join an Existing Team"</h2>
-                    <p class="text-muted text-sm mb-4">"Search for a team by name and request to join."</p>
-
-                    <input
-                        type="text"
-                        placeholder="Search teams by name..."
-                        prop:value=move || search_query.get()
-                        on:input=move |ev| set_search_query.set(event_target_value(&ev))
-                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none mb-4"
-                    />
-
-                    <Suspense fallback=|| view! { <div class="flex flex-col gap-2"><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /><SkeletonCard height="h-12" /></div> }>
-                        {move || teams_resource.get().map(|result| match result {
-                            Ok(teams) => {
-                                let search_val = search_query.get();
-                                if search_val.is_empty() {
-                                    view! {
-                                        <p class="text-muted text-sm">"Type to search for teams..."</p>
-                                    }.into_any()
-                                } else {
-                                    let filtered: Vec<_> = teams.into_iter()
-                                        .filter(|t| t.name.to_lowercase().contains(&search_val.to_lowercase()))
-                                        .collect();
-                                    if filtered.is_empty() {
+                </div>
+            </section>
+            <section aria-labelledby="join-h" data-join-team>
+                <SectionHeader title="Join a team" id="join-h" />
+                <Field id="team-search" label="Find a team" hint="Type part of the team's name.">
+                    <TextField value=query kind=InputKind::Search placeholder="Team name" />
+                </Field>
+                <Suspense fallback=|| view! { <SkeletonGroup label="Loading teams"><Skeleton lines=3 /></SkeletonGroup> }>
+                    {move || teams.get().map(|r| match r {
+                        Err(_) => view! { <p class="mt-4 text-body text-danger" role="alert">"The team list did not load."</p> }.into_any(),
+                        Ok(list) => {
+                            let q = query.get().trim().to_lowercase();
+                            if q.is_empty() {
+                                return view! { <p class="mt-4 text-body text-muted">{format!("{} teams on Companion. Search to find yours.", list.len())}</p> }.into_any();
+                            }
+                            let found: Vec<Team> = list.into_iter().filter(|t| t.name.to_lowercase().contains(&q)).collect();
+                            if found.is_empty() {
+                                return view! { <div class="mt-4"><EmptyState size=EmptySize::Compact level=HeadingLevel::H3 message="No team matches. Check the spelling, or ask your captain for the exact name." /></div> }.into_any();
+                            }
+                            view! {
+                                <ul class="mt-4 border-b border-rule">
+                                    {found.into_iter().map(|t| {
+                                        let id = t.id.clone().unwrap_or_default();
+                                        let id_for_check = id.clone();
+                                        let name = t.name.clone();
                                         view! {
-                                            <p class="text-dimmed text-sm">"No teams match your search."</p>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="flex flex-col gap-2">
-                                                {filtered.into_iter().map(|team| {
-                                                    let team_id = team.id.clone().unwrap_or_default();
-                                                    let team_name = team.name.clone();
-                                                    let region = team.region.clone();
-                                                    let member_count = team.member_count.unwrap_or(0);
-                                                    view! {
-                                                        <div class="bg-surface border border-outline rounded-lg px-4 py-3 flex items-center justify-between">
-                                                            <div class="flex items-center gap-3">
-                                                                <span class="font-display text-primary text-base">{team_name.clone()}</span>
-                                                                <span class="font-mono text-muted text-sm">{region}</span>
-                                                                <span class="text-muted text-sm tabular-nums">{member_count} " members"</span>
-                                                            </div>
-                                                            <button
-                                                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                                on:click=move |_| {
-                                                                    let id = team_id.clone();
-                                                                    let tname = team_name.clone();
-                                                                    leptos::task::spawn_local(async move {
-                                                                        match request_to_join(id).await {
-                                                                            Ok(_) => toast.show.run((ToastKind::Success, format!("Join request sent to {}!", tname))),
-                                                                            Err(e) => toast.show.run((ToastKind::Error, e.to_string())),
-                                                                        }
-                                                                    });
-                                                                }
-                                                            >
-                                                                "Request to Join"
-                                                            </button>
-                                                        </div>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        }.into_any()
-                                    }
-                                }
-                            },
-                            Err(e) => view! {
-                                <p class="text-danger text-sm" role="alert">{e.to_string()}</p>
-                            }.into_any(),
-                        })}
-                    </Suspense>
-                </section>
-
-                // Link Riot Account — Card.plain
-                <section class="bg-elevated border border-divider rounded-xl p-6">
-                    <h2 class="font-display text-2xl text-primary mb-4">"Link Riot Account"</h2>
-                    <ActionForm action=link_riot>
-                        <div class="flex flex-col gap-4">
-                            <div>
-                                <label class="block font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
-                                    "Riot ID (e.g. PlayerName#EUW)"
-                                </label>
-                                <input
-                                    type="text"
-                                    name="riot_id"
-                                    placeholder="GameName#TAG"
-                                    required
-                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-2 text-primary focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                class="bg-accent hover:bg-accent-hover text-accent-contrast font-bold rounded-lg px-4 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                            >
-                                "Link Account"
-                            </button>
-                        </div>
-                    </ActionForm>
-                </section>
-            </div>
-                    }.into_any()
-                }}
-            </div>
+                                            <li class="flex flex-wrap items-center justify-between gap-3 border-t border-rule py-2.5">
+                                                <span>
+                                                    <span class="block font-medium text-primary">{t.name.clone()}</span>
+                                                    <span class="figures block text-caption text-muted">{format!("{} \u{00b7} {} members", t.region, t.member_count.unwrap_or(0))}</span>
+                                                </span>
+                                                {move || if requested.get().contains(&id_for_check) {
+                                                    view! { <span class="text-label text-success">"Request sent"</span> }.into_any()
+                                                } else {
+                                                    let (id, name) = (id.clone(), name.clone());
+                                                    view! { <Button size=ButtonSize::Sm on_click=Callback::new(move |_| ask.run((id.clone(), name.clone())))>"Ask to join"</Button> }.into_any()
+                                                }}
+                                            </li>
+                                        }
+                                    }).collect_view()}
+                                </ul>
+                            }.into_any()
+                        }
+                    })}
+                </Suspense>
+            </section>
         </div>
     }
 }

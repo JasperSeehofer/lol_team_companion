@@ -351,6 +351,8 @@ struct ReviewEd {
     outcome: RwSignal<String>,
     /// "" or "1".."5".
     rating: RwSignal<String>,
+    /// The draft this review was linked to was deleted.
+    draft_deleted: RwSignal<bool>,
 }
 
 impl ReviewEd {
@@ -367,10 +369,12 @@ impl ReviewEd {
             notes: s(),
             outcome: s(),
             rating: s(),
+            draft_deleted: RwSignal::new(false),
         }
     }
     fn clear(&self) {
         self.id.set(None);
+        self.draft_deleted.set(false);
         for sig in [
             self.match_id,
             self.plan_id,
@@ -398,6 +402,7 @@ impl ReviewEd {
         self.outcome.set(r.win_loss.clone().unwrap_or_default());
         self.rating
             .set(r.rating.map(|n| n.to_string()).unwrap_or_default());
+        self.draft_deleted.set(r.draft_deleted);
     }
     /// Subscribe to every field (for the "unsaved changes" memo).
     fn track(&self) {
@@ -418,6 +423,8 @@ impl ReviewEd {
     }
     fn build(&self) -> PostGameLearning {
         PostGameLearning {
+            draft_deleted: false,
+            created_at: None,
             id: self.id.get_untracked(),
             team_id: String::new(),
             match_riot_id: opt(self.match_id.get_untracked()),
@@ -551,6 +558,7 @@ pub fn PostGamePage() -> impl IntoView {
         created_items.set(None);
     });
     let confirm_delete = RwSignal::new(false);
+    let share_open = RwSignal::new(false);
     let do_delete = Callback::new(move |_| {
         let Some(id) = ed.id.get_untracked() else {
             return;
@@ -612,11 +620,13 @@ pub fn PostGamePage() -> impl IntoView {
                 actions=move || view! {
                     <Button variant=ButtonVariant::Quiet on_click=new_review>"New review"</Button>
                     {move || ed.id.get().map(|_| view! {
+                        <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="review-share">"Share"</Button>
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
                     <Button variant=ButtonVariant::Primary on_click=do_save loading=saving attr:data-testid="review-save">"Save review"</Button>
                 }
             />
+            <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::Review target=Signal::derive(move || ed.id.get()) />
             <ConfirmDialog
                 id="delete-review"
                 open=confirm_delete
@@ -762,6 +772,9 @@ fn LinksSection(
                 {move || { let p = ed.plan_id.get(); (!p.is_empty()).then(|| view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=format!("/game-plan?plan_id={p}")>"Open the game plan"</Button> }) }}
                 {move || { let d = ed.draft_id.get(); (!d.is_empty()).then(|| view! { <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=format!("/draft?draft_id={d}")>"Open the draft"</Button> }) }}
             </div>
+            {move || (ed.draft_id.get().is_empty() && ed.draft_deleted.get()).then(|| view! {
+                <p class="text-caption text-muted" data-testid="review-draft-deleted">"Draft deleted: the draft this review was linked to no longer exists."</p>
+            })}
             {move || {
                 let pid = ed.plan_id.get();
                 (!pid.is_empty()).then(|| view! { <LinkedPlan plan_id=pid /> })

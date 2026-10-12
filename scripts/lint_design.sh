@@ -64,6 +64,8 @@ rule faded-text '(?<![\w-])text-(primary|secondary|muted|dimmed|accent|success|w
 # `border-outline` for controls and `border-rule` for decorative hairlines.
 rule faint-outline '(?<![\w-])(border|divide|ring)-outline/\d+' '' \
   'outline token at an opacity falls below 3:1; use border-outline (controls) or border-rule (hairlines)'
+rule legacy-token '(?<![\w-])((bg|text|border|divide|ring|from|to|fill|stroke)-|var\(--color-)(base|surface|elevated|divider|dimmed|accent-contrast|overlay|overlay-strong)(?![\w-])' '' \
+  'legacy colour name (removed in M5); use page, ink-1/2/3, rule, muted, accent-ink or scrim'
 
 declare -A COUNT
 TOTAL=0

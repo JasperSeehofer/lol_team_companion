@@ -325,6 +325,8 @@ async fn cleanup(db: &Surreal<Db>) -> Result<(), String> {
         DELETE ban_priority WHERE team IN $teams; \
         DELETE checklist_template WHERE team IN $teams; \
         DELETE checklist_instance WHERE team IN $teams; \
+        DELETE scheduled_match WHERE team IN $teams; \
+        DELETE share_link WHERE team IN $teams; \
         UPDATE match SET team_id = NONE WHERE team_id IN $teams; \
         DELETE join_request WHERE team IN $teams OR user IN $users; \
         DELETE team_member WHERE team IN $teams OR user IN $users; \
@@ -559,6 +561,7 @@ async fn populate(
         .map_err(err)?;
 
         let plan = GamePlan {
+            draft_deleted: false,
             id: None,
             team_id: team.id.clone(),
             draft_id: Some(draft_id.clone()),
@@ -636,6 +639,8 @@ async fn populate(
         db::create_review_with_action_items(
             db,
             PostGameLearning {
+                draft_deleted: false,
+                created_at: None,
                 id: None,
                 team_id: team.id.clone(),
                 match_riot_id: None,
@@ -729,12 +734,34 @@ async fn populate(
             )
         })
         .collect();
-    db::create_opponent_with_players(
+    let (opponent_id, _) = db::create_opponent_with_players(
         db,
         &team.id,
         rival.name.to_string(),
         Some("Regular scrim partner. Strong early skirmishes around the jungle.".to_string()),
         players,
+    )
+    .await
+    .map_err(err)?;
+
+    // The next match, for Match Day: a scrim against the rival tomorrow evening.
+    let tomorrow = (chrono::Utc::now() + chrono::Duration::days(1))
+        .date_naive()
+        .and_hms_opt(18, 0, 0)
+        .map(|t| t.and_utc().to_rfc3339())
+        .unwrap_or_default();
+    db::save_scheduled_match(
+        db,
+        &team.id,
+        &team.members[0],
+        lol_team_companion::models::match_day::ScheduledMatchInput {
+            id: None,
+            starts_at: tomorrow,
+            kind: "scrim".into(),
+            format: "bo3".into(),
+            opponent_id: Some(opponent_id),
+            notes: Some("Scrim block on their server; lobby opens 15 minutes before.".into()),
+        },
     )
     .await
     .map_err(err)?;

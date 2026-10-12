@@ -8,7 +8,11 @@
 
 use leptos::prelude::*;
 
-use crate::components::ui::{ToastContext, ToastKind};
+use crate::components::ui::{
+    Button, ButtonSize, ButtonType, ButtonVariant, EmptySize, EmptyState, Field, InputKind,
+    PageHeader, PageShell, PageWidth, SectionHeader, Skeleton, SkeletonGroup, Table, Td, TextField,
+    Th, ToastContext, ToastKind, Tr,
+};
 use crate::error_template::NotFound;
 use crate::models::invite::Invite;
 
@@ -138,167 +142,100 @@ pub fn AdminInvitesPage() -> impl IntoView {
 
     let last_code = move || mint.value().get().and_then(|r| r.ok());
 
+    let max_uses = RwSignal::new("1".to_string());
+    let expiry = RwSignal::new("14".to_string());
+    let note = RwSignal::new(String::new());
     view! {
-        <Suspense fallback=|| view! { <div class="min-h-screen bg-base"></div> }>
+        <Suspense fallback=|| view! { <PageShell><SkeletonGroup label="Loading invites"><Skeleton lines=4 /></SkeletonGroup></PageShell> }>
             {move || invites.get().map(|result| match result {
                 Err(_) => view! { <NotFound /> }.into_any(),
                 Ok((now, rows)) => {
                     view! {
-                        <div class="bg-base min-h-screen px-4 sm:px-8 py-6">
-                            <div class="max-w-5xl mx-auto flex flex-col gap-6">
-                                <header>
-                                    <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted">
-                                        "Invite management"
-                                    </div>
-                                    <h1 class="font-display text-display leading-tight text-primary mt-2">
-                                        "Beta invitations"
-                                    </h1>
-                                    <div class="mt-3"><div class="h-px w-full bg-rule" aria-hidden="true"></div></div>
-                                </header>
-
-                                <section class="bg-surface border border-divider rounded-xl p-6">
-                                    <h2 class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-3">
-                                        "Mint a code"
-                                    </h2>
-                                    <ActionForm action=mint>
-                                        <div class="flex flex-wrap gap-3 items-end">
-                                            <div>
-                                                <label for="invite-max-uses" class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                                    "Max uses"
-                                                </label>
-                                                <input
-                                                    id="invite-max-uses"
-                                                    type="number"
-                                                    name="max_uses"
-                                                    min="1"
-                                                    max="1000"
-                                                    value="1"
-                                                    required
-                                                    class="w-28 bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label for="invite-expiry" class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                                    "Expires in days (empty: never)"
-                                                </label>
-                                                <input
-                                                    id="invite-expiry"
-                                                    type="number"
-                                                    name="expires_in_days"
-                                                    min="1"
-                                                    max="365"
-                                                    value="14"
-                                                    class="w-28 bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                />
-                                            </div>
-                                            <div class="flex-1 min-w-[12rem]">
-                                                <label for="invite-note" class="block text-xs text-muted uppercase tracking-wider mb-1.5">
-                                                    "Note (optional)"
-                                                </label>
-                                                <input
-                                                    id="invite-note"
-                                                    type="text"
-                                                    name="note"
-                                                    maxlength="200"
-                                                    placeholder="Who is this for?"
-                                                    class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                                />
-                                            </div>
-                                            <button
-                                                type="submit"
-                                                class="bg-accent text-accent-contrast font-semibold rounded-lg px-4 py-3 text-sm hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
-                                            >
-                                                "Mint code"
-                                            </button>
+                        <PageShell width=PageWidth::Standard>
+                            <PageHeader title="Beta invitations" eyebrow="Admin" meta=move || view! { <span>"Invite codes for the closed beta: mint, share the link, disable."</span> } />
+                            <section aria-labelledby="mint-h">
+                                <SectionHeader title="Mint a code" id="mint-h" />
+                                <ActionForm action=mint>
+                                    <div class="flex flex-wrap items-end gap-3">
+                                        <div class="w-32">
+                                            <Field id="invite-max-uses" label="Max uses">
+                                                <TextField kind=InputKind::Number name="max_uses" value=max_uses required=true />
+                                            </Field>
                                         </div>
-                                    </ActionForm>
-                                    {move || last_code().map(|code| {
-                                        let link = format!("/auth/register?invite={code}");
-                                        view! {
-                                            <p class="mt-4 text-sm text-secondary" data-testid="minted-code">
-                                                "New code: "
-                                                <code class="font-mono text-primary">{code}</code>
-                                                " \u{2014} share the link "
-                                                <code class="font-mono text-primary break-all">{link}</code>
-                                            </p>
-                                        }
-                                    })}
-                                </section>
-
-                                <section class="bg-surface border border-divider rounded-xl overflow-hidden">
-                                    <div class="px-6 py-4 border-b border-divider">
-                                        <h2 class="font-display text-heading text-primary">
-                                            "All invitations"
-                                        </h2>
+                                        <div class="w-40">
+                                            <Field id="invite-expiry" label="Expires in days" hint="Empty: never">
+                                                <TextField kind=InputKind::Number name="expires_in_days" value=expiry />
+                                            </Field>
+                                        </div>
+                                        <div class="min-w-48 flex-1">
+                                            <Field id="invite-note" label="Note (optional)">
+                                                <TextField name="note" value=note maxlength=200 placeholder="Who is this for?" />
+                                            </Field>
+                                        </div>
+                                        <Button kind=ButtonType::Submit variant=ButtonVariant::Primary>"Mint code"</Button>
                                     </div>
-                                    {if rows.is_empty() {
-                                        view! {
-                                            <p class="px-6 py-6 text-sm text-muted">
-                                                "No invite codes yet. Mint one above; it appears here with its uses and expiry."
-                                            </p>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="overflow-x-auto">
-                                                <table class="w-full">
-                                                    <thead class="bg-elevated">
-                                                        <tr class="text-left">
-                                                            <th class="px-4 py-3 text-xs text-muted uppercase tracking-wider">"Code"</th>
-                                                            <th class="px-4 py-3 text-xs text-muted uppercase tracking-wider">"Status"</th>
-                                                            <th class="px-4 py-3 text-xs text-muted uppercase tracking-wider">"Uses"</th>
-                                                            <th class="px-4 py-3 text-xs text-muted uppercase tracking-wider">"Expires"</th>
-                                                            <th class="px-4 py-3 text-xs text-muted uppercase tracking-wider">"Created"</th>
-                                                            <th class="px-4 py-3 text-xs text-muted uppercase tracking-wider">"Note"</th>
-                                                            <th class="px-4 py-3"><span class="sr-only">"Actions"</span></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {rows.into_iter().map(|inv| {
-                                                            let status = inv.status(&now);
-                                                            let can_disable = !inv.disabled;
-                                                            let id = inv.id.clone();
-                                                            let created = match &inv.created_by {
-                                                                Some(by) => format!("{} by {by}", short_date(&inv.created_at)),
-                                                                None => short_date(&inv.created_at),
-                                                            };
-                                                            view! {
-                                                                <tr class="border-t border-divider/50">
-                                                                    <td class="px-4 py-3">
-                                                                        <code class="font-mono text-caption text-primary">{inv.code.clone()}</code>
-                                                                    </td>
-                                                                    <td class=format!("px-4 py-3 text-sm {}", status_class(status))>{status}</td>
-                                                                    <td class="px-4 py-3 text-sm text-secondary tabular-nums">
-                                                                        {format!("{} / {}", inv.uses, inv.max_uses)}
-                                                                    </td>
-                                                                    <td class="px-4 py-3 text-sm text-secondary tabular-nums">
-                                                                        {inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}
-                                                                    </td>
-                                                                    <td class="px-4 py-3 text-sm text-secondary">{created}</td>
-                                                                    <td class="px-4 py-3 text-sm text-secondary">{inv.note.clone().unwrap_or_default()}</td>
-                                                                    <td class="px-4 py-3 text-right">
-                                                                        {can_disable.then(|| view! {
-                                                                            <button
-                                                                                type="button"
-                                                                                class="text-sm text-danger hover:underline focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none rounded"
-                                                                                on:click=move |_| {
-                                                                                    disable.dispatch(DisableInviteFn { id: id.clone() });
-                                                                                }
-                                                                            >
-                                                                                "Disable"
-                                                                            </button>
-                                                                        })}
-                                                                    </td>
-                                                                </tr>
-                                                            }
-                                                        }).collect_view()}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </section>
-                            </div>
-                        </div>
+                                </ActionForm>
+                                {move || last_code().map(|code| {
+                                    let link = format!("/auth/register?invite={code}");
+                                    view! {
+                                        <p class="mt-4 text-body text-secondary" data-testid="minted-code">
+                                            "New code: "
+                                            <code class="font-mono text-primary">{code}</code>
+                                            ". Share the link "
+                                            <code class="break-all font-mono text-primary">{link}</code>
+                                        </p>
+                                    }
+                                })}
+                            </section>
+                            <section class="mt-12" aria-labelledby="all-invites-h">
+                                <SectionHeader title="All invitations" id="all-invites-h" />
+                                {if rows.is_empty() {
+                                    view! { <EmptyState size=EmptySize::Compact message="No invite codes yet. Mint one above; it appears here with its uses and expiry." /> }.into_any()
+                                } else {
+                                    view! {
+                                        <Table caption="Invite codes" caption_hidden=true>
+                                            <thead>
+                                                <tr>
+                                                    <Th>"Code"</Th>
+                                                    <Th>"Status"</Th>
+                                                    <Th numeric=true>"Uses"</Th>
+                                                    <Th>"Expires"</Th>
+                                                    <Th>"Created"</Th>
+                                                    <Th>"Note"</Th>
+                                                    <Th><span class="sr-only">"Actions"</span></Th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rows.into_iter().map(|inv| {
+                                                    let status = inv.status(&now);
+                                                    let can_disable = !inv.disabled;
+                                                    let id = inv.id.clone();
+                                                    let created = match &inv.created_by {
+                                                        Some(by) => format!("{} by {by}", short_date(&inv.created_at)),
+                                                        None => short_date(&inv.created_at),
+                                                    };
+                                                    view! {
+                                                        <Tr>
+                                                            <Td><code class="font-mono text-caption text-primary">{inv.code.clone()}</code></Td>
+                                                            <Td><span class=status_class(status)>{status}</span></Td>
+                                                            <Td numeric=true>{format!("{} / {}", inv.uses, inv.max_uses)}</Td>
+                                                            <Td>{inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}</Td>
+                                                            <Td muted=true>{created}</Td>
+                                                            <Td muted=true>{inv.note.clone().unwrap_or_default()}</Td>
+                                                            <Td>
+                                                                {can_disable.then(|| view! {
+                                                                    <Button size=ButtonSize::Sm variant=ButtonVariant::Danger on_click=Callback::new(move |_| { disable.dispatch(DisableInviteFn { id: id.clone() }); })>"Disable"</Button>
+                                                                })}
+                                                            </Td>
+                                                        </Tr>
+                                                    }
+                                                }).collect_view()}
+                                            </tbody>
+                                        </Table>
+                                    }.into_any()
+                                }}
+                            </section>
+                        </PageShell>
                     }.into_any()
                 }
             })}

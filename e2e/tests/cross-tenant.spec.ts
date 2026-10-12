@@ -153,3 +153,64 @@ test("a second team cannot open the first team's draft or game plan by ID", asyn
   await ctxA.close();
   await ctxB.close();
 });
+
+test("a second team cannot share, list, revoke or edit the first team's M5 records", async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext();
+  const a = await ctxA.newPage();
+  await authenticatePage(a);
+  await createTeam(a, `ShareA_${TIMESTAMP}`);
+  const planName = `A-shared-plan-${TIMESTAMP}`;
+  const plan = {
+    id: null, team_id: "", draft_id: null, name: planName, our_champions: [], enemy_champions: [],
+    win_conditions: [], objective_priority: [], teamfight_strategy: "", early_game: null,
+    top_strategy: null, jungle_strategy: null, mid_strategy: null, bot_strategy: null,
+    support_strategy: null, notes: null, win_condition_tag: null,
+  };
+  const planId: string = await (await call(a, "create_plan", { plan_json: JSON.stringify(plan) })).json();
+  const link = await (await call(a, "create_share", { kind: "game_plan", target_id: planId, days: "7" })).json();
+  expect(link.token).toMatch(/^[a-z2-9]{32}$/);
+  const matchId: string = await (
+    await call(a, "save_next_match", {
+      input_json: JSON.stringify({
+        id: null,
+        starts_at: new Date(Date.now() + 86400000).toISOString(),
+        kind: "scrim",
+        format: "bo1",
+        opponent_id: null,
+        notes: "A's secret note",
+      }),
+    })
+  ).json();
+
+  const ctxB = await browser.newContext();
+  const b = await ctxB.newPage();
+  await authenticatePage(b);
+  await createTeam(b, `ShareB_${TIMESTAMP}`);
+
+  for (const [name, form] of [
+    ["create_share", { kind: "game_plan", target_id: planId, days: "7" }],
+    ["revoke_share", { link_id: link.id }],
+    ["remove_next_match", { match_id: matchId }],
+    ["mark_brief_read", { match_id: matchId, read: "true" }],
+  ] as const) {
+    const r = await call(b, name, form as Record<string, string>);
+    expect(r.status(), name).toBeGreaterThanOrEqual(400);
+    expect(await r.text(), name).toContain("Not found");
+  }
+  const listed = await (await call(b, "list_shares", { kind: "game_plan", target_id: planId })).json();
+  expect(listed).toEqual([]);
+  // B's Match Day shows nothing of A's match.
+  await b.goto("/");
+  await expect(b.getByRole("heading", { level: 1, name: "Match Day" })).toBeVisible({ timeout: 15000 });
+  expect(await visibleData(b)).not.toContain("A's secret note");
+
+  // The link still works for anyone (B could not revoke it).
+  const guest = await (await browser.newContext()).newPage();
+  await guest.goto(`/s/${link.token}`);
+  await expect(guest.getByRole("heading", { level: 1, name: planName })).toBeVisible({ timeout: 15000 });
+
+  await ctxA.close();
+  await ctxB.close();
+});

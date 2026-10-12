@@ -4,6 +4,47 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Milestone M5: Remaining pages, navigation, mobile
+
+#### Added
+- Match Day: signed in with a team, Home walks the team through the next scrim or match. Set it with date and time (in your own time zone), opponent, format and notes; the page then shows a preparation sequence built from your own records (read the opponent brief, draft plans against them, a game plan from those drafts, open action items, and the review after the game), with the one step to do now and a link to where it is done. Beside it: the opponent brief with when the dossier was last surveyed and who on the team has read it, open action items, the last review's lesson, form over your last five reviewed games, and the current patch. Without a match it says how to start; on a phone it is a read-only summary in the same order.
+- Substitutes: the leader can start a player in a position, move them to the bench, make them a coach or take them off the roster. New members start as "not placed yet". Substitutes see everything the team does.
+- Team notes can be undone: after an edit or a delete, "Undo" in the notification puts the note back (for a day after a delete), and a note says who last edited it.
+- Read-only share links for a game plan, a review and a player card: they open without signing in, show only that one thing, expire after a day, a week or a month, and can be revoked at any time.
+- Player cards (from the roster): position and place, best pool champions, recent form and most played champions.
+- My games: your synced games, ranked standing, goals (rank, CS per minute, deaths per game), LP history and champion trends with 7, 30 and 90 day filters, all in one place.
+- A phone menu: every page grouped by when you need it (today, after the game, team, you), with counts such as "3 open" on the right.
+
+#### Changed
+- Navigation has five hubs: Match Day, Prep, Review, Team and You. The Solo / Team switch is gone: personal pages are under You and no page asks you to switch modes any more. Signing in and registering land on Home.
+- The team page shows the roster as starting five, substitutes, coaches and not placed yet, with join requests, team notes, recent games and pool gaps; the roster page shows members their team and how players join, and offers creating or joining a team only to people without one.
+- The profile shows your email and holds the Riot link with what a sync costs; the stats page is now "Team games" (grouped by game, with a summary per member); match detail, learnings, sign-in, registration, the legal pages and the invites page are on the design system.
+- Match timeline markers have a shape per kind of event (objective, tower, kill, ward, recall, teamfight), with a legend.
+- The command bar lists every page; the bug-report button sits above the footer at every width, so it never covers content.
+- Dragging a champion onto a filled draft slot swaps the two instead of replacing one.
+- "Overdue" on action items follows your own calendar day.
+- Plans and reviews whose draft was deleted say "draft deleted" instead of pointing nowhere.
+- The game plan's step list no longer competes with "Save plan" for attention.
+- Champion pool positions are stored in one spelling, and duplicates that differed only in spelling were merged.
+- Team pages load faster for larger teams.
+
+#### Fixed
+- Creating an account before the page had finished loading failed with "Registration failed" even with a valid invite link.
+- Saving a game plan started from a draft before the draft had loaded saved it without the link to that draft; "Save plan" now waits for the draft.
+- An empty state right under a page title no longer draws a second line under the title's own.
+- After opening an old address that redirects (the solo dashboard, analytics, team builder), pages could intermittently fail to load their scripts.
+- The phone menu stays a full-screen sheet over the page once its counts have loaded.
+- Wide tables on phones (such as the invite list) scroll inside their frame instead of widening the page.
+- The bug-report dialog has its dimmed backdrop again (it was transparent after the colour clean-up).
+- Deleting an opponent's dossier clears it from the next match instead of leaving a match that could not be saved; choosing another opponent resets who has read the brief, and "Read by" counts only current members.
+- A deleted team note can be restored for one day, as promised, and is then removed for good.
+- The privacy page now lists everything stored, including series, ban priorities, checklist templates, Sand Table boards and imported replays.
+- Shared pages ask search engines not to index them.
+
+#### Removed
+- The standalone solo dashboard (now My games and your profile; its address redirects), and the parked analytics and team builder pages (their addresses redirect to Team games and Draft).
+- An invented "14 days" log retention on the privacy page; the operator's details and the legal sections are marked placeholders until they are filled in.
+
 ### Milestone M4: Draft Graph, stage B (the canvas)
 
 #### Added

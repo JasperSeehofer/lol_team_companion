@@ -120,6 +120,7 @@ async fn test_get_game_plans_for_draft_found() {
 
     // Create a game plan linked to that draft
     let plan = GamePlan {
+        draft_deleted: false,
         id: None,
         team_id: team_id.clone(),
         draft_id: Some(draft_id.clone()),
@@ -223,6 +224,7 @@ async fn dashboard_counts_follow_record_links() {
     let d1 = mk_draft("planned").await;
     let _d2 = mk_draft("unplanned").await;
     let plan = GamePlan {
+        draft_deleted: false,
         id: None,
         team_id: t.clone(),
         draft_id: Some(d1.clone()),
@@ -245,6 +247,7 @@ async fn dashboard_counts_follow_record_links() {
     let _p2 = db::save_game_plan(
         &d,
         GamePlan {
+            draft_deleted: false,
             draft_id: None,
             ..plan
         },
@@ -255,6 +258,8 @@ async fn dashboard_counts_follow_record_links() {
     db::save_post_game_learning(
         &d,
         PostGameLearning {
+            draft_deleted: false,
+            created_at: None,
             id: None,
             team_id: t.clone(),
             match_riot_id: None,

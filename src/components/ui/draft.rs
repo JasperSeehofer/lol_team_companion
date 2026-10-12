@@ -442,6 +442,11 @@ pub fn DraftBoard(
     /// Enter and the picker).
     #[prop(optional)]
     on_drop: Option<Callback<(usize, String)>>,
+    /// A filled slot dragged onto another slot: (from, to). The page swaps
+    /// the two (a drop on a filled slot exchanges the champions). Without
+    /// it, a slot drag clears the source and drops onto the target.
+    #[prop(optional)]
+    on_move: Option<Callback<(usize, usize)>>,
     /// Show the keycap legend under the board.
     #[prop(optional)]
     hints: bool,
@@ -570,7 +575,8 @@ pub fn DraftBoard(
                     }
                     .into_any(),
                 ),
-                (None, None) if slot == 6 => Some(
+                // "First pick" only while blue's first pick is empty (DESIGN 6.5).
+                (None, None) if slot == 6 && name.is_none() => Some(
                     view! {
                         <span class="truncate text-caption text-muted">"First pick"</span>
                     }
@@ -632,6 +638,12 @@ pub fn DraftBoard(
                         .get_data("text/x-source-slot")
                         .ok()
                         .and_then(|s| s.parse::<usize>().ok());
+                    if let (Some(src), Some(mv)) = (source, on_move) {
+                        if src != slot {
+                            mv.run((src, slot));
+                        }
+                        return;
+                    }
                     if let Ok(name) = dt.get_data("text/plain") {
                         if !name.is_empty() && source != Some(slot) {
                             if let (Some(src), Some(clear)) = (source, on_clear) {

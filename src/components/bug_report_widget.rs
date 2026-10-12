@@ -372,18 +372,17 @@ fn BugReportWidgetInner(
         // Floating button (UI-SPEC line 583). Single click enters
         // select-mode directly — no intermediate menu, per D-08 (no
         // multi-step nags).
-        // On phones the button docks under the footer as a labelled text
-        // button, so it never covers content; from `sm` it floats.
-        <div class="mx-auto flex max-w-7xl justify-end px-4 pb-6 sm:contents">
+        // Docked at every width: a labelled button in the page flow, just
+        // above the footer, so it never covers content (M7 rebuilds it).
+        <div class="mx-auto flex max-w-7xl justify-end px-4 pt-10 sm:px-8" data-bug-report-dock>
             <button
                 type="button"
-                class="inline-flex h-9 items-center gap-2 rounded-ctl border border-outline bg-ink-1 px-3 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary sm:fixed sm:bottom-6 sm:right-6 sm:z-50 sm:size-11 sm:justify-center sm:px-0 sm:shadow-overlay"
-                title="Report a bug or wishlist item"
+                class="inline-flex h-8 items-center gap-2 rounded-ctl border border-outline bg-ink-1 px-3 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary"
                 aria-label="Report a bug or wishlist item"
                 on:click=move |_| start_select_mode()
             >
-                <Icon name="feather" size=18 class="text-muted" />
-                <span class="sm:sr-only" aria-hidden="true">"Report a bug"</span>
+                <Icon name="feather" size=16 class="text-muted" />
+                <span aria-hidden="true">"Report a bug"</span>
             </button>
         </div>
 
@@ -391,7 +390,7 @@ fn BugReportWidgetInner(
         <Show when=move || matches!(widget_state.get(), WidgetState::Editing) fallback=|| ()>
             <div
                 class="fixed inset-0 z-50 flex items-center justify-center p-6"
-                style="background-color: var(--color-overlay-strong);"
+                style="background-color: var(--color-scrim);"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Report a bug or wishlist item"
@@ -400,7 +399,7 @@ fn BugReportWidgetInner(
                 // Inner card — stop propagation so clicking inside
                 // does not close the modal.
                 <div
-                    class="bg-surface border border-divider rounded-xl p-6 shadow-overlay max-w-md w-full"
+                    class="bg-ink-1 border border-rule rounded-xl p-6 shadow-overlay max-w-md w-full"
                     on:click=|ev: ev::MouseEvent| ev.stop_propagation()
                 >
                     <h2 class="font-display text-xl text-primary mb-4">
@@ -410,7 +409,7 @@ fn BugReportWidgetInner(
                     <div class="font-mono uppercase tracking-[0.18em] text-caption text-muted mb-1">
                         "Element"
                     </div>
-                    <div class="bg-elevated rounded-lg p-2 text-sm text-secondary mb-4">
+                    <div class="bg-ink-2 rounded-lg p-2 text-sm text-secondary mb-4">
                         {move || element_label.get()}
                     </div>
 
@@ -419,9 +418,9 @@ fn BugReportWidgetInner(
                         <button
                             type="button"
                             class=move || if report_kind_cls_bug.get() == "bug" {
-                                "bg-accent text-accent-contrast px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-accent text-accent-ink px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             } else {
-                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-divider focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-rule focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             }
                             on:click=move |_| report_kind_set_bug.set("bug".to_string())
                         >
@@ -430,9 +429,9 @@ fn BugReportWidgetInner(
                         <button
                             type="button"
                             class=move || if report_kind_cls_wish.get() == "wishlist" {
-                                "bg-accent text-accent-contrast px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "bg-accent text-accent-ink px-4 py-2 rounded-lg text-sm font-semibold focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             } else {
-                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-divider focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                                "text-muted hover:text-secondary px-4 py-2 rounded-lg text-sm border border-rule focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                             }
                             on:click=move |_| report_kind_set_wish.set("wishlist".to_string())
                         >
@@ -441,7 +440,7 @@ fn BugReportWidgetInner(
                     </div>
 
                     <textarea
-                        class="w-full bg-surface/50 border border-outline rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                        class="w-full bg-ink-2 border border-outline rounded-lg px-3 py-3 text-primary text-sm resize-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                         rows="4"
                         placeholder="What went wrong, or what would you like?"
                         prop:value=move || report_text_get.get()
@@ -465,7 +464,7 @@ fn BugReportWidgetInner(
                         </button>
                         <button
                             type="button"
-                            class="bg-accent text-accent-contrast font-semibold rounded-lg px-4 py-2 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
+                            class="bg-accent text-accent-ink font-semibold rounded-lg px-4 py-2 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none transition-colors"
                             on:click=move |_| {
                                 submit_error.set(None);
 

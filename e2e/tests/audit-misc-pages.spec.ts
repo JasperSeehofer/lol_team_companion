@@ -2,7 +2,7 @@
  * Miscellaneous pages audit tests.
  *
  * Documents any bugs and verifies basic load + empty state for:
- * stats, profile, opponents, action-items, team-builder pages.
+ * stats, profile, opponents and action-items pages.
  *
  * Requires a running dev server: cargo leptos watch
  */
@@ -112,43 +112,3 @@ test("action-items: page loads", async ({ teamPage }) => {
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
-test("team-builder: page loads and basic interaction", async ({ teamPage }) => {
-  const page = teamPage;
-  const errors = captureErrors(page);
-
-  await navigateTo(page, "/team-builder");
-  await page.waitForTimeout(500);
-
-  // Page should render
-  await expect(page.locator("h1")).toBeVisible({ timeout: 5000 });
-
-  // Look for any interactive elements — dropdowns, champion selectors, role buttons
-  const selects = page.locator("select");
-  const selectCount = await selects.count();
-  if (selectCount > 0) {
-    // Interact with the first select (likely role or champion selector)
-    const opts = await selects.first().locator("option").count();
-    if (opts > 1) {
-      const secondOpt = await selects.first().locator("option").nth(1).getAttribute("value");
-      if (secondOpt) {
-        await selects.first().selectOption(secondOpt);
-        await page.waitForTimeout(300);
-      }
-    }
-  }
-
-  // Look for buttons (role slots, champion selectors)
-  const buttons = page.locator("button:not([disabled])");
-  const btnCount = await buttons.count();
-  if (btnCount > 0) {
-    // Click a visible button that's not a nav link
-    const firstNonNavBtn = buttons.filter({ hasNot: page.locator('a') }).first();
-    const isVisible = await firstNonNavBtn.isVisible({ timeout: 1000 }).catch(() => false);
-    if (isVisible) {
-      await firstNonNavBtn.click();
-      await page.waitForTimeout(300);
-    }
-  }
-
-  expect(filterRealErrors(errors)).toHaveLength(0);
-});

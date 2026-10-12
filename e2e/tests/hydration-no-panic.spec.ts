@@ -19,7 +19,7 @@
  *    hydration, and a draft slot can be filled from the champion grid.
  */
 
-import { test, expect, setMode } from "./fixtures";
+import { test, expect } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -39,10 +39,11 @@ const PANIC_REGEX = /panicked at|Option::unwrap.*None|tachys/i;
 
 /**
  * The 7 routes that still use region-branching primitives. All require auth — the `authedPage` fixture registers via
- * /auth/register?invite=$INVITE_CODE and lands the user on /solo.
+ * /auth/register?invite=$INVITE_CODE and lands the user on Home (/).
  */
 const SCOPED_ROUTES = [
-  "/solo",
+  "/",
+  "/me",
   "/draft",
   "/team/dashboard",
   "/tree-drafter",
@@ -128,9 +129,8 @@ test("stale theme cookie is ignored", async ({ authedPage }) => {
 // 3. Interactivity after hydration
 // ---------------------------------------------------------------------------
 //
-// /solo has a page-mode toggle (default constellation); the draft page has
-// one board, so its check switches "Our side" instead. Either way a click
-// must produce an observable `aria-checked` change after hydration.
+// The draft page switches "Our side" and My games switches the LP period:
+// a click must produce an observable `aria-checked` change after hydration.
 
 test("segmented control observable on /draft", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
@@ -143,16 +143,15 @@ test("segmented control observable on /draft", async ({ authedPage }) => {
   expect(errors, `Panic during /draft side switch: ${errors.join("\n")}`).toEqual([]);
 });
 
-test("mode-toggle observable on /solo", async ({ authedPage }) => {
+test("segmented control observable on /me", async ({ authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
-  await authedPage.goto("/solo");
+  await authedPage.goto("/me");
   await authedPage.waitForLoadState("networkidle");
   await authedPage.waitForTimeout(1500);
-  await setMode(authedPage, "journal");
-  await expect(
-    authedPage.locator('[data-segmented="page-mode"] [role="radio"][aria-checked="true"]:text-is("Journal")')
-  ).toBeVisible({ timeout: 2000 });
-  expect(errors, `Panic during /solo mode-toggle: ${errors.join("\n")}`).toEqual([]);
+  const week = authedPage.locator('[data-segmented="lp-window"] [role="radio"]:text-is("7 days")');
+  await week.click({ timeout: 10000 });
+  await expect(week).toHaveAttribute("aria-checked", "true", { timeout: 2000 });
+  expect(errors, `Panic during /me period switch: ${errors.join("\n")}`).toEqual([]);
 });
 
 test("draft slot click-fill", async ({ authedPage }) => {
