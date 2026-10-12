@@ -10,6 +10,8 @@ const M7 = "milestone-m7-community-and-transparency-loop";
 
 async function sendReport(page: Page, text: string) {
   await page.goto("/draft");
+  // Wait for hydration: a click on the widget before it would do nothing.
+  await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
   await page.locator('button[aria-label="Report a bug or a wish"]').click();
   await page.locator("[data-feedback-hint]").getByRole("button", { name: "Skip" }).click();
