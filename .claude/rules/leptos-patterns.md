@@ -86,6 +86,10 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 55. **Suppress auto-save during batch signal updates** — When switching nodes/trees, multiple signals update in sequence. Use a `suppress_autosave: RwSignal<bool>` guard: set `true` before batch updates, re-enable after a `setTimeout(0)` microtask.
 
+61. **Window listeners kept in a `StoredValue` need a re-entry guard** — Storing a new `Closure` with `set_value` drops the previous one while the browser still calls it ("closure invoked ... after being dropped" on every later event). Return early when the mode is already on, and end the mode on route change (`bug_report_widget.rs` `start_select`, M7 review).
+
+62. **Live regions exist before their text; focus returns to something that still exists** — An `aria-live` or `role="status"` element inserted together with its content is often not announced: keep the region mounted and change what is inside (`survey_prompt.rs`). `Dialog` returns focus to the element focused before it opened; when that was a transient control (a hint bar button), focus the stable trigger after close (`bug_report_widget.rs` `focus_trigger`).
+
 ## Auth / Routing
 
 49. **Logout hard-navigates to `/`** — Both `nav.rs` and `profile.rs` watch `logout_action.value()` and call `window.location().set_href("/")` on success (same pattern as login, rule 8).

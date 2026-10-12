@@ -48,7 +48,7 @@ cargo test --features ssr --lib
 cargo test --features ssr
 
 # e2e (needs a running server started with the e2e env, see "Testing" below)
-cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts
+cd e2e && npx playwright test smoke.spec.ts auth.spec.ts hydration-no-panic.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts
 
 # Seed demo data (STOP THE SERVER FIRST, see "One process per database").
 # Idempotent; prints every login and a 25-use invite code. --dry-run shows the plan.
@@ -77,6 +77,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `RIOT_GLOBAL_BUDGET_PER_SEC` / `RIOT_GLOBAL_BUDGET_PER_MIN` | Process-wide Riot request budget on top of the per-IP limit (development key: 20/s and 100 per 2 min). Raise both for a production key | `20` / `50` |
 | `SURREAL_DATA_DIR` | DB location | `./data` |
 | `BUG_REPORT_INBOX_PATH` | Bug-report export on server start | `./docs/inbox/bug-reports.md` (git-ignored) |
+| `SUPPORT_URL` | The one external support page, shown only on `/transparency` once the money policy and the support sentence are both approved on `/admin/texts`. Absolute `https://` without credentials, otherwise ignored with a warning. The owner sets it; never the agent | unset: nothing about support renders |
 | `RUST_LOG` | tracing filter | `info,lol_team_companion=debug` |
 | `APP_ENV` | `dev`/`development`/`local` marks a dev run (so does `LEPTOS_ENV=DEV`, set by `cargo leptos watch`) | unset = production |
 | `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes. **Required outside dev** (the server refuses to start); in dev a random key is used per run | none |
@@ -97,7 +98,7 @@ SurrealKV takes an exclusive lock on `./data`. Only one process can open it: nev
 
 ### Seed tool
 
-`cargo run --features ssr --bin seed` (data dir from `SURREAL_DATA_DIR`, default `./data`) runs the migrations, removes what an earlier run created (accounts `seed-*@example.com`, the teams they created and everything those teams own, invites noted `seed`; nothing else) and creates it again, so it is safe to repeat. It creates two teams of five ("Northgate Academy" led by `seed-alpha-top@example.com`, "Riverside Rooks" led by `seed-beta-top@example.com`; members `seed-{alpha,beta}-{top,jg,mid,bot,sup}`), all with password `seedpass123`, starting roles, two drafts with linked game plans, three reviews with action items, a team note, champion pools and notes, a scouting profile of the other team and a scrim against it tomorrow at 18:00 UTC (so Match Day has a next match), plus a 25-use invite code. It prints every login and the code. Players are fictional and are not looked up on Riot unless you pass `--link-riot`. To try it on a copy first: `SURREAL_DATA_DIR=/tmp/data-copy cargo run --features ssr --bin seed`.
+`cargo run --features ssr --bin seed` (data dir from `SURREAL_DATA_DIR`, default `./data`) runs the migrations, removes what an earlier run created (accounts `seed-*@example.com`, the teams they created and everything those teams own, invites noted `seed`; nothing else) and creates it again, so it is safe to repeat. It creates two teams of five ("Northgate Academy" led by `seed-alpha-top@example.com`, "Riverside Rooks" led by `seed-beta-top@example.com`; members `seed-{alpha,beta}-{top,jg,mid,bot,sup}`), all with password `seedpass123`, starting roles, two drafts with linked game plans, three reviews with action items, a team note, champion pools and notes, a scouting profile of the other team and a scrim against it tomorrow at 18:00 UTC (so Match Day has a next match), two bug reports (one planned and on the bug board, one new) and votes on three seeded What next ideas (no ledger figures, ever), plus a 25-use invite code. Seeded proposals, surveys and money texts come from migration 11, stay unpublished or unapproved, and the seed tool never touches them. It prints every login and the code. Players are fictional and are not looked up on Riot unless you pass `--link-riot`. To try it on a copy first: `SURREAL_DATA_DIR=/tmp/data-copy cargo run --features ssr --bin seed`.
 
 ## Architecture in one paragraph
 
@@ -122,6 +123,7 @@ src/
 │   ├── riot.rs          # Shared RiotClient (riven): region routing, global request budget
 │   ├── data_dragon.rs   # Live patch version + champion cache (DB copy, 6 h refresh, patch changes)
 │   ├── sand_table.rs    # Riot Match-V5 timeline importer (replay frames and events)
+│   ├── community/       # M7: changelog parser, survey delivery rules, seed content, store.rs (queries)
 │   ├── graph/           # Draft Graph: traits.rs (defaults file champion_traits.csv, startup sync,
 │   │                    # in-memory table), rules.rs (trait rules), evidence.rs (own games), fit.rs (ranking)
 │   └── bug_report_export.rs # Exports open bug reports to markdown on start
@@ -173,6 +175,12 @@ tests/integration/       # DB integration tests (one binary)
 | `/stats` | StatsPage (Team games) | Yes |
 | `/match/:id` | MatchDetailPage | Yes |
 | `/personal-learnings`, `/personal-learnings/new` | PersonalLearningsPage, NewLearningPage | Yes |
+| `/changelog` | ChangelogPage: CHANGELOG.md of the build plus detected game patches | No |
+| `/transparency` | TransparencyPage: money policy and monthly ledger, only owner-approved texts | No |
+| `/bugs` (`?tab=mine`) | BugBoardPage: bug board and Your reports | Yes |
+| `/what-next` | WhatNextPage: published proposals, one vote per user | Yes |
+| `/admin` | AdminHubPage: every admin area with its status | Admin (404 for everyone else) |
+| `/admin/bugs`, `/admin/surveys`, `/admin/proposals`, `/admin/ledger`, `/admin/texts` | Bug triage, surveys (approve exact wording), proposals (publish), ledger, public money texts (approve) | Admin (404 for everyone else) |
 | `/admin/invites` | AdminInvitesPage: list, mint, disable invite codes | Admin (404 for everyone else) |
 | `/admin/traits` | AdminTraitsPage: the champion trait table behind the Draft Graph (search, edit, reset to default) | Admin (404 for everyone else) |
 | `/design` | DesignGalleryPage: every primitive, token and state | Admin, or anyone in a dev build (404 otherwise) |
@@ -193,12 +201,13 @@ Pages redirect signed-out visitors to `/auth/login` client-side; the real enforc
 - **Invite gate:** `register_action` consumes one use of an `invite` code atomically (generic error for unknown/used/expired/disabled codes and for duplicate emails). Mint codes on `/admin/invites`, via `BOOTSTRAP_INVITE_CODE`, or with the seed tool.
 - **Sessions:** expired rows load as absent and are purged hourly; the cookie is `HttpOnly`, `SameSite=Strict` and `Secure` outside dev; the session auth hash is an HMAC of the password hash keyed with `SESSION_SECRET`.
 - **Users belong to at most one team**; `create_team` and join requests enforce it.
-- Cross-tenant tests live in `tests/integration/security.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
+- **Community loop (M7):** the community tables are global, not team-scoped; user-scoped rows (`survey_prompt`, `proposal_vote`, a reporter's `bug_report` rows) filter by `user`. No user-written text is shown to another user (the board shows admin-written titles and notes only). Nothing unapproved reaches users: surveys need an approved wording hash, money texts an approved `site_text`, proposals `published = true`. Submissions and votes are rate-limited per user (`authz::rate_limit_user`, `Bucket::Feedback` / `Community`, and `SurveyCheck` for the band's check on every route change, which answers "no question" when over the limit); public reads per IP (`PublicRead`). Migrations 10 (`bug_report_statuses_v2`) and 11 (`community_seed_content`: 17 unpublished proposals, 4 unapproved surveys, 5 unapproved money texts) belong to M7. Admin writes store `*_by`/`*_at` and log the admin id. Details in `docs/ARCHITECTURE.md` ("Community loop").
+- Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/community.rs` (cross-user cases) and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
 
 ## Critical patterns and gotchas
 
 Path-specific rules load automatically from `.claude/rules/`:
-- SurrealDB (`db.rs`, `*.surql`): `.claude/rules/surreal-patterns.md`
+- SurrealDB (`db.rs`, `community/store.rs`, `migrations.rs`, `*.surql`): `.claude/rules/surreal-patterns.md`
 - Leptos, server functions, reactivity, auth (`pages/**`, `components/**`): `.claude/rules/leptos-patterns.md`
 - WASM safety and e2e (`src/**/*.rs`, `e2e/**`): `.claude/rules/wasm-patterns.md`
 
@@ -215,9 +224,11 @@ Toolchain and external APIs:
 
 ## Adding things
 
+Changelog: every user-visible change gets an entry; every milestone heading carries its date, `### Milestone M7: Title (YYYY-MM-DD)` (a unit test checks it; the earlier ones were dated from git). The slug of the heading without its date is the stable anchor bug fixes and shipped ideas link to, so never rename a heading that something links to. `/changelog` renders the file.
+
 New page: `src/pages/my_page.rs` with `#[component] pub fn MyPage()` and its `#[server]` fns; `pub mod` in `src/pages/mod.rs`; `<Route>` in `src/app.rs`; nav entry in `src/components/nav.rs`: add it to `PAGES` (path, label, hub, keywords) and to `MENU_GROUPS` (unit tests check every page has a hub, appears in the phone menu once and in the command bar); smoke entry in `e2e/tests/pages.spec.ts` (`AUTHED_PAGES`) or `smoke.spec.ts` (`PUBLIC_PAGES`); verify in a browser.
 
-New DB table: `DEFINE TABLE` / `DEFINE FIELD` in `schema.surql` (with `IF NOT EXISTS`); query functions in `src/server/db.rs` with a `Db*` struct converted to the shared model; model in `src/models/` deriving `Serialize, Deserialize, Clone`. Index the scope field (`team`/`user`). Changing existing data or types, or adding a unique index, needs a migration: see "How to add a migration" in `docs/ARCHITECTURE.md`.
+New DB table: `DEFINE TABLE` / `DEFINE FIELD` in `schema.surql` (with `IF NOT EXISTS`); query functions in `src/server/db.rs` (the community tables of M7 keep theirs in `src/server/community/store.rs`) with a `Db*` struct converted to the shared model; model in `src/models/` deriving `Serialize, Deserialize, Clone`. Index the scope field (`team`/`user`). Changing existing data or types, or adding a unique index, needs a migration: see "How to add a migration" in `docs/ARCHITECTURE.md`.
 
 Honesty rule (MISSION section 6): never render invented data or controls that do nothing. When a feature has no data yet, show an empty state that says what will appear and how (`EmptyState` in `components/ui/empty.rs`).
 
@@ -226,7 +237,7 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 `components::ui` primitives:
 - Batch 1 (layout and controls): `PageShell`, `PageHeader`, `SectionHeader`, `Surface`, `Text`, `Button` (+ `Keycap`), `Field`, `TextField`, `Select`, `Badge`, `Table` (`Th`, `Tr`, `Td`, `RowLink`), `Tabs` (+ `TabPanel`); domain `DraftBoard` (the one tournament board for the draft page, tree drafter and gallery; `DraftFormat` has only `Tournament`), `PrepSequence` (`emphasis: PrepEmphasis {Primary, Quiet}`). `TextField` has `InputKind::Time` (M5). Hooks added in M3: `Button` `pressed` (toggle rows), `TextField` `on_keydown`/`on_blur`/`combobox`.
 - Batch 2 (interaction): `Dialog` (sizes Sm, Md, Lg and `Sheet`, the whole viewport: the phone menu), `ConfirmDialog`, `Menu`, `CommandBar`, `Toast` (`ToastContext.show`/`.push` with an "Undo" action), `Callout`, `EmptyState`, `Skeleton` (+ `SkeletonGroup`; the only `animate-pulse`), `Tooltip`, `SegmentedControl` (`manual`: arrows move focus, Enter/Space/click select, for switches with side effects), `Switch`, `Checkbox`.
-- Batch 3 (domain and canvas): `ChampionAvatar` (only `/img/champion/...`, monogram fallback), `UserAvatar`, `RoleLabel` (TOP JGL MID BOT SUP; no role icons; `guessed` draws an inferred role as uncertain, as does `DraftBoard`'s `guessed`), `SideMarker`, `ResultGlyph`, `StatReadout`, `LegendBlock`, `CanvasFrame` + `ScaleBar`, `Annotation`, `TimelineScrub`. The Draft Graph canvas (`components::graph_canvas`) uses `CanvasFrame` and `LegendBlock`; `Annotation`, `ScaleBar` and `TimelineScrub` stay reserved for the Sand Table.
+- Batch 3 (domain and canvas): `ProportionBar` (M7: decorative segments on a shared scale, figures always written beside it), `ChampionAvatar` (only `/img/champion/...`, monogram fallback), `UserAvatar`, `RoleLabel` (TOP JGL MID BOT SUP; no role icons; `guessed` draws an inferred role as uncertain, as does `DraftBoard`'s `guessed`), `SideMarker`, `ResultGlyph`, `StatReadout`, `LegendBlock`, `CanvasFrame` + `ScaleBar`, `Annotation`, `TimelineScrub`. The Draft Graph canvas (`components::graph_canvas`) uses `CanvasFrame` and `LegendBlock`; `Annotation`, `ScaleBar` and `TimelineScrub` stay reserved for the Sand Table.
 - The M2 compatibility shims (`region/*`, `ErrorBanner`, `StatusMessage`, `SkeletonLine/Card/Grid`, `PageLoading`, `PageEmpty`, `StatCard`) were removed in M5.
 - Page patterns (DESIGN 6.9): hubs by when you need them (Match Day, Prep, Review, Team, You), the phone menu below `md`, one primary action per view.
 
@@ -234,7 +245,7 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant` and `gallery` specs against a debug build. `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates` and `bug-triage` specs against a debug build. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container

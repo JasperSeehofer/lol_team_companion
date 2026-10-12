@@ -1,5 +1,5 @@
 ---
-paths: ["**/db.rs", "**/schema.surql", "**/session_store.rs"]
+paths: ["**/db.rs", "**/schema.surql", "**/session_store.rs", "**/server/community/store.rs", "**/server/migrations.rs"]
 description: SurrealDB 3.x patterns and gotchas for lol_team_companion
 ---
 
