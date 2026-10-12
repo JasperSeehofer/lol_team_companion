@@ -263,11 +263,9 @@ pub fn MyGamesPage() -> impl IntoView {
                     )));
                     data.refetch();
                 }
-                Err(e) => toast.push.run(Toast::error(
-                    e.to_string()
-                        .trim_start_matches("error running server function: ")
-                        .to_string(),
-                )),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
             syncing.set(false);
         });
@@ -610,11 +608,9 @@ fn Goals(goals: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl In
                     toast.push.run(Toast::success("Goal saved"));
                     goals.refetch();
                 }
-                Err(e) => toast.push.run(Toast::error(
-                    e.to_string()
-                        .trim_start_matches("error running server function: ")
-                        .to_string(),
-                )),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });

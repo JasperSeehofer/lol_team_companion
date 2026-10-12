@@ -307,11 +307,9 @@ pub fn StatsPage() -> impl IntoView {
                     toast.push.run(Toast::success(msg));
                     stats.refetch();
                 }
-                Err(e) => toast.push.run(Toast::error(
-                    e.to_string()
-                        .trim_start_matches("error running server function: ")
-                        .to_string(),
-                )),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
             syncing.set(false);
         });

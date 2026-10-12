@@ -1,5 +1,14 @@
 use chrono::{DateTime, Utc};
 
+/// The message of a server-function error as users should read it: without
+/// the "error running server function: " wrapper Leptos puts in front.
+pub fn error_text(e: &impl std::fmt::Display) -> String {
+    let msg = e.to_string();
+    msg.strip_prefix("error running server function: ")
+        .unwrap_or(&msg)
+        .to_string()
+}
+
 /// Formats a UTC ISO 8601 timestamp string into a human-readable relative or absolute string.
 ///
 /// Examples:
@@ -65,6 +74,15 @@ fn format_absolute(dt: DateTime<Utc>, now: DateTime<Utc>) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn error_text_strips_the_wrapper() {
+        assert_eq!(
+            error_text(&"error running server function: Not found"),
+            "Not found"
+        );
+        assert_eq!(error_text(&"Plain message"), "Plain message");
+    }
+
     use super::*;
     use chrono::Utc;
 
