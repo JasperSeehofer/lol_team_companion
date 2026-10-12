@@ -223,23 +223,34 @@ pub struct ShutdownConfig {
 pub const DEFAULT_DATA_DIR: &str = "./data";
 pub const DEFAULT_RUST_LOG: &str = "info,lol_team_companion=debug";
 
-/// Name prefixes of this app's variables: a set variable with one of these
-/// prefixes that is not in [`VARIABLES`] is probably a misspelt name.
-const OWN_PREFIXES: &[&str] = &[
-    "RIOT_",
-    "SHUTDOWN_",
-    "BOOTSTRAP_",
-    "SESSION_",
-    "COOKIE_",
-    "RATE_LIMIT",
-    "TRUST_",
-    "ADMIN_",
-    "CLOSED_",
-    "SUPPORT_",
-    "SURREAL_DATA_DIR",
-    "BUG_REPORT",
-    "APP_",
-];
+/// Edit distance between two variable names (insertions, deletions and
+/// substitutions), for spotting misspelt names.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut cur = vec![i + 1; b.len() + 1];
+        for (j, cb) in b.iter().enumerate() {
+            let sub = prev[j] + usize::from(ca != *cb);
+            cur[j + 1] = sub.min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+/// The setting a set variable `name` probably meant: one of ours within two
+/// edits (but not itself).
+fn misspelt_setting(name: &str) -> Option<&'static str> {
+    if VARIABLES.iter().any(|v| v.name == name) {
+        return None;
+    }
+    VARIABLES
+        .iter()
+        .filter(|v| v.server && v.name.len() >= 6)
+        .find(|v| edit_distance(name, v.name) <= 2)
+        .map(|v| v.name)
+}
 
 /// Reads variables through `lookup`, records every problem (so one start
 /// reports all mistakes) and every name it read (for the table test).
@@ -556,10 +567,9 @@ impl AppConfig {
             );
         }
         for name in names {
-            let ours = OWN_PREFIXES.iter().any(|p| name.starts_with(p));
-            if ours && !VARIABLES.iter().any(|v| v.name == name.as_str()) {
+            if let Some(meant) = misspelt_setting(name) {
                 r.warnings.push(format!(
-                    "{name} is set but is not a Companion setting (a misspelt name?)"
+                    "{name} is set but is not a Companion setting; did you mean {meant}?"
                 ));
             }
         }
@@ -746,10 +756,25 @@ mod tests {
 
     #[test]
     fn misspelt_names_warn() {
-        let names = vec!["TRUST_FORWARD_FOR".to_string(), "PATH".to_string()];
+        let names: Vec<String> = [
+            "TRUST_FORWARD_FOR",
+            "SESION_SECRET",
+            "PATH",
+            "SESSION_INGRESS_URL",
+            "TRUST_FORWARDED_FOR",
+        ]
+        .map(String::from)
+        .to_vec();
         let (_, warnings) = AppConfig::from_parts(&lookup(&[("APP_ENV", "dev")]), &names).unwrap();
-        assert!(warnings.iter().any(|w| w.contains("TRUST_FORWARD_FOR")));
-        assert!(!warnings.iter().any(|w| w.contains("PATH")));
+        let hits: Vec<&String> = warnings
+            .iter()
+            .filter(|w| w.contains("did you mean"))
+            .collect();
+        assert_eq!(hits.len(), 2, "{warnings:?}");
+        assert!(hits
+            .iter()
+            .any(|w| w.contains("TRUST_FORWARD_FOR") && w.contains("TRUST_FORWARDED_FOR?")));
+        assert!(hits.iter().any(|w| w.contains("SESION_SECRET")));
     }
 
     #[test]

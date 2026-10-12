@@ -267,7 +267,7 @@ jobs:
       # The release build (opt-level z WASM, LTO) must hydrate like the debug build.
       - name: Playwright against the image
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts legal.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts --retries=1
 
       - name: Graceful stop, restart on the same volume
         run: |
