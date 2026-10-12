@@ -471,7 +471,7 @@ pub async fn init(db: &Surreal<Db>) {
 }
 
 /// Refresh every [`REFRESH_EVERY`] in the background.
-pub fn spawn_refresh_task(db: Arc<Surreal<Db>>) {
+pub fn spawn_refresh_task(db: Arc<Surreal<Db>>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(REFRESH_EVERY);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -488,7 +488,7 @@ pub fn spawn_refresh_task(db: Arc<Surreal<Db>>) {
                 Err(e) => tracing::warn!("Data Dragon refresh failed: {e}"),
             }
         }
-    });
+    })
 }
 
 #[cfg(test)]

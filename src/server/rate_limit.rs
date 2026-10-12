@@ -277,7 +277,7 @@ impl Limiter {
 }
 
 /// Purge [`Limiter::global`] every `every` on a background task.
-pub fn spawn_purge_task(every: Duration) {
+pub fn spawn_purge_task(every: Duration) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(every);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -288,7 +288,7 @@ pub fn spawn_purge_task(every: Duration) {
                 tracing::debug!(removed, "rate limiter purge");
             }
         }
-    });
+    })
 }
 
 // ---------------------------------------------------------------------------

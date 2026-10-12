@@ -71,26 +71,35 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 
 ### Environment variables
 
+`src/server/config.rs` reads and validates all of them once at startup (`AppConfig`): **a malformed value stops the server** with every error listed (`TRUST_FORWARDED_FOR=ture`, `RATE_LIMIT_MULTIPLIER=1O`, a non-https `SUPPORT_URL`, ...), risky production values only warn (e2e settings, an empty `ADMIN_EMAILS`, a set `GITHUB_TOKEN`), and a set variable that looks like one of ours but is misspelt is warned about. `config::VARIABLES` is the same list; a unit test fails when this table and it differ.
+
 | Variable | Used by | Default |
 |----------|---------|---------|
 | `RIOT_API_KEY` | The shared Riot API client (`src/server/riot.rs`) | none; Riot features report that they are off |
-| `RIOT_GLOBAL_BUDGET_PER_SEC` / `RIOT_GLOBAL_BUDGET_PER_MIN` | Process-wide Riot request budget on top of the per-IP limit (development key: 20/s and 100 per 2 min). Raise both for a production key | `20` / `50` |
-| `SURREAL_DATA_DIR` | DB location | `./data` |
-| `BUG_REPORT_INBOX_PATH` | Bug-report export on server start | `./docs/inbox/bug-reports.md` (git-ignored) |
-| `SUPPORT_URL` | The one external support page, shown only on `/transparency` once the money policy and the support sentence are both approved on `/admin/texts`. Absolute `https://` without credentials, otherwise ignored with a warning. The owner sets it; never the agent | unset: nothing about support renders |
-| `RUST_LOG` | tracing filter | `info,lol_team_companion=debug` |
-| `APP_ENV` | `dev`/`development`/`local` marks a dev run (so does `LEPTOS_ENV=DEV`, set by `cargo leptos watch`) | unset = production |
-| `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes. **Required outside dev** (the server refuses to start); in dev a random key is used per run | none |
+| `RIOT_GLOBAL_BUDGET_PER_SEC` / `RIOT_GLOBAL_BUDGET_PER_MIN` | Process-wide Riot request budget on top of the per-IP limit (development key: 20/s and 100 per 2 min). Raise both for a production key (`deploy/env.production.example` has the arithmetic) | `20` / `50` |
+| `SURREAL_DATA_DIR` | DB location (must be a directory if it exists) | `./data` (image: `/data/db`) |
+| `BUG_REPORT_INBOX_PATH` | Bug-report export on server start | `./docs/inbox/bug-reports.md` (git-ignored; image: `/data/inbox/bug-reports.md`) |
+| `RUST_LOG` | tracing filter; an invalid filter is reported and the default used | `info,lol_team_companion=debug` (image: `info`) |
+| `APP_ENV` | `dev`/`development`/`local` marks a dev run | unset = production |
+| `LEPTOS_ENV` | `DEV` marks a dev run too (`cargo leptos watch` sets it); the image sets `PROD` | unset = production |
+| `SESSION_SECRET` | HMAC key for the session auth hash, at least 32 bytes and 8 distinct characters (`openssl rand -hex 32`). **Required outside dev**; in dev a random key is used per run | none |
 | `CLOSED_BETA` | `false` disables the invite gate. **Honoured only in dev**; production always requires an invite | gate on |
 | `COOKIE_SECURE` | `Secure` flag on the session cookie | `true` outside dev, `false` in dev |
 | `ADMIN_EMAILS` | Comma-separated emails that are admins (`user.is_admin`). Listed addresses are promoted when they sign in or register; **removing an address revokes admin** (immediately for access checks, and the stored flag is cleared at that user's next sign-in). There is no email verification, so register the admin account first (with the bootstrap invite), then list it | empty |
-| `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs) | unset / `1` |
-| `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities (e2e uses `100`) | `1` |
-| `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy) | `false` |
+| `BOOTSTRAP_INVITE_CODE` / `BOOTSTRAP_INVITE_MAX_USES` | Ensure this invite code exists at startup (first admin, e2e runs); uses 1 to 1,000,000 | unset / `1` |
+| `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities, 1 to 1,000 (e2e uses `100`; warned about outside dev) | `1` |
+| `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy; `compose.yaml` forces it on) | `false` |
+| `SUPPORT_URL` | The one external support page, shown on `/transparency` once the money texts are approved; absolute `https://` URL without credentials | unset |
+| `SHUTDOWN_DRAIN_SECS` | After SIGTERM/SIGINT, how long requests in flight may finish (0 to 300) | `10` |
+| `SHUTDOWN_DB_SECS` | Then how long to wait for SurrealKV to close before exiting anyway with code 1 (0 to 60) | `5` |
+| `GITHUB_TOKEN` | Not read by the app (only by a local MCP server); warned about outside dev, never in `.env.example` | unset |
 | `E2E_INVITE_CODE` | e2e: invite code the fixtures register with (match `BOOTSTRAP_INVITE_CODE`) | `E2E-INVITE-CODE` |
+| `E2E_EXPECT_PRODUCTION` | e2e: the server under test runs in production mode (`/design` is a 404) | unset |
 | `BASE_URL` | e2e: server under test | `http://127.0.0.1:3020` |
 | `PLAYWRIGHT_BROWSERS_PATH` | e2e: browser location. In cloud sessions use `/root/.cache/pw-browsers-compat` (Playwright 1.58 expects chromium rev 1208; the hook symlinks the preinstalled 1194 build) | Playwright default |
 | `AGENT_BROWSER_EXECUTABLE_PATH` | agent-browser screenshots (`/opt/pw-browsers/chromium` in cloud sessions) | none |
+
+SurrealDB reads its own `SURREAL_*` engine variables (for example `SURREAL_SURREALKV_BLOCK_CACHE_CAPACITY`); the app does not validate them.
 
 ### One process per database
 

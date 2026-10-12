@@ -4,7 +4,9 @@ use axum::{extract::State, http::StatusCode, response::Redirect, routing::get, R
 use axum_login::{tower_sessions::SessionManagerLayer, AuthManagerLayerBuilder};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
+use std::future::IntoFuture;
 use std::sync::Arc;
+use std::time::Duration;
 
 use lol_team_companion::app::{shell, App};
 use lol_team_companion::server::{
@@ -42,32 +44,115 @@ async fn health_handler(
     }
 }
 
+/// Resolves on SIGTERM (`docker stop`) or SIGINT (Ctrl+C).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!("cannot listen for Ctrl+C: {e}");
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(e) => {
+                tracing::error!("cannot listen for SIGTERM: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => tracing::info!("SIGINT received, shutting down"),
+        _ = terminate => tracing::info!("SIGTERM received, shutting down"),
+    }
+}
+
+/// Wait until SurrealKV has released `<data_dir>/LOCK` (the datastore is
+/// closed), at most `limit`. SurrealKV holds an exclusive `flock` on that
+/// file; taking it here succeeds only once SurrealKV let go (flock locks of
+/// two separate opens conflict even inside one process).
+async fn wait_for_db_close(data_dir: &std::path::Path, limit: Duration) -> bool {
+    let lock_path = data_dir.join("LOCK");
+    let deadline = tokio::time::Instant::now() + limit;
+    loop {
+        match std::fs::File::open(&lock_path) {
+            Ok(file) => match file.try_lock() {
+                Ok(()) => return true, // unlocked again when `file` drops here
+                Err(std::fs::TryLockError::WouldBlock) => {}
+                Err(std::fs::TryLockError::Error(e)) => {
+                    tracing::warn!("cannot check the database lock: {e}");
+                    return false;
+                }
+            },
+            // No LOCK file: nothing holds the directory.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return true,
+            Err(e) => {
+                tracing::warn!("cannot open {}: {e}", lock_path.display());
+                return false;
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Load .env file (if present)
     dotenvy::dotenv().ok();
 
-    // Logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,lol_team_companion=debug".parse().unwrap()),
-        )
-        .init();
-
-    // Security configuration (fails fast outside dev without SESSION_SECRET)
-    let security = match config::SecurityConfig::from_env() {
-        Ok(c) => c,
+    // Logging. An invalid RUST_LOG is reported, not silently replaced.
+    let filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
+        Ok(f) => f,
         Err(e) => {
-            tracing::error!("Configuration error: {e}");
+            if std::env::var_os("RUST_LOG").is_some() {
+                eprintln!("RUST_LOG is invalid ({e}); using the default filter");
+            }
+            tracing_subscriber::EnvFilter::new(config::DEFAULT_RUST_LOG)
+        }
+    };
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+
+    // All configuration, validated once: every error is listed, then the
+    // server stops (config::AppConfig, the table in config::VARIABLES).
+    let app_config = match config::AppConfig::from_env() {
+        Ok((c, warnings)) => {
+            for w in &warnings {
+                tracing::warn!("Configuration: {w}");
+            }
+            c
+        }
+        Err(errors) => {
+            for e in &errors {
+                tracing::error!("Configuration error: {e}");
+            }
+            tracing::error!(
+                "{} configuration error(s); the server does not start",
+                errors.len()
+            );
             std::process::exit(1);
         }
     };
+    let security = app_config.security.clone();
     tracing::info!(
         dev = security.is_dev,
         closed_beta = security.closed_beta,
         cookie_secure = security.cookie_secure,
         admin_emails = security.admin_emails.len(),
+        trust_forwarded_for = security.trust_forwarded_for,
+        rate_limit_multiplier = security.rate_limit_multiplier,
+        riot_key = app_config.riot.api_key.is_some(),
+        riot_budget_per_sec = app_config.riot.budget_per_sec,
+        riot_budget_per_min = app_config.riot.budget_per_min,
+        data_dir = %app_config.data_dir.display(),
         "security configuration"
     );
     if !security.closed_beta {
@@ -78,7 +163,7 @@ async fn main() {
     config::init(security);
 
     // SurrealDB
-    let data_dir = std::env::var("SURREAL_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
+    let data_dir = app_config.data_dir.to_string_lossy().into_owned();
     // Applies schema.surql and any pending migrations; a failed migration
     // stops the server here rather than serving a half-migrated database.
     let surreal_db = match db::init_db(&data_dir).await {
@@ -100,27 +185,19 @@ async fn main() {
     if let Err(e) = db::migrate_champion_names(&surreal_db).await {
         tracing::warn!("Champion name normalisation failed: {e}");
     }
-    lol_team_companion::server::data_dragon::spawn_refresh_task(Arc::clone(&surreal_db));
+    let ddragon_task =
+        lol_team_companion::server::data_dragon::spawn_refresh_task(Arc::clone(&surreal_db));
 
     // One Riot client for the whole process (shared rate limiting + budget).
-    let riot = Arc::new(RiotClient::from_env());
-    if !riot.is_configured() {
-        tracing::warn!("RIOT_API_KEY is not set: Riot features will report that they are off");
-    }
+    // (A missing key is among the configuration warnings above.)
+    let riot = Arc::new(RiotClient::from_config(&app_config.riot));
 
     // Drop idle rate-limiter entries off the request path.
-    rate_limit::spawn_purge_task(std::time::Duration::from_secs(60));
+    let limiter_task = rate_limit::spawn_purge_task(Duration::from_secs(60));
 
-    // Phase 19 D-04 — auto-export open bug reports to the triage inbox.
-    // Runs once, synchronously, after DB init and before axum::serve.
-    // Write failures are logged and swallowed (D-04.5).
-    let inbox_path = std::env::var("BUG_REPORT_INBOX_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::path::PathBuf::from(
-                lol_team_companion::server::bug_report_export::DEFAULT_INBOX_PATH,
-            )
-        });
+    // Export open bug reports to the triage inbox, once, before serving.
+    // Write failures are logged and swallowed.
+    let inbox_path = app_config.bug_inbox_path.clone();
     if let Err(e) =
         lol_team_companion::server::bug_report_export::export_open_reports(&surreal_db, &inbox_path)
             .await
@@ -136,7 +213,13 @@ async fn main() {
     }
 
     // Leptos config
-    let conf = get_configuration(None).unwrap();
+    let conf = match get_configuration(None) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("Configuration error (LEPTOS_* variables): {e}");
+            std::process::exit(1);
+        }
+    };
     let leptos_options = conf.leptos_options.clone();
     let addr = leptos_options.site_addr;
     let routes = generate_route_list(App);
@@ -146,7 +229,7 @@ async fn main() {
 
     // Purge expired sessions, and team notes deleted longer ago than their
     // Undo window, now and every hour.
-    {
+    let session_purge_task = {
         let store = session_store.clone();
         let db = Arc::clone(&surreal_db);
         tokio::spawn(async move {
@@ -160,8 +243,8 @@ async fn main() {
                     tracing::warn!("Deleted team note purge failed: {e}");
                 }
             }
-        });
-    }
+        })
+    };
 
     // SameSite=Strict and HttpOnly are the tower-sessions defaults; Secure
     // comes from config (on unless dev).
@@ -220,13 +303,73 @@ async fn main() {
         .layer(auth_layer)
         .with_state(app_state);
 
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("cannot listen on {addr}: {e}");
+            std::process::exit(1);
+        }
+    };
     tracing::info!("Listening on http://{}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    // Graceful shutdown: on SIGTERM/SIGINT stop accepting, let requests in
+    // flight finish for at most `drain`, drop every database handle, wait at
+    // most `db_close` for SurrealKV to close, then exit without tearing the
+    // runtime down (that waits without a limit for blocking work).
+    let drain_limit = app_config.shutdown.drain;
+    let close_limit = app_config.shutdown.db_close;
+    let (signalled_tx, mut signalled_rx) = tokio::sync::watch::channel(false);
     // Connect info gives server functions the peer IP for rate limiting.
-    axum::serve(
+    let server = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .await
-    .unwrap();
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        let _ = signalled_tx.send(true);
+    });
+    let drain_deadline = async move {
+        let _ = signalled_rx.wait_for(|s| *s).await;
+        tokio::time::sleep(drain_limit).await;
+    };
+
+    // `server` owns the router (and with it AppState, the auth backend and
+    // the session store, each holding a database handle); leaving this
+    // select drops it, finished or not.
+    tokio::select! {
+        result = server.into_future() => {
+            if let Err(e) = result {
+                tracing::error!("server error: {e}");
+            }
+            tracing::info!("all connections closed");
+        }
+        _ = drain_deadline => {
+            tracing::warn!(
+                "requests still running after {}s; closing anyway",
+                drain_limit.as_secs()
+            );
+        }
+    }
+
+    // Drop the remaining handles so the embedded engine sees its channel
+    // close and shuts the datastore down (flush, close, unlock).
+    for task in [ddragon_task, session_purge_task, limiter_task] {
+        task.abort();
+        let _ = task.await;
+    }
+    drop(riot);
+    drop(surreal_db);
+
+    let closed = wait_for_db_close(std::path::Path::new(&data_dir), close_limit).await;
+    if closed {
+        tracing::info!("database closed; exiting");
+    } else {
+        // Committed data is on disk already (SurrealKV syncs every commit);
+        // the next start replays the log.
+        tracing::warn!(
+            "database did not close within {}s; exiting anyway",
+            close_limit.as_secs()
+        );
+    }
+    std::process::exit(if closed { 0 } else { 1 });
 }
