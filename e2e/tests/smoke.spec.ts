@@ -11,6 +11,8 @@ const PUBLIC_PAGES = [
   { path: "/closed-beta", title: /Companion/i },
   { path: "/legal/impressum", title: /Companion/i },
   { path: "/legal/datenschutz", title: /Companion/i },
+  { path: "/changelog", title: /Companion/i },
+  { path: "/transparency", title: /Companion/i },
 ];
 
 for (const { path, title } of PUBLIC_PAGES) {

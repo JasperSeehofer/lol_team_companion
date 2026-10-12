@@ -50,6 +50,10 @@ const SCOPED_ROUTES = [
   "/champion-pool",
   "/post-game",
   "/match/test-match-id",
+  "/bugs",
+  "/what-next",
+  "/changelog",
+  "/transparency",
 ] as const;
 
 /**

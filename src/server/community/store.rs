@@ -439,7 +439,8 @@ pub async fn list_proposals(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<Pro
 /// Every proposal, for admins (votes counted, own vote irrelevant).
 pub async fn admin_list_proposals(db: &Surreal<Db>) -> DbResult<Vec<ProposalView>> {
     let query = format!("SELECT {PROPOSAL_FIELDS} FROM proposal");
-    let mut r = db.query(query).bind(("u", String::new())).await?;
+    // No caller: a key no user has, so `mine` counts nothing.
+    let mut r = db.query(query).bind(("u", "-".to_string())).await?;
     let rows: Vec<DbProposal> = r.take(0)?;
     let mut list: Vec<ProposalView> = rows.into_iter().map(|p| proposal_view(p, true)).collect();
     list.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)));

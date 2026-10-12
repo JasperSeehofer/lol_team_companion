@@ -286,6 +286,11 @@ async fn one_vote_per_user_and_withdrawal_is_own_only() {
     assert_eq!(store::set_vote(&db, &a, &p, false).await.unwrap(), 1);
     let board = store::list_proposals(&db, &a).await.unwrap();
     assert!(!board.iter().find(|x| x.id == p).unwrap().voted_by_me);
+    // Admins see the count (the list works while votes exist).
+    let admin_view = store::admin_list_proposals(&db).await.unwrap();
+    let row = admin_view.iter().find(|x| x.id == p).unwrap();
+    assert_eq!(row.votes, 1);
+    assert!(!row.voted_by_me);
 }
 
 #[tokio::test]

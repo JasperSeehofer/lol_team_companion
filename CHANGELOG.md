@@ -2,7 +2,25 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions will follow semantic versioning once releases start.
 
+From M7 on, every milestone heading carries its date: `### Milestone M7: Title (YYYY-MM-DD)`. The app shows this file on /changelog.
+
 ## [Unreleased]
+
+### Milestone M7: Community and transparency loop (2026-10-12)
+
+#### Added
+- Bug board (`/bugs`) for everyone in the beta: reported problems and wishes the team has read, with a title and a note the team writes, their status (new, triaged, planned, fixed, won't fix) and the update that fixed them. Your own words stay private.
+- Your reports: every report you sent with its status and the team's note, marked "Updated" when something changed; the account menu says how many changed.
+- The bug-report button is rebuilt: point at the part of the page (or skip that step), choose Bug or Wishlist, and send. It sits above the footer and never covers the page.
+- What next (`/what-next`): ideas the maintainer is considering, planning, building and has shipped, ordered by votes. One vote per idea, and you can take it back.
+- Changelog (`/changelog`, public): this file, newest first, with the game patches the app detected.
+- Transparency page (`/transparency`, public): how support is used and, month by month, what came in, what running Companion cost and what went to the maintainer. It shows only wording the owner has approved.
+- Short survey questions, at most one a week and only right after something you did; dismiss any of them, or turn them off on your profile.
+- Admin area (`/admin`): bug triage, surveys with approval of the exact wording, What next ideas with a publish step, the monthly ledger, and the public texts about money, each recording who changed what and when.
+
+#### Changed
+- The account menu has one "Admin" entry for admins (it replaces the separate admin links) and "Your reports" for everyone. The footer, the command bar and the phone menu link the community pages.
+- The privacy page lists bug-report triage data, votes and survey answers.
 
 ### Milestone M5: Remaining pages, navigation, mobile
 
