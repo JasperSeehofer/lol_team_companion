@@ -23,7 +23,7 @@ async function openInTriage(admin: Page, firstLine: string, filter = "New") {
   await admin.goto("/admin/bugs");
   await admin.waitForLoadState("networkidle");
   await admin.locator('[data-segmented="bug-filter"]').getByRole("radio", { name: filter, exact: true }).click();
-  await admin.getByRole("button", { name: new RegExp(firstLine) }).click();
+  await admin.getByRole("link", { name: new RegExp(firstLine) }).click();
   await expect(admin.getByTestId("bug-editor")).toBeVisible();
   await expect(admin.getByTestId("reporter-words")).toHaveText(firstLine);
 }
@@ -78,7 +78,7 @@ test("triage reaches the reporter and the board; a fix links the changelog", asy
   await user.getByRole("tab", { name: /Fixed/ }).click();
   const fixed = user.locator("#bugs-panel-fixed");
   await expect(fixed).toContainText(title);
-  await expect(fixed.locator(`a[href="/changelog#${M7}"]`)).toBeVisible();
+  await expect(fixed.locator("tr").filter({ hasText: title }).locator(`a[href="/changelog#${M7}"]`)).toBeVisible();
 });
 
 test("another user sees only their own reports", async ({ browser }) => {
