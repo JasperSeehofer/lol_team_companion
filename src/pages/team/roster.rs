@@ -176,7 +176,7 @@ fn MemberRoster(
         <section class="mt-12 max-w-prose" aria-labelledby="joining-h" data-roster-joining>
             <SectionHeader title="How players join" id="joining-h" />
             <p class="text-body text-secondary">
-                {format!("New players sign up with an invite link, open this page, find {} under \u{201c}Join a team\u{201d} and ask to join. The team leader answers on the team page; accepted players start as \u{201c}not placed yet\u{201d} until the leader puts them in the starting five, on the bench or with the coaches.", team.name)}
+                {format!("The team leader sends new players an invite link from the team page (\u{201c}Invite a player\u{201d}): signing up with it puts them on {} at once. Players who already have an account open this page, find the team under \u{201c}Join a team\u{201d} and ask to join; the leader answers on the team page. New members start as \u{201c}not placed yet\u{201d} until the leader puts them in the starting five, on the bench or with the coaches.", team.name)}
             </p>
             {is_leader.then(|| view! {
                 <Suspense fallback=|| ()>

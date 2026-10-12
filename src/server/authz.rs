@@ -23,7 +23,7 @@ use crate::server::rate_limit::{slow_down_message, Bucket, Limiter};
 pub type DbHandle = Arc<Surreal<Db>>;
 
 pub const NOT_SIGNED_IN: &str = "Not signed in";
-pub const NO_TEAM: &str = "Join or create a team first";
+pub const NO_TEAM: &str = "Create or join your team first";
 pub const NOT_FOUND: &str = "Not found";
 pub const LEADER_ONLY: &str = "Only the team leader can do that";
 const GENERIC: &str = "Something went wrong on our side. Please try again.";
@@ -178,35 +178,6 @@ fn last_seen_due_in(
     }
 }
 
-#[cfg(test)]
-mod last_seen_tests {
-    use super::last_seen_due_in;
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn a_visit_is_written_once_an_hour() {
-        let mut map = std::collections::HashMap::new();
-        let t0 = Instant::now();
-        assert!(last_seen_due_in(&mut map, "user:a", t0));
-        assert!(!last_seen_due_in(
-            &mut map,
-            "user:a",
-            t0 + Duration::from_secs(60)
-        ));
-        assert!(last_seen_due_in(&mut map, "user:b", t0), "per user");
-        assert!(!last_seen_due_in(
-            &mut map,
-            "user:a",
-            t0 + Duration::from_secs(3599)
-        ));
-        assert!(last_seen_due_in(
-            &mut map,
-            "user:a",
-            t0 + Duration::from_secs(3600)
-        ));
-    }
-}
-
 /// The signed-in user, or "Not signed in".
 pub async fn require_user() -> Result<AppUser, ServerFnError> {
     optional_user()
@@ -231,7 +202,7 @@ pub async fn current_team_for(
     db::get_user_team_id(db, &user.id).await.map_err(server_err)
 }
 
-/// The user's team, or "Join or create a team first".
+/// The user's team, or "Create or join your team first".
 pub async fn require_team(db: &Surreal<Db>, user: &AppUser) -> Result<String, ServerFnError> {
     current_team_for(db, user)
         .await?
@@ -403,4 +374,33 @@ pub fn user_cooldown(
                 remaining.as_secs().max(1)
             ))
         })
+}
+
+#[cfg(test)]
+mod last_seen_tests {
+    use super::last_seen_due_in;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_visit_is_written_once_an_hour() {
+        let mut map = std::collections::HashMap::new();
+        let t0 = Instant::now();
+        assert!(last_seen_due_in(&mut map, "user:a", t0));
+        assert!(!last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(60)
+        ));
+        assert!(last_seen_due_in(&mut map, "user:b", t0), "per user");
+        assert!(!last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(3599)
+        ));
+        assert!(last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(3600)
+        ));
+    }
 }

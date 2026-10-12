@@ -349,7 +349,7 @@ fn item(
         } else if href.is_some() {
             "To do".to_string()
         } else {
-            "After step 1".to_string()
+            "Needs a team".to_string()
         },
         done,
         href: href.map(str::to_string),
@@ -373,15 +373,15 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
     let t = |href: &'static str| if team { Some(href) } else { None };
     vec![
         item(
-            "Join or create your team",
+            "Create or join your team",
             match &f.team_name {
-                Some(n) => format!("You are on {n}."),
-                None => "Create a team, or find yours and ask to join.".to_string(),
+                Some(_) => "Done: the steps below count what your team has done.".to_string(),
+                None => "Create a team, or use your team's invite link, or find your team and ask to join.".to_string(),
             },
             team,
             "Done".to_string(),
             Some("/team/roster"),
-            "Create or join a team",
+            "Create or join your team",
         ),
         item(
             "Fill the starting five",
@@ -389,7 +389,7 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
                 "Top, jungle, mid, bot and support each have a starter.".to_string()
             } else {
                 format!(
-                    "{} of 5 positions have a starter. The leader places players on the team page.",
+                    "{} of 5 positions have a starter. The team leader places players on the team page.",
                     f.starting_positions
                 )
             },
@@ -437,7 +437,7 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
             } else if f.pending_requests > 0 {
                 "A join request is waiting on the team page.".to_string()
             } else {
-                "Teammates sign up with an invite, find your team on the roster page and ask to join."
+                "The team leader sends an invite link from the team page. Teammates who already have an account find your team on the roster page, then ask to join."
                     .to_string()
             },
             f.members > 1 || f.pending_requests > 0,
@@ -719,7 +719,7 @@ mod tests {
         assert_eq!(next_step(&items), Some(0));
         assert_eq!(items[0].href.as_deref(), Some("/team/roster"));
         assert!(items[1..].iter().all(|i| i.href.is_none()));
-        assert_eq!(items[3].status, "After step 1");
+        assert_eq!(items[3].status, "Needs a team");
     }
 
     #[test]
@@ -737,7 +737,7 @@ mod tests {
         assert_eq!(next_step(&items), Some(1));
         assert_eq!(
             items[1].detail,
-            "0 of 5 positions have a starter. The leader places players on the team page."
+            "0 of 5 positions have a starter. The team leader places players on the team page."
         );
         f.drafts = 2;
         f.starting_positions = 4;

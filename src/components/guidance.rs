@@ -411,8 +411,7 @@ pub fn WelcomePanel(
     };
     view! {
         <section class="mb-10 border-y border-rule bg-ink-1 px-5 py-6 sm:px-8" aria-labelledby="welcome-h" data-welcome>
-            <p class="eyebrow">"Welcome"</p>
-            <h2 id="welcome-h" class="mt-1 break-words font-display text-title font-semibold text-primary">
+            <h2 id="welcome-h" class="break-words font-display text-title font-semibold text-primary">
                 {format!("Welcome to Team Companion, {}", welcome.username)}
             </h2>
             <p class="mt-3 max-w-prose text-reading text-secondary">
@@ -519,7 +518,7 @@ pub fn GettingStarted(
                 }
             />
             {forced.then(|| view! {
-                <p class="-mt-2 mb-3 text-label text-muted">"Shown because you asked for it. It stays hidden on Match Day otherwise."</p>
+                <p class="-mt-2 mb-3 text-label text-muted">"You opened the checklist. While it is hidden or complete, Match Day leaves it out."</p>
             })}
             <PrepSequence label="Getting started with Team Companion" steps=steps emphasis=emphasis />
         </section>
@@ -608,12 +607,12 @@ pub fn GuidanceSettings(enabled: bool) -> impl IntoView {
             <SectionHeader title="Guidance" id="guidance-h" />
             <div>
                 <Switch label="Show guidance" checked=on on_change=on_change />
-                <p class="mt-2 max-w-prose text-caption text-muted">"The welcome, the getting-started checklist on Match Day, one-time hints where a feature is, next-step lines on Match Day and New marks for new features. Every piece can also be turned off where it appears."</p>
+                <p class="mt-2 max-w-prose text-caption text-muted">"Every piece can also be turned off where it appears."</p>
             </div>
             <div class="flex flex-wrap gap-3">
                 <Button on_click=reset("checklist", "The checklist is back on Match Day until it is complete.") attr:data-testid="reset-checklist">"Show the checklist again"</Button>
                 <Button on_click=reset("hints", "Hints you dismissed will show again where their feature is.") attr:data-testid="reset-hints">"Show hints again"</Button>
-                <Button on_click=reset("nudges", "Next-step lines you turned off can show on Match Day again.") attr:data-testid="reset-nudges">"Show nudges again"</Button>
+                <Button on_click=reset("nudges", "Nudges you turned off can show on Match Day again.") attr:data-testid="reset-nudges">"Show nudges again"</Button>
             </div>
             {move || (!on.get()).then(|| view! {
                 <Callout tone=CalloutTone::Info>"Guidance is off. These buttons take effect when you turn it on again."</Callout>
