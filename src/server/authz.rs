@@ -115,7 +115,10 @@ pub fn server_err<E: IntoServerError>(e: E) -> ServerFnError {
 // Context
 // ---------------------------------------------------------------------------
 
-/// The DB handle provided to every server function.
+/// The DB handle for a server function: a clone of the process-wide handle
+/// (`db::shared`), held only for the call. (Not a Leptos context value: a
+/// clone in a request's owner could outlive the request and keep the
+/// database open at shutdown.)
 pub fn db() -> Result<DbHandle, ServerFnError> {
     use_context::<DbHandle>().ok_or_else(|| internal_error("server fn context", "no DB handle"))
 }

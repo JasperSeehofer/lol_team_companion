@@ -264,6 +264,53 @@ impl From<DbJoinRequest> for JoinRequest {
     }
 }
 
+/// The process-wide database handle that server functions use (polish
+/// pass). It used to be provided as a Leptos context value, which put a
+/// clone into every request's reactive owner: an owner that outlived its
+/// request (a resource task still pending after the client left) kept the
+/// database open at shutdown ("N database handle(s) still held"). Server
+/// functions now borrow a clone from this slot for the length of the call,
+/// and shutdown empties it with [`release_shared`].
+static SHARED: std::sync::RwLock<Option<Arc<Surreal<Db>>>> = std::sync::RwLock::new(None);
+
+/// Make `db` the handle server functions get from `authz::db()`.
+pub fn install_shared(db: Arc<Surreal<Db>>) {
+    let mut slot = SHARED.write().unwrap_or_else(|p| p.into_inner());
+    *slot = Some(db);
+}
+
+/// A clone of the shared handle (`None` before startup or after shutdown).
+pub fn shared() -> Option<Arc<Surreal<Db>>> {
+    SHARED
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .as_ref()
+        .map(Arc::clone)
+}
+
+/// Empty the shared slot (shutdown): later server functions answer with an
+/// internal error instead of keeping the database open.
+pub fn release_shared() -> Option<Arc<Surreal<Db>>> {
+    SHARED.write().unwrap_or_else(|p| p.into_inner()).take()
+}
+
+/// Record a visit: `last_seen_at` becomes now and its old value moves to
+/// `prev_seen_at`, but only when the last record is an hour old or more (or
+/// missing). Returns whether it wrote.
+pub async fn touch_last_seen(db: &Surreal<Db>, user_id: &str) -> DbResult<bool> {
+    let mut r = db
+        .query(
+            "UPDATE type::record('user', $uk) \
+                SET prev_seen_at = last_seen_at, last_seen_at = time::now() \
+                WHERE last_seen_at = NONE OR last_seen_at < time::now() - 1h \
+                RETURN VALUE id",
+        )
+        .bind(("uk", record_key(user_id, "user")))
+        .await?;
+    let ids: Vec<RecordId> = r.take(0)?;
+    Ok(!ids.is_empty())
+}
+
 pub async fn init_db(path: &str) -> DbResult<Arc<Surreal<Db>>> {
     use surrealdb::engine::local::SurrealKv;
 

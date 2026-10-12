@@ -239,6 +239,9 @@ async fn main() {
         }
     };
 
+    // Server functions borrow the handle from one process-wide slot.
+    db::install_shared(Arc::clone(&surreal_db));
+
     // Data Dragon: load the stored copy, refresh from the network, then keep
     // refreshing every 6 hours. Champion names are normalised against it.
     lol_team_companion::server::data_dragon::init(&surreal_db).await;
@@ -355,8 +358,9 @@ async fn main() {
             {
                 let app_state = app_state.clone();
                 move || {
-                    let db = Arc::clone(&app_state.db);
-                    provide_context(db);
+                    // The database handle is not a context value (it would
+                    // live as long as the request's owner): server functions
+                    // take it from `db::shared()`.
                     provide_context(Arc::clone(&app_state.riot));
                 }
             },
@@ -424,6 +428,7 @@ async fn main() {
         let _ = task.await;
     }
     drop(riot);
+    drop(db::release_shared());
     // Every other handle should be gone now; one still held somewhere (a
     // request's reactive owner, a task) keeps SurrealKV open, so say so.
     let held = Arc::strong_count(&surreal_db) - 1;
