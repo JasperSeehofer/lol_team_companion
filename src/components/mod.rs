@@ -5,6 +5,7 @@ pub mod draft_board;
 pub mod footer;
 pub mod graph_canvas;
 pub mod graph_layout;
+pub mod guidance;
 pub mod icon;
 pub mod local_time;
 pub mod nav;

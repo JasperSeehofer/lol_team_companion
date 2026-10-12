@@ -167,6 +167,17 @@ fn route_commands(is_admin: bool) -> Vec<Command> {
                 .keywords(*keywords),
         );
     }
+    // Guidance (M9): the checklist on demand, and what changed.
+    out.push(
+        Command::go("Guide me", "/?guide=1#getting-started")
+            .hint("Help")
+            .keywords("help getting started checklist welcome lost"),
+    );
+    out.push(
+        Command::go("What's new", "/changelog")
+            .hint("Help")
+            .keywords("new features changes release notes"),
+    );
     out.push(Command::go("Impressum", "/legal/impressum").hint("Legal"));
     out.push(
         Command::go("Privacy", "/legal/datenschutz")
@@ -446,7 +457,7 @@ fn PhoneMenu(
                                             attr:aria-current=move || is_current(path, &location.pathname.get()).then_some("page")
                                             on:click=move |_| open.set(false)
                                         >
-                                            <span>{pg.label}</span>
+                                            <span>{pg.label}<crate::components::guidance::NewMark route=path /></span>
                                             <span class="figures text-caption text-muted">
                                                 {move || counts.get().and_then(|c| count_for(path, &c))}
                                             </span>
@@ -559,6 +570,15 @@ pub fn Nav() -> impl IntoView {
         });
     }
 
+    // Opening the command bar ends its hint (M9).
+    Effect::new(move |_| {
+        if command_open.get() {
+            if let Some(g) = use_context::<crate::components::guidance::GuidanceCtx>() {
+                g.used(crate::models::guidance::Hint::CommandBar);
+            }
+        }
+    });
+
     let location = use_location();
     let active_hub = Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
     let signed_in = Signal::derive(move || matches!(user.get(), Some(Ok(Some(_)))));
@@ -577,6 +597,7 @@ pub fn Nav() -> impl IntoView {
                         <nav class="hidden md:flex items-center gap-5" aria-label="Primary">
                             {HUBS.iter().map(|(key, label, href)| {
                                 let key = *key;
+                                let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
                                 view! {
                                     <A
                                         href=*href
@@ -584,6 +605,9 @@ pub fn Nav() -> impl IntoView {
                                         attr:aria-current=move || (active_hub.get() == key).then_some("true")
                                     >
                                         {*label}
+                                        {move || crate::components::guidance::any_new(&paths).then(|| view! {
+                                            <span class="ml-1.5 text-caption font-semibold text-info" data-new-hub=key><span class="sr-only">", "</span>"New"</span>
+                                        })}
                                     </A>
                                 }
                             }).collect_view()}
@@ -706,6 +730,7 @@ pub fn Nav() -> impl IntoView {
                                         });
                                         let commands = route_commands(u.is_admin);
                                         view! {
+                                            <crate::components::guidance::CommandBarHint />
                                             <button
                                                 type="button"
                                                 class="inline-flex h-8 cursor-pointer items-center gap-2 rounded-ctl border border-rule px-2 text-label text-muted transition-colors hover:border-outline hover:text-primary"
@@ -792,6 +817,7 @@ pub fn Nav() -> impl IntoView {
                                         attr:aria-current=move || is_current(path, &location.pathname.get()).then_some("page")
                                     >
                                         {p.label}
+                                        <crate::components::guidance::NewMark route=path />
                                     </A>
                                 }
                             }).collect_view()}

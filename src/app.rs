@@ -7,6 +7,7 @@ use leptos_router::{
 
 use crate::components::bug_report_widget::BugReportWidget;
 use crate::components::footer::SiteFooter;
+use crate::components::guidance::{GuidanceProvider, IntroNote};
 use crate::components::nav::Nav;
 use crate::components::survey_prompt::SurveyPrompt;
 use crate::components::ui::ToastProvider;
@@ -80,6 +81,7 @@ pub fn App() -> impl IntoView {
 
         <Router>
             <ToastProvider>
+            <GuidanceProvider>
                 <a
                     href="#main"
                     class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-(--z-toast) focus:rounded-ctl focus:bg-accent focus:px-3 focus:py-2 focus:text-label focus:font-semibold focus:text-accent-ink"
@@ -90,6 +92,8 @@ pub fn App() -> impl IntoView {
                 <main id="main" tabindex="-1">
                     // One short survey question, at most weekly (browser only).
                     <SurveyPrompt />
+                    // A new feature's one-time note, on its page (M9).
+                    <IntroNote />
                     <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=HomePage />
                         <Route path=path!("/profile") view=ProfilePage />
@@ -135,6 +139,7 @@ pub fn App() -> impl IntoView {
                 // on auth and on public paths).
                 <BugReportWidget />
                 <SiteFooter />
+            </GuidanceProvider>
             </ToastProvider>
         </Router>
     }

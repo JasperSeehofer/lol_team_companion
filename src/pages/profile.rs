@@ -194,6 +194,10 @@ pub fn ProfilePage() -> impl IntoView {
         |_| crate::components::survey_prompt::get_survey_opt_out(),
     );
     let card_hidden = Resource::new(|| (), |_| get_share_card_hidden());
+    let guidance_on = Resource::new(
+        || (),
+        |_| crate::components::guidance::get_guidance_enabled(),
+    );
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
             #[cfg(feature = "hydrate")]
@@ -211,6 +215,9 @@ pub fn ProfilePage() -> impl IntoView {
                         _ => view! { <PageHeader title="Profile" /> }.into_any(),
                     }
                 })}
+            </Suspense>
+            <Suspense fallback=|| ()>
+                {move || guidance_on.get().and_then(|r| r.ok()).map(|on| view! { <crate::components::guidance::GuidanceSettings enabled=on /> })}
             </Suspense>
             <Suspense fallback=|| ()>
                 {move || surveys_off.get().and_then(|r| r.ok()).map(|off| view! { <SurveySettings off=off /> })}

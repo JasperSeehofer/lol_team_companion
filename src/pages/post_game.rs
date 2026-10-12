@@ -660,6 +660,11 @@ pub fn PostGamePage() -> impl IntoView {
                 }
             />
             <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::Review target=Signal::derive(move || ed.id.get()) />
+            {move || ed.id.get().map(|_| view! {
+                <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::ShareLinks title="Share a read-only link" class="mb-6">
+                    "Share makes a link to this review that opens without signing in, for a coach or a sub outside the team. Choose how long it lives; revoke it any time."
+                </crate::components::guidance::FirstUseHint>
+            })}
             <ConfirmDialog
                 id="delete-review"
                 open=confirm_delete
