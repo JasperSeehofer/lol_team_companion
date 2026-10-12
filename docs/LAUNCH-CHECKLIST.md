@@ -17,7 +17,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 ## 2. Riot
 
 - [ ] **owner** The existing Riot registration compared with `docs/RIOT-REGISTRATION-CHECK.md` and updated where it differs; production key approved (if not already), key in `RIOT_API_KEY`.
-- [ ] **owner + agent** `riot.txt` with the verification code from the portal served at `https://<host>/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`) and holds a placeholder.* *Owner:* paste the code.
+- [ ] **owner + agent** `riot.txt` with the verification code from the portal served at `https://app.team-companion.eu/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`) and holds a placeholder.* *Owner:* paste the code.
 - [ ] **owner** `RIOT_GLOBAL_BUDGET_PER_SEC` / `_PER_MIN` set for the production limits shown in the portal (template comment: 45 / 2400 for 500 per 10 s and 30,000 per 10 min).
 - [ ] **both** A linked account's match history, a match detail with timeline, ranked data and an opponent scouting lookup work in production.
 
@@ -52,7 +52,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 6. Monitoring and logs
 
-- [ ] **owner** External uptime check on `https://<host>/healthz`, alerting by email.
+- [ ] **owner** External uptime check on `https://app.team-companion.eu/healthz`, alerting by email.
 - [ ] **owner** Backup dead-man's switch (`HEALTHCHECK_PING_URL`) or a weekly calendar reminder to read the backup log.
 - [ ] **owner** Disk usage alert at 80 %.
 - [ ] **both** Error log review: run the app for a day with real use and read `docker compose logs app | grep -E "ERROR|WARN"`. No recurring errors; no passwords, session ids or full emails in the log at `RUST_LOG=info` (grep for `@` and for known test emails). Fix what shows up.
@@ -61,9 +61,9 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 ## 7. Performance smoke
 
 - [ ] **both** Cold page loads on a throttled connection (Chrome "Fast 4G"): home, sign-in, team dashboard, draft. Note the WASM size (`/pkg/lol_team_companion.wasm`, compressed transfer size in the network panel) and time to interactive. Budget proposal: under 3 MB compressed WASM, interactive under 4 s on Fast 4G.
-- [ ] **both** Compression works: `curl -sI -H 'Accept-Encoding: zstd, gzip' https://<host>/pkg/lol_team_companion.wasm` shows `Content-Encoding`.
+- [ ] **both** Compression works: `curl -sI -H 'Accept-Encoding: zstd, gzip' https://app.team-companion.eu/pkg/lol_team_companion.wasm` shows `Content-Encoding`.
 - [ ] **both** Caching: `/pkg/*` revalidates (`304` on reload), `/img/*` served from cache on the second load, `/fonts/*` cached.
-- [ ] **both** A small load test against the VM (for example `hey -z 60s -c 20 https://<host>/` and the same for `/healthz`): no errors, p95 under 500 ms, app memory stays well under its 1.5 GB limit (`docker stats`).
+- [ ] **both** A small load test against the VM (for example `hey -z 60s -c 20 https://app.team-companion.eu/` and the same for `/healthz`): no errors, p95 under 500 ms, app memory stays well under its 1.5 GB limit (`docker stats`).
 - [ ] **both** Phone width walkthrough of plans, drafts, reviews (read-only views, MISSION 4).
 
 ## 8. Product readiness (Release 1 definition of done, MISSION 6)
@@ -76,5 +76,5 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 ## 9. Invite the first teams
 
 - [ ] **owner** Discord server ready, with a short "how to report a bug" note.
-- [ ] **owner** Each team lead gets their invite link (`https://<host>/auth/register?invite=<code>`) and a two-line note: what the closed beta is, how to report bugs, that data may be reset only with notice.
+- [ ] **owner** Each team lead gets their invite link (`https://app.team-companion.eu/auth/register?invite=<code>`) and a two-line note: what the closed beta is, how to report bugs, that data may be reset only with notice.
 - [ ] **both** First week: check logs and bug reports daily; first backup drill after launch within 30 days.

@@ -42,6 +42,8 @@ backup (daily, BACKUP_AT UTC): stop app -> tar /data/db,/data/inbox -> start app
 
 ### 2.1 VM
 
+**This deployment:** a Hetzner Cloud VM in Helsinki, IPv4 `37.27.20.30`, IPv6 block `2a01:4f9:c013:554a::/64` with the address `2a01:4f9:c013:554a::1`. Public host name `app.team-companion.eu`; certificate contact `info@team-companion.eu`. The examples below use these values.
+
 - **Size:** 2 vCPU, 4 GB RAM, 40 GB disk is enough for the closed beta (for example Hetzner CX22/CPX21 or similar; EU region for DACH users). The app is limited to 1.5 GB and Caddy and the backup sidecar to 256 MB each.
 - **Building on the VM** (section 3) needs more: the release build links a large binary and runs LTO for the WASM. Add 4 GB of swap if you build there, or build elsewhere and copy the image.
 - Debian 13 or Ubuntu 24.04 LTS, automatic security updates on (`unattended-upgrades`).
@@ -62,7 +64,7 @@ Set log rotation defaults for anything not in `compose.yaml` in `/etc/docker/dae
 
 ### 2.3 DNS
 
-Create `A` (and `AAAA` if the VM has IPv6) records for the chosen host name pointing at the VM. Wait until `dig +short <host>` answers with the VM's address **before** the first `docker compose up`: Caddy requests the certificate on start, and repeated failures hit Let's Encrypt rate limits.
+Create `A` (and `AAAA` if the VM has IPv6) records for the chosen host name pointing at the VM: here `app.team-companion.eu A 37.27.20.30` and `app.team-companion.eu AAAA 2a01:4f9:c013:554a::1`. Wait until `dig +short app.team-companion.eu` (and `dig +short AAAA app.team-companion.eu`) answers with the VM's addresses **before** the first `docker compose up`: Caddy requests the certificate on start, and repeated failures hit Let's Encrypt rate limits.
 
 ### 2.4 Checkout and settings
 
@@ -109,7 +111,7 @@ Check the forwarded address once: sign in from your own connection with a wrong 
 
 ### 2.6 Admin, invites, cleanup
 
-1. Open `https://<host>/auth/register?invite=<BOOTSTRAP_INVITE_CODE>` and register the admin account.
+1. Open `https://app.team-companion.eu/auth/register?invite=<BOOTSTRAP_INVITE_CODE>` and register the admin account.
 2. Sign-in smoke test over HTTPS with that account, without registering anything (start the line with a space so the shell history does not keep the password): ` SKIP_REGISTER=1 SMOKE_EMAIL=<admin email> SMOKE_PASSWORD='<password>' ./scripts/smoke_signin.sh https://$COMPANION_DOMAIN` ends with `PASSED`.
 3. Put that email into `ADMIN_EMAILS` and remove `BOOTSTRAP_INVITE_CODE` from `.env`, then `docker compose up -d app` (recreates the container with the new environment).
 4. Sign out and in: the nav shows the admin entry; `/admin/invites` works. Mint invite codes there for the first teams.
@@ -118,7 +120,7 @@ Check the forwarded address once: sign in from your own connection with a wrong 
 
 ### 2.7 Monitoring (minimal)
 
-- **Uptime:** an external HTTP check on `https://<host>/healthz` every 1 to 5 minutes, alerting by email (any free uptime service; owner's choice, MISSION "ask first" for external services). `/healthz` answers 503 when the database query fails.
+- **Uptime:** an external HTTP check on `https://app.team-companion.eu/healthz` every 1 to 5 minutes, alerting by email (any free uptime service; owner's choice, MISSION "ask first" for external services). `/healthz` answers 503 when the database query fails.
 - **Backups:** `HEALTHCHECK_PING_URL` in `deploy/backup.env` (a dead-man's switch that alerts when no successful backup arrived for a day). Without it, read the backup log weekly (section 7).
 - **Disk:** alert at 80 % (provider monitoring, or a cron line: `df --output=pcent / | tail -1`).
 - **Certificates:** Caddy renews by itself; the uptime check catches a failure.
