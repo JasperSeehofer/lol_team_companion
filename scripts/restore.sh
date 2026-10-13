@@ -185,9 +185,14 @@ drill() {
   "$DOCKER" image inspect "$image" >/dev/null 2>&1 || die "image $image not found locally (set DRILL_IMAGE)"
 
   # Extracted files belong to whoever ran this script. As root they keep the
-  # archive's owner (uid 10001, the image's user); otherwise run the container
-  # as the current user so SurrealKV can write its WAL and LOCK.
-  if [[ "$(id -u)" != 0 ]]; then
+  # archive's owner (uid 10001, the image's user), but the data directory
+  # itself was made by mktemp (root, 0700), so hand it over too: the image's
+  # user must enter it to open db/ (first drill on the VM, 13 Oct 2026).
+  # Otherwise run the container as the current user so SurrealKV can write
+  # its WAL and LOCK.
+  if [[ "$(id -u)" == 0 ]]; then
+    chown -R 10001:10001 "$DRILL_DIR/data"
+  else
     run_user=(--user "$(id -u):$(id -g)")
   fi
   secret="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
