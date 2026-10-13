@@ -1780,7 +1780,14 @@ async fn hand_over_and_export_stay_inside_the_tenant() {
         .await
         .unwrap()
         .to_string();
-    assert!(!doc.contains("bob") && !doc.contains("Team Two"), "{doc}");
+    // Quoted values, not bare substrings: a random record id can spell
+    // "bob" by chance (CI, 13 Oct 2026: `user:v7jdj6400bob1zqr326n`).
+    assert!(
+        !doc.contains("bob@example.com")
+            && !doc.contains("\"bob\"")
+            && !doc.contains("\"Team Two\""),
+        "{doc}"
+    );
 }
 
 /// M9: guidance state is per user and reads only the user's own team. The
