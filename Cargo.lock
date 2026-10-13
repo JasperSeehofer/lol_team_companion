@@ -2909,6 +2909,7 @@ dependencies = [
  "axum",
  "axum-login",
  "chrono",
+ "http-body 1.0.1",
  "console_error_panic_hook",
  "dotenvy",
  "hmac",

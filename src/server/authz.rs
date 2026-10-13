@@ -27,6 +27,8 @@ use crate::server::rate_limit::{slow_down_message, Bucket, Limiter};
 pub struct DbHandle {
     db: Arc<Surreal<Db>>,
     path: Arc<str>,
+    /// The request that borrowed it, for the in-flight steps.
+    request: Option<crate::server::inflight::RequestId>,
 }
 
 fn holders() -> &'static std::sync::Mutex<std::collections::HashMap<Arc<str>, usize>> {
@@ -43,7 +45,11 @@ impl DbHandle {
             .unwrap_or_else(|p| p.into_inner())
             .entry(Arc::clone(&path))
             .or_insert(0) += 1;
-        Self { db, path }
+        let request = crate::server::inflight::current();
+        if let Some(id) = request {
+            crate::server::inflight::note_for(id, "db borrowed");
+        }
+        Self { db, path, request }
     }
 
     /// The `Arc` itself, for an API that keeps one (it is not counted).
@@ -60,6 +66,9 @@ impl Clone for DbHandle {
 
 impl Drop for DbHandle {
     fn drop(&mut self) {
+        if let Some(id) = self.request {
+            crate::server::inflight::note_for(id, "db released");
+        }
         let mut map = holders().lock().unwrap_or_else(|p| p.into_inner());
         if let Some(n) = map.get_mut(&self.path) {
             *n -= 1;
@@ -211,6 +220,7 @@ pub async fn optional_user() -> Result<Option<AppUser>, ServerFnError> {
     let auth: AuthSession = leptos_axum::extract()
         .await
         .map_err(|e| internal_error("extract auth session", e))?;
+    crate::server::inflight::note("auth session extracted");
     if let Some(u) = &auth.user {
         let counts = visit_page()
             .as_deref()
@@ -223,6 +233,7 @@ pub async fn optional_user() -> Result<Option<AppUser>, ServerFnError> {
                     .map_err(|e| e.to_string()),
                 None => Err("no database handle".to_string()),
             };
+            crate::server::inflight::note("visit written");
             if let Err(e) = written {
                 // Try again on the next request rather than in an hour.
                 forget_seen(&u.id);

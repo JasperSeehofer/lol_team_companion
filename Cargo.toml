@@ -32,6 +32,7 @@ tower = { version = "0.5", features = ["full"], optional = true }
 tower-http = { version = "0.6", features = ["fs"], optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+http-body = { version = "1", optional = true }
 dotenvy = { version = "0.15", optional = true }
 
 # Client-only
@@ -69,6 +70,7 @@ ssr = [
   "dep:tower-http",
   "dep:tracing",
   "dep:tracing-subscriber",
+  "dep:http-body",
   "dep:dotenvy",
   "leptos/ssr",
   "leptos_meta/ssr",

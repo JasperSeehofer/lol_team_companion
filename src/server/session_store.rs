@@ -138,6 +138,7 @@ impl SessionStore for SurrealSessionStore {
         // Retry with a fresh ID on the (astronomically unlikely) collision; a
         // CREATE on an existing ID fails or returns no row. Bounded so a
         // broken database surfaces as an error instead of a busy loop.
+        crate::server::inflight::note("session create");
         let mut last_err = None;
         for _ in 0..5 {
             match self.write(record, true).await {
@@ -152,10 +153,14 @@ impl SessionStore for SurrealSessionStore {
     }
 
     async fn save(&self, record: &Record) -> session_store::Result<()> {
-        self.write(record, false).await.map(|_| ())
+        crate::server::inflight::note("session save");
+        let r = self.write(record, false).await.map(|_| ());
+        crate::server::inflight::note("session saved");
+        r
     }
 
     async fn load(&self, session_id: &Id) -> session_store::Result<Option<Record>> {
+        crate::server::inflight::note("session load");
         let mut result = self
             .db()?
             .query("SELECT data FROM type::record($tb, $id)")
@@ -165,6 +170,7 @@ impl SessionStore for SurrealSessionStore {
             .map_err(backend)?;
 
         let row: Option<SessionRow> = result.take(0).map_err(backend)?;
+        crate::server::inflight::note("session loaded");
         let Some(row) = row else {
             return Ok(None);
         };

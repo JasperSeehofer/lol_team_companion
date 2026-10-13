@@ -271,6 +271,9 @@ async fn main() {
     // (A missing key is among the configuration warnings above.)
     let riot = Arc::new(RiotClient::from_config(&app_config.riot));
 
+    // Log requests that do not complete (server::inflight).
+    let inflight_task = lol_team_companion::server::inflight::spawn_watchdog();
+
     // Drop idle rate-limiter entries off the request path.
     let limiter_task = rate_limit::spawn_purge_task(Duration::from_secs(60));
 
@@ -410,6 +413,11 @@ async fn main() {
         )
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         .layer(auth_layer)
+        // Outermost: every request is registered until its body is sent, and
+        // the watchdog logs any that runs longer than 15 s (M11).
+        .layer(axum::middleware::from_fn(
+            lol_team_companion::server::inflight::track,
+        ))
         .with_state(app_state);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -467,6 +475,7 @@ async fn main() {
         session_purge_task,
         match_cache_task,
         limiter_task,
+        inflight_task,
     ] {
         task.abort();
         let _ = task.await;

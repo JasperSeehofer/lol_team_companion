@@ -9,6 +9,7 @@ pub mod db;
 pub mod graph;
 pub mod guidance;
 pub mod images;
+pub mod inflight;
 pub mod migrations;
 pub mod promote;
 pub mod rate_limit;
