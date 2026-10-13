@@ -64,13 +64,15 @@ Account holders can download everything about themselves and delete their accoun
 
 ## 6. Verification file
 
-`public/riot.txt` is served at `https://app.team-companion.eu/riot.txt` (cargo-leptos copies `public/` into the site root; `e2e/tests/legal.spec.ts` checks it answers as plain text). Today it holds the placeholder `[OWNER: paste the verification code ...]`.
+`public/riot.txt` is served at `https://app.team-companion.eu/riot.txt` (cargo-leptos copies `public/` into the site root; `e2e/tests/legal.spec.ts` checks it answers as plain text). The owner found no verification section for app 834192 on the portal (13 October 2026), so the file names the app and says so; it ships with the next image build. Should the portal ask for a code later:
 
 1. Copy the verification code from the product page on the portal.
 2. Replace the whole content of `public/riot.txt` with it (no other text, one line).
 3. Commit, deploy, and check `curl -s https://app.team-companion.eu/riot.txt` prints exactly the code.
 
 ## 7. Production key, if the registration still needs one
+
+State on 13 October 2026: the production key is live on the VM (`riot_key=true`, budget 45 / 2400), the owner linked an account and saw the match history and a match detail with its timeline; ranked standing and an opponent lookup are still to be checked (the lookup needs a team). The registration text was rewritten from section 1 and 2 (the old text named the product "LoL Team Companion", placed the hosting in Germany, and said champion mastery seeds the user's own pool, which the code does not do: mastery is read only for scouted opponents' players); the owner's answers for the three notes above: no monetisation (a voluntary support link may follow, off at launch); closed beta of 5 to 20 teams, all requests user-triggered, a few thousand on a busy day; retention as in section 4.
 
 1. Make sure sections 1 to 6 match the registration; update the product description on the portal where they do not.
 2. The portal asks for a live site over HTTPS with terms, a privacy policy, `riot.txt` and a working prototype: deploy per `docs/RUNBOOK.md`, have the adviser confirm the drafted legal bases and clauses on the legal pages, and give the reviewer an invite link and a test account with a linked Riot ID (or a short screencast).
