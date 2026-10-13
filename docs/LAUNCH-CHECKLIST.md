@@ -18,10 +18,10 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 2. Riot
 
-- [ ] **owner** The existing Riot registration compared with `docs/RIOT-REGISTRATION-CHECK.md` and updated where it differs; production key approved (if not already), key in `RIOT_API_KEY`. *13 Oct 2026: key live on the VM; the description rewritten (check doc, section 7); open: the owner pastes it and the three answers into the portal.*
+- [ ] **owner** The existing Riot registration compared with `docs/RIOT-REGISTRATION-CHECK.md` and updated where it differs; production key approved (if not already), key in `RIOT_API_KEY`. *13 Oct 2026: key live on the VM; the description rewritten and shortened to the portal's field limit (about 1,450 characters, with monetisation, volume and retention as its last paragraph; check doc, section 7); the owner agreed to the text and the three answers and pastes them into the portal.*
 - [x] **owner + agent** `riot.txt` with the verification code from the portal served at `https://app.team-companion.eu/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`).* *Owner, 13 Oct 2026: the portal shows no verification section for app 834192, so there is no code; the file names the app instead (ships with the next image).*
 - [x] **owner** `RIOT_GLOBAL_BUDGET_PER_SEC` / `_PER_MIN` set for the production limits shown in the portal (template comment: 45 / 2400 for 500 per 10 s and 30,000 per 10 min). *Done 13 Oct 2026: key in `.env`, budget 45 / 2400, the startup log shows `riot_key=true`.*
-- [ ] **both** A linked account's match history, a match detail with timeline, ranked data and an opponent scouting lookup work in production. *13 Oct 2026: match history and a match detail with timeline work (three bug reports filed on the detail page, among them recall events shown as item undo); ranked data and the opponent lookup still to check (the lookup needs a team).*
+- [x] **both** A linked account's match history, a match detail with timeline, ranked data and an opponent scouting lookup work in production. *Done 13 Oct 2026: match history, a match detail with timeline, the ranked standing on `/me` and an opponent lookup all work with the production key (three bug reports filed on the detail page, among them recall events shown as item undo; product work for the next session).*
 
 ## 3. Deployment and configuration
 
