@@ -152,6 +152,7 @@ const DELETE_TEAM: &str = "\
     DELETE checklist_instance WHERE team = $t; \
     DELETE scheduled_match WHERE team = $t; \
     DELETE share_link WHERE team = $t; \
+    DELETE invite WHERE team = $t; \
     UPDATE match SET team_id = NONE WHERE team_id = $t; \
     DELETE join_request WHERE team = $t; \
     DELETE team_member WHERE team = $t; \
@@ -349,7 +350,8 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
     (
         "account",
         "SELECT id, username, email, created_at, riot_summoner_name, riot_puuid, riot_region, \
-         last_solo_sync, is_admin, admin_promoted_at, guidance_enabled, survey_opt_out, share_card_hidden FROM ONLY $u",
+         last_solo_sync, is_admin, admin_promoted_at, guidance_enabled, survey_opt_out, share_card_hidden, \
+         last_seen_at, prev_seen_at FROM ONLY $u",
     ),
     (
         "team_membership",
@@ -470,7 +472,7 @@ pub async fn export_user_data(db: &Surreal<Db>, user_id: &str) -> DbResult<serde
     Ok(serde_json::json!({
         "format": "companion-export-1",
         "exported_at": chrono::Utc::now().to_rfc3339(),
-        "about": "Everything Companion stores about your account. Team records you created are listed by kind, id, name and date; their content belongs to the team and is not part of this file.",
+        "about": "Everything Team Companion stores about your account. Team records you created are listed by kind, id, name and date; their content belongs to the team and is not part of this file.",
         "not_included": [
             "Your password: only an Argon2 hash is stored, and it is never exported.",
             "Other people's data: teammates, their pages, admin notes on your bug reports.",
@@ -531,6 +533,35 @@ mod tests {
                 Treatment::Leader => continue,
             };
             assert!(all.contains(&needle), "{t}.{f}: expected `{needle}`");
+        }
+    }
+
+    /// Deleting a team removes (or unlinks) every row that points at it
+    /// through a `record<team>` field, so no row is left with a dangling
+    /// team (team-bound invites included).
+    #[test]
+    fn deleting_a_team_covers_every_team_link() {
+        let links: Vec<(String, String)> = include_str!("../../schema.surql")
+            .lines()
+            .filter(|l| l.contains("record<team>"))
+            .filter_map(|l| {
+                let rest = l.trim().strip_prefix("DEFINE FIELD IF NOT EXISTS ")?;
+                let mut words = rest.split_whitespace();
+                let field = words.next()?.to_string();
+                let _on = words.next()?;
+                Some((words.next()?.to_string(), field))
+            })
+            .collect();
+        assert!(links.iter().any(|(t, f)| t == "invite" && f == "team"));
+        for (t, f) in &links {
+            let deleted = DELETE_TEAM.contains(&format!("DELETE {t} WHERE {f} = $t"))
+                || DELETE_TEAM.contains(&format!("DELETE {t} WHERE id IN $"));
+            let unlinked =
+                DELETE_TEAM.contains(&format!("UPDATE {t} SET {f} = NONE WHERE {f} = $t"));
+            assert!(
+                deleted || unlinked,
+                "{t}.{f} links a team but DELETE_TEAM leaves it"
+            );
         }
     }
 }

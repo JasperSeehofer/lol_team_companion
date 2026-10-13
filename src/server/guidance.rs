@@ -119,6 +119,37 @@ pub async fn reset(db: &Surreal<Db>, user_id: &str, what: Reset) -> DbResult<()>
     Ok(())
 }
 
+/// The visit before this one. Normally `user.prev_seen_at` (this visit's
+/// first request moved the old `last_seen_at` there; see
+/// `db::touch_last_seen`). While that write has not landed yet (another
+/// request of the same page load is doing it), `last_seen_at` is still an
+/// hour old or more and is itself the previous visit (M10 review).
+async fn prev_seen(
+    db: &Surreal<Db>,
+    user_id: &str,
+    now: DateTime<Utc>,
+) -> DbResult<Option<DateTime<Utc>>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Seen {
+        last_seen_at: Option<Datetime>,
+        prev_seen_at: Option<Datetime>,
+    }
+    let mut r = db
+        .query("SELECT last_seen_at, prev_seen_at FROM ONLY type::record('user', $uk)")
+        .bind(("uk", record_key(user_id, "user")))
+        .await?;
+    let v: Option<Seen> = r.take(0)?;
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let last = v.last_seen_at.as_ref().and_then(parse_dt);
+    let prev = v.prev_seen_at.as_ref().and_then(parse_dt);
+    Ok(match last {
+        Some(l) if now - l >= Duration::hours(1) => Some(l),
+        _ => prev,
+    })
+}
+
 /// The account's guidance switch and creation time.
 async fn account(db: &Surreal<Db>, user_id: &str) -> DbResult<(bool, Option<DateTime<Utc>>)> {
     #[derive(Debug, Deserialize, SurrealValue)]
@@ -393,6 +424,7 @@ pub async fn nudge_facts(
     Ok(NudgeFacts {
         now,
         last_write: last_write(db, user_id, Some(team_id)).await?,
+        prev_seen: prev_seen(db, user_id, now).await?,
         account_created: created,
         match_without_review,
         old_open_items: old.map(|c| c.n.max(0) as usize).unwrap_or(0),

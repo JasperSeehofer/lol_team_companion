@@ -103,11 +103,7 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
         .map_err(authz::server_err)?
     {
         Some(id) => id,
-        None => {
-            return Err(ServerFnError::new(
-                "You need to join or create a team first",
-            ))
-        }
+        None => return Err(ServerFnError::new("Create or join your team first")),
     };
     let members = db::get_roster_puuids(&surreal, &team_id)
         .await

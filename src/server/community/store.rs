@@ -1391,6 +1391,7 @@ pub async fn admin_survey_results(db: &Surreal<Db>, id: &str) -> DbResult<Survey
 struct DbLedger {
     month: String,
     support_cents: i64,
+    payment_fees_cents: Option<i64>,
     hosting_cents: i64,
     domain_cents: i64,
     ai_tokens_cents: i64,
@@ -1409,6 +1410,7 @@ impl From<DbLedger> for LedgerMonth {
         LedgerMonth {
             month: m.month,
             support_cents: m.support_cents,
+            payment_fees_cents: m.payment_fees_cents.unwrap_or(0),
             hosting_cents: m.hosting_cents,
             domain_cents: m.domain_cents,
             ai_tokens_cents: m.ai_tokens_cents,
@@ -1424,7 +1426,8 @@ impl From<DbLedger> for LedgerMonth {
     }
 }
 
-const LEDGER_FIELDS: &str = "month, support_cents, hosting_cents, domain_cents, ai_tokens_cents, \
+const LEDGER_FIELDS: &str =
+    "month, support_cents, payment_fees_cents, hosting_cents, domain_cents, ai_tokens_cents, \
      other_cents, other_label, note, published, published_at, revised_at, updated_at, \
      updated_by.username AS updated_by_name";
 
@@ -1477,7 +1480,7 @@ pub async fn admin_save_ledger_month(
         .is_some_and(|e| e.published || e.published_at.is_some());
     db.query(
         "UPSERT type::record('ledger_month', $month) SET month = $month, \
-             support_cents = $support, hosting_cents = $hosting, domain_cents = $domain, \
+             support_cents = $support, payment_fees_cents = $fees, hosting_cents = $hosting, domain_cents = $domain, \
              ai_tokens_cents = $ai, other_cents = $other, other_label = $other_label, note = $note, \
              published = $published, published_at = <option<datetime>> $published_at, \
              revised_at = IF $revision { time::now() } ELSE { NONE }, \
@@ -1485,6 +1488,7 @@ pub async fn admin_save_ledger_month(
     )
     .bind(("month", m.month.clone()))
     .bind(("support", m.support_cents))
+    .bind(("fees", m.payment_fees_cents))
     .bind(("hosting", m.hosting_cents))
     .bind(("domain", m.domain_cents))
     .bind(("ai", m.ai_tokens_cents))

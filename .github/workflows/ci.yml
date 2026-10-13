@@ -105,14 +105,23 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
 
+      # The guidance spec's returning-user test needs the seed data; with CI
+      # set it fails (instead of skipping) when the seed is missing. The seed
+      # tool must run before the server opens the database (one process per
+      # SurrealKV directory).
+      - name: Seed the database
+        run: |
+          cargo build --features ssr --bin seed
+          ./target/debug/seed
+
       - name: Start server
         run: |
           nohup ./target/debug/lol_team_companion > "$RUNNER_TEMP/server.log" 2>&1 &
           ./scripts/wait_for_server.sh 120 "$BASE_URL"
 
-      - name: Playwright smoke, hydration gate, auth, admin, legal and account
+      - name: Playwright smoke, hydration gate, auth, admin, legal, account, guidance and team invites
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts --retries=1
 
       - name: Server log
         if: always()

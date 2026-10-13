@@ -20,10 +20,78 @@ use crate::server::auth::{AppUser, AuthSession};
 use crate::server::db::{self, DbError};
 use crate::server::rate_limit::{slow_down_message, Bucket, Limiter};
 
-pub type DbHandle = Arc<Surreal<Db>>;
+/// A server function's database handle: the shared handle plus the request
+/// path that borrowed it. Live handles are counted per path, so a shutdown
+/// that still finds handles can say which requests hold them
+/// ([`held_handles`]). Derefs to `Surreal<Db>`.
+pub struct DbHandle {
+    db: Arc<Surreal<Db>>,
+    path: Arc<str>,
+}
+
+fn holders() -> &'static std::sync::Mutex<std::collections::HashMap<Arc<str>, usize>> {
+    static HOLDERS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<Arc<str>, usize>>,
+    > = std::sync::OnceLock::new();
+    HOLDERS.get_or_init(Default::default)
+}
+
+impl DbHandle {
+    fn new(db: Arc<Surreal<Db>>, path: Arc<str>) -> Self {
+        *holders()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .entry(Arc::clone(&path))
+            .or_insert(0) += 1;
+        Self { db, path }
+    }
+
+    /// The `Arc` itself, for an API that keeps one (it is not counted).
+    pub fn arc(&self) -> Arc<Surreal<Db>> {
+        Arc::clone(&self.db)
+    }
+}
+
+impl Clone for DbHandle {
+    fn clone(&self) -> Self {
+        Self::new(Arc::clone(&self.db), Arc::clone(&self.path))
+    }
+}
+
+impl Drop for DbHandle {
+    fn drop(&mut self) {
+        let mut map = holders().lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(n) = map.get_mut(&self.path) {
+            *n -= 1;
+            if *n == 0 {
+                map.remove(&self.path);
+            }
+        }
+    }
+}
+
+impl std::ops::Deref for DbHandle {
+    type Target = Surreal<Db>;
+    fn deref(&self) -> &Surreal<Db> {
+        &self.db
+    }
+}
+
+/// The request paths whose server functions still hold a database handle,
+/// with how many (logged at shutdown when handles are left).
+pub fn held_handles() -> Vec<(String, usize)> {
+    let mut v: Vec<(String, usize)> = holders()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .map(|(k, n)| (k.to_string(), *n))
+        .collect();
+    v.sort();
+    v
+}
 
 pub const NOT_SIGNED_IN: &str = "Not signed in";
-pub const NO_TEAM: &str = "Join or create a team first";
+pub const NO_TEAM: &str = "Create or join your team first";
 pub const NOT_FOUND: &str = "Not found";
 pub const LEADER_ONLY: &str = "Only the team leader can do that";
 const GENERIC: &str = "Something went wrong on our side. Please try again.";
@@ -115,9 +183,18 @@ pub fn server_err<E: IntoServerError>(e: E) -> ServerFnError {
 // Context
 // ---------------------------------------------------------------------------
 
-/// The DB handle provided to every server function.
+/// The DB handle for a server function: a clone of the process-wide handle
+/// (`db::shared`), held only for the call. (Not a Leptos context value: a
+/// clone in a request's owner could outlive the request and keep the
+/// database open at shutdown.)
 pub fn db() -> Result<DbHandle, ServerFnError> {
-    use_context::<DbHandle>().ok_or_else(|| internal_error("server fn context", "no DB handle"))
+    let db = crate::server::db::shared()
+        .ok_or_else(|| internal_error("server fn context", "no DB handle (shutting down)"))?;
+    let path: Arc<str> = use_context::<axum::http::request::Parts>()
+        .map(|p| p.uri.path().to_string())
+        .unwrap_or_else(|| "(no request)".to_string())
+        .into();
+    Ok(DbHandle::new(db, path))
 }
 
 /// The shared Riot API client provided to every server function.
@@ -126,12 +203,90 @@ pub fn riot() -> Result<Arc<crate::server::riot::RiotClient>, ServerFnError> {
         .ok_or_else(|| internal_error("server fn context", "no Riot client"))
 }
 
-/// The signed-in user, if any.
+/// The signed-in user, if any. A signed-in request also records the visit
+/// (`user.last_seen_at`, at most once an hour per user; see
+/// [`last_seen_due`]), except on public pages (share links, legal and
+/// sign-in pages, changelog, transparency; `counts_as_visit`).
 pub async fn optional_user() -> Result<Option<AppUser>, ServerFnError> {
     let auth: AuthSession = leptos_axum::extract()
         .await
         .map_err(|e| internal_error("extract auth session", e))?;
+    if let Some(u) = &auth.user {
+        let counts = visit_page()
+            .as_deref()
+            .is_some_and(crate::models::guidance::counts_as_visit);
+        if counts && last_seen_due(&u.id, std::time::Instant::now()) {
+            let written = match crate::server::db::shared() {
+                Some(db) => crate::server::db::touch_last_seen(&db, &u.id)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string()),
+                None => Err("no database handle".to_string()),
+            };
+            if let Err(e) = written {
+                // Try again on the next request rather than in an hour.
+                forget_seen(&u.id);
+                tracing::warn!(user = %u.id, error = %e, "could not record the visit");
+            }
+        }
+    }
     Ok(auth.user)
+}
+
+/// The page this request belongs to: the request path for a server-rendered
+/// page, or the same-origin `Referer` path for a server function call from
+/// the browser (`/api/...`). `None` when it cannot be told.
+fn visit_page() -> Option<String> {
+    let parts = use_context::<axum::http::request::Parts>()?;
+    let path = parts.uri.path();
+    if !path.starts_with("/api/") {
+        return Some(path.to_string());
+    }
+    let referer = parts
+        .headers
+        .get(axum::http::header::REFERER)?
+        .to_str()
+        .ok()?;
+    let uri: axum::http::Uri = referer.parse().ok()?;
+    Some(uri.path().to_string())
+}
+
+fn seen_map() -> &'static std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>> {
+    static SEEN: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+    > = std::sync::OnceLock::new();
+    SEEN.get_or_init(Default::default)
+}
+
+/// Forget the in-memory "written" mark (the write failed).
+fn forget_seen(user_id: &str) {
+    seen_map()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(user_id);
+}
+
+/// Whether this process should write the user's visit now: the first
+/// signed-in request, then once an hour (the database query checks the hour
+/// too, across restarts). Kept in memory so most requests cost nothing.
+pub fn last_seen_due(user_id: &str, now: std::time::Instant) -> bool {
+    let mut map = seen_map().lock().unwrap_or_else(|p| p.into_inner());
+    last_seen_due_in(&mut map, user_id, now)
+}
+
+fn last_seen_due_in(
+    map: &mut std::collections::HashMap<String, std::time::Instant>,
+    user_id: &str,
+    now: std::time::Instant,
+) -> bool {
+    const HOUR: std::time::Duration = std::time::Duration::from_secs(3600);
+    match map.get(user_id) {
+        Some(at) if now.duration_since(*at) < HOUR => false,
+        _ => {
+            map.insert(user_id.to_string(), now);
+            true
+        }
+    }
 }
 
 /// The signed-in user, or "Not signed in".
@@ -158,7 +313,7 @@ pub async fn current_team_for(
     db::get_user_team_id(db, &user.id).await.map_err(server_err)
 }
 
-/// The user's team, or "Join or create a team first".
+/// The user's team, or "Create or join your team first".
 pub async fn require_team(db: &Surreal<Db>, user: &AppUser) -> Result<String, ServerFnError> {
     current_team_for(db, user)
         .await?
@@ -330,4 +485,33 @@ pub fn user_cooldown(
                 remaining.as_secs().max(1)
             ))
         })
+}
+
+#[cfg(test)]
+mod last_seen_tests {
+    use super::last_seen_due_in;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_visit_is_written_once_an_hour() {
+        let mut map = std::collections::HashMap::new();
+        let t0 = Instant::now();
+        assert!(last_seen_due_in(&mut map, "user:a", t0));
+        assert!(!last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(60)
+        ));
+        assert!(last_seen_due_in(&mut map, "user:b", t0), "per user");
+        assert!(!last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(3599)
+        ));
+        assert!(last_seen_due_in(
+            &mut map,
+            "user:a",
+            t0 + Duration::from_secs(3600)
+        ));
+    }
 }

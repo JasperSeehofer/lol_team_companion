@@ -50,6 +50,9 @@ pub enum Bucket {
     /// The guidance check on every route change, per user (M9). Over the
     /// limit the page simply shows no hint.
     GuidanceCheck,
+    /// Team invites minted, disabled or redeemed, per user (polish pass):
+    /// slow enough that codes cannot be guessed through the redeem form.
+    TeamInvite,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -128,6 +131,11 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::GuidanceCheck => Limit {
             capacity: 60.0,
             refill_per_sec: 2.0,
+        },
+        // 10 mints, disables or redeem attempts, then one every 30 s.
+        Bucket::TeamInvite => Limit {
+            capacity: 10.0,
+            refill_per_sec: 1.0 / 30.0,
         },
         // 120 page loads, then two a second.
         Bucket::PublicRead => Limit {

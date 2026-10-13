@@ -1,6 +1,6 @@
 #![recursion_limit = "512"]
 
-use axum::{extract::State, http::StatusCode, response::Redirect, routing::get, Router};
+use axum::{http::StatusCode, response::Redirect, routing::get, Router};
 use axum_login::{tower_sessions::SessionManagerLayer, AuthManagerLayerBuilder};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -15,21 +15,25 @@ use lol_team_companion::server::{
 };
 use tower_sessions::ExpiredDeletion;
 
+/// No database handle in here (polish pass): the router's state and the
+/// Leptos context closure are cloned into every request, and a request whose
+/// render never finished kept the database open at shutdown. Handlers take
+/// the handle from `db::shared()` for the length of the call.
 #[derive(Clone, axum::extract::FromRef)]
 struct AppState {
     leptos_options: LeptosOptions,
-    db: Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
     riot: Arc<RiotClient>,
     auth_backend: AuthBackend,
 }
 
 /// 200 when a trivial DB query succeeds, 503 otherwise.
-async fn health_handler(
-    State(state): State<AppState>,
-) -> (StatusCode, axum::Json<serde_json::Value>) {
-    let db_ok = match state.db.query("RETURN true").await {
-        Ok(r) => r.check().is_ok(),
-        Err(_) => false,
+async fn health_handler() -> (StatusCode, axum::Json<serde_json::Value>) {
+    let db_ok = match db::shared() {
+        Some(db) => match db.query("RETURN true").await {
+            Ok(r) => r.check().is_ok(),
+            Err(_) => false,
+        },
+        None => false,
     };
     if db_ok {
         (
@@ -111,7 +115,6 @@ async fn wait_for_db_close(data_dir: &std::path::Path, limit: Duration) -> bool 
 /// SameSite=Strict, so another site cannot trigger it with the cookie.
 async fn export_handler(
     auth: lol_team_companion::server::auth::AuthSession,
-    State(state): State<AppState>,
 ) -> axum::response::Response {
     use axum::http::header;
     use axum::response::IntoResponse;
@@ -128,7 +131,14 @@ async fn export_handler(
         )
             .into_response();
     }
-    match lol_team_companion::server::account::export_user_data(&state.db, &user.id).await {
+    let Some(db) = db::shared() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The server is restarting. Try again in a minute.",
+        )
+            .into_response();
+    };
+    match lol_team_companion::server::account::export_user_data(&db, &user.id).await {
         Ok(doc) => {
             let body = serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into());
             let file = format!(
@@ -239,6 +249,9 @@ async fn main() {
         }
     };
 
+    // Server functions borrow the handle from one process-wide slot.
+    db::install_shared(Arc::clone(&surreal_db));
+
     // Data Dragon: load the stored copy, refresh from the network, then keep
     // refreshing every 6 hours. Champion names are normalised against it.
     lol_team_companion::server::data_dragon::init(&surreal_db).await;
@@ -325,7 +338,6 @@ async fn main() {
 
     let app_state = AppState {
         leptos_options: leptos_options.clone(),
-        db: Arc::clone(&surreal_db),
         riot: Arc::clone(&riot),
         auth_backend,
     };
@@ -353,11 +365,13 @@ async fn main() {
             &app_state,
             routes,
             {
-                let app_state = app_state.clone();
+                // Only the Riot client: the closure is cloned into every
+                // request. The database handle is not a context value (it
+                // would live as long as the request's owner); server
+                // functions take it from `db::shared()`.
+                let riot = Arc::clone(&riot);
                 move || {
-                    let db = Arc::clone(&app_state.db);
-                    provide_context(db);
-                    provide_context(Arc::clone(&app_state.riot));
+                    provide_context(Arc::clone(&riot));
                 }
             },
             {
@@ -424,11 +438,15 @@ async fn main() {
         let _ = task.await;
     }
     drop(riot);
+    drop(db::release_shared());
     // Every other handle should be gone now; one still held somewhere (a
     // request's reactive owner, a task) keeps SurrealKV open, so say so.
     let held = Arc::strong_count(&surreal_db) - 1;
     if held > 0 {
         tracing::warn!("{held} database handle(s) still held at shutdown");
+        for (path, n) in lol_team_companion::server::authz::held_handles() {
+            tracing::warn!("  {n} held by a server function of {path}");
+        }
     }
     drop(surreal_db);
 

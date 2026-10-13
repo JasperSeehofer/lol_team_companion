@@ -4,20 +4,20 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 1. Identity and legal
 
-- [ ] **owner** Final product name chosen: no "League of Legends", "LoL", "Riot" or Riot IP (MISSION 4). Name updated in the shell `<title>`, footer disclaimer (`RIOT_DISCLAIMER` keeps Riot's exact wording with the new name), nav, Impressum, privacy page, `riot.txt` application.
-- [ ] **owner** Domain registered; `COMPANION_DOMAIN` set; HTTPS works.
-- [ ] **owner + agent** Impressum (`/legal/impressum`) is real: name, postal address, email, and whatever else § 5 DDG requires for the owner's situation. No placeholders. *Agent part done: the page exists with `[OWNER: ...]` placeholders for every fact.*
-- [ ] **owner + agent** Privacy page (`/legal/datenschutz`) is real. *Agent part done (M8):* it lists what is stored (the list is checked against `schema.surql` in both directions by `every_table_is_accounted_for`), purposes, Riot and Data Dragon, the hosting and backup providers (placeholders), the one session cookie, the access and application logs, rate limiting in memory, retention (backups 30 days), rights with the export and deletion links. *Owner:* fill the `[OWNER: ...]` items (controller, privacy contact, legal bases confirmed with advice, hosting and storage providers with DPAs, log retention in days, supervisory authority) and remove the "Partly a draft" callout.
-- [ ] **owner + agent** Terms of use page exists. *Agent part done (M8): `/legal/terms`, linked in the footer.* *Owner:* pricing statement, liability clause, governing law.
+- [x] **owner** Final product name chosen: no "League of Legends", "LoL", "Riot" or Riot IP (MISSION 4). Name updated in the shell `<title>`, footer disclaimer (`RIOT_DISCLAIMER` keeps Riot's exact wording with the new name), nav, Impressum, privacy page, `riot.txt` application. *Done: "Team Companion" (owner, 12 Oct 2026); applied everywhere in the polish pass (`smoke.spec.ts` checks the title and the nav brand, a unit test the disclaimer).*
+- [ ] **owner** Domain registered; `COMPANION_DOMAIN` set; HTTPS works. *Domain `app.team-companion.eu`, certificate contact `info@team-companion.eu` (owner, 12 Oct 2026; set as the example values in `deploy/env.production.example`). Open: DNS records and the first HTTPS check on the VM.*
+- [x] **owner + agent** Impressum (`/legal/impressum`) is real: name, postal address, email, and whatever else § 5 DDG requires for the owner's situation. No placeholders. *Done (polish pass): the owner's facts (private person: name, address, email; no second contact, no responsible-for-content line, no registration or VAT ID); `legal.spec.ts` checks there is no placeholder.*
+- [ ] **owner + agent** Privacy page (`/legal/datenschutz`) is real. *Agent part done (M8):* it lists what is stored (the list is checked against `schema.surql` in both directions by `every_table_is_accounted_for`), purposes, Riot and Data Dragon, the hosting and backup providers (placeholders), the one session cookie, the access and application logs, rate limiting in memory, retention (backups 30 days), rights with the export and deletion links. *Polish pass:* controller, privacy contact, hosting (Hetzner Helsinki) and backup storage (Hetzner Falkenstein), access logs 14 days (Caddy rolls and deletes to match) and the supervisory authority (LfDI Baden-Württemberg) are filled in. *Review:* the legal basis per purpose is filled in with drafted defaults (service: contract; Riot link, syncs, share links, bug reports and votes: the user's own action under the contract; scouting opponents, logs, rate limits and backups: legitimate interest), flagged by the callout. *Owner, still open:* the adviser confirms the legal bases (and the two drafted terms clauses), data processing agreements with Hetzner in place (not claimed on the page), application-log retention (today: size-rotated, 5 x 10 MB); then remove the "Partly a draft" callout.
+- [ ] **owner + agent** Terms of use page exists. *Agent part done (M8): `/legal/terms`, linked in the footer. Polish pass: the owner's pricing statement word for word; liability and governing law drafted for the owner and on the page.* *Owner:* the adviser confirms the two drafted paragraphs (section "Liability and law").
 - [x] **agent** Account deletion works end to end: profile "Delete my account" (username + password), personal rows deleted, team records kept under "Former member", sessions ended; a leader with members hands over first (team page "Make team leader"), a leader alone deletes the team. Evidence: `tests/integration/account.rs`, `security.rs::hand_over_and_export_stay_inside_the_tenant`, `e2e/tests/account.spec.ts`.
 - [x] **agent** Account export works: `GET /account/export` (profile "Download my data"). Evidence: `export_holds_every_section_and_nothing_of_others`, `account.spec.ts`.
-- [ ] **owner** Support page and money wording follow the money policy (MISSION 4) and the owner's confirmation after the Riot and tax questions; or the support link stays off for launch.
+- [ ] **owner** Support page and money wording follow the money policy (MISSION 4) and the owner's confirmation after the Riot and tax questions; or the support link stays off for launch. *Owner, 12 Oct 2026: off for launch (`SUPPORT_URL` unset); support shown gross with payment fees as a cost line.*
 - [x] **agent** Footer shows Riot's legal disclaimer on every page (unit test on the wording; `smoke.spec.ts` and `legal.spec.ts` check it renders).
 
 ## 2. Riot
 
 - [ ] **owner** The existing Riot registration compared with `docs/RIOT-REGISTRATION-CHECK.md` and updated where it differs; production key approved (if not already), key in `RIOT_API_KEY`.
-- [ ] **owner + agent** `riot.txt` with the verification code from the portal served at `https://<host>/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`) and holds a placeholder.* *Owner:* paste the code.
+- [ ] **owner + agent** `riot.txt` with the verification code from the portal served at `https://app.team-companion.eu/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`) and holds a placeholder.* *Owner:* paste the code.
 - [ ] **owner** `RIOT_GLOBAL_BUDGET_PER_SEC` / `_PER_MIN` set for the production limits shown in the portal (template comment: 45 / 2400 for 500 per 10 s and 30,000 per 10 min).
 - [ ] **both** A linked account's match history, a match detail with timeline, ranked data and an opponent scouting lookup work in production.
 
@@ -52,7 +52,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 6. Monitoring and logs
 
-- [ ] **owner** External uptime check on `https://<host>/healthz`, alerting by email.
+- [ ] **owner** External uptime check on `https://app.team-companion.eu/healthz`, alerting by email.
 - [ ] **owner** Backup dead-man's switch (`HEALTHCHECK_PING_URL`) or a weekly calendar reminder to read the backup log.
 - [ ] **owner** Disk usage alert at 80 %.
 - [ ] **both** Error log review: run the app for a day with real use and read `docker compose logs app | grep -E "ERROR|WARN"`. No recurring errors; no passwords, session ids or full emails in the log at `RUST_LOG=info` (grep for `@` and for known test emails). Fix what shows up.
@@ -61,9 +61,9 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 ## 7. Performance smoke
 
 - [ ] **both** Cold page loads on a throttled connection (Chrome "Fast 4G"): home, sign-in, team dashboard, draft. Note the WASM size (`/pkg/lol_team_companion.wasm`, compressed transfer size in the network panel) and time to interactive. Budget proposal: under 3 MB compressed WASM, interactive under 4 s on Fast 4G.
-- [ ] **both** Compression works: `curl -sI -H 'Accept-Encoding: zstd, gzip' https://<host>/pkg/lol_team_companion.wasm` shows `Content-Encoding`.
+- [ ] **both** Compression works: `curl -sI -H 'Accept-Encoding: zstd, gzip' https://app.team-companion.eu/pkg/lol_team_companion.wasm` shows `Content-Encoding`.
 - [ ] **both** Caching: `/pkg/*` revalidates (`304` on reload), `/img/*` served from cache on the second load, `/fonts/*` cached.
-- [ ] **both** A small load test against the VM (for example `hey -z 60s -c 20 https://<host>/` and the same for `/healthz`): no errors, p95 under 500 ms, app memory stays well under its 1.5 GB limit (`docker stats`).
+- [ ] **both** A small load test against the VM (for example `hey -z 60s -c 20 https://app.team-companion.eu/` and the same for `/healthz`): no errors, p95 under 500 ms, app memory stays well under its 1.5 GB limit (`docker stats`).
 - [ ] **both** Phone width walkthrough of plans, drafts, reviews (read-only views, MISSION 4).
 
 ## 8. Product readiness (Release 1 definition of done, MISSION 6)
@@ -76,5 +76,5 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 ## 9. Invite the first teams
 
 - [ ] **owner** Discord server ready, with a short "how to report a bug" note.
-- [ ] **owner** Each team lead gets their invite link (`https://<host>/auth/register?invite=<code>`) and a two-line note: what the closed beta is, how to report bugs, that data may be reset only with notice.
+- [ ] **owner** Each team lead gets their invite link (`https://app.team-companion.eu/auth/register?invite=<code>`) and a two-line note: what the closed beta is, how to report bugs, that data may be reset only with notice.
 - [ ] **both** First week: check logs and bug reports daily; first backup drill after launch within 30 days.

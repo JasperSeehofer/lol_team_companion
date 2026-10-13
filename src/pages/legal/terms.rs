@@ -1,24 +1,24 @@
 //! Terms of use (M8). The structure and the rules of the closed beta are
-//! written here; facts only the operator can state (identity, pricing,
-//! liability, governing law) are `[OWNER: ...]` placeholders. Riot's
+//! written here. The pricing statement is the owner's own (launch checklist,
+//! 12 October 2026); the liability and governing-law paragraphs were drafted
+//! for the owner and are listed for the owner's adviser to confirm. Riot's
 //! production key review asks for terms next to the privacy page.
 
 use crate::components::footer::RIOT_DISCLAIMER;
-use crate::components::ui::{
-    Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
-};
-use crate::pages::legal::impressum::OwnerPlaceholder;
+use crate::components::ui::{PageHeader, PageShell, PageWidth, SectionHeader};
 use leptos::prelude::*;
 
-/// The sections of the terms: (id, title, paragraphs). A paragraph that
-/// starts with `OWNER:` renders as a placeholder.
+/// The pricing statement, exactly as the owner gave it.
+pub const PRICING: &str = "Using Team Companion costs nothing; support is voluntary.";
+
+/// The sections of the terms: (id, title, paragraphs).
 pub const SECTIONS: &[(&str, &str, &[&str])] = &[
     (
         "service-h",
-        "What Companion is",
+        "What Team Companion is",
         &[
-            "Companion is a private coaching workspace for one team: scouting, drafting, game plans, reviews and lessons. It is in a closed beta: you can register only with an invite code, features change, and things can break.",
-            "OWNER: pricing statement (for example that using Companion costs nothing)",
+            "Team Companion is a private coaching workspace for one team: scouting, drafting, game plans, reviews and lessons. It is in a closed beta: you can register only with an invite code, features change, and things can break.",
+            PRICING,
             "The operator is named in the Impressum. These terms apply between you and the operator.",
         ],
     ),
@@ -43,10 +43,10 @@ pub const SECTIONS: &[(&str, &str, &[&str])] = &[
         "use-h",
         "Fair use",
         &[
-            "Use Companion to prepare and review your own team's games. Do not try to read another team's data, get around rate limits or the invite gate, automate requests, or copy data out of Companion in bulk.",
-            "Scouting covers what is public: the match history and champions of players your team names, looked up through Riot's official API. Do not use Companion to follow or expose individual players beyond preparing for a match.",
+            "Use Team Companion to prepare and review your own team's games. Do not try to read another team's data, get around rate limits or the invite gate, automate requests, or copy data out of Team Companion in bulk.",
+            "Scouting covers what is public: the match history and champions of players your team names, looked up through Riot's official API. Do not use Team Companion to follow or expose individual players beyond preparing for a match.",
             "Do not put content in notes, reports or names that is unlawful, harassing or that reveals other people's private information.",
-            "Companion gives no help during a live game or champion select beyond what your team prepared in advance.",
+            "Team Companion gives no help during a live game or champion select beyond what your team prepared in advance.",
         ],
     ),
     (
@@ -60,7 +60,7 @@ pub const SECTIONS: &[(&str, &str, &[&str])] = &[
         "availability-h",
         "Availability and changes",
         &[
-            "Companion is offered as it is, without a promise of availability. It restarts for a few seconds every night for the backup and for updates.",
+            "Team Companion is offered as it is, without a promise of availability. It restarts for a few seconds every night for the backup and for updates.",
             "Data is not reset without notice. Changes to features are announced in the changelog; changes to these terms are announced there before they apply.",
             "The operator may suspend an account that breaks these terms, and will say why.",
         ],
@@ -69,8 +69,9 @@ pub const SECTIONS: &[(&str, &str, &[&str])] = &[
         "liability-h",
         "Liability and law",
         &[
-            "OWNER: liability clause suitable for a free private service under the operator's law",
-            "OWNER: governing law and place of jurisdiction",
+            "Team Companion is a free, private, non-commercial service. The operator is liable only for intent and gross negligence, and for injury to life, body or health. Otherwise liability is excluded as far as the law allows.",
+            "There is no guarantee that Team Companion is available at any given time, or that game data from Riot is correct or complete.",
+            "These terms are governed by the law of the Federal Republic of Germany. If you use Team Companion as a consumer, you keep the protection of the mandatory law of the country where you live. The place of jurisdiction follows the statutory rules.",
         ],
     ),
     (
@@ -86,19 +87,11 @@ pub const SECTIONS: &[(&str, &str, &[&str])] = &[
 pub fn TermsPage() -> impl IntoView {
     view! {
         <PageShell width=PageWidth::Reading>
-            <PageHeader title="Terms of use" eyebrow="Legal" meta=move || view! { <span>"The rules for using Companion during the closed beta."</span> } />
-            <div class="mb-8">
-                <Callout tone=CalloutTone::Warning title="Partly a draft">
-                    "Items marked OWNER are completed by the operator before Companion opens beyond the closed beta."
-                </Callout>
-            </div>
+            <PageHeader title="Terms of use" eyebrow="Legal" meta=move || view! { <span>"The rules for using Team Companion during the closed beta."</span> } />
             {SECTIONS.iter().enumerate().map(|(i, (id, title, paragraphs))| view! {
                 <section class=if i == 0 { "" } else { "mt-10" } aria-labelledby=*id>
                     <SectionHeader title=*title id=*id />
-                    {paragraphs.iter().map(|text| match text.strip_prefix("OWNER: ") {
-                        Some(what) => view! { <p class="mt-2"><OwnerPlaceholder what=what /></p> }.into_any(),
-                        None => view! { <p class="mt-2 max-w-prose text-body text-secondary">{*text}</p> }.into_any(),
-                    }).collect_view()}
+                    {paragraphs.iter().map(|text| view! { <p class="mt-2 max-w-prose text-body text-secondary">{*text}</p> }).collect_view()}
                 </section>
             }).collect_view()}
             <section class="mt-10" aria-labelledby="disclaimer-h">
@@ -111,21 +104,35 @@ pub fn TermsPage() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::SECTIONS;
+    use super::{PRICING, SECTIONS};
 
-    /// Facts that are the operator's stay placeholders until filled in.
+    fn paragraphs() -> impl Iterator<Item = &'static str> {
+        SECTIONS.iter().flat_map(|(_, _, p)| p.iter().copied())
+    }
+
+    /// No placeholder is left, and the owner's pricing statement is there
+    /// word for word.
     #[test]
-    fn owner_facts_are_placeholders() {
-        let owner: Vec<&str> = SECTIONS
-            .iter()
-            .flat_map(|(_, _, p)| p.iter())
-            .filter_map(|t| t.strip_prefix("OWNER: "))
-            .collect();
-        for needle in ["pricing", "liability", "governing law"] {
-            assert!(
-                owner.iter().any(|o| o.contains(needle)),
-                "{needle} must be an OWNER placeholder"
-            );
+    fn the_owners_facts_are_filled_in() {
+        assert!(paragraphs().all(|t| !t.contains("OWNER")));
+        assert_eq!(
+            PRICING,
+            "Using Team Companion costs nothing; support is voluntary."
+        );
+        assert!(paragraphs().any(|t| t == PRICING));
+    }
+
+    /// The drafted clauses cover what the owner asked for.
+    #[test]
+    fn liability_and_law_are_stated() {
+        let all: String = paragraphs().collect::<Vec<_>>().join(" ");
+        for needle in [
+            "intent and gross negligence",
+            "life, body or health",
+            "Federal Republic of Germany",
+            "mandatory law of the country where you live",
+        ] {
+            assert!(all.contains(needle), "{needle} missing from the terms");
         }
     }
 }

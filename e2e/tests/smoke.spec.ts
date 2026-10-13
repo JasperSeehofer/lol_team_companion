@@ -5,15 +5,15 @@
 import { test, expect } from "@playwright/test";
 
 const PUBLIC_PAGES = [
-  { path: "/", title: /Companion/i },
-  { path: "/auth/login", title: /Companion/i },
-  { path: "/auth/register", title: /Companion/i },
-  { path: "/closed-beta", title: /Companion/i },
-  { path: "/legal/impressum", title: /Companion/i },
-  { path: "/legal/datenschutz", title: /Companion/i },
-  { path: "/legal/terms", title: /Companion/i },
-  { path: "/changelog", title: /Companion/i },
-  { path: "/transparency", title: /Companion/i },
+  { path: "/", title: /Team Companion/i },
+  { path: "/auth/login", title: /Team Companion/i },
+  { path: "/auth/register", title: /Team Companion/i },
+  { path: "/closed-beta", title: /Team Companion/i },
+  { path: "/legal/impressum", title: /Team Companion/i },
+  { path: "/legal/datenschutz", title: /Team Companion/i },
+  { path: "/legal/terms", title: /Team Companion/i },
+  { path: "/changelog", title: /Team Companion/i },
+  { path: "/transparency", title: /Team Companion/i },
 ];
 
 for (const { path, title } of PUBLIC_PAGES) {
@@ -30,7 +30,7 @@ for (const { path, title } of PUBLIC_PAGES) {
     // The site header is present (rendered by Leptos SSR). Signed-out
     // visitors get the brand and the sign-in links; the hub links
     // (nav "Primary") are for signed-in users only.
-    await expect(page.locator("header").getByRole("link", { name: "Companion", exact: true })).toBeVisible();
+    await expect(page.locator("header").getByRole("link", { name: "Team Companion", exact: true })).toBeVisible();
 
     // Footer carries Riot's legal disclaimer on every page
     await expect(page.getByTestId("riot-disclaimer")).toContainText(

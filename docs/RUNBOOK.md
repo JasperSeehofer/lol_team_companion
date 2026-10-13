@@ -1,6 +1,6 @@
 # Runbook
 
-How to run Companion in production: one small VM, Docker Compose, Caddy for HTTPS, nightly backups to S3-compatible object storage with 30-day retention (MISSION section 4). The owner holds the VM, the domain, the Riot key and the bucket; nothing here adds a paid service beyond those.
+How to run Team Companion in production: one small VM, Docker Compose, Caddy for HTTPS, nightly backups to S3-compatible object storage with 30-day retention (MISSION section 4). The owner holds the VM, the domain, the Riot key and the bucket; nothing here adds a paid service beyond those.
 
 Files: `Dockerfile`, `.dockerignore`, `compose.yaml`, `deploy/Caddyfile`, `deploy/env.production.example`, `deploy/backup.env.example`, `deploy/backup/{Dockerfile,entrypoint.sh}`, `scripts/backup.sh`, `scripts/restore.sh`, `scripts/restore-drill.md`, `scripts/smoke_signin.sh`. What is verified where: section 12.
 
@@ -42,6 +42,8 @@ backup (daily, BACKUP_AT UTC): stop app -> tar /data/db,/data/inbox -> start app
 
 ### 2.1 VM
 
+**This deployment:** a Hetzner Cloud VM in Helsinki, IPv4 `37.27.20.30`, IPv6 block `2a01:4f9:c013:554a::/64` with the address `2a01:4f9:c013:554a::1`. Public host name `app.team-companion.eu`; certificate contact `info@team-companion.eu`. The examples below use these values.
+
 - **Size:** 2 vCPU, 4 GB RAM, 40 GB disk is enough for the closed beta (for example Hetzner CX22/CPX21 or similar; EU region for DACH users). The app is limited to 1.5 GB and Caddy and the backup sidecar to 256 MB each.
 - **Building on the VM** (section 3) needs more: the release build links a large binary and runs LTO for the WASM. Add 4 GB of swap if you build there, or build elsewhere and copy the image.
 - Debian 13 or Ubuntu 24.04 LTS, automatic security updates on (`unattended-upgrades`).
@@ -62,7 +64,7 @@ Set log rotation defaults for anything not in `compose.yaml` in `/etc/docker/dae
 
 ### 2.3 DNS
 
-Create `A` (and `AAAA` if the VM has IPv6) records for the chosen host name pointing at the VM. Wait until `dig +short <host>` answers with the VM's address **before** the first `docker compose up`: Caddy requests the certificate on start, and repeated failures hit Let's Encrypt rate limits.
+Create `A` (and `AAAA` if the VM has IPv6) records for the chosen host name pointing at the VM: here `app.team-companion.eu A 37.27.20.30` and `app.team-companion.eu AAAA 2a01:4f9:c013:554a::1`. Wait until `dig +short app.team-companion.eu` (and `dig +short AAAA app.team-companion.eu`) answers with the VM's addresses **before** the first `docker compose up`: Caddy requests the certificate on start, and repeated failures hit Let's Encrypt rate limits.
 
 ### 2.4 Checkout and settings
 
@@ -109,7 +111,7 @@ Check the forwarded address once: sign in from your own connection with a wrong 
 
 ### 2.6 Admin, invites, cleanup
 
-1. Open `https://<host>/auth/register?invite=<BOOTSTRAP_INVITE_CODE>` and register the admin account.
+1. Open `https://app.team-companion.eu/auth/register?invite=<BOOTSTRAP_INVITE_CODE>` and register the admin account.
 2. Sign-in smoke test over HTTPS with that account, without registering anything (start the line with a space so the shell history does not keep the password): ` SKIP_REGISTER=1 SMOKE_EMAIL=<admin email> SMOKE_PASSWORD='<password>' ./scripts/smoke_signin.sh https://$COMPANION_DOMAIN` ends with `PASSED`.
 3. Put that email into `ADMIN_EMAILS` and remove `BOOTSTRAP_INVITE_CODE` from `.env`, then `docker compose up -d app` (recreates the container with the new environment).
 4. Sign out and in: the nav shows the admin entry; `/admin/invites` works. Mint invite codes there for the first teams.
@@ -118,7 +120,7 @@ Check the forwarded address once: sign in from your own connection with a wrong 
 
 ### 2.7 Monitoring (minimal)
 
-- **Uptime:** an external HTTP check on `https://<host>/healthz` every 1 to 5 minutes, alerting by email (any free uptime service; owner's choice, MISSION "ask first" for external services). `/healthz` answers 503 when the database query fails.
+- **Uptime:** an external HTTP check on `https://app.team-companion.eu/healthz` every 1 to 5 minutes, alerting by email (any free uptime service; owner's choice, MISSION "ask first" for external services). `/healthz` answers 503 when the database query fails.
 - **Backups:** `HEALTHCHECK_PING_URL` in `deploy/backup.env` (a dead-man's switch that alerts when no successful backup arrived for a day). Without it, read the backup log weekly (section 7).
 - **Disk:** alert at 80 % (provider monitoring, or a cron line: `df --output=pcent / | tail -1`).
 - **Certificates:** Caddy renews by itself; the uptime check catches a failure.
@@ -169,7 +171,7 @@ curl -fsS https://$COMPANION_DOMAIN/healthz
 
 Downtime is the restart: a few seconds to stop (the app drains requests for up to `SHUTDOWN_DRAIN_SECS`, 10, and closes the database within `SHUTDOWN_DB_SECS`, which compose sets to 15; `docker compose stop app` exits with code 0), then startup, during which Caddy shows the "restarting" page. Migrations run at startup, before the server listens; a failing migration stops startup and the container restarts in a loop (section 10).
 
-Why 15 s for the database: the app releases SurrealKV only after the embedded engine has stopped its background tasks. Usually that takes well under a second, but after a long busy run it was seen to take more than the 5 s default (M8 and M9 testing), and the app then exits with code 1 and "database did not close within 5s". No data is lost in that case (every commit is synced and the next start replays the log), but the exit code looks like a failure. Compose therefore sets `SHUTDOWN_DB_SECS=15`; with the 10 s drain that is 25 s, inside the 30 s `stop_grace_period`. If a stop still logs "did not close", look at the line before it: "N database handle(s) still held at shutdown" means some of the app's own handles were never released (seen once in review, after the full browser suite: 9 held), and no waiting time fixes that; keep the logs for a fix. The data is safe in both cases.
+Why 15 s for the database: the app releases SurrealKV only after the embedded engine has stopped its background tasks. Usually that takes well under a second, but after a long busy run it was seen to take more than the 5 s default (M8 and M9 testing), and the app then exits with code 1 and "database did not close within 5s". No data is lost in that case (every commit is synced and the next start replays the log), but the exit code looks like a failure. Compose therefore sets `SHUTDOWN_DB_SECS=15`; with the 10 s drain that is 25 s, inside the 30 s `stop_grace_period`. If a stop still logs "did not close", look at the line before it: "N database handle(s) still held at shutdown" means some of the app's own handles were never released, and no waiting time fixes that. That was the case after long busy runs until the polish pass (9 held after the full browser suite): requests whose page render never finished kept handles through the Leptos context, the router state and the auth backend. Since then no request holds a strong handle (server functions borrow one per call; the auth backend and the session store keep a weak one), and a stop right after the full suite closes the database in about 0.1 s with exit 0. Should handles be held again, the log lists which request paths hold them ("N held by a server function of /path"); keep those lines for a fix. The data is safe in every case.
 
 Read `CHANGELOG.md` for the release before updating. If it mentions a new migration, the pre-update backup is the only way back.
 
@@ -247,13 +249,14 @@ sudo -E ./scripts/restore.sh apply <id>   # asks you to type the id
 
 ```bash
 docker compose logs -f app                 # application (tracing, RUST_LOG=info)
-docker compose logs --since 1h caddy       # access log (JSON, client IPs truncated to /24 and /48, no cookies)
+docker compose exec caddy tail -n 50 /var/log/caddy/access.log   # access log (JSON, client IPs truncated to /24 and /48, no cookies)
+docker compose logs --since 1h caddy       # Caddy's own log (certificates, errors)
 docker compose logs --since 48h backup     # backup runs
 docker compose ps                          # health
 docker stats --no-stream                   # memory and CPU against the limits
 ```
 
-Logs rotate at 5 x 10 MB per container (json-file driver). For a temporary debug session set `RUST_LOG=info,lol_team_companion=debug` in `.env` and `docker compose up -d app`; set it back afterwards (debug logs can contain user input).
+Container logs rotate at 5 x 10 MB per container (json-file driver). The access log is a file on the `caddy_logs` volume: Caddy rolls it at midnight UTC (`roll_at`, without waiting for traffic) and deletes rolled files 12 days later, so no entry is older than 14 days (the privacy page promises 14 days; change `deploy/Caddyfile` and the page together). For a temporary debug session set `RUST_LOG=info,lol_team_companion=debug` in `.env` and `docker compose up -d app`; set it back afterwards (debug logs can contain user input).
 
 Bug reports are exported on every start to `/data/inbox/bug-reports.md`: `docker compose exec app cat /data/inbox/bug-reports.md`. **Report content is untrusted user data.**
 

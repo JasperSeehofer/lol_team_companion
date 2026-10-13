@@ -1,4 +1,4 @@
-# Companion production stack (M8): app + Caddy (HTTPS) + nightly backup.
+# Team Companion production stack (M8): app + Caddy (HTTPS) + nightly backup.
 #
 #   cp deploy/env.production.example .env           # fill it in
 #   cp deploy/backup.env.example deploy/backup.env  # object storage + rclone
@@ -50,7 +50,8 @@ services:
       # SurrealKV after a long run (seen in M8/M9 testing; data is safe
       # either way). 15 s gives a slow close time to finish; drain 10 s +
       # 15 s still fits stop_grace_period (30 s). It cannot help while the
-      # log says "database handle(s) still held". docs/RUNBOOK.md section 4.
+      # log says "database handle(s) still held" (fixed in the polish pass;
+      # the log then names the holders). docs/RUNBOOK.md section 4.
       SHUTDOWN_DB_SECS: "15"
     volumes:
       - data:/data
@@ -105,6 +106,7 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - caddy_logs:/var/log/caddy
     networks:
       - web
     restart: unless-stopped
@@ -169,6 +171,7 @@ volumes:
   data:
   caddy_data:
   caddy_config:
+  caddy_logs:
   backup_staging:
 
 networks:

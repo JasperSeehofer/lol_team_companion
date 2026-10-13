@@ -189,6 +189,19 @@ pub fn is_quiet_path(path: &str) -> bool {
         || path == "/closed-beta"
 }
 
+/// Whether a signed-in load of `path` counts as a visit for "Picking up
+/// again?" (`user.last_seen_at`). Public pages do not: share links, legal
+/// and sign-in pages, the closed-beta page, changelog and transparency
+/// (M10 review).
+pub fn counts_as_visit(path: &str) -> bool {
+    !(path.starts_with("/s/")
+        || path.starts_with("/legal/")
+        || path.starts_with("/auth/")
+        || path == "/closed-beta"
+        || path == "/changelog"
+        || path == "/transparency")
+}
+
 /// The one page hint for `path`: the first active hint that lives there.
 /// An introduction on the page wins over hints (never more than one).
 pub fn page_hint(state: &GuidanceState, path: &str) -> Option<Hint> {
@@ -349,7 +362,7 @@ fn item(
         } else if href.is_some() {
             "To do".to_string()
         } else {
-            "After step 1".to_string()
+            "Needs a team".to_string()
         },
         done,
         href: href.map(str::to_string),
@@ -373,15 +386,15 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
     let t = |href: &'static str| if team { Some(href) } else { None };
     vec![
         item(
-            "Join or create your team",
+            "Create or join your team",
             match &f.team_name {
-                Some(n) => format!("You are on {n}."),
-                None => "Create a team, or find yours and ask to join.".to_string(),
+                Some(_) => "The steps below count what your team has done.".to_string(),
+                None => "Create a team, or use your team's invite link, or find your team and ask to join.".to_string(),
             },
             team,
             "Done".to_string(),
             Some("/team/roster"),
-            "Create or join a team",
+            "Create or join your team",
         ),
         item(
             "Fill the starting five",
@@ -389,7 +402,7 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
                 "Top, jungle, mid, bot and support each have a starter.".to_string()
             } else {
                 format!(
-                    "{} of 5 positions have a starter. The leader places players on the team page.",
+                    "{} of 5 positions have a starter. The team leader places players on the team page.",
                     f.starting_positions
                 )
             },
@@ -437,7 +450,7 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
             } else if f.pending_requests > 0 {
                 "A join request is waiting on the team page.".to_string()
             } else {
-                "Teammates sign up with an invite, find your team on the roster page and ask to join."
+                "The team leader sends an invite link from the team page. Teammates who already have an account find your team on the roster page, then ask to join."
                     .to_string()
             },
             f.members > 1 || f.pending_requests > 0,
@@ -554,6 +567,8 @@ pub struct NudgeFacts {
     /// The newest record the user wrote (drafts, plans, reviews, trees,
     /// notes, learnings, pool, the next match ...).
     pub last_write: Option<DateTime<Utc>>,
+    /// The visit before this one (`user.prev_seen_at`): reading counts too.
+    pub prev_seen: Option<DateTime<Utc>>,
     pub account_created: Option<DateTime<Utc>>,
     pub match_without_review: Option<PastMatch>,
     /// Open action items older than `OPEN_ITEM_DAYS`.
@@ -564,10 +579,14 @@ pub struct NudgeFacts {
     pub dossier_without_draft: Option<(String, String)>,
 }
 
-/// Whether the user has been away: no write for `RETURNING_AFTER_DAYS`
-/// (an account that never wrote anything counts from its creation).
+/// Whether the user has been away: neither a write nor a visit for
+/// `RETURNING_AFTER_DAYS` before this visit (polish pass: reading counts).
+/// Without either, the account's age decides.
 pub fn is_returning(f: &NudgeFacts) -> bool {
-    let since = f.last_write.or(f.account_created);
+    let since = match (f.last_write, f.prev_seen) {
+        (Some(w), Some(s)) => Some(w.max(s)),
+        (w, s) => w.or(s).or(f.account_created),
+    };
     since.is_some_and(|t| f.now - t >= Duration::days(RETURNING_AFTER_DAYS))
 }
 
@@ -713,7 +732,7 @@ mod tests {
         assert_eq!(next_step(&items), Some(0));
         assert_eq!(items[0].href.as_deref(), Some("/team/roster"));
         assert!(items[1..].iter().all(|i| i.href.is_none()));
-        assert_eq!(items[3].status, "After step 1");
+        assert_eq!(items[3].status, "Needs a team");
     }
 
     #[test]
@@ -731,7 +750,7 @@ mod tests {
         assert_eq!(next_step(&items), Some(1));
         assert_eq!(
             items[1].detail,
-            "0 of 5 positions have a starter. The leader places players on the team page."
+            "0 of 5 positions have a starter. The team leader places players on the team page."
         );
         f.drafts = 2;
         f.starting_positions = 4;
@@ -812,6 +831,7 @@ mod tests {
         NudgeFacts {
             now: at(now),
             last_write: Some(at(now)),
+            prev_seen: None,
             account_created: Some(at("2026-01-01T00:00:00Z")),
             match_without_review: None,
             old_open_items: 0,
@@ -834,6 +854,47 @@ mod tests {
         f.last_write = None;
         assert!(is_returning(&f));
         f.account_created = Some(at("2026-10-10T00:00:00Z"));
+        assert!(!is_returning(&f));
+    }
+
+    #[test]
+    fn public_pages_do_not_count_as_visits() {
+        for p in [
+            "/",
+            "/draft",
+            "/team/dashboard",
+            "/profile",
+            "/admin/invites",
+        ] {
+            assert!(counts_as_visit(p), "{p}");
+        }
+        for p in [
+            "/s/abc",
+            "/legal/terms",
+            "/auth/register",
+            "/closed-beta",
+            "/changelog",
+            "/transparency",
+        ] {
+            assert!(!counts_as_visit(p), "{p}");
+        }
+    }
+
+    /// Reading counts (polish pass): a member who opened the app a day ago
+    /// is not "picking up again", however long ago they last wrote.
+    #[test]
+    fn a_recent_visit_counts_like_a_write() {
+        let mut f = facts("2026-10-12T12:00:00Z");
+        f.last_write = Some(at("2026-08-01T00:00:00Z"));
+        f.prev_seen = Some(at("2026-10-11T09:00:00Z"));
+        assert!(!is_returning(&f));
+        // Away for two weeks: both the last write and the last visit are old.
+        f.prev_seen = Some(at("2026-09-28T12:00:00Z"));
+        assert!(is_returning(&f));
+        // A visit but never a write: the visit decides, not the account age.
+        f.last_write = None;
+        f.account_created = Some(at("2026-01-01T00:00:00Z"));
+        f.prev_seen = Some(at("2026-10-05T00:00:00Z"));
         assert!(!is_returning(&f));
     }
 

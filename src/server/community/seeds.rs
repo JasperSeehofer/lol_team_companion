@@ -53,14 +53,14 @@ pub fn proposals() -> Vec<SeedProposal> {
         ("opponent_memory", "Opponent memory", "When you meet a team again, see your earlier drafts, reviews and what worked against them.", "planned", "mission"),
         ("practice_loop", "Practice targets from pool gaps", "Turn gaps in the champion pool into practice targets per player and follow progress from their ranked games.", "planned", "mission"),
         ("patch_awareness", "Patch notes for your pools", "When a patch lands, flag the champions in your team's pools that changed.", "planned", "mission"),
-        ("vod_bookmarks", "Video bookmarks on reviews", "Attach a video link with timestamped notes to a review. Notes only: Companion does not analyse video.", "planned", "mission"),
+        ("vod_bookmarks", "Video bookmarks on reviews", "Attach a video link with timestamped notes to a review. Notes only: Team Companion does not analyse video.", "planned", "mission"),
         ("prediction_check", "Prediction check", "Write what you expect in the game plan, mark what happened in the review, and see how often the plan read the game right.", "planned", "mission"),
         ("multiple_teams", "More than one team per coach", "Let a coach or analyst work with several teams from one account, with each team's data kept apart.", "proposed", "mission"),
         ("flex_draft", "Flex queue draft format", "Plan drafts for Flex queue, where bans happen at the same time, next to the tournament format.", "proposed", "backlog"),
         ("player_cards", "Shareable player cards", "A read-only card per player with role, pool and form, to share with a link.", "shipped", "mission"),
         ("discord", "Post plans to Discord", "Send the opponent brief or the game plan to your team's Discord channel.", "proposed", "mission"),
         ("community_traits", "Suggest champion traits", "Propose corrections to the Draft Graph's champion traits; accepted proposals update everyone's graph.", "proposed", "mission"),
-        ("german_ui", "German interface", "Use Companion in German.", "proposed", "mission"),
+        ("german_ui", "German interface", "Use Team Companion in German.", "proposed", "mission"),
         ("light_theme", "Light theme", "A light colour theme for bright rooms.", "proposed", "mission"),
     ];
     rows.into_iter()
@@ -116,7 +116,7 @@ pub fn surveys(hash: impl Fn(&SurveyWording) -> String) -> Vec<SeedSurvey> {
         ),
         (
             "what_next_missing",
-            "What should Companion do for your team that is not on this board?",
+            "What should Team Companion do for your team that is not on this board?",
             "short_text",
             vec![],
             None,
@@ -153,11 +153,11 @@ pub fn texts() -> Vec<SeedText> {
     [
         (
             TEXT_MONEY_POLICY,
-            "Companion is free to use, and every feature stays free. Support is a voluntary contribution to the running costs. It goes to costs first (hosting, domain and AI tokens), and whatever remains goes to the maintainer.\n\nSupport buys nothing: there are no extras and no advantage in the app. Companion is run by a private person, not a charity, so no donation receipt is issued.\n\nEach month below shows what came in, what running Companion cost, and what went to the maintainer.",
+            "Team Companion is free to use, and every feature stays free. Support is a voluntary contribution to the running costs. It goes to costs first (hosting, domain and AI tokens), and whatever remains goes to the maintainer.\n\nSupport buys nothing: there are no extras and no advantage in the app. Team Companion is run by a private person, not a charity, so no donation receipt is issued.\n\nEach month below shows what came in, what running Team Companion cost, and what went to the maintainer.",
         ),
         (
             TEXT_LEDGER_LABELS,
-            "Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support",
+            "Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support\nPayment fees",
         ),
         (
             TEXT_SPLIT_LEGEND,
@@ -169,7 +169,7 @@ pub fn texts() -> Vec<SeedText> {
         ),
         (
             TEXT_SUPPORT_SENTENCE,
-            "If Companion is useful to your team, you can support it. Support goes to running costs first, then to the maintainer. It buys nothing in the app, and no donation receipt is issued.",
+            "If Team Companion is useful to your team, you can support it. Support goes to running costs first, then to the maintainer. It buys nothing in the app, and no donation receipt is issued.",
         ),
     ]
     .into_iter()

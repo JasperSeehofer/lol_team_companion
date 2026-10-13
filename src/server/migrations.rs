@@ -145,6 +145,48 @@ pub const MIGRATIONS: &[Migration] = &[
              DEFINE FIELD OVERWRITE guidance_enabled ON user TYPE bool DEFAULT true;",
         ),
     },
+    Migration {
+        version: 14,
+        name: "ledger_payment_fees",
+        // Polish pass (owner: support is shown gross): payment fees become a
+        // cost line. Old months get 0 fees. A ledger-labels text with the
+        // old eight lines gains "Payment fees" as its ninth and goes back
+        // behind the approval switch (a changed money text needs approval).
+        step: Step::Surql(
+            "UPDATE ledger_month SET payment_fees_cents = 0 WHERE payment_fees_cents = NONE; \
+             DEFINE FIELD OVERWRITE payment_fees_cents ON ledger_month TYPE int DEFAULT 0 \
+               ASSERT $value >= 0 AND $value <= 100000000; \
+             UPDATE site_text SET body = string::concat(body, '\\nPayment fees'), \
+                 approved = false, approved_by = NONE, approved_at = NONE, updated_at = time::now() \
+               WHERE slug = 'ledger_labels' \
+                 AND array::len(array::filter(string::split(body, '\\n'), |$l| string::trim($l) != '')) = 8;",
+        ),
+    },
+    Migration {
+        version: 15,
+        name: "invite_team",
+        // Polish pass: an invite may carry a team (and a position). Both
+        // fields are optional and existing codes stay global, so this only
+        // states the fields and the index for databases created before the
+        // baseline had them (the baseline defines the same, idempotently).
+        step: Step::Surql(
+            "DEFINE FIELD IF NOT EXISTS team ON invite TYPE option<record<team>>; \
+             DEFINE FIELD IF NOT EXISTS position ON invite TYPE option<string> \
+               ASSERT $value = NONE OR $value IN ['top', 'jungle', 'mid', 'bot', 'support']; \
+             DEFINE INDEX IF NOT EXISTS invite_team ON invite FIELDS team;",
+        ),
+    },
+    Migration {
+        version: 16,
+        name: "user_last_seen",
+        // Polish pass: reads count as activity for "Picking up again?".
+        // Both fields start empty (no visit recorded yet; the rule then falls
+        // back to the newest write or the account's age, as before).
+        step: Step::Surql(
+            "DEFINE FIELD IF NOT EXISTS last_seen_at ON user TYPE option<datetime>; \
+             DEFINE FIELD IF NOT EXISTS prev_seen_at ON user TYPE option<datetime>;",
+        ),
+    },
 ];
 
 const BUG_REPORT_STATUSES_V2: &str = "\

@@ -123,12 +123,21 @@ pub struct Credentials {
 
 #[derive(Clone)]
 pub struct AuthBackend {
-    pub db: Arc<Surreal<Db>>,
+    /// Not an `Arc`: axum-login clones the backend into every request's
+    /// `AuthSession`, and a request that outlives the server must not keep
+    /// the database open (polish pass, shutdown).
+    db: crate::server::db::WeakDb,
 }
 
 impl AuthBackend {
     pub fn new(db: Arc<Surreal<Db>>) -> Self {
-        Self { db }
+        Self {
+            db: crate::server::db::WeakDb::new(&db),
+        }
+    }
+
+    fn db(&self) -> Result<Arc<Surreal<Db>>, AuthError> {
+        self.db.get().ok_or(AuthError::Closed)
     }
 }
 
@@ -171,7 +180,7 @@ impl axum_login::AuthnBackend for AuthBackend {
         // Emails are stored lowercase (migration 1 lowercased older rows), so
         // the unique email index answers this exact match.
         let mut result = self
-            .db
+            .db()?
             .query("SELECT * FROM user WHERE email = $email LIMIT 1")
             .bind(("email", email))
             .await
@@ -194,7 +203,7 @@ impl axum_login::AuthnBackend for AuthBackend {
     async fn get_user(&self, user_id: &String) -> Result<Option<Self::User>, Self::Error> {
         let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
         let mut result = self
-            .db
+            .db()?
             .query("SELECT * FROM type::record('user', $user_key) LIMIT 1")
             .bind(("user_key", user_key))
             .await
@@ -221,6 +230,8 @@ pub enum AuthError {
     Db(#[from] surrealdb::types::Error),
     #[error("Password hash error: {0}")]
     Hash(String),
+    #[error("The database is closed (shutting down)")]
+    Closed,
 }
 
 // ---------------------------------------------------------------------------

@@ -757,3 +757,52 @@ async fn community_seed_content_is_inserted_once_and_unapproved() {
     migrations::run(&db).await.unwrap();
     assert_eq!(counts().await.proposals, 16);
 }
+
+#[tokio::test]
+async fn payment_fees_become_a_cost_line_and_old_labels_need_approval_again() {
+    let db = baseline_only().await;
+    // Before the polish pass: a month without fees and the eight-line
+    // labels text, approved.
+    db.query(
+        "CREATE ledger_month:⟨2026-09⟩ SET month = '2026-09', support_cents = 2000, hosting_cents = 500; \
+         CREATE site_text SET slug = 'ledger_labels', approved = true, approved_at = time::now(), \
+             body = 'Support received\nHosting\nDomain\nAI tokens\nOther\nRunning costs\nTo the maintainer\nNot covered by support';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+
+    migrations::run(&db).await.unwrap();
+
+    #[derive(Debug, serde::Deserialize, SurrealValue)]
+    struct Row {
+        fees: i64,
+        body: String,
+        approved: bool,
+    }
+    let mut r = db
+        .query(
+            "RETURN { fees: ledger_month:⟨2026-09⟩.payment_fees_cents, \
+                body: (SELECT VALUE body FROM site_text WHERE slug = 'ledger_labels')[0], \
+                approved: (SELECT VALUE approved FROM site_text WHERE slug = 'ledger_labels')[0] }",
+        )
+        .await
+        .unwrap();
+    let row: Option<Row> = r.take(0).unwrap();
+    let row = row.unwrap();
+    assert_eq!(row.fees, 0);
+    assert!(row.body.ends_with("Not covered by support\nPayment fees"));
+    assert!(
+        lol_team_companion::models::community::LedgerLabels::parse(&row.body).is_some(),
+        "the migrated text parses as nine labels"
+    );
+    assert!(!row.approved, "a changed money text needs approval again");
+    // Negative fees are refused from now on.
+    assert!(db
+        .query("UPDATE ledger_month:⟨2026-09⟩ SET payment_fees_cents = -1")
+        .await
+        .unwrap()
+        .check()
+        .is_err());
+}

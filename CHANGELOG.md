@@ -8,6 +8,25 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Polish before launch (2026-10-12)
+
+Introduce: /team/dashboard | Invite a player | Team leaders: create a link here that signs a new player up straight into your team.
+
+#### Added
+- Invite a player: the team leader creates an invite link on the team page (how many uses, when it expires, optionally a position). Whoever signs up with it is on the team at once, not placed until the leader places them, and the welcome says which team they are on. Someone already signed in without a team joins with one click; someone already on a team is told to leave it first. The leader sees each link's uses and can disable it.
+- Admins can bind an invite code on the admin page to a team.
+
+#### Changed
+- Guidance wording: the welcome says "Welcome" once; one order for "Create or join your team"; steps that wait for a team say "Needs a team"; the checklist explains invite links; "nudges" is the one name for the Match Day lines; shorter captions.
+- "Picking up again?" on Match Day counts visits too: someone who opens the app every day without writing anything no longer sees it. The app notes when you were last here, to the hour (listed on the privacy page and in your data download).
+- The app has its name: Team Companion. It replaces the working title in the browser tab, the navigation, the footer's Riot disclaimer, the legal pages and every page that named the app.
+- Impressum, privacy page and terms are filled in with the operator's details: who runs the app and how to reach them, the hosting (Helsinki) and backup storage (Falkenstein), access logs kept for 14 days, the data protection authority you can complain to, the price (using Team Companion costs nothing; support is voluntary), liability and governing law. The privacy page states the legal basis for each purpose; those bases and the terms' liability and law clauses are marked as drafts until the operator's adviser has confirmed them.
+- Transparency: support is shown as what supporters paid, before the payment platform's fees, and the fees appear as their own running cost. The new column label needs an admin's approval like every money text.
+- Draft Graph: early in a draft one strong link with the only pick no longer fills synergy or counters, so the top candidates stop tying; the canvas draws lines only for the champion in focus instead of a web of every relation; the ranking loads less data (full explanations for the top eight and the focused candidate, the rest when you focus them).
+
+#### Fixed
+- The server closes the database within a second of a stop even after a long busy day; before, requests whose page never finished loading could keep it open, and a stop then took the full wait and ended with an error code (no data was lost).
+
 ### Milestone M9: Welcome and guidance (2026-10-12)
 
 Introduce: /profile | Guidance | Turn the welcome, the checklist, hints and nudges off here, or show the checklist, hints and nudges again.

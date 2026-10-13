@@ -312,7 +312,14 @@ DEFINE FIELD IF NOT EXISTS uses ON invite TYPE int DEFAULT 0 ASSERT $value >= 0;
 DEFINE FIELD IF NOT EXISTS expires_at ON invite TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS disabled ON invite TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS note ON invite TYPE option<string>;
+-- Team-bound invites (polish pass, migration 15): registering with such a
+-- code puts the account in this team, a member not placed yet, at `position`
+-- if set. Deleted with the team.
+DEFINE FIELD IF NOT EXISTS team ON invite TYPE option<record<team>>;
+DEFINE FIELD IF NOT EXISTS position ON invite TYPE option<string>
+  ASSERT $value = NONE OR $value IN ['top', 'jungle', 'mid', 'bot', 'support'];
 DEFINE INDEX IF NOT EXISTS invite_code_unique ON invite FIELDS code UNIQUE;
+DEFINE INDEX IF NOT EXISTS invite_team ON invite FIELDS team;
 
 -- Ranked snapshots
 DEFINE TABLE IF NOT EXISTS ranked_snapshot SCHEMAFULL;
@@ -692,6 +699,9 @@ DEFINE FIELD IF NOT EXISTS month ON ledger_month TYPE string
   ASSERT string::matches($value, '^[0-9]{4}-(0[1-9]|1[0-2])$');
 DEFINE FIELD IF NOT EXISTS support_cents ON ledger_month TYPE int DEFAULT 0
   ASSERT $value >= 0 AND $value <= 100000000;
+-- Support is recorded gross; the payment platform's fees are a cost line
+-- (polish pass; migration 14 backfills 0 and makes it an int).
+DEFINE FIELD IF NOT EXISTS payment_fees_cents ON ledger_month TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS hosting_cents ON ledger_month TYPE int DEFAULT 0
   ASSERT $value >= 0 AND $value <= 100000000;
 DEFINE FIELD IF NOT EXISTS domain_cents ON ledger_month TYPE int DEFAULT 0
@@ -760,3 +770,9 @@ DEFINE INDEX IF NOT EXISTS user_guidance_unique ON user_guidance FIELDS user, ke
 -- (NONE = on); migration 13 (user_guidance) backfills true and tightens it
 -- to bool DEFAULT true.
 DEFINE FIELD IF NOT EXISTS guidance_enabled ON user TYPE option<bool>;
+-- When the user was last here, to the hour (polish pass, migration 16): any
+-- signed-in request writes last_seen_at at most once an hour and moves the
+-- previous value to prev_seen_at, so Match Day can tell a returning visit
+-- ("Picking up again?") from a reader who comes every day.
+DEFINE FIELD IF NOT EXISTS last_seen_at ON user TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS prev_seen_at ON user TYPE option<datetime>;

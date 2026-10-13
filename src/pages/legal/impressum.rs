@@ -1,54 +1,48 @@
-//! Impressum (provider information). The operator's details are the
-//! owner's to fill in before launch (M8); until then every item is a
-//! clearly marked placeholder. Nothing here is invented.
+//! Impressum (provider information, § 5 DDG). The operator is a private
+//! person; the facts below are the owner's own (launch checklist, 12 October
+//! 2026). There is no second contact, no separate person responsible for
+//! content and no registration or VAT ID.
 
-use crate::components::ui::{
-    Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
-};
+use crate::components::ui::{PageHeader, PageShell, PageWidth, SectionHeader};
 use leptos::prelude::*;
 
 /// A placeholder the owner replaces: shown in mono, in the warning tone,
-/// with the words "[OWNER: ...]".
+/// with the words "[OWNER: ...]". The legal pages carry none at launch; the
+/// component stays for any fact the operator has not given yet.
 #[component]
 pub fn OwnerPlaceholder(#[prop(into)] what: String) -> impl IntoView {
     view! { <span class="font-mono text-label text-warning" data-owner-placeholder>{format!("[OWNER: {what}]")}</span> }
 }
 
+/// The operator's name, as in the Impressum (also the privacy controller).
+pub const OPERATOR_NAME: &str = "Jasper Seehofer";
+/// The operator's postal address, one line per entry.
+pub const OPERATOR_ADDRESS: &[&str] = &["Augustenstrasse 4", "70178 Stuttgart", "Germany"];
+/// The operator's contact email (also the privacy contact).
+pub const OPERATOR_EMAIL: &str = "jasper@jseehofer.eu";
+
 #[component]
 pub fn ImpressumPage() -> impl IntoView {
-    let rows: [(&str, &str); 6] = [
-        (
-            "Operator",
-            "full name of the person or organisation running Companion",
-        ),
-        ("Address", "street and number, postcode, city, country"),
-        ("Email", "contact email address"),
-        (
-            "Second contact",
-            "phone number or another fast way to reach the operator, if required",
-        ),
-        (
-            "Responsible for content",
-            "name and address, if different from the operator",
-        ),
-        ("Registration or VAT ID", "only if applicable"),
-    ];
     view! {
         <PageShell width=PageWidth::Reading>
-            <PageHeader title="Impressum" eyebrow="Legal" meta=move || view! { <span>"Who runs Companion and how to reach them."</span> } />
-            <div class="mb-8">
-                <Callout tone=CalloutTone::Warning title="Not filled in yet">
-                    "The operator's details below are placeholders. They are completed before Companion opens beyond the closed beta."
-                </Callout>
-            </div>
+            <PageHeader title="Impressum" eyebrow="Legal" meta=move || view! { <span>"Who runs Team Companion and how to reach them."</span> } />
             <section aria-labelledby="provider-h">
                 <SectionHeader title="Provider" id="provider-h" />
                 <dl class="grid gap-x-6 gap-y-3 border-t border-rule pt-3 text-body sm:grid-cols-[12rem_minmax(0,1fr)]">
-                    {rows.into_iter().map(|(label, what)| view! {
-                        <dt class="text-muted">{label}</dt>
-                        <dd><OwnerPlaceholder what=what /></dd>
-                    }).collect_view()}
+                    <dt class="text-muted">"Operator"</dt>
+                    <dd class="text-primary">{OPERATOR_NAME}</dd>
+                    <dt class="text-muted">"Address"</dt>
+                    <dd class="text-primary">
+                        {OPERATOR_ADDRESS.iter().map(|line| view! { <span class="block">{*line}</span> }).collect_view()}
+                    </dd>
+                    <dt class="text-muted">"Email"</dt>
+                    <dd>
+                        <a href=format!("mailto:{OPERATOR_EMAIL}") class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">{OPERATOR_EMAIL}</a>
+                    </dd>
                 </dl>
+                <p class="mt-4 max-w-prose text-body text-secondary">
+                    "Team Companion is run by a private person."
+                </p>
             </section>
             <section class="mt-10" aria-labelledby="beta-h">
                 <SectionHeader title="During the closed beta" id="beta-h" />

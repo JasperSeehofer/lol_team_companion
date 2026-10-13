@@ -36,7 +36,7 @@ async function setApproval(admin: Page, slug: string, approve: boolean) {
   }
 }
 
-async function saveMonth(admin: Page, month: string, support: string, hosting: string, expectComputed: RegExp) {
+async function saveMonth(admin: Page, month: string, support: string, hosting: string, expectComputed: RegExp, fees = "") {
   await admin.goto("/admin/ledger");
   await admin.waitForLoadState("networkidle");
   await admin.getByRole("button", { name: "Add month" }).click();
@@ -44,6 +44,7 @@ async function saveMonth(admin: Page, month: string, support: string, hosting: s
   await d.locator("#ledger-month").fill(month);
   await d.locator("#ledger-support").fill(support);
   await d.locator("#ledger-hosting").fill(hosting);
+  if (fees) await d.locator("#ledger-fees").fill(fees);
   await expect(admin.getByTestId("ledger-computed")).toHaveText(expectComputed);
   await d.getByRole("button", { name: "Save as draft" }).click();
   await expect(admin.getByText("Draft saved.")).toBeVisible();
@@ -65,7 +66,8 @@ test("draft, publish, not covered and revised", async ({ browser }) => {
     await setApproval(admin, "money_policy", true);
     await setApproval(admin, "ledger_labels", true);
 
-    await saveMonth(admin, m1, "20", "5", /Running costs: €5\.00 · To the maintainer: €15\.00/);
+    // Support is gross; the platform's fees are a running cost (owner, 12 Oct 2026).
+    await saveMonth(admin, m1, "20", "5", /Running costs: €6\.00 · To the maintainer: €14\.00/, "1");
     await expect(admin.locator("tr").filter({ hasText: label1 })).toContainText("Draft");
     await guest.goto("/transparency");
     await expect(guest.getByText("How support is used")).toBeVisible();
@@ -75,7 +77,8 @@ test("draft, publish, not covered and revised", async ({ browser }) => {
     await guest.reload();
     const row1 = guest.locator("tr").filter({ hasText: label1 });
     await expect(row1).toContainText("€20.00");
-    await expect(row1).toContainText("€15.00");
+    await expect(row1).toContainText("€1.00");
+    await expect(row1).toContainText("€14.00");
 
     await saveMonth(admin, m2, "1", "4", /Not covered by support: €3\.00/);
     await publish(admin, label2);

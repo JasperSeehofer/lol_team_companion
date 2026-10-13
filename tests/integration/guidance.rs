@@ -275,3 +275,86 @@ async fn nudges_read_the_users_team_and_writes() {
     // Ben's mute state is his own.
     assert!(g::rows(&db, &b).await.unwrap().is_empty());
 }
+
+/// Reading counts for "Picking up again?" (polish pass): a visit is
+/// recorded at most once an hour, the previous visit moves to
+/// `prev_seen_at`, and a member who was here yesterday is not "returning"
+/// however old their last write is.
+#[tokio::test]
+async fn visits_count_for_the_returning_rule() {
+    let db = common::test_db().await;
+    let a = user(&db, "ann").await;
+    let team = db::create_team(&db, &a, "Northgate".into(), "EUW".into())
+        .await
+        .unwrap();
+    // Everything Ann wrote is a month old; she has never been seen.
+    sql(
+        &db,
+        "CREATE draft SET name = 'Old', team = $t, created_by = $u, created_at = time::now() - 30d; \
+         UPDATE $u SET created_at = time::now() - 40d;",
+        &a,
+        &team,
+    )
+    .await;
+    let now = Utc::now();
+    assert!(
+        db::touch_last_seen(&db, &a).await.unwrap(),
+        "first visit is written"
+    );
+    assert!(
+        !db::touch_last_seen(&db, &a).await.unwrap(),
+        "not again within the hour"
+    );
+    // First recorded visit: no earlier one, so the old write decides.
+    let f = g::nudge_facts(&db, &a, &team, now).await.unwrap();
+    assert!(f.prev_seen.is_none());
+    assert_eq!(
+        pick_nudge(true, &f, &[], None).unwrap().kind,
+        NudgeKind::Returning
+    );
+
+    // She was here yesterday (last_seen a day old): the next visit moves it
+    // to prev_seen and the line is gone.
+    sql(
+        &db,
+        "UPDATE $u SET last_seen_at = time::now() - 1d;",
+        &a,
+        &team,
+    )
+    .await;
+    assert!(db::touch_last_seen(&db, &a).await.unwrap());
+    let f = g::nudge_facts(&db, &a, &team, now).await.unwrap();
+    assert!(f.prev_seen.is_some_and(|t| now - t < Duration::days(2)));
+    assert!(pick_nudge(true, &f, &[], None).is_none_or(|n| n.kind != NudgeKind::Returning));
+
+    // Away for three weeks: returning again.
+    sql(
+        &db,
+        "UPDATE $u SET last_seen_at = time::now() - 21d;",
+        &a,
+        &team,
+    )
+    .await;
+    assert!(db::touch_last_seen(&db, &a).await.unwrap());
+    let f = g::nudge_facts(&db, &a, &team, now).await.unwrap();
+    assert_eq!(
+        pick_nudge(true, &f, &[], None).unwrap().kind,
+        NudgeKind::Returning
+    );
+
+    // M10 review: a request of the same page load reads before the visit is
+    // written (another request is writing it). last_seen_at (yesterday) is
+    // then the previous visit, not the older prev_seen_at.
+    sql(
+        &db,
+        "UPDATE $u SET last_seen_at = time::now() - 1d, prev_seen_at = time::now() - 21d;",
+        &a,
+        &team,
+    )
+    .await;
+    let f = g::nudge_facts(&db, &a, &team, Utc::now()).await.unwrap();
+    assert!(f
+        .prev_seen
+        .is_some_and(|t| Utc::now() - t < Duration::days(2)));
+    assert!(pick_nudge(true, &f, &[], None).is_none_or(|n| n.kind != NudgeKind::Returning));
+}

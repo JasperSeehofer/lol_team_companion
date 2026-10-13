@@ -76,6 +76,7 @@ struct Form {
     editing: RwSignal<Option<String>>,
     month: RwSignal<String>,
     support: RwSignal<String>,
+    fees: RwSignal<String>,
     hosting: RwSignal<String>,
     domain: RwSignal<String>,
     ai: RwSignal<String>,
@@ -92,6 +93,7 @@ impl Form {
             editing: RwSignal::new(None),
             month: RwSignal::new(String::new()),
             support: RwSignal::new(String::new()),
+            fees: RwSignal::new(String::new()),
             hosting: RwSignal::new(String::new()),
             domain: RwSignal::new(String::new()),
             ai: RwSignal::new(String::new()),
@@ -107,6 +109,10 @@ impl Form {
             .set(m.map(|m| m.month.clone()).unwrap_or_default());
         self.support.set(
             m.map(|m| cents_to_input(m.support_cents))
+                .unwrap_or_default(),
+        );
+        self.fees.set(
+            m.map(|m| cents_to_input(m.payment_fees_cents))
                 .unwrap_or_default(),
         );
         self.hosting.set(
@@ -135,6 +141,7 @@ impl Form {
             is_new: self.editing.get_untracked().is_none(),
             month: self.month.get_untracked(),
             support: self.support.get_untracked(),
+            payment_fees: self.fees.get_untracked(),
             hosting: self.hosting.get_untracked(),
             domain: self.domain.get_untracked(),
             ai_tokens: self.ai.get_untracked(),
@@ -220,8 +227,9 @@ pub fn AdminLedgerPage() -> impl IntoView {
 
     let computed = move || {
         let c = |s: RwSignal<String>| parse_euros(&s.get()).ok();
-        let (Some(sup), Some(h), Some(d), Some(a), Some(o)) = (
+        let (Some(sup), Some(f), Some(h), Some(d), Some(a), Some(o)) = (
             c(form.support),
+            c(form.fees),
             c(form.hosting),
             c(form.domain),
             c(form.ai),
@@ -229,7 +237,7 @@ pub fn AdminLedgerPage() -> impl IntoView {
         ) else {
             return "Amounts must be zero or more, in euros with up to two decimals.".to_string();
         };
-        let costs = h + d + a + o;
+        let costs = f + h + d + a + o;
         let rest = if shortfall_cents(sup, costs) > 0 {
             format!(
                 "Not covered by support: {}",
@@ -289,7 +297,10 @@ pub fn AdminLedgerPage() -> impl IntoView {
                 <Field id="ledger-month" label="Month" hint="Year and month, for example 2026-10.">
                     <TextField value=form.month placeholder="2026-10" disabled=Signal::derive(move || form.editing.get().is_some()) />
                 </Field>
-                {amount("ledger-support", "Support received", form.support, "In euros, for example 12.50. What actually arrived after the payment platform's fees.")}
+                <div class="grid gap-4 sm:grid-cols-2">
+                    {amount("ledger-support", "Support received", form.support, "In euros, for example 12.50. What supporters paid, before the payment platform's fees.")}
+                    {amount("ledger-fees", "Payment fees", form.fees, "In euros. What the payment platform kept; counted as a running cost.")}
+                </div>
                 <div class="grid gap-4 sm:grid-cols-3">
                     {amount("ledger-hosting", "Hosting", form.hosting, "In euros")}
                     {amount("ledger-domain", "Domain", form.domain, "In euros")}

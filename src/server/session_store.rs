@@ -16,7 +16,10 @@ use tower_sessions_core::{
 /// periodically from `main`.
 #[derive(Clone)]
 pub struct SurrealSessionStore {
-    db: Arc<Surreal<Db>>,
+    /// Not an `Arc` (see `db::WeakDb`): the session layer lives in the
+    /// router, and requests that outlive the server must not keep the
+    /// database open.
+    db: crate::server::db::WeakDb,
     table: String,
 }
 
@@ -46,7 +49,16 @@ fn now_unix() -> i64 {
 
 impl SurrealSessionStore {
     pub fn new(db: Arc<Surreal<Db>>, table: String) -> Self {
-        Self { db, table }
+        Self {
+            db: crate::server::db::WeakDb::new(&db),
+            table,
+        }
+    }
+
+    fn db(&self) -> session_store::Result<Arc<Surreal<Db>>> {
+        self.db
+            .get()
+            .ok_or_else(|| session_store::Error::Backend("the database is closed".into()))
     }
 
     /// Write `record` (insert or replace).
@@ -60,7 +72,7 @@ impl SurrealSessionStore {
             "UPSERT type::record($tb, $id) SET data = $data, expires_at = $expires_at"
         };
         let mut result = self
-            .db
+            .db()?
             .query(query)
             .bind(("tb", self.table.clone()))
             .bind(("id", record.id.to_string()))
@@ -85,7 +97,7 @@ impl SurrealSessionStore {
             data: Vec<u8>,
         }
         let mut result = self
-            .db
+            .db()?
             .query("SELECT id, data FROM type::table($tb)")
             .bind(("tb", self.table.clone()))
             .await
@@ -107,7 +119,7 @@ impl SurrealSessionStore {
         }
         let n = ids.len();
         if n > 0 {
-            self.db
+            self.db()?
                 .query("DELETE type::table($tb) WHERE id IN $ids")
                 .bind(("tb", self.table.clone()))
                 .bind(("ids", ids))
@@ -145,7 +157,7 @@ impl SessionStore for SurrealSessionStore {
 
     async fn load(&self, session_id: &Id) -> session_store::Result<Option<Record>> {
         let mut result = self
-            .db
+            .db()?
             .query("SELECT data FROM type::record($tb, $id)")
             .bind(("tb", self.table.clone()))
             .bind(("id", session_id.to_string()))
@@ -168,7 +180,7 @@ impl SessionStore for SurrealSessionStore {
     }
 
     async fn delete(&self, session_id: &Id) -> session_store::Result<()> {
-        self.db
+        self.db()?
             .query("DELETE type::record($tb, $id)")
             .bind(("tb", self.table.clone()))
             .bind(("id", session_id.to_string()))
@@ -185,7 +197,7 @@ impl ExpiredDeletion for SurrealSessionStore {
     /// Delete expired rows. Rows without `expires_at` predate M1 (and carry a
     /// session auth hash that no longer matches), so they go too.
     async fn delete_expired(&self) -> session_store::Result<()> {
-        self.db
+        self.db()?
             .query("DELETE type::table($tb) WHERE expires_at = NONE OR expires_at <= $now")
             .bind(("tb", self.table.clone()))
             .bind(("now", now_unix()))

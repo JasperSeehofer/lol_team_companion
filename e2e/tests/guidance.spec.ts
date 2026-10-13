@@ -23,7 +23,7 @@ test("first sign-in shows the welcome once; Skip keeps the checklist", async ({ 
   await navigateTo(page, "/");
   const welcome = page.locator("[data-welcome]");
   await expect(welcome).toBeVisible();
-  await expect(welcome.getByRole("heading", { level: 2 })).toContainText("Welcome to Companion");
+  await expect(welcome.getByRole("heading", { level: 2 })).toContainText("Welcome to Team Companion");
   await expect(welcome.getByRole("list", { name: "The loop" })).toContainText("Review");
   await expect(page.getByTestId("welcome-start")).toHaveAttribute("href", "/team/roster");
   const checklist = page.locator("[data-checklist]");
@@ -76,7 +76,7 @@ test("the checklist ticks after creating a team and a draft, and hides on reques
   await page.getByRole("combobox").fill("guide me");
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-checklist]")).toBeVisible({ timeout: 10000 });
-  await expect(page.locator("[data-checklist]")).toContainText("Shown because you asked for it");
+  await expect(page.locator("[data-checklist]")).toContainText("You opened the checklist");
   // Hiding it again from the Guide me address works too.
   await page.getByTestId("hide-checklist").click();
   await expect(page.locator("[data-checklist]")).toHaveCount(0, { timeout: 10000 });
@@ -112,7 +112,7 @@ test("the profile switch hides every piece of guidance", async ({ teamPage }) =>
   await expect(page.getByText("Guidance is off:")).toBeVisible();
   // "Show nudges again" is there and answers.
   await section.getByTestId("reset-nudges").click();
-  await expect(page.getByText("Next-step lines you turned off can show on Match Day again.")).toBeVisible();
+  await expect(page.getByText("Nudges you turned off can show on Match Day again.")).toBeVisible();
 
   await navigateTo(page, "/");
   await expect(page.locator("[data-welcome]")).toHaveCount(0);
@@ -160,6 +160,9 @@ test.describe("seeded returning user", () => {
 
   test("the returning-user line shows; a New mark appears and clears", async ({ page }) => {
     const ok = await signInSeeded(page);
+    // CI seeds its database before the server starts: there a missing seed
+    // is a failure, not a skip (locally the seed is optional).
+    if (process.env.CI) expect(ok, "CI must seed the database (seed tool) before starting the server").toBe(true);
     test.skip(!ok, "needs the seed data: stop the server, run the seed tool, start it again");
     await page.waitForTimeout(500);
     await navigateTo(page, "/");
@@ -182,6 +185,8 @@ test.describe("seeded returning user", () => {
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => true)
       .catch(() => false);
+    // A freshly seeded database (CI) has never seen the mark.
+    if (process.env.CI) expect(hasMark, "the seeded returning user sees the New mark").toBe(true);
     if (hasMark) {
       await shot(page, "new-mark-1280");
       await navigateTo(page, "/profile");

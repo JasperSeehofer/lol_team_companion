@@ -1,15 +1,16 @@
-//! Privacy (Datenschutz). Lists exactly what Companion stores (checked
+//! Privacy (Datenschutz). Lists exactly what Team Companion stores (checked
 //! against `schema.surql` by the tests below), who else is involved, the one
 //! cookie, the logs, how long things are kept and how to use your rights.
-//! Facts only the operator knows (identity, providers, legal bases, the
-//! supervisory authority) are `[OWNER: ...]` placeholders; nothing here is
-//! invented (M8).
+//! The operator's facts (controller, providers, log retention, supervisory
+//! authority) are the owner's own (launch checklist, 12 October 2026). The
+//! legal bases ([`LEGAL_BASES`]) are drafted defaults pending the operator's
+//! adviser (M10 review); the callout says so. Nothing here is invented.
 
 use crate::components::footer::RIOT_DISCLAIMER;
 use crate::components::ui::{
     Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
 };
-use crate::pages::legal::impressum::OwnerPlaceholder;
+use crate::pages::legal::impressum::{OPERATOR_ADDRESS, OPERATOR_EMAIL, OPERATOR_NAME};
 use leptos::prelude::*;
 
 /// What the app stores, by area: (area, items). Kept in step with
@@ -21,7 +22,7 @@ pub const STORED: &[(&str, &[&str])] = &[
             "Username and email address (the email in lowercase).",
             "Your password, only as an Argon2 hash; the password itself is never stored.",
             "Your region, and once you link it, your Riot ID and the Riot account id (PUUID) Riot returns for it.",
-            "Whether you are an admin (and whether that was set with the promote command), and when the account was created.",
+            "Whether you are an admin (and whether that was set with the promote command), when the account was created, and when you were last here and the time before (to the hour), so Match Day can tell when you come back after a break.",
             "Your settings: whether you get survey questions, whether guidance (the welcome, checklist, hints and nudges) is on, and whether teammates may share your player card by link.",
             "Guidance you have seen or turned off: which item (for example \u{201c}hint.draft_keys\u{201d}) and when, so it is not shown again.",
         ],
@@ -30,7 +31,7 @@ pub const STORED: &[(&str, &[&str])] = &[
         "Signing in",
         &[
             "A session cookie (HttpOnly, SameSite=Strict) and the session it points to on the server. A session ends after 30 days without use; ended sessions are deleted.",
-            "Invite codes with how often they were used.",
+            "Invite codes with how often they were used and, for a team invite, the team and position it leads to.",
         ],
     ),
     (
@@ -74,15 +75,41 @@ pub const STORED: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Why each kind of data is processed, and on what legal basis: (purpose,
+/// basis). Drafted defaults (orchestrator's decision in the M10 review),
+/// pending the operator's adviser; the page's callout says so.
+pub const LEGAL_BASES: &[(&str, &str)] = &[
+    (
+        "Your account, your team's workspace and your own pages: to provide the service you signed up for.",
+        "Legal basis: performance of the contract with you (Art. 6(1)(b) GDPR).",
+    ),
+    (
+        "Linking your Riot account, syncing your games and your team's games, and share links: done when you or your team choose to.",
+        "Legal basis: your own action under the contract with you (Art. 6(1)(b) GDPR).",
+    ),
+    (
+        "Scouting: when your team scouts an opponent, the public match history of the players it names.",
+        "Legal basis: the team's legitimate interest in preparing for its matches (Art. 6(1)(f) GDPR).",
+    ),
+    (
+        "Logs, rate limits and backups: to keep the service secure, available and recoverable.",
+        "Legal basis: legitimate interest in the security and operation of the service (Art. 6(1)(f) GDPR).",
+    ),
+    (
+        "Bug reports, votes and survey answers: to decide what to fix and build next, with you.",
+        "Legal basis: your own action under the contract with you (Art. 6(1)(b) GDPR); you choose whether to send them.",
+    ),
+];
+
 /// Who else touches the data: (who, role, what reaches them).
 pub const THIRD_PARTIES: &[(&str, &str)] = &[
     (
         "Riot Games",
-        "The source of game data. Companion's server asks the Riot API for match history, match details and timelines, ranked standing and champion mastery when you or your team sync, link a Riot ID or scout an opponent. The request carries the Riot ID or account id being looked up and Companion's API key; your browser never contacts Riot.",
+        "The source of game data. Team Companion's server asks the Riot API for match history, match details and timelines, ranked standing and champion mastery when you or your team sync, link a Riot ID or scout an opponent. The request carries the Riot ID or account id being looked up and Team Companion's API key; your browser never contacts Riot.",
     ),
     (
         "Riot Games Data Dragon",
-        "Champion and item pictures and the champion list. Companion's server downloads them once per game patch and serves them itself; nothing about you is sent.",
+        "Champion and item pictures and the champion list. Team Companion's server downloads them once per game patch and serves them itself; nothing about you is sent.",
     ),
 ];
 
@@ -93,22 +120,28 @@ pub fn DatenschutzPage() -> impl IntoView {
     let ul = "mt-2 flex max-w-prose list-disc flex-col gap-1.5 pl-5 text-body text-secondary";
     view! {
         <PageShell width=PageWidth::Reading>
-            <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Companion stores, who else is involved, and your rights."</span> } />
+            <PageHeader title="Privacy" eyebrow="Legal \u{00b7} Datenschutz" meta=move || view! { <span>"What Team Companion stores, who else is involved, and your rights."</span> } />
             <div class="mb-8">
                 <Callout tone=CalloutTone::Warning title="Partly a draft">
-                    "The lists of stored data, cookies, logs and retention describe this version of Companion. Items marked OWNER are completed by the operator before Companion opens beyond the closed beta."
+                    "The legal bases below and two clauses of the terms (liability, governing law) are drafts pending the operator's adviser."
                 </Callout>
             </div>
 
             <section aria-labelledby="controller-h">
                 <SectionHeader title="Who is responsible" id="controller-h" />
                 <p class=p>"The controller for the data on this site is:"</p>
-                <p class="mt-2"><OwnerPlaceholder what="name, postal address and email of the controller (as in the Impressum)" /></p>
-                <p class=p>"Data protection questions: " <OwnerPlaceholder what="contact email for privacy requests" /></p>
+                <p class="mt-2 text-body text-primary" data-testid="controller">
+                    <span class="block">{OPERATOR_NAME}</span>
+                    {OPERATOR_ADDRESS.iter().map(|line| view! { <span class="block">{*line}</span> }).collect_view()}
+                </p>
+                <p class=p>
+                    "Data protection questions: "
+                    <a href=format!("mailto:{OPERATOR_EMAIL}") class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">{OPERATOR_EMAIL}</a>
+                </p>
             </section>
 
             <section class="mt-10" aria-labelledby="stored-h">
-                <SectionHeader title="What Companion stores" id="stored-h" />
+                <SectionHeader title="What Team Companion stores" id="stored-h" />
                 {STORED.iter().map(|(area, items)| view! {
                     <h3 class=h3>{*area}</h3>
                     <ul class=ul>
@@ -117,19 +150,15 @@ pub fn DatenschutzPage() -> impl IntoView {
                 }).collect_view()}
                 <h3 class=h3>"What it does not do"</h3>
                 <p class=p>
-                    "No analytics, no advertising and no third-party trackers. The pages load no scripts, fonts or pictures from other sites: fonts are served by Companion itself, and champion and item pictures come through Companion's own server. Companion stores nothing in your browser besides the session cookie."
+                    "No analytics, no advertising and no third-party trackers. The pages load no scripts, fonts or pictures from other sites: fonts are served by Team Companion itself, and champion and item pictures come through Team Companion's own server. Team Companion stores nothing in your browser besides the session cookie."
                 </p>
             </section>
 
             <section class="mt-10" aria-labelledby="basis-h">
                 <SectionHeader title="Why, and on what legal basis" id="basis-h" />
-                <ul class=ul>
-                    <li>"Your account, your team's workspace and your own pages: to provide the service you signed up for."</li>
-                    <li>"Game data from Riot: to show your games and your team's games and, when your team scouts an opponent, the public match history of the players it names."</li>
-                    <li>"Logs, rate limits and backups: to keep the service secure, available and recoverable."</li>
-                    <li>"Bug reports, votes and survey answers: to decide what to fix and build next, with you."</li>
+                <ul class=ul data-testid="legal-bases">
+                    {LEGAL_BASES.iter().map(|(purpose, basis)| view! { <li>{*purpose} " " <span class="text-primary">{*basis}</span></li> }).collect_view()}
                 </ul>
-                <p class="mt-3"><OwnerPlaceholder what="the legal basis for each purpose above (for example Art. 6(1)(b) and 6(1)(f) GDPR), confirmed with advice" /></p>
             </section>
 
             <section class="mt-10" aria-labelledby="third-h">
@@ -140,9 +169,9 @@ pub fn DatenschutzPage() -> impl IntoView {
                         <dd class="text-secondary">{*what}</dd>
                     }).collect_view()}
                     <dt class="font-medium text-primary">"Hosting"</dt>
-                    <dd class="text-secondary">"The server and its database run on a rented virtual machine. " <OwnerPlaceholder what="hosting provider, its address and the data centre location; data processing agreement in place" /></dd>
+                    <dd class="text-secondary">"The server and its database run on a rented virtual machine at Hetzner Online GmbH, Helsinki (Finland)."</dd>
                     <dt class="font-medium text-primary">"Backups"</dt>
-                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept in object storage. " <OwnerPlaceholder what="object-storage provider, its address and location; data processing agreement in place" /></dd>
+                    <dd class="text-secondary">"A nightly copy of the database, encrypted on the server before it leaves, is kept in object storage at Hetzner Online GmbH, Falkenstein (Germany)."</dd>
                 </dl>
                 <p class=p>"Nothing else: no analytics service, no email service, no payment provider."</p>
             </section>
@@ -150,18 +179,17 @@ pub fn DatenschutzPage() -> impl IntoView {
             <section class="mt-10" aria-labelledby="cookies-h">
                 <SectionHeader title="Cookies" id="cookies-h" />
                 <p class=p>
-                    "One cookie, named " <code class="font-mono text-label text-primary">"id"</code> ", set when you sign in. It holds a random session number, is sent only to Companion (HttpOnly, SameSite=Strict, and only over HTTPS) and ends 30 days after your last visit or when you sign out. It is needed to stay signed in; there are no other cookies and no tracking."
+                    "One cookie, named " <code class="font-mono text-label text-primary">"id"</code> ", set when you sign in. It holds a random session number, is sent only to Team Companion (HttpOnly, SameSite=Strict, and only over HTTPS) and ends 30 days after your last visit or when you sign out. It is needed to stay signed in; there are no other cookies and no tracking."
                 </p>
             </section>
 
             <section class="mt-10" aria-labelledby="logs-h">
                 <SectionHeader title="Server logs" id="logs-h" />
                 <ul class=ul>
-                    <li>"The web server's access log records each request: time, address requested, status, response size, the request headers except cookies (such as the browser name and language) and your IP address shortened to its first three parts (IPv4) or first three groups (IPv6). Cookies and passwords are never logged. The log is rotated by size (five files of 10 MB)."</li>
-                    <li>"The application log records errors and notable events, such as an admin change or an account deletion, with the account's internal id. It never records passwords or session numbers."</li>
+                    <li>"The web server's access log records each request: time, address requested, status, response size, the request headers except cookies (such as the browser name and language) and your IP address shortened to its first three parts (IPv4) or first three groups (IPv6). Cookies and passwords are never logged. The access log is kept for 14 days, then deleted."</li>
+                    <li>"The application log records errors and notable events, such as an admin change or an account deletion, with the account's internal id. It never records passwords or session numbers. It is rotated by size (five files of 10 MB), so older entries are overwritten as new ones arrive."</li>
                     <li>"Rate limits keep IP addresses and account ids in memory only; an entry is dropped a minute after it is no longer needed and nothing is written to disk."</li>
                 </ul>
-                <p class="mt-3"><OwnerPlaceholder what="how many days the access and application logs are kept at the measured traffic" /></p>
             </section>
 
             <section class="mt-10" aria-labelledby="retention-h">
@@ -182,7 +210,11 @@ pub fn DatenschutzPage() -> impl IntoView {
                     <li>"Correction: change your username, region and Riot link on your profile; ask your team to correct team records."</li>
                     <li>"Erasure: " <a href="/profile#your-data" class="text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">"Delete my account"</a> " on your profile, without asking anyone."</li>
                     <li>"Restriction and objection, and anything the buttons do not cover: write to the contact above."</li>
-                    <li>"You can complain to a data protection supervisory authority. " <OwnerPlaceholder what="the supervisory authority responsible for the operator" /></li>
+                    <li>"You can complain to a data protection supervisory authority. The one responsible for the operator is "
+                        <span data-testid="authority">"Der Landesbeauftragte f\u{00fc}r den Datenschutz und die Informationsfreiheit Baden-W\u{00fc}rttemberg (LfDI), Lautenschlagerstra\u{00df}e 20, 70173 Stuttgart, "
+                        <span class="text-primary">"www.baden-wuerttemberg.datenschutz.de"</span></span>
+                        "."
+                    </li>
                 </ul>
             </section>
 
@@ -258,6 +290,17 @@ mod tests {
             .filter_map(|rest| rest.split_whitespace().next())
             .map(|t| t.trim_end_matches(';').to_string())
             .collect()
+    }
+
+    /// Every purpose has a stated legal basis; no placeholder is left.
+    #[test]
+    fn every_purpose_has_a_legal_basis() {
+        assert_eq!(super::LEGAL_BASES.len(), 5);
+        for (purpose, basis) in super::LEGAL_BASES {
+            assert!(!purpose.contains("OWNER") && !basis.contains("OWNER"));
+            assert!(basis.starts_with("Legal basis: "), "{basis}");
+            assert!(basis.contains("Art. 6(1)("), "{basis}");
+        }
     }
 
     #[test]

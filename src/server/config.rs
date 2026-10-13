@@ -569,7 +569,7 @@ impl AppConfig {
         for name in names {
             if let Some(meant) = misspelt_setting(name) {
                 r.warnings.push(format!(
-                    "{name} is set but is not a Companion setting; did you mean {meant}?"
+                    "{name} is set but is not a Team Companion setting; did you mean {meant}?"
                 ));
             }
         }

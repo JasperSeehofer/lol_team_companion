@@ -1,4 +1,4 @@
-# Mission: Companion (working name)
+# Mission: Team Companion
 
 Agreed 2026-10-10 between the owner (Jasper) and the orchestrating agent, from the Companion Mission Contract and the Sand Table Proposal. This file is the contract every milestone is measured against. Change it only by agreement.
 
@@ -124,3 +124,8 @@ Decisions the owner took after the contract was agreed. Each entry is dated; lat
 - New features are introduced where they are used, not in a tour.
 - Good pages stay self-explanatory; guidance is a safety net on top of them. A step counts as done only when the data says so.
 - M9 is added after M8 and comes before the first invites.
+
+2026-10-12 (owner's launch facts)
+- The product name is "Team Companion" (it replaces the working title "Companion" in section 4). The public address is app.team-companion.eu.
+- Using Team Companion costs nothing; support is voluntary. The support link stays off at launch. Support received is shown gross (before payment fees), and payment fees are a cost line in the transparency ledger.
+- Team-bound invites (orchestrator's call on the owner's onboarding question): a team leader can mint an invite that registers the new account straight into the team.

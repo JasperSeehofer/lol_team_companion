@@ -32,18 +32,10 @@ use crate::models::graph::{
 // Server functions
 // ---------------------------------------------------------------------------
 
-/// Rank the candidates for the draft's current step. Team notes, pools,
-/// games and the opponent dossier are the signed-in user's team's (none
-/// without a team: the trait rules alone). `state_json` is a
-/// [`DraftState`].
-#[server]
-pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerFnError> {
-    use crate::server::graph::{evidence, fit, traits};
-    use crate::server::{authz, db, rate_limit::Bucket};
-
-    let ctx = authz::authed().await?;
-    authz::rate_limit(Bucket::Graph).await?;
-    let state: DraftState = serde_json::from_str(&state_json)
+/// Read and check a [`DraftState`] sent by the panel.
+#[cfg(feature = "ssr")]
+fn parse_state(state_json: &str) -> Result<DraftState, ServerFnError> {
+    let state: DraftState = serde_json::from_str(state_json)
         .map_err(|_| ServerFnError::new("The draft could not be read."))?;
     if state.slots.len() > 20
         || state.roles.len() > 20
@@ -51,9 +43,23 @@ pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerF
         || state.tags.len() > 20
         || state.unavailable.len() > 200
         || state.current.is_some_and(|c| c >= 20)
+        || state.focus.as_ref().is_some_and(|f| f.len() > 64)
     {
         return Err(ServerFnError::new("The draft could not be read."));
     }
+    Ok(state)
+}
+
+/// Rank a draft with the signed-in user's team's knowledge (none without a
+/// team: the trait rules alone). Every reason of every candidate.
+#[cfg(feature = "ssr")]
+async fn rank_draft(
+    ctx: &crate::server::authz::Ctx,
+    state: &DraftState,
+) -> Result<GraphResult, ServerFnError> {
+    use crate::server::graph::{evidence, fit, traits};
+    use crate::server::{authz, db};
+
     let started = std::time::Instant::now();
     let table = traits::ensure_loaded(&ctx.db)
         .await
@@ -118,7 +124,7 @@ pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerF
     }
     let result = fit::rank(
         &table,
-        &state,
+        state,
         &fit::TeamKnowledge {
             team: team.is_some(),
             relations: &relations,
@@ -133,6 +139,46 @@ pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerF
         "graph_candidates"
     );
     Ok(result)
+}
+
+/// Rank the candidates for the draft's current step. Team notes, pools,
+/// games and the opponent dossier are the signed-in user's team's (none
+/// without a team: the trait rules alone). `state_json` is a
+/// [`DraftState`]. Only the top [`crate::models::graph::FULL_REASONS`] candidates and the focused
+/// one carry every reason; the panel asks for the rest of a candidate's
+/// reasons when it is focused ([`graph_candidate_reasons`]).
+#[server]
+pub async fn graph_candidates(state_json: String) -> Result<GraphResult, ServerFnError> {
+    use crate::server::{authz, rate_limit::Bucket};
+
+    let ctx = authz::authed().await?;
+    authz::rate_limit(Bucket::Graph).await?;
+    let state = parse_state(&state_json)?;
+    let mut result = rank_draft(&ctx, &state).await?;
+    crate::models::graph::trim_reasons(&mut result, state.focus.as_deref());
+    Ok(result)
+}
+
+/// Every reason of one candidate of the same ranking (the panel asks when a
+/// candidate whose reasons were trimmed is focused). Empty when the
+/// champion is no longer a candidate.
+#[server]
+pub async fn graph_candidate_reasons(
+    state_json: String,
+    champion: String,
+) -> Result<Vec<Reason>, ServerFnError> {
+    use crate::server::{authz, rate_limit::Bucket};
+
+    let ctx = authz::authed().await?;
+    authz::rate_limit(Bucket::Graph).await?;
+    let state = parse_state(&state_json)?;
+    let result = rank_draft(&ctx, &state).await?;
+    Ok(result
+        .candidates
+        .into_iter()
+        .find(|c| c.champion == champion)
+        .map(|c| c.reasons)
+        .unwrap_or_default())
 }
 
 /// The team's notes on pairs (empty without a team).
@@ -506,6 +552,12 @@ pub fn DraftGraphPanel(
     let memory: StoredValue<HashMap<String, (f32, f32)>> = StoredValue::new(HashMap::new());
     let refresh = RwSignal::new(0u32);
     let generation = StoredValue::new(0u32);
+    // The generation and question of the result on screen (for the lazy
+    // reasons: they must belong to that ranking, not a newer request).
+    #[allow(unused_variables)]
+    let asked = StoredValue::new((0u32, String::new()));
+    // The candidate whose remaining reasons failed to load.
+    let reasons_failed = RwSignal::new(None::<String>);
     #[allow(unused_variables)]
     let timer: RwSignal<Option<i32>> = RwSignal::new(None);
 
@@ -523,8 +575,12 @@ pub fn DraftGraphPanel(
             opponent_id: inputs.opponent.get(),
             unavailable: inputs.unavailable.get(),
             role: Role::parse(&role_choice.get()),
+            // Read untracked: a focus change must not ask for a new ranking.
+            focus: focused.get_untracked(),
         };
         let json = serde_json::to_string(&state).unwrap_or_default();
+        #[allow(unused_variables)]
+        let asked_json = json.clone();
         let gen = generation.get_value() + 1;
         generation.set_value(gen);
         #[cfg(feature = "hydrate")]
@@ -539,6 +595,7 @@ pub fn DraftGraphPanel(
                 leptos::task::spawn_local(async move {
                     let r = graph_candidates(json).await.map_err(|e| e.to_string());
                     if generation.get_value() == gen {
+                        asked.set_value((gen, asked_json));
                         result.set(Some(r));
                     }
                 });
@@ -589,6 +646,43 @@ pub fn DraftGraphPanel(
     let focused_candidate = Memo::new(move |_| {
         let f = focused.get()?;
         candidates.with(|l| l.iter().find(|c| c.champion == f).cloned())
+    });
+    // A focused candidate below the top 8 came with its two strongest
+    // reasons only: ask for the rest once, for the same ranking.
+    Effect::new(move |_| {
+        let Some(c) = focused_candidate.get().filter(|c| !c.reasons_complete) else {
+            return;
+        };
+        #[cfg(not(feature = "hydrate"))]
+        let _ = c;
+        #[cfg(feature = "hydrate")]
+        {
+            let (gen, json) = asked.get_value();
+            reasons_failed.set(None);
+            leptos::task::spawn_local(async move {
+                let answer = graph_candidate_reasons(json, c.champion.clone()).await;
+                // Only for the ranking still on screen (M10 review: a reply
+                // for an older draft state must not fill a newer result).
+                if asked.with_value(|(g, _)| *g) != gen {
+                    return;
+                }
+                let Ok(reasons) = answer else {
+                    reasons_failed.set(Some(c.champion.clone()));
+                    return;
+                };
+                result.update(|r| {
+                    if let Some(Ok(g)) = r {
+                        if let Some(x) = g.candidates.iter_mut().find(|x| x.champion == c.champion)
+                        {
+                            if !reasons.is_empty() {
+                                x.reasons = reasons;
+                            }
+                            x.reasons_complete = true;
+                        }
+                    }
+                });
+            });
+        }
     });
 
     let pick = Callback::new(move |c: Candidate| {
@@ -901,6 +995,7 @@ pub fn DraftGraphPanel(
                             <div class="flex min-w-0 flex-col gap-6">
                                 {move || focused_candidate.get().map(|c| view! {
                                     <WhyPanel
+                                        reasons_failed=reasons_failed.get().as_deref() == Some(c.champion.as_str())
                                         candidate=c
                                         team=notes.team
                                         on_pick=pick
@@ -1136,6 +1231,8 @@ fn CandidateRow(
 #[component]
 fn WhyPanel(
     candidate: Candidate,
+    /// The rest of a trimmed candidate's reasons could not be loaded.
+    reasons_failed: bool,
     team: bool,
     on_pick: Callback<Candidate>,
     on_argue: Callback<Option<(String, String, &'static str)>>,
@@ -1233,6 +1330,11 @@ fn WhyPanel(
                     </div>
                 }
             }).collect_view()}
+            {(!c.reasons_complete).then(|| if reasons_failed {
+                view! { <p class="text-caption text-muted" data-graph-why-failed="">"The rest of the reasons could not be loaded. Focus another candidate and come back to try again."</p> }.into_any()
+            } else {
+                view! { <p class="text-caption text-muted" data-graph-why-loading="">"Loading the rest of the reasons."</p> }.into_any()
+            })}
             {trait_note.map(|t| view! { <p class="text-caption text-muted">{t}</p> })}
         </section>
     }
@@ -1486,6 +1588,7 @@ mod tests {
                     strength: -2.0,
                 },
             ],
+            reasons_complete: true,
             pool: Some(PoolStatus {
                 player: Some("Pell".into()),
                 tier: Some("match_ready".into()),

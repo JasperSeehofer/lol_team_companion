@@ -588,7 +588,7 @@ pub fn Nav() -> impl IntoView {
             <div class="mx-auto max-w-7xl px-4 sm:px-8">
                 <div class="flex h-12 items-center gap-6">
                     <A href="/" attr:class="shrink-0 font-display text-reading font-bold tracking-[-0.01em] text-primary">
-                        "Companion"
+                        "Team Companion"
                     </A>
 
                     // The user is a resource: read it inside a Suspense.
