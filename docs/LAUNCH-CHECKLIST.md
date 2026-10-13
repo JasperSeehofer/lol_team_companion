@@ -18,10 +18,10 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 2. Riot
 
-- [ ] **owner** The existing Riot registration compared with `docs/RIOT-REGISTRATION-CHECK.md` and updated where it differs; production key approved (if not already), key in `RIOT_API_KEY`.
-- [ ] **owner + agent** `riot.txt` with the verification code from the portal served at `https://app.team-companion.eu/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`) and holds a placeholder.* *Owner:* paste the code.
+- [ ] **owner** The existing Riot registration compared with `docs/RIOT-REGISTRATION-CHECK.md` and updated where it differs; production key approved (if not already), key in `RIOT_API_KEY`. *13 Oct 2026: key live on the VM; the description rewritten and shortened to the portal's field limit (about 1,450 characters, with monetisation, volume and retention as its last paragraph; check doc, section 7); the owner agreed to the text and the three answers and pastes them into the portal.*
+- [x] **owner + agent** `riot.txt` with the verification code from the portal served at `https://app.team-companion.eu/riot.txt`. *Agent part done: `public/riot.txt` is served (checked by `legal.spec.ts`).* *Owner, 13 Oct 2026: the portal shows no verification section for app 834192, so there is no code; the file names the app instead (ships with the next image).*
 - [x] **owner** `RIOT_GLOBAL_BUDGET_PER_SEC` / `_PER_MIN` set for the production limits shown in the portal (template comment: 45 / 2400 for 500 per 10 s and 30,000 per 10 min). *Done 13 Oct 2026: key in `.env`, budget 45 / 2400, the startup log shows `riot_key=true`.*
-- [ ] **both** A linked account's match history, a match detail with timeline, ranked data and an opponent scouting lookup work in production.
+- [x] **both** A linked account's match history, a match detail with timeline, ranked data and an opponent scouting lookup work in production. *Done 13 Oct 2026: match history, a match detail with timeline, the ranked standing on `/me` and an opponent lookup all work with the production key (three bug reports filed on the detail page, among them recall events shown as item undo; product work for the next session).*
 
 ## 3. Deployment and configuration
 
@@ -58,7 +58,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 - [ ] **owner** Backup dead-man's switch: `scripts/backup-watch.sh remote` twice a day from the second server with the read-only sub-account (RUNBOOK 2.7), or `HEALTHCHECK_PING_URL`. *Agent part done: the script (alerts after 36 h), examples, harness checks. 13 Oct 2026: runs on `brain` at 07:15 and 19:15 UTC with the read-only `u663454-sub2` (password obscured, host key pinned) and reports the newest backup; delivery of an alert waits for the owner's application there (`docs/ALERTING.md`).*
 - [ ] **owner** Disk usage alert at 80 %.
 - [ ] **both** Error log review: run the app for a day with real use and read `docker compose logs app | grep -E "ERROR|WARN"`. No recurring errors; no passwords, session ids or full emails in the log at `RUST_LOG=info` (grep for `@` and for known test emails). Fix what shows up.
-- [ ] **both** The bug-report widget works in production and reports land in `/data/inbox/bug-reports.md` after a restart.
+- [x] **both** The bug-report widget works in production and reports land in `/data/inbox/bug-reports.md` after a restart. *Done 13 Oct 2026: three reports from the owner exported on the next restart.*
 
 ## 7. Performance smoke
 
