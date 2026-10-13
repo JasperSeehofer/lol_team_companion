@@ -400,3 +400,144 @@ async fn a_hidden_card_cannot_be_shared_and_old_links_are_revoked() {
         .await
         .unwrap();
 }
+
+/// Owner's decision (12 October 2026): bug reports survive the deletion,
+/// anonymised. Before the deletion the export holds the report in full;
+/// afterwards the admin triage list and the public board still work, the
+/// report belongs to "Former member" and nothing the reporter wrote or sent
+/// is left. Another user's report is untouched.
+#[tokio::test]
+async fn bug_reports_survive_deletion_anonymised() {
+    use lol_team_companion::models::bug_report::BugTriage;
+    use lol_team_companion::server::community::store;
+
+    let db = crate::common::test_db().await;
+    let ana = db::create_user(&db, "ana".into(), "ana@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let ben = db::create_user(&db, "ben".into(), "ben@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let admin = db::create_user(&db, "root".into(), "root@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    db::create_bug_report(
+        &db,
+        &ana,
+        "/draft?draft_id=draft:x".into(),
+        "Save button".into(),
+        "Saving fails. Thanks, Ana from Northgate".into(),
+        "bug".into(),
+        Some(1280),
+        Some(720),
+    )
+    .await
+    .unwrap();
+    // Sent from her own player card: the page names her account.
+    db::create_bug_report(
+        &db,
+        &ana,
+        format!("/team/player/{ana}"),
+        "Card".into(),
+        "My card looks wrong".into(),
+        "bug".into(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    db::create_bug_report(
+        &db,
+        &ben,
+        "/stats".into(),
+        "Table".into(),
+        "Ben's own words".into(),
+        "bug".into(),
+        Some(400),
+        Some(800),
+    )
+    .await
+    .unwrap();
+    let reports = store::admin_list_bug_reports(&db, None).await.unwrap();
+    let anas = reports
+        .iter()
+        .find(|r| r.reporter == "ana" && r.page_url.starts_with("/draft"))
+        .unwrap()
+        .id
+        .clone();
+    store::admin_update_bug_report(
+        &db,
+        &admin,
+        &BugTriage {
+            id: anas.clone(),
+            status: "planned".into(),
+            on_board: true,
+            public_title: "Saving a draft can fail".into(),
+            public_note: "Fix is planned.".into(),
+            admin_note: "Seen on the draft page".into(),
+            fixed_in: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+    store::mark_my_reports_seen(&db, &ana).await.unwrap();
+
+    // The export before the deletion has the report as she sent it.
+    let doc = account::export_user_data(&db, &ana).await.unwrap();
+    let mut mine = doc["data"]["bug_reports"].as_array().unwrap().clone();
+    assert_eq!(mine.len(), 2);
+    mine.retain(|r| {
+        r["page_url"]
+            .as_str()
+            .is_some_and(|p| p.starts_with("/draft"))
+    });
+    assert_eq!(
+        mine[0]["description"],
+        "Saving fails. Thanks, Ana from Northgate"
+    );
+    assert_eq!(mine[0]["element_label"], "Save button");
+    assert_eq!(mine[0]["viewport_w"], 1280);
+    assert!(!mine[0]["reporter_seen_at"].is_null());
+    assert!(!doc.to_string().contains("Ben's own words"));
+
+    account::delete_account(&db, &ana).await.unwrap();
+
+    let after = store::admin_list_bug_reports(&db, None).await.unwrap();
+    assert_eq!(after.len(), 3, "every report is still there");
+    // The id in the page is cut off: the card no longer names her.
+    let card = after
+        .iter()
+        .find(|r| r.page_url.starts_with("/team/player"))
+        .unwrap();
+    assert_eq!(card.page_url, "/team/player/");
+    assert_eq!(card.reporter, "Former member");
+    let ana_key = ana.strip_prefix("user:").unwrap_or(&ana);
+    assert!(
+        !serde_json::to_string(&after).unwrap().contains(ana_key),
+        "nothing in the triage list names her account"
+    );
+    let r = after.iter().find(|r| r.id == anas).unwrap();
+    assert_eq!(r.reporter, "Former member");
+    assert!(!r.description.contains("Ana"), "{}", r.description);
+    assert!(r.description.contains("deleted their account"));
+    assert_eq!(r.element_label, "");
+    assert_eq!((r.viewport_w, r.viewport_h), (None, None));
+    // What the admins wrote, the page and the category stay.
+    assert_eq!(r.status, "planned");
+    assert_eq!(r.public_title.as_deref(), Some("Saving a draft can fail"));
+    assert_eq!(r.admin_note.as_deref(), Some("Seen on the draft page"));
+    assert_eq!(r.page_url, "/draft?draft_id=draft:x");
+    assert_eq!(r.category, "bug");
+    assert_eq!(
+        count(&db, "SELECT count() AS n FROM bug_report WHERE user = user:former_member AND reporter_seen_at = NONE GROUP ALL").await,
+        2
+    );
+    // The public board still shows it, with the admin-written text only.
+    let board = store::list_bug_board(&db).await.unwrap();
+    assert_eq!(board.len(), 1);
+    assert_eq!(board[0].public_title, "Saving a draft can fail");
+    // Ben's report is as he sent it.
+    let bens = after.iter().find(|r| r.reporter == "ben").unwrap();
+    assert_eq!(bens.description, "Ben's own words");
+    assert_eq!(bens.viewport_w, Some(400));
+}

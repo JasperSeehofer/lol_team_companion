@@ -20,10 +20,12 @@
 //!   the tombstone account [`FORMER_MEMBER_ID`] ("Former member"), stored
 //!   copies of the username are replaced, action items assigned to the
 //!   username are unassigned and the user leaves every "brief read" list.
-//! - Bug reports stay (their status, the public title and note and the
-//!   triage history keep the bug board and "fixed in" links consistent), but
-//!   they move to the tombstone and lose what the reporter wrote (text,
-//!   pointed element, window size).
+//! - Bug reports stay, anonymised (owner's decision, 12 October 2026): their
+//!   status, the public title and note and the triage history keep the bug
+//!   board and "fixed in" links consistent, but they move to the tombstone
+//!   and lose what the reporter wrote or sent ([`BUG_REPORT_AUTHOR_FIELDS`]:
+//!   text, pointed element, window size, the reporter's read marker). The
+//!   export taken before the deletion still holds them in full.
 //! - A team leader whose team has other members must hand leadership over
 //!   first ([`DbError::Invalid`]). A leader who is the only member deletes
 //!   the team with everything it owns.
@@ -56,6 +58,10 @@ pub enum Treatment {
     Delete,
     /// The row stays; the link moves to the tombstone account.
     Tombstone,
+    /// The row stays, moved to the tombstone account, and loses everything
+    /// its author wrote or sent ([`BUG_REPORT_AUTHOR_FIELDS`]): bug reports
+    /// (owner's decision, 12 October 2026: kept, anonymised).
+    Anonymise,
     /// An array of users; the user is removed from it.
     RemoveFromArray,
     /// `team.created_by` (the leader): refuse while others are in the team,
@@ -82,7 +88,7 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
     ("ranked_snapshot", "user", Treatment::Delete),
     ("personal_learning", "user", Treatment::Delete),
     ("personal_goal", "user", Treatment::Delete),
-    ("bug_report", "user", Treatment::Tombstone),
+    ("bug_report", "user", Treatment::Anonymise),
     ("board", "created_by", Treatment::Tombstone),
     ("board_version", "author", Treatment::Tombstone),
     ("champion_trait", "edited_by", Treatment::Tombstone),
@@ -109,6 +115,26 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
     ("site_text", "approved_by", Treatment::Tombstone),
     ("site_text", "updated_by", Treatment::Tombstone),
 ];
+
+/// What deletion clears on the user's bug reports: everything the reporter
+/// wrote or sent (the text, the element they pointed at, the window size)
+/// and the reporter's own read marker. What stays is the page, the category,
+/// the date and what admins wrote (status, public title and note, internal
+/// note, "fixed in"), so the bug board and its changelog links keep working.
+/// Bug reports have no other author field (no name is stored on them).
+/// The page stays, but an id in it is cut off ([`BUG_REPORT_PAGES_WITH_IDS`]):
+/// a report sent from one's own player card would otherwise name the user.
+pub const BUG_REPORT_AUTHOR_FIELDS: &[&str] = &[
+    "description",
+    "element_label",
+    "viewport_w",
+    "viewport_h",
+    "reporter_seen_at",
+];
+
+/// Routes whose path holds an id (a user's player card, a share token, a
+/// game): deletion keeps only this prefix of a report's page.
+pub const BUG_REPORT_PAGES_WITH_IDS: &[&str] = &["/team/player/", "/s/", "/match/"];
 
 /// The tombstone row. Its email has no `@` and its username key is longer
 /// than registration allows, so no registration can collide with it; its
@@ -201,7 +227,8 @@ const DELETE_USER: &str = "\
     UPDATE proposal SET created_by = $tomb WHERE created_by = $u; \
     UPDATE proposal SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE bug_report SET triaged_by = $tomb WHERE triaged_by = $u; \
-    UPDATE bug_report SET user = $tomb, description = $removed, element_label = '', viewport_w = NONE, viewport_h = NONE WHERE user = $u; \
+    UPDATE bug_report SET user = $tomb, description = $removed, element_label = '', viewport_w = NONE, viewport_h = NONE, reporter_seen_at = NONE, \
+        page_url = IF string::starts_with(page_url, '/team/player/') { '/team/player/' } ELSE IF string::starts_with(page_url, '/s/') { '/s/' } ELSE IF string::starts_with(page_url, '/match/') { '/match/' } ELSE { page_url } WHERE user = $u; \
     UPDATE ledger_month SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE site_text SET approved_by = $tomb WHERE approved_by = $u; \
     UPDATE site_text SET updated_by = $tomb WHERE updated_by = $u; \
@@ -528,12 +555,84 @@ mod tests {
         for (t, f, treatment) in USER_LINKS {
             let needle = match treatment {
                 Treatment::Delete => format!("DELETE {t} WHERE {f} = $u"),
-                Treatment::Tombstone => format!("UPDATE {t} SET {f} = $tomb"),
+                Treatment::Tombstone | Treatment::Anonymise => {
+                    format!("UPDATE {t} SET {f} = $tomb")
+                }
                 Treatment::RemoveFromArray => format!("WHERE $u IN {f}"),
                 Treatment::Leader => continue,
             };
             assert!(all.contains(&needle), "{t}.{f}: expected `{needle}`");
         }
+    }
+
+    /// An anonymised link clears every author field in the same statement
+    /// that moves the row to the tombstone, and those are all the free-text
+    /// or browser fields the reporter fills in.
+    #[test]
+    fn anonymised_rows_lose_what_their_author_wrote() {
+        let anonymised: Vec<_> = USER_LINKS
+            .iter()
+            .filter(|(_, _, t)| *t == Treatment::Anonymise)
+            .collect();
+        assert_eq!(anonymised.len(), 1, "only bug reports are anonymised");
+        for (t, f, _) in anonymised {
+            let stmt = DELETE_USER
+                .split("; ")
+                .find(|s| {
+                    s.trim_start()
+                        .starts_with(&format!("UPDATE {t} SET {f} = $tomb"))
+                })
+                .expect("the anonymising statement");
+            for field in BUG_REPORT_AUTHOR_FIELDS {
+                assert!(
+                    stmt.contains(&format!("{field} = ")),
+                    "{t}: {field} is not cleared in `{stmt}`"
+                );
+            }
+            for prefix in BUG_REPORT_PAGES_WITH_IDS {
+                assert!(
+                    stmt.contains(&format!(
+                        "string::starts_with(page_url, '{prefix}') {{ '{prefix}' }}"
+                    )),
+                    "{t}: an id after {prefix} is not cut off in `{stmt}`"
+                );
+            }
+        }
+        // Every bug_report field the reporter's browser sends is cleared;
+        // the schema has no name field to forget.
+        let schema = include_str!("../../schema.surql");
+        let fields: Vec<&str> = schema
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("DEFINE FIELD IF NOT EXISTS "))
+            .filter(|rest| rest.contains(" ON bug_report "))
+            .filter_map(|rest| rest.split_whitespace().next())
+            .collect();
+        assert!(fields.contains(&"description"), "{fields:?}");
+        for f in &fields {
+            assert!(
+                !f.contains("name") && !f.contains("author"),
+                "bug_report.{f} looks like an author field; clear it on deletion"
+            );
+        }
+    }
+
+    /// Every route with a parameter (an id in the path) is cut to its
+    /// prefix when a deleted user's bug reports are anonymised.
+    #[test]
+    fn every_route_with_an_id_is_cut_from_anonymised_reports() {
+        let app = include_str!("../app.rs");
+        let mut found = 0;
+        for chunk in app.split("path!(\"").skip(1) {
+            let route = chunk.split('"').next().unwrap_or_default();
+            if let Some((prefix, _)) = route.split_once(':') {
+                found += 1;
+                assert!(
+                    BUG_REPORT_PAGES_WITH_IDS.contains(&prefix),
+                    "{route}: add {prefix} to BUG_REPORT_PAGES_WITH_IDS"
+                );
+            }
+        }
+        assert_eq!(found, BUG_REPORT_PAGES_WITH_IDS.len());
     }
 
     /// Deleting a team removes (or unlinks) every row that points at it

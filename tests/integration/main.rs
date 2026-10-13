@@ -23,6 +23,7 @@ mod graph;
 mod guidance;
 mod match_day;
 mod migrations;
+mod retention;
 mod sand_table;
 mod security;
 mod team_invites;

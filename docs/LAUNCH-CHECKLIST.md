@@ -10,6 +10,8 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 - [ ] **owner + agent** Privacy page (`/legal/datenschutz`) is real. *Agent part done (M8):* it lists what is stored (the list is checked against `schema.surql` in both directions by `every_table_is_accounted_for`), purposes, Riot and Data Dragon, the hosting and backup providers (placeholders), the one session cookie, the access and application logs, rate limiting in memory, retention (backups 30 days), rights with the export and deletion links. *Polish pass:* controller, privacy contact, hosting (Hetzner Helsinki) and backup storage (Hetzner Falkenstein), access logs 14 days (Caddy rolls and deletes to match) and the supervisory authority (LfDI Baden-Württemberg) are filled in. *Review:* the legal basis per purpose is filled in with drafted defaults (service: contract; Riot link, syncs, share links, bug reports and votes: the user's own action under the contract; scouting opponents, logs, rate limits and backups: legitimate interest), flagged by the callout. *Owner, still open:* the adviser confirms the legal bases (and the two drafted terms clauses), data processing agreements with Hetzner in place (not claimed on the page), application-log retention (today: size-rotated, 5 x 10 MB); then remove the "Partly a draft" callout.
 - [ ] **owner + agent** Terms of use page exists. *Agent part done (M8): `/legal/terms`, linked in the footer. Polish pass: the owner's pricing statement word for word; liability and governing law drafted for the owner and on the page.* *Owner:* the adviser confirms the two drafted paragraphs (section "Liability and law").
 - [x] **agent** Account deletion works end to end: profile "Delete my account" (username + password), personal rows deleted, team records kept under "Former member", sessions ended; a leader with members hands over first (team page "Make team leader"), a leader alone deletes the team. Evidence: `tests/integration/account.rs`, `security.rs::hand_over_and_export_stay_inside_the_tenant`, `e2e/tests/account.spec.ts`.
+- [x] **agent** Bug reports survive account deletion, anonymised (owner's decision, 12 Oct 2026): moved to "Former member", the reporter's text, element, window size and read marker removed, an id in the page address cut off (own player card, share link, game); the privacy page says so. Evidence: `account.rs::anonymised_rows_lose_what_their_author_wrote`, `tests/integration/account.rs::bug_reports_survive_deletion_anonymised`.
+- [x] **agent** Cached Riot games are deleted after 12 months (owner's decision, 12 Oct 2026; nightly task, `MATCH_CACHE_RETENTION_DAYS`); stated on the privacy page and in `docs/RIOT-REGISTRATION-CHECK.md`. Evidence: `tests/integration/retention.rs`.
 - [x] **agent** Account export works: `GET /account/export` (profile "Download my data"). Evidence: `export_holds_every_section_and_nothing_of_others`, `account.spec.ts`.
 - [ ] **owner** Support page and money wording follow the money policy (MISSION 4) and the owner's confirmation after the Riot and tax questions; or the support link stays off for launch. *Owner, 12 Oct 2026: off for launch (`SUPPORT_URL` unset); support shown gross with payment fees as a cost line.*
 - [x] **agent** Footer shows Riot's legal disclaimer on every page (unit test on the wording; `smoke.spec.ts` and `legal.spec.ts` check it renders).
@@ -24,7 +26,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 ## 3. Deployment and configuration
 
 - [ ] **owner** VM per `docs/RUNBOOK.md` 2.1: firewall (22 restricted, 80, 443), SSH keys only, unattended upgrades.
-- [ ] **owner** `.env` and `deploy/backup.env` are `chmod 600`, not in git, and backed up in the password manager (with the rclone crypt passphrases and `SESSION_SECRET`).
+- [ ] **owner** `.env` and `deploy/backup.env` are `chmod 600`, not in git, and backed up in the password manager (with the rclone crypt passphrases, the Storage Box sub-account passwords and `SESSION_SECRET`).
 - [ ] **owner** `SESSION_SECRET` from `openssl rand -hex 32`; `APP_ENV` unset; `RATE_LIMIT_MULTIPLIER` unset (the e2e value 100 must never reach production); `CLOSED_BETA` unset.
 - [ ] **both** The startup log line `security configuration` shows `dev=false closed_beta=true cookie_secure=true admin_emails=1` (or the intended count).
 - [ ] **both** The response headers in production show HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, the CSP report-only header, and the session cookie with `Secure; HttpOnly; SameSite=Strict`.
@@ -43,7 +45,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 5. Backups (verified, not assumed)
 
-- [ ] **owner** Bucket created in an EU region, access key limited to that bucket, lifecycle rule as a backstop (longer than 30 days), versioning or object lock if available.
+- [ ] **owner** Hetzner Storage Box ready (owner's decision, 12 Oct 2026; RUNBOOK 5.1): SSH support and external reachability on; a backup sub-account limited to its own directory and a read-only sub-account on the same directory for the watcher; block A of `deploy/backup.env` filled in (password obscured, or an SSH key), host key pinned. Confirm the box's location: the privacy page says Falkenstein (Germany). No object lock or versioning on a Storage Box: the trade-off is written down in RUNBOOK 5.2.
 - [ ] **both** First manual backup ran: `docker compose run --rm backup now` ends with `backup <id> done` and "remote copy verified".
 - [ ] **both** The nightly run happened at least twice (`docker compose logs --since 72h backup`).
 - [ ] **both** Restore drill passed on the VM **and** once on another machine (`scripts/restore-drill.md`); results recorded.
@@ -52,8 +54,8 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 ## 6. Monitoring and logs
 
-- [ ] **owner** External uptime check on `https://app.team-companion.eu/healthz`, alerting by email.
-- [ ] **owner** Backup dead-man's switch (`HEALTHCHECK_PING_URL`) or a weekly calendar reminder to read the backup log.
+- [ ] **owner** Uptime check on `https://app.team-companion.eu/healthz` from the second Hetzner server, alerting by email: `scripts/healthcheck-remote.sh` by cron or systemd timer every 5 minutes (RUNBOOK 2.7), alert path tested once. *Agent part done: the script, cron and systemd examples, harness checks.*
+- [ ] **owner** Backup dead-man's switch: `scripts/backup-watch.sh remote` twice a day from the second server with the read-only sub-account (RUNBOOK 2.7), or `HEALTHCHECK_PING_URL`. *Agent part done: the script (alerts after 36 h), examples, harness checks.*
 - [ ] **owner** Disk usage alert at 80 %.
 - [ ] **both** Error log review: run the app for a day with real use and read `docker compose logs app | grep -E "ERROR|WARN"`. No recurring errors; no passwords, session ids or full emails in the log at `RUST_LOG=info` (grep for `@` and for known test emails). Fix what shows up.
 - [ ] **both** The bug-report widget works in production and reports land in `/data/inbox/bug-reports.md` after a restart.

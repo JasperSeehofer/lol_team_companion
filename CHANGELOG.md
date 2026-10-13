@@ -8,6 +8,19 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Launch follow-up (2026-10-12)
+
+#### Added
+- A "Source" link in the footer of every page: the code of Team Companion is public.
+- For operators: backups to a Hetzner Storage Box over SFTP (still encrypted before they leave the server, still kept 30 days), with setup steps in the runbook; S3-compatible storage still works. Two scripts for a second server: an uptime check that mails once when the site goes down and once when it is back, and a backup watch that mails when the newest backup is more than 36 hours old.
+
+#### Changed
+- Games opened from the match history are cached for 12 months and then deleted (a nightly task); the privacy page says so.
+- When you delete your account, your bug reports stay so the bug board keeps its history, shown as from a former member, without your text, the element you pointed at, your window size or an id in the page address (such as your own player card). The privacy page says so; "Download my data" still includes them in full before you delete.
+
+#### Fixed
+- A page now and then never finished loading (about one in several thousand, more often on a busy server): one section kept its loading placeholder although everything had loaded. The cause was in the web framework and is fixed by its update; the server also logs any request that takes longer than 15 seconds, with how far it got.
+
 ### Polish before launch (2026-10-12)
 
 Introduce: /team/dashboard | Invite a player | Team leaders: create a link here that signs a new player up straight into your team.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Team Companion backup: consistent cold copy of the SurrealKV data directory,
-# uploaded to S3-compatible object storage with rclone.
+# uploaded with rclone through a crypt remote (Hetzner Storage Box over SFTP,
+# or S3-compatible object storage).
 #
 #   backup.sh            one backup now (the backup container runs this nightly)
 #   backup.sh --help
@@ -42,7 +43,7 @@
 set -Eeuo pipefail
 umask 077
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; }
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
 
 : "${RCLONE_REMOTE:?RCLONE_REMOTE is required (e.g. offsitecrypt:)}"

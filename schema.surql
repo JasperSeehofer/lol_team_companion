@@ -341,6 +341,8 @@ DEFINE FIELD IF NOT EXISTS game_duration ON match_detail TYPE int;
 DEFINE FIELD IF NOT EXISTS game_mode ON match_detail TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS fetched_at ON match_detail TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS match_detail_match_id ON match_detail FIELDS match_id UNIQUE;
+-- The nightly retention task (M11) deletes cached games by this time.
+DEFINE INDEX IF NOT EXISTS match_detail_fetched_at ON match_detail FIELDS fetched_at;
 
 -- Match timeline events cache
 DEFINE TABLE IF NOT EXISTS match_timeline_event SCHEMAFULL;

@@ -67,6 +67,9 @@ cargo run --features ssr --bin promote -- --list
 # Register + sign in over plain HTTP against a running server (CI runs it on the image)
 ./scripts/smoke_signin.sh http://127.0.0.1:3020
 
+# Load check: 12,000 page requests over 16 connections; fails if any page never finishes streaming
+python3 scripts/ssr_stress.py http://127.0.0.1:3020
+
 # Ops scripts: ShellCheck and the offline backup/restore harness (needs rclone, python3)
 shellcheck scripts/*.sh scripts/tests/*.sh deploy/backup/entrypoint.sh
 ./scripts/tests/run-script-tests.sh scripts
@@ -78,6 +81,10 @@ cp deploy/env.production.example .env && cp deploy/backup.env.example deploy/bac
 docker compose up -d --build
 docker compose run --rm backup now                 # one backup now (stops the app for seconds)
 sudo -E ./scripts/restore.sh drill latest          # restore drill: scripts/restore-drill.md
+
+# Monitoring from the owner's second server (no external service; RUNBOOK 2.7)
+ALERT_EMAIL=you@example.org ./scripts/healthcheck-remote.sh   # uptime: one mail down, one back
+WATCH_REMOTE=watch:companion-backups ./scripts/backup-watch.sh  # alert when the newest backup is > 36 h old
 ```
 
 `just` recipes exist for most of these (`just verify`, `just e2e`, `just smoke`); if `just` is not installed, run the commands directly.
@@ -115,6 +122,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities, 1 to 1,000 (e2e uses `100`; warned about outside dev) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy; `compose.yaml` forces it on) | `false` |
 | `SUPPORT_URL` | The one external support page, shown on `/transparency` once the money texts are approved; absolute `https://` URL without credentials | unset |
+| `MATCH_CACHE_RETENTION_DAYS` | Days a cached Riot game (`match_detail` with its `match_timeline_event` rows, by fetch time) is kept; a nightly task deletes older ones in batches, and `match` rows nobody's synced games use once the game is older (1 to 3,650). The privacy page states 12 months: change both together | `365` |
 | `SHUTDOWN_DRAIN_SECS` | After SIGTERM/SIGINT, how long requests in flight may finish (0 to 300) | `10` |
 | `SHUTDOWN_DB_SECS` | Then how long to wait for SurrealKV to close before exiting anyway with code 1 (0 to 60) | `5` |
 | `GITHUB_TOKEN` | Not read by the app (only by a local MCP server); warned about outside dev, never in `.env.example` | unset |
@@ -141,7 +149,8 @@ Single crate, two compile targets. `--features ssr` builds the Axum server (Surr
 ```
 src/
 ├── main.rs              # Axum setup: AppConfig, DB init + migrations, Data Dragon, Riot client, bug-report export, sessions, auth,
-│                        # /img/* images, /healthz, /account/export; graceful shutdown (drain, close the DB, exit)
+│                        # /img/* images, /healthz, /account/export, the nightly match-cache retention task;
+│                        # graceful shutdown (drain, close the DB, exit)
 ├── app.rs               # Shell, <Routes>, footer
 ├── lib.rs               # Crate root, hydrate() entry
 ├── error_template.rs    # NotFound (404) + ErrorTemplate
@@ -155,6 +164,7 @@ src/
 │   ├── account.rs       # M8: data export, account deletion (tombstone "Former member"), leadership hand-over,
 │                        # player-card switch; USER_LINKS = every record<user> field and its treatment
 │   ├── rate_limit.rs    # In-memory token buckets + per-user cooldowns
+│   ├── inflight.rs      # M11: every request tracked until its body is sent; a watchdog logs requests > 15 s
 │   ├── auth.rs          # axum-login backend, argon2 (spawn_blocking), HMAC session hash
 │   ├── session_store.rs # tower-sessions store on SurrealDB (expiry + purge)
 │   ├── images.rs        # /img/champion/{key}[/icon], /img/item/{id}: cached images (no browser CDN calls)
@@ -195,7 +205,8 @@ public/riot.txt          # Riot verification file, served at /riot.txt (owner pa
 Dockerfile, .dockerignore, compose.yaml   # M8 container image and production stack (app, Caddy, backup)
 deploy/                  # Caddyfile, env templates, backup sidecar (Dockerfile + entrypoint)
 scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, backup.sh, restore.sh (+ restore-drill.md),
-                         # tests/ (backup/restore harness), ...
+                         # healthcheck-remote.sh, backup-watch.sh (monitoring from a second server),
+                         # tests/ (ops harness: backup/restore locally and over SFTP, monitoring), ...
 ```
 
 ## Routes
@@ -253,7 +264,7 @@ Pages redirect signed-out visitors to `/auth/login` client-side; the real enforc
 - **Sessions:** expired rows load as absent and are purged hourly; the cookie is `HttpOnly`, `SameSite=Strict` and `Secure` outside dev; the session auth hash is an HMAC of the password hash keyed with `SESSION_SECRET`.
 - **Users belong to at most one team**; `create_team` and join requests enforce it.
 - **Community loop (M7):** the community tables are global, not team-scoped; user-scoped rows (`survey_prompt`, `proposal_vote`, a reporter's `bug_report` rows) filter by `user`. No user-written text is shown to another user (the board shows admin-written titles and notes only). Nothing unapproved reaches users: surveys need an approved wording hash, money texts an approved `site_text`, proposals `published = true`. Submissions and votes are rate-limited per user (`authz::rate_limit_user`, `Bucket::Feedback` / `Community`, and `SurveyCheck` for the band's check on every route change, which answers "no question" when over the limit); public reads per IP (`PublicRead`). Migrations 10 (`bug_report_statuses_v2`) and 11 (`community_seed_content`: 17 unpublished proposals, 4 unapproved surveys, 5 unapproved money texts) belong to M7. Admin writes store `*_by`/`*_at` and log the admin id. Details in `docs/ARCHITECTURE.md` ("Community loop").
-- **Account export and deletion (M8):** both act only on the session's user (`server::account`). Deletion needs the username typed again and the password, takes `invariant_lock`, refuses a leader whose team has other members, and in one transaction deletes personal rows and moves every other `record<user>` link to the tombstone `user:former_member`; then the user's sessions are deleted. **A new `record<user>` field must be added to `account::USER_LINKS` with its treatment** (a unit test fails otherwise) and to the export if it is about the user. A `THROW` only aborts the statements after it inside `BEGIN ... COMMIT` (outside a transaction the next statement still runs).
+- **Account export and deletion (M8):** both act only on the session's user (`server::account`). Deletion needs the username typed again and the password, takes `invariant_lock`, refuses a leader whose team has other members, and in one transaction deletes personal rows and moves every other `record<user>` link to the tombstone `user:former_member`; bug reports stay anonymised (`Treatment::Anonymise`: the reporter's text, element, window size and read marker cleared, an id in the page cut off (`BUG_REPORT_PAGES_WITH_IDS`; a new route with a parameter must be added there, a unit test checks `app.rs`), owner's decision); then the user's sessions are deleted. **A new `record<user>` field must be added to `account::USER_LINKS` with its treatment** (a unit test fails otherwise) and to the export if it is about the user. A `THROW` only aborts the statements after it inside `BEGIN ... COMMIT` (outside a transaction the next statement still runs).
 - **Guidance (M9):** `user_guidance` rows (user, key, seen_at, muted_at; unique on user and key, row id `<user key>~<key>`) and `user.guidance_enabled` are read and written only for the session's user; team facts come from the user's own membership. The browser may write only known keys (`models::guidance::is_known_key`); writes take `Bucket::Guidance`, the per-route check `Bucket::GuidanceCheck`. Migrations 12 (`drop_user_mode`) and 13 (`user_guidance`) belong to M9. Patterns and mute keys: `docs/DESIGN.md` 6.11; code: `docs/ARCHITECTURE.md` "Guidance".
 - Cross-tenant tests live in `tests/integration/security.rs`, `tests/integration/guidance.rs`, `tests/integration/community.rs` (cross-user cases), `tests/integration/account.rs` and `e2e/tests/cross-tenant.spec.ts`. Every new team- or user-scoped DB function gets a case there.
 
@@ -270,10 +281,11 @@ Toolchain and external APIs:
 2. **Slim debug info.** `[profile.dev]` keeps line tables for this crate only and no debug info for dependencies. Full debug info made each test or server link about 2 GB and exhausted disk and memory in the session container.
 3. **Standalone Tailwind.** cargo-leptos downloads the Tailwind v4 CLI itself (`tailwind-input-file = "input.css"`). There is no `style-file`: setting both made the browser fetch `/pkg/tailwindcss` (404).
 4. **tower-sessions** must match the version axum-login uses (0.14). A mismatch fails silently.
-5. **riven:** `Queue::from(u16)`, not `i16`; `puuid` is `String`, not `Option<String>`.
-6. **Unlayered CSS beats Tailwind utilities.** Custom rules in `input.css` that could clash with utilities belong in `@layer components` or `@layer base` (see the forced-state rule for the gallery).
-7. **Tailwind only sees literal class names.** Primitives map enum variants to `&'static str` in `match` arms; never build class names at runtime (`format!("text-{}", x)` produces nothing).
-8. **Disk in the session container is small.** `target/debug/incremental` grows by several GB per session and failed links leave `target/debug/deps/*.rcgu.o` behind; a full disk shows up as `ld terminated with signal 7 [Bus error]`. Delete both (and old test binaries in `deps/`) when `df -h /` runs low; `CARGO_INCREMENTAL=0 cargo test --features ssr` avoids adding to it.
+5. **Leptos 0.8.21 or newer.** Older 0.8 releases' `<Suspense>` (we ran 0.8.17) lost a wake-up when a resource finished on another thread while the boundary re-checked its tasks: about one page in 8,000 never finished streaming (the old e2e "page.goto stall"; M11; fixed upstream by leptos PR 4853 in 0.8.21). `Cargo.toml` requires 0.8.22. A request that does not complete is logged as `slow request ...` (`server::inflight`); `scripts/ssr_stress.py` is the load check (CI runs it after the e2e suite and fails on a stalled request in the server log).
+6. **riven:** `Queue::from(u16)`, not `i16`; `puuid` is `String`, not `Option<String>`.
+7. **Unlayered CSS beats Tailwind utilities.** Custom rules in `input.css` that could clash with utilities belong in `@layer components` or `@layer base` (see the forced-state rule for the gallery).
+8. **Tailwind only sees literal class names.** Primitives map enum variants to `&'static str` in `match` arms; never build class names at runtime (`format!("text-{}", x)` produces nothing).
+9. **Disk in the session container is small.** `target/debug/incremental` grows by several GB per session and failed links leave `target/debug/deps/*.rcgu.o` behind; a full disk shows up as `ld terminated with signal 7 [Bus error]`. Delete both (and old test binaries in `deps/`) when `df -h /` runs low; `CARGO_INCREMENTAL=0 cargo test --features ssr` avoids adding to it.
 
 ## Adding things
 
@@ -300,7 +312,7 @@ New UI: build from `components::ui` primitives (see `docs/DESIGN.md` section 6 a
 
 - **Unit tests** live in `#[cfg(test)]` modules next to the code: `cargo test --features ssr --lib`.
 - **DB integration tests** are one binary, `tests/integration/main.rs` with one module per area, each using an in-memory SurrealDB: `cargo test --features ssr`.
-- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, seeds the database (seed tool, before the server starts), then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates`, `bug-triage`, `legal`, `account`, `guidance` and `team-invites` specs against a debug build; the `image` job builds the container and runs `smoke`, `hydration-no-panic`, `auth`, `legal` and `account` against the release build inside it; the `scripts` job runs ShellCheck and the backup/restore harness. `legal.spec.ts` (each legal page at 1280 and 400 to `$LEGAL_SHOTS_DIR`, falling back to `$M8_SHOTS_DIR`) and `account.spec.ts` write screenshots when set. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set. `guidance.spec.ts` (M9) covers the welcome and Skip, the checklist ticking, a hint shown once, the profile switch, no guidance on admin pages and, when the seed data is present (seed before starting the server; skipped locally without it, a failure when `CI` is set), the returning-user line and a "New" mark that clears; `team-invites.spec.ts` covers the leader's invite link, registering into the team, joining with a signed-in account and the refusal for someone already on a team (screenshots to `$TEAM_INVITE_SHOTS_DIR`); screenshots to `$M9_SHOTS_DIR` when set. Fresh e2e accounts see the welcome and checklist on Match Day and hints on feature pages; specs that count callouts or `role="status"` elements must allow for them.
+- **e2e** (`e2e/`, Playwright 1.58): needs a running server on `BASE_URL` started with the e2e env: `BOOTSTRAP_INVITE_CODE=E2E-INVITE-CODE BOOTSTRAP_INVITE_MAX_USES=100000 RATE_LIMIT_MULTIPLIER=100 ADMIN_EMAILS=e2e-admin@test.invalid`. The `authedPage` fixture registers a fresh user via `/auth/register?invite=$E2E_INVITE_CODE` (password of 10+ characters) and waits for Home (`/`); `teamPage` also creates a team on `/team/roster`. `adminPage` signs in as the `ADMIN_EMAILS` account (registering it on a fresh database). `draft-graph.spec.ts` covers the ranked list, team notes, the canvas (agreement with the list, keyboard and pointer picks, the performance budget read from `data-sim-*`, reduced motion; use `page.emulateMedia`, the fixtures open their own context) and `/admin/traits`. `match-day.spec.ts` covers the next match and the prep sequence, share links (plan and player card, unknown token) and the phone menu at 400 px; `audit-team.spec.ts` the roster places, bench and unbench, and team note Undo. CI runs unit and integration tests and the design lint, seeds the database (seed tool, before the server starts), then `smoke`, `hydration-no-panic`, `auth`, `admin-invites`, `cross-tenant`, `gallery`, `community-public`, `community-gates`, `bug-triage`, `legal`, `account`, `guidance` and `team-invites` specs against a debug build; the `image` job builds the container and runs `smoke`, `hydration-no-panic`, `auth`, `legal` and `account` against the release build inside it; after the specs the e2e job runs `scripts/ssr_stress.py` (12,000 page requests, every page must finish streaming) and fails on a server-side `slow request` in the server log; the `scripts` job runs ShellCheck and the ops harness. `legal.spec.ts` (each legal page at 1280 and 400 to `$LEGAL_SHOTS_DIR`, falling back to `$M8_SHOTS_DIR`) and `account.spec.ts` write screenshots when set. The M7 specs `what-next`, `surveys`, `ledger` and `admin-hub` run in the full suite; `surveys` and `ledger` undo what they turn on (they close their surveys and withdraw the text approvals). `gallery.spec.ts` writes section screenshots to `$GALLERY_SHOTS_DIR` when set. `guidance.spec.ts` (M9) covers the welcome and Skip, the checklist ticking, a hint shown once, the profile switch, no guidance on admin pages and, when the seed data is present (seed before starting the server; skipped locally without it, a failure when `CI` is set), the returning-user line and a "New" mark that clears; `team-invites.spec.ts` covers the leader's invite link, registering into the team, joining with a signed-in account and the refusal for someone already on a team (screenshots to `$TEAM_INVITE_SHOTS_DIR`); screenshots to `$M9_SHOTS_DIR` when set. Fresh e2e accounts see the welcome and checklist on Match Day and hints on feature pages; specs that count callouts or `role="status"` elements must allow for them.
 - Run in cloud sessions: `cd e2e && PLAYWRIGHT_BROWSERS_PATH=/root/.cache/pw-browsers-compat npx playwright test <spec>`.
 
 ### Dev session in a cloud container

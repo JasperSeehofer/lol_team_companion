@@ -210,6 +210,7 @@ impl axum_login::AuthnBackend for AuthBackend {
             .map_err(AuthError::Db)?;
 
         let db_user: Option<DbUser> = result.take(0).map_err(AuthError::Db)?;
+        crate::server::inflight::note("user loaded");
         Ok(db_user.map(|u| u.into()))
     }
 }

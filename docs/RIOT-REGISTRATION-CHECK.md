@@ -42,14 +42,14 @@ Request sizes: a player sync is 1 + 20 match requests (+ 1 ranked); a team sync 
 | Data | Stored as | Kept |
 |---|---|---|
 | Linked player: Riot ID, PUUID, region | `user` | until the account is deleted (or relinked) |
-| Synced games of a linked player: champion, K/D/A, CS, vision, damage, result, game end | `match`, `player_match` | per player: until the account is deleted; the `match` row (id, queue, duration) stays as a shared cache |
-| Opened games: all ten participants' public match data (names, PUUIDs, champions, items, stats) and the timeline events | `match_detail`, `match_timeline_event` | shared cache, **no time limit yet** |
+| Synced games of a linked player: champion, K/D/A, CS, vision, damage, result, game end | `match`, `player_match` | per player: until the account is deleted; the `match` row (id, queue, duration) is shared and stays while any player's synced games use it, then is deleted 12 months after the game |
+| Opened games: all ten participants' public match data (names, PUUIDs, champions, items, stats) and the timeline events | `match_detail`, `match_timeline_event` | shared cache, **deleted 12 months after it was fetched** (nightly task, `MATCH_CACHE_RETENTION_DAYS=365`) |
 | Ranked snapshots of a linked player | `ranked_snapshot` | until the account is deleted |
 | Scouted opponents: player names, Riot IDs, PUUIDs, recent champions, mastery and role data | `opponent_player` | until the team deletes the dossier or the team is deleted |
 | Sand Table replays (positions and events of all ten players, with PUUIDs) | `replay*` | until the team deletes it (no import UI yet) |
-| Backups of the whole database | encrypted object storage | 30 days |
+| Backups of the whole database | encrypted (rclone crypt) on a Hetzner Storage Box | 30 days |
 
-Open question for the owner: Riot's policies ask products to keep data only as long as needed. A retention limit for the shared match caches (for example 12 months) is not implemented. [OWNER: decide whether the registration promises a limit; if so, it becomes a small follow-up.]
+Retention of the shared match caches (owner's decision, 12 October 2026): **12 months**. A task in the server deletes cached games (`match_detail` with their `match_timeline_event` rows) 12 months after they were fetched, a minute after every start and then every 24 hours, in batches of 50 games, and logs the counts; `match` rows that no player's synced games use any more go 12 months after the game (a row without a recorded end time stays). The limit is the `MATCH_CACHE_RETENTION_DAYS` setting (default 365) and the privacy page states it. A player's own synced games and ranked snapshots are kept until the account is deleted, and scouting dossiers until the team deletes them. [OWNER: if the registration states a retention period, make it match.]
 
 Account holders can download everything about themselves and delete their account on the profile (M8); deletion removes their Riot link, synced games and ranked snapshots at once and from backups within 30 days.
 

@@ -134,9 +134,27 @@ async fn ensure_owned(
 /// concurrent writes of the same unique key could both report success while
 /// only one row was kept, or both be kept (M6 review, tests
 /// `concurrent_signups_*`, `concurrent_board_saves_*`, `concurrent_joins_*`).
-pub async fn invariant_lock() -> tokio::sync::MutexGuard<'static, ()> {
+///
+/// The request that waits for it, holds it and releases it is noted in
+/// `server::inflight`, so a request stalled behind the lock names its holder
+/// in the watchdog's log line.
+pub async fn invariant_lock() -> InvariantGuard {
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    LOCK.lock().await
+    crate::server::inflight::invariant_lock_wait();
+    let guard = LOCK.lock().await;
+    crate::server::inflight::invariant_lock_taken();
+    InvariantGuard { _guard: guard }
+}
+
+/// Held while [`invariant_lock`] is held; dropping it releases the lock.
+pub struct InvariantGuard {
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for InvariantGuard {
+    fn drop(&mut self) {
+        crate::server::inflight::invariant_lock_released();
+    }
 }
 
 /// `table:id` must exist and belong to `team_id` (via its `team` field).
@@ -2395,6 +2413,21 @@ pub async fn store_matches_with_synced_by(
 ) -> DbResult<()> {
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let synced_by_key = synced_by_user_id.map(|s| s.strip_prefix("user:").unwrap_or(s).to_string());
+
+    // Under the write lock (M11 review): the nightly retention task deletes
+    // `match` rows no `player_match` uses, so a row found or created here
+    // must get its `player_match` before that task looks; and an account
+    // deleted while Riot was answering must not get its games back
+    // (deletion takes the same lock and removes `player_match` rows).
+    let _guard = invariant_lock().await;
+    let mut r = db
+        .query("SELECT id FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key.clone()))
+        .await?;
+    let user: Option<IdRecord> = r.take(0)?;
+    if user.is_none() {
+        return Err(DbError::NotFound);
+    }
 
     for m in matches {
         let mut r = db
@@ -6153,6 +6186,108 @@ pub async fn store_match_detail(
         .await?;
     check_tx(response)?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Retention of the shared Riot match caches (M11)
+// ---------------------------------------------------------------------------
+
+/// Match details removed per transaction by [`purge_match_cache`]: each
+/// takes its timeline (a few hundred events) with it, so a batch stays a
+/// small transaction.
+pub const MATCH_CACHE_BATCH: usize = 50;
+
+/// What one [`purge_match_cache`] run deleted.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MatchCachePurge {
+    /// `match_detail` rows (one per opened game).
+    pub details: usize,
+    /// `match_timeline_event` rows of those games.
+    pub timeline_events: usize,
+    /// `match` rows no player's synced games point at any more.
+    pub matches: usize,
+}
+
+/// Delete the shared Riot match caches older than `cutoff`, in batches of
+/// `batch`:
+/// - an opened game (`match_detail`, by `fetched_at`, the time it was
+///   cached) together with its timeline events, which are only ever written
+///   in the same transaction as their detail row and read through it;
+/// - a `match` row that no `player_match` points at any more (its players
+///   deleted their accounts) once the game ended before `cutoff`. Rows a
+///   player's synced games still use stay with those games (until the
+///   account is deleted); a row without an end time is left alone.
+///
+/// Runs nightly from the server's retention task (`MATCH_CACHE_RETENTION_DAYS`).
+pub async fn purge_match_cache(
+    db: &Surreal<Db>,
+    cutoff: chrono::DateTime<chrono::Utc>,
+    batch: usize,
+) -> DbResult<MatchCachePurge> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Counts {
+        details: i64,
+        events: i64,
+    }
+    let cutoff = cutoff.to_rfc3339();
+    let batch = batch.max(1) as i64;
+    let mut total = MatchCachePurge::default();
+    loop {
+        let response = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $ids = (SELECT VALUE match_id FROM match_detail WHERE fetched_at < <datetime>$cutoff LIMIT $batch); \
+                 LET $events = (SELECT VALUE id FROM match_timeline_event WHERE match_id IN $ids); \
+                 DELETE match_timeline_event WHERE match_id IN $ids; \
+                 DELETE match_detail WHERE match_id IN $ids; \
+                 RETURN { details: array::len($ids), events: array::len($events) }; \
+                 COMMIT TRANSACTION;",
+            )
+            .bind(("cutoff", cutoff.clone()))
+            .bind(("batch", batch))
+            .await?;
+        let mut r = check_tx(response)?;
+        let counts: Option<Counts> = r.take(5)?;
+        let counts = counts.unwrap_or(Counts {
+            details: 0,
+            events: 0,
+        });
+        total.details += counts.details as usize;
+        total.timeline_events += counts.events as usize;
+        if counts.details < batch {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    loop {
+        // Under the write lock: a sync creates a `match` row and then its
+        // `player_match` row (`store_matches_with_synced_by`, same lock), so
+        // an old game a player syncs right now is never seen as unused.
+        let guard = invariant_lock().await;
+        let response = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $aged = (SELECT VALUE id FROM match WHERE game_end != NONE AND game_end < <datetime>$cutoff); \
+                 LET $used = (SELECT VALUE match FROM player_match WHERE match IN $aged); \
+                 LET $old = (SELECT VALUE id FROM match WHERE id IN array::complement($aged, $used) LIMIT $batch); \
+                 DELETE match WHERE id IN $old; \
+                 RETURN array::len($old); \
+                 COMMIT TRANSACTION;",
+            )
+            .bind(("cutoff", cutoff.clone()))
+            .bind(("batch", batch))
+            .await?;
+        let mut r = check_tx(response)?;
+        let n: Option<i64> = r.take(5)?;
+        drop(guard);
+        let n = n.unwrap_or(0);
+        total.matches += n as usize;
+        if n < batch {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    Ok(total)
 }
 
 // ---------------------------------------------------------------------------

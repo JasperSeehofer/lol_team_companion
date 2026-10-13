@@ -1,7 +1,7 @@
 # Team Companion production stack (M8): app + Caddy (HTTPS) + nightly backup.
 #
 #   cp deploy/env.production.example .env           # fill it in
-#   cp deploy/backup.env.example deploy/backup.env  # object storage + rclone
+#   cp deploy/backup.env.example deploy/backup.env  # Storage Box (sftp) or S3 + rclone crypt
 #   GIT_SHA=$(git rev-parse --short HEAD) COMPANION_TAG=$GIT_SHA docker compose build
 #   COMPANION_TAG=<sha> docker compose up -d
 #
@@ -137,7 +137,8 @@ services:
       context: .
       dockerfile: deploy/backup/Dockerfile
     init: true
-    # Object storage credentials and the rclone remote (deploy/backup.env.example).
+    # Storage credentials and the rclone remote (deploy/backup.env.example:
+    # a Hetzner Storage Box over SFTP, or S3-compatible object storage).
     env_file:
       - deploy/backup.env
     environment:
@@ -157,6 +158,9 @@ services:
       # root-equivalent access to the host; see RUNBOOK "Backups" for the
       # host-cron alternative without it.
       - /var/run/docker.sock:/var/run/docker.sock
+      # Storage Box with an SSH key and a pinned host key instead of the
+      # password (deploy/backup.env.example, block A): uncomment.
+      # - ./deploy/backup-ssh:/config/ssh:ro
     networks:
       - backup
     restart: unless-stopped

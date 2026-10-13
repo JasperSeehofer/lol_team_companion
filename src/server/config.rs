@@ -171,6 +171,7 @@ pub const VARIABLES: &[EnvVar] = &[
     EnvVar { name: "RATE_LIMIT_MULTIPLIER", default: "1", meaning: "scales every rate-limit capacity (1 to 1,000; e2e uses 100)", server: true },
     EnvVar { name: "TRUST_FORWARDED_FOR", default: "false", meaning: "take the client IP from the last X-Forwarded-For hop (behind Caddy)", server: true },
     EnvVar { name: "SUPPORT_URL", default: "unset", meaning: "the external support page on /transparency, https only", server: true },
+    EnvVar { name: "MATCH_CACHE_RETENTION_DAYS", default: "365", meaning: "days a cached Riot game (match details, timeline) is kept before the nightly task deletes it (1 to 3,650)", server: true },
     EnvVar { name: "SHUTDOWN_DRAIN_SECS", default: "10", meaning: "how long requests in flight may finish after SIGTERM (0 to 300)", server: true },
     EnvVar { name: "SHUTDOWN_DB_SECS", default: "5", meaning: "how long to wait for the database to close before exiting (0 to 60)", server: true },
     EnvVar { name: "GITHUB_TOKEN", default: "unset", meaning: "not read by the app; warned about outside dev", server: true },
@@ -191,6 +192,9 @@ pub struct AppConfig {
     pub bug_inbox_path: PathBuf,
     pub riot: RiotConfig,
     pub shutdown: ShutdownConfig,
+    /// `MATCH_CACHE_RETENTION_DAYS`: how long the shared Riot match caches
+    /// are kept (M11; `db::purge_match_cache`, nightly).
+    pub match_cache_retention_days: u32,
 }
 
 #[derive(Clone)]
@@ -222,6 +226,8 @@ pub struct ShutdownConfig {
 
 pub const DEFAULT_DATA_DIR: &str = "./data";
 pub const DEFAULT_RUST_LOG: &str = "info,lol_team_companion=debug";
+/// Twelve months (owner's decision, 12 October 2026).
+pub const DEFAULT_MATCH_CACHE_RETENTION_DAYS: u32 = 365;
 
 /// Edit distance between two variable names (insertions, deletions and
 /// substitutions), for spotting misspelt names.
@@ -552,6 +558,13 @@ impl AppConfig {
             );
         }
 
+        // --- retention ------------------------------------------------------------
+        let match_cache_retention_days = r.number(
+            "MATCH_CACHE_RETENTION_DAYS",
+            DEFAULT_MATCH_CACHE_RETENTION_DAYS,
+            1..=3650,
+        );
+
         // --- shutdown -------------------------------------------------------------
         let shutdown = ShutdownConfig {
             drain: Duration::from_secs(r.number("SHUTDOWN_DRAIN_SECS", 10u64, 0..=300)),
@@ -601,6 +614,7 @@ impl AppConfig {
                         budget_per_min,
                     },
                     shutdown,
+                    match_cache_retention_days,
                 },
                 r.warnings,
             )),
@@ -730,6 +744,24 @@ mod tests {
             }
         );
         assert_eq!(cfg.riot.budget_per_sec, 20);
+        assert_eq!(cfg.match_cache_retention_days, 365);
+    }
+
+    #[test]
+    fn match_cache_retention_is_bounded() {
+        for bad in ["0", "3651", "twelve months", "-30"] {
+            let errors = AppConfig::from_lookup(&lookup(&[
+                ("APP_ENV", "dev"),
+                ("MATCH_CACHE_RETENTION_DAYS", bad),
+            ]))
+            .unwrap_err();
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.contains("MATCH_CACHE_RETENTION_DAYS")),
+                "{bad}: {errors:?}"
+            );
+        }
     }
 
     #[test]
@@ -742,8 +774,10 @@ mod tests {
             ("SHUTDOWN_DRAIN_SECS", "2"),
             ("SURREAL_DATA_DIR", "/data/db"),
             ("SUPPORT_URL", "https://ko-fi.com/companion"),
+            ("MATCH_CACHE_RETENTION_DAYS", "180"),
         ]))
         .unwrap();
+        assert_eq!(cfg.match_cache_retention_days, 180);
         assert!(cfg.security.trust_forwarded_for);
         assert_eq!(
             (cfg.riot.budget_per_sec, cfg.riot.budget_per_min),

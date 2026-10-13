@@ -227,6 +227,7 @@ async fn main() {
         riot_key = app_config.riot.api_key.is_some(),
         riot_budget_per_sec = app_config.riot.budget_per_sec,
         riot_budget_per_min = app_config.riot.budget_per_min,
+        match_cache_retention_days = app_config.match_cache_retention_days,
         data_dir = %app_config.data_dir.display(),
         "security configuration"
     );
@@ -269,6 +270,9 @@ async fn main() {
     // One Riot client for the whole process (shared rate limiting + budget).
     // (A missing key is among the configuration warnings above.)
     let riot = Arc::new(RiotClient::from_config(&app_config.riot));
+
+    // Log requests that do not complete (server::inflight).
+    let inflight_task = lol_team_companion::server::inflight::spawn_watchdog();
 
     // Drop idle rate-limiter entries off the request path.
     let limiter_task = rate_limit::spawn_purge_task(Duration::from_secs(60));
@@ -319,6 +323,34 @@ async fn main() {
                 }
                 if let Err(e) = db::purge_deleted_team_notes(&db).await {
                     tracing::warn!("Deleted team note purge failed: {e}");
+                }
+            }
+        })
+    };
+
+    // Retention of the shared Riot match caches (MATCH_CACHE_RETENTION_DAYS,
+    // twelve months by default): a minute after start, then every 24 hours.
+    // The backup restarts the app nightly, so in practice it runs each night.
+    let match_cache_task = {
+        let db = Arc::clone(&surreal_db);
+        let days = app_config.match_cache_retention_days;
+        tokio::spawn(async move {
+            let day = Duration::from_secs(24 * 3600);
+            let first = tokio::time::Instant::now() + Duration::from_secs(60);
+            let mut interval = tokio::time::interval_at(first, day);
+            loop {
+                interval.tick().await;
+                let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(days));
+                match db::purge_match_cache(&db, cutoff, db::MATCH_CACHE_BATCH).await {
+                    Ok(p) => tracing::info!(
+                        retention_days = days,
+                        details = p.details,
+                        timeline_events = p.timeline_events,
+                        matches = p.matches,
+                        "match cache retention: deleted games cached before {}",
+                        cutoff.format("%Y-%m-%d")
+                    ),
+                    Err(e) => tracing::warn!("match cache retention failed: {e}"),
                 }
             }
         })
@@ -381,6 +413,11 @@ async fn main() {
         )
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         .layer(auth_layer)
+        // Outermost: every request is registered until its body is sent, and
+        // the watchdog logs any that runs longer than 15 s (M11).
+        .layer(axum::middleware::from_fn(
+            lol_team_companion::server::inflight::track,
+        ))
         .with_state(app_state);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -433,7 +470,13 @@ async fn main() {
 
     // Drop the remaining handles so the embedded engine sees its channel
     // close and shuts the datastore down (flush, close, unlock).
-    for task in [ddragon_task, session_purge_task, limiter_task] {
+    for task in [
+        ddragon_task,
+        session_purge_task,
+        match_cache_task,
+        limiter_task,
+        inflight_task,
+    ] {
         task.abort();
         let _ = task.await;
     }
