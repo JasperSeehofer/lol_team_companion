@@ -16,7 +16,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 #### Changed
 - Games opened from the match history are cached for 12 months and then deleted (a nightly task); the privacy page says so.
-- When you delete your account, your bug reports stay so the bug board keeps its history, shown as from a former member, without your text, the element you pointed at or your window size. The privacy page says so; "Download my data" still includes them in full before you delete.
+- When you delete your account, your bug reports stay so the bug board keeps its history, shown as from a former member, without your text, the element you pointed at, your window size or an id in the page address (such as your own player card). The privacy page says so; "Download my data" still includes them in full before you delete.
 
 #### Fixed
 - A page now and then never finished loading (about one in several thousand, more often on a busy server): one section kept its loading placeholder although everything had loaded. The cause was in the web framework and is fixed by its update; the server also logs any request that takes longer than 15 seconds, with how far it got.
