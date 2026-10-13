@@ -220,6 +220,18 @@ test("users see only their own bug reports and cannot answer another user's surv
 }) => {
   const admin = await (await browser.newContext()).newPage();
   await signInAsAdmin(admin);
+  // A timed-out earlier attempt cannot run its `finally`: close any survey
+  // it left live, or this attempt is shown that one first (CI run 109).
+  const leftovers = (await (await call(admin, "admin_list_surveys", {})).json()) as Array<{
+    id: string;
+    status: string;
+    wording: { question: string };
+  }>;
+  for (const s of leftovers) {
+    if (s.status === "live" && s.wording.question.startsWith("Cross-user question ")) {
+      await call(admin, "admin_set_survey_status", { id: s.id, status: "closed" });
+    }
+  }
   const question = `Cross-user question ${TIMESTAMP}?`;
   const saved = await call(admin, "admin_save_survey", {
     survey_json: JSON.stringify({
