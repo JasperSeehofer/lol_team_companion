@@ -45,6 +45,8 @@ Copy the line from `restore-drills.log` into the table below (commit it with the
 
 | Date (UTC) | Backup id | Image | Where | Result | Duration | Notes |
 |---|---|---|---|---|---|---|
+| 2026-10-13T10:53Z | 20261013T103138Z-pre-drill | companion:2f004de | owner's laptop | PASSED | 3s | Off-VM: read with the read-only watcher sub-account and the passphrases from the password manager (`~/.config/companion-drill/backup.env`, kept for the quarterly drill), image copied from the laptop build. |
+| 2026-10-13T10:54Z | 20261013T103138Z-pre-drill | companion:2f004de | owner's laptop, rehearsal stack | `apply` PASSED | 7s | `restore.sh apply` against a throwaway compose project (`companion-rehearsal`, app only): stop, swap, restart, healthy; old data kept as `pre-restore-<ts>`; the owner signed in on the restored stack. Stack removed afterwards. |
 | 2026-10-13T10:39Z | 20261013T103138Z-pre-drill | companion:2f004de | VM | PASSED | 4s | First drill. The first attempt failed with "Permission denied" on `/data`: as root the script left the scratch data directory root-only (fixed in `restore.sh` the same day). Without the two path overrides above, `rclone` could not find the key file. |
 
 ## If it fails
