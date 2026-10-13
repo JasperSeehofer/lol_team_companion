@@ -141,7 +141,7 @@ chmod +x healthcheck-remote.sh backup-watch.sh
 - **Disk:** alert at 80 % (provider monitoring, or a cron line on the VM: `df --output=pcent / | tail -1`).
 - **Certificates:** Caddy renews by itself; the uptime check catches a failure.
 
-**cron** (`crontab -e` on the monitoring server; cron's `PATH` lacks `/usr/sbin`, the scripts look for `/usr/sbin/sendmail` themselves):
+**cron** (`sudo crontab -e` on the monitoring server: the lines below log to `/var/log`, which only root can write; in a user's crontab log to a file in its home instead. cron's `PATH` lacks `/usr/sbin`, the scripts look for `/usr/sbin/sendmail` themselves):
 
 ```cron
 MAILTO=""
@@ -445,7 +445,7 @@ The thirteen checks from the M8 preparation, with where each one is proven. "CI"
 | # | Check | Where | State (M8) |
 |---|---|---|---|
 | 1 | Files in place, scripts executable, `.gitignore` covers `deploy/backup.env`, `.previous-tag`, `restore-drills.log`, `restore-*/` | repo | done |
-| 2 | ShellCheck clean; ops harness passes (40 checks: stop/start order, restart on failure, no half backups, upload through an rclone crypt remote, download-and-compare, retention keeps the newest 7, fetch + sha256 + extract, drill pass and fail, cleanup; the same backup, retention and fetch over SFTP (`rclone serve sftp` as the Storage Box) with only encrypted names on the server; `healthcheck-remote.sh` ok/fail/timeout and one mail per state change; `backup-watch.sh` fresh/stale/empty storage and fresh/old/unreadable log) | CI `scripts`, dev | passing |
+| 2 | ShellCheck clean; ops harness passes (43 checks: stop/start order, restart on failure, no half backups, upload through an rclone crypt remote, download-and-compare, retention keeps the newest 7, fetch + sha256 + extract, drill pass and fail, cleanup; the same backup, retention and fetch over SFTP (`rclone serve sftp` as the Storage Box) with only encrypted names on the server; `healthcheck-remote.sh` ok/fail/timeout and one mail per state change, and with an unusable state file a healthy site still passes and a failure still mails; `backup-watch.sh` fresh/stale/empty storage and fresh/old/unreadable log) | CI `scripts`, dev | passing |
 | 3 | Image builds with BuildKit; time and size recorded; cache mounts reused | CI `image` | passing: cold build about 20 min, warm about 9 min, image 231 MB uncompressed: stripped server binary 127 MB, release WASM 8.2 MB before compression, CSS 70 KB |
 | 4 | Image contents: uid 10001, `pkg/` with `.wasm`/`.js`/`.css`, fonts, no missing shared libraries | CI `image` ("Inspect the image") | passing |
 | 5 | Runs bare in production mode, read-only root, no capabilities; `/healthz`; Docker health check healthy; Playwright smoke, hydration, auth, legal and account specs against the release build; sign-in over HTTP | CI `image` | passing |

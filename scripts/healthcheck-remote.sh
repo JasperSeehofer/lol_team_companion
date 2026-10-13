@@ -24,7 +24,8 @@
 #   ALERT_MAILER        auto (default), mail or sendmail
 #   FAILS_BEFORE_ALERT  failed checks in a row before the alert (default: 2)
 #   STATE_FILE          remembers the failures in a row
-#                       (default: ${XDG_STATE_HOME:-~/.local/state}/companion-healthcheck.state)
+#                       (default: ${XDG_STATE_HOME:-~/.local/state}/companion-healthcheck.state);
+#                       if it cannot be written, every failed check mails (warned)
 
 set -Eeuo pipefail
 
@@ -76,16 +77,30 @@ if OUT="$(curl -sS -m "$TIMEOUT" -H 'Accept: application/json' -w '\n%{http_code
     REASON="HTTP 200 without \"status\":\"ok\": ${BODY:0:200}"
   fi
 else
-  REASON="no answer: ${OUT:0:200}"
+  # curl's error message, without the "000" status line -w appended.
+  REASON="no answer: ${OUT%$'\n'000}"
+  REASON="${REASON:0:200}"
 fi
+# One line for the log and the mail subject's companion text.
+REASON="${REASON//$'\n'/ }"
+REASON="${REASON%"${REASON##*[![:space:]]}"}"
 
 # --- state and alerts -------------------------------------------------------------
-mkdir -p "$(dirname "$STATE_FILE")"
+# A state file that cannot be read or written never turns a healthy site into
+# a failed check, and never swallows an alert: without it every failure mails.
+STATE_OK=1
+mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
 FAILS=0
-if [[ -r "$STATE_FILE" ]]; then
-  read -r FAILS < "$STATE_FILE" || true
+if [[ -f "$STATE_FILE" && -r "$STATE_FILE" ]]; then
+  read -r FAILS < "$STATE_FILE" 2>/dev/null || true
   [[ "$FAILS" =~ ^[0-9]+$ ]] || FAILS=0
 fi
+save_state() { # save_state <count>
+  if ! { printf '%s\n' "$1" > "$STATE_FILE"; } 2>/dev/null; then
+    STATE_OK=0
+    log "warning: cannot write the state file $STATE_FILE; alerts are not de-duplicated"
+  fi
+}
 HOST="$(hostname 2>/dev/null || echo unknown)"
 
 if [[ -z "$REASON" ]]; then
@@ -94,15 +109,15 @@ if [[ -z "$REASON" ]]; then
     send_mail "Team Companion is back: $URL" \
       "$URL answers \"status\":\"ok\" again after $FAILS failed checks in a row (checked from $HOST at $(date -u +%Y-%m-%dT%H:%M:%SZ))."
   fi
-  echo 0 > "$STATE_FILE"
+  save_state 0
   log "ok: $URL"
   exit 0
 fi
 
 FAILS=$((FAILS + 1))
-echo "$FAILS" > "$STATE_FILE"
+save_state "$FAILS"
 log "FAILED ($FAILS in a row): $URL: $REASON"
-if (( FAILS == FAILS_BEFORE_ALERT )); then
+if (( FAILS == FAILS_BEFORE_ALERT || STATE_OK == 0 )); then
   send_mail "Team Companion is DOWN: $URL" \
     "$URL failed $FAILS checks in a row (from $HOST, latest at $(date -u +%Y-%m-%dT%H:%M:%SZ)).
 

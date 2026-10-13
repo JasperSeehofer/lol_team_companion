@@ -133,6 +133,12 @@ check "$SCRIPTS/healthcheck-remote.sh" "http://127.0.0.1:$HP/healthz" 2>/dev/nul
 check grep -q "Subject: Team Companion is back" "$T/mail.log"
 check test "$(cat "$T/hstate/health")" = 0
 rm -f "$T/mail.log"
+# An unusable state file: a healthy site still passes, a failure still mails.
+mkdir -p "$T/hstate/isdir"
+check env STATE_FILE="$T/hstate/isdir" "$SCRIPTS/healthcheck-remote.sh" "http://127.0.0.1:$HP/healthz" 2>/dev/null
+check bash -c "! STATE_FILE='$T/hstate/isdir' HEALTH_TIMEOUT=2 '$SCRIPTS/healthcheck-remote.sh' 'http://127.0.0.1:1/healthz' 2>/dev/null"
+check grep -q "Subject: Team Companion is DOWN" "$T/mail.log"
+rm -f "$T/mail.log"
 
 # --- backup-watch.sh --------------------------------------------------------------------
 # remote: the raw storage (no crypt passphrase), newest modification time.
