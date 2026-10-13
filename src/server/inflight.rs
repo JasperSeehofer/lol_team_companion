@@ -421,7 +421,11 @@ mod tests {
             .collect();
         assert_eq!(
             steps,
-            vec!["invariant lock wait", "invariant lock held", "invariant lock released"]
+            vec![
+                "invariant lock wait",
+                "invariant lock held",
+                "invariant lock released"
+            ]
         );
     }
 

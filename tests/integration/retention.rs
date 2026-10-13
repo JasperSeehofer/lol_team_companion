@@ -188,15 +188,26 @@ async fn syncs_and_retention_do_not_race() {
     // A long-idle player syncs games older than the retention window while
     // the task runs: the rows stay with her synced games.
     let (stored, purged) = tokio::join!(
-        db::store_matches(&db, &ana, (0..20).map(|i| game(&format!("EUW1_OLD{i}"))).collect()),
+        db::store_matches(
+            &db,
+            &ana,
+            (0..20).map(|i| game(&format!("EUW1_OLD{i}"))).collect()
+        ),
         db::purge_match_cache(&db, cutoff, 2),
     );
     stored.unwrap();
     purged.unwrap();
     db::purge_match_cache(&db, cutoff, 2).await.unwrap();
-    assert_eq!(count(&db, "SELECT count() AS n FROM match GROUP ALL").await, 20);
     assert_eq!(
-        count(&db, "SELECT count() AS n FROM player_match WHERE match.match_id != NONE GROUP ALL").await,
+        count(&db, "SELECT count() AS n FROM match GROUP ALL").await,
+        20
+    );
+    assert_eq!(
+        count(
+            &db,
+            "SELECT count() AS n FROM player_match WHERE match.match_id != NONE GROUP ALL"
+        )
+        .await,
         20
     );
 
@@ -204,9 +215,16 @@ async fn syncs_and_retention_do_not_race() {
     account::delete_account(&db, &ana).await.unwrap();
     let late = db::store_matches(&db, &ana, vec![game("EUW1_LATE")]).await;
     assert!(matches!(late, Err(db::DbError::NotFound)), "{late:?}");
-    assert_eq!(count(&db, "SELECT count() AS n FROM player_match GROUP ALL").await, 0);
     assert_eq!(
-        count(&db, "SELECT count() AS n FROM match WHERE match_id = 'EUW1_LATE' GROUP ALL").await,
+        count(&db, "SELECT count() AS n FROM player_match GROUP ALL").await,
+        0
+    );
+    assert_eq!(
+        count(
+            &db,
+            "SELECT count() AS n FROM match WHERE match_id = 'EUW1_LATE' GROUP ALL"
+        )
+        .await,
         0
     );
     // With her games gone, the task now removes the old rows.
