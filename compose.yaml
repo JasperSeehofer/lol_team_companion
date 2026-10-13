@@ -180,4 +180,9 @@ volumes:
 
 networks:
   web:
+    # IPv6 too: without it Docker's userland proxy terminates IPv6 connections
+    # and every IPv6 visitor reaches Caddy (and so the rate limiter) as the
+    # bridge gateway, 172.18.0.1, one shared bucket. Seen on the first
+    # production deploy (13 Oct 2026). Docker picks a private (ULA) subnet.
+    enable_ipv6: true
   backup:
