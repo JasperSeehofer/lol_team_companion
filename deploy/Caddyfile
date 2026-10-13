@@ -100,6 +100,10 @@
 					ipv4 24
 					ipv6 48
 				}
+				# Invite links carry their code in the query; keep it out of the log.
+				request>uri query {
+					delete invite
+				}
 				request>headers>Cookie delete
 				request>headers>Authorization delete
 				resp_headers>Set-Cookie delete
