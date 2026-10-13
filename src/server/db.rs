@@ -2414,6 +2414,21 @@ pub async fn store_matches_with_synced_by(
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     let synced_by_key = synced_by_user_id.map(|s| s.strip_prefix("user:").unwrap_or(s).to_string());
 
+    // Under the write lock (M11 review): the nightly retention task deletes
+    // `match` rows no `player_match` uses, so a row found or created here
+    // must get its `player_match` before that task looks; and an account
+    // deleted while Riot was answering must not get its games back
+    // (deletion takes the same lock and removes `player_match` rows).
+    let _guard = invariant_lock().await;
+    let mut r = db
+        .query("SELECT id FROM type::record('user', $user_key)")
+        .bind(("user_key", user_key.clone()))
+        .await?;
+    let user: Option<IdRecord> = r.take(0)?;
+    if user.is_none() {
+        return Err(DbError::NotFound);
+    }
+
     for m in matches {
         let mut r = db
             .query("SELECT id FROM match WHERE match_id = $match_id LIMIT 1")
@@ -6245,6 +6260,10 @@ pub async fn purge_match_cache(
         tokio::task::yield_now().await;
     }
     loop {
+        // Under the write lock: a sync creates a `match` row and then its
+        // `player_match` row (`store_matches_with_synced_by`, same lock), so
+        // an old game a player syncs right now is never seen as unused.
+        let guard = invariant_lock().await;
         let response = db
             .query(
                 "BEGIN TRANSACTION; \
@@ -6260,6 +6279,7 @@ pub async fn purge_match_cache(
             .await?;
         let mut r = check_tx(response)?;
         let n: Option<i64> = r.take(5)?;
+        drop(guard);
         let n = n.unwrap_or(0);
         total.matches += n as usize;
         if n < batch {

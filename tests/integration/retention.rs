@@ -157,3 +157,59 @@ async fn a_freshly_cached_game_is_kept() {
         .unwrap();
     assert_eq!(purged.details, 1);
 }
+
+/// Review (M11): syncs and the retention task share the write lock. An old
+/// game synced now keeps its `match` row (its `player_match` comes in the
+/// same locked step), and a sync that finishes after the account was
+/// deleted stores nothing (no `player_match` pointing at a missing user).
+#[tokio::test]
+async fn syncs_and_retention_do_not_race() {
+    use lol_team_companion::server::{account, riot::MatchData};
+    let db = crate::common::test_db().await;
+    let ana = db::create_user(&db, "ana".into(), "ana@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let two_years_ago = (chrono::Utc::now() - chrono::Duration::days(730)).timestamp_millis();
+    let game = |id: &str| MatchData {
+        match_id: id.into(),
+        queue_id: 420,
+        game_duration: 1800,
+        game_end_epoch_ms: Some(two_years_ago),
+        champion: "Ahri".into(),
+        kills: 1,
+        deaths: 2,
+        assists: 3,
+        cs: 200,
+        vision_score: 20,
+        damage: 15000,
+        win: true,
+    };
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(365);
+    // A long-idle player syncs games older than the retention window while
+    // the task runs: the rows stay with her synced games.
+    let (stored, purged) = tokio::join!(
+        db::store_matches(&db, &ana, (0..20).map(|i| game(&format!("EUW1_OLD{i}"))).collect()),
+        db::purge_match_cache(&db, cutoff, 2),
+    );
+    stored.unwrap();
+    purged.unwrap();
+    db::purge_match_cache(&db, cutoff, 2).await.unwrap();
+    assert_eq!(count(&db, "SELECT count() AS n FROM match GROUP ALL").await, 20);
+    assert_eq!(
+        count(&db, "SELECT count() AS n FROM player_match WHERE match.match_id != NONE GROUP ALL").await,
+        20
+    );
+
+    // Riot answered after the account was deleted: nothing is stored.
+    account::delete_account(&db, &ana).await.unwrap();
+    let late = db::store_matches(&db, &ana, vec![game("EUW1_LATE")]).await;
+    assert!(matches!(late, Err(db::DbError::NotFound)), "{late:?}");
+    assert_eq!(count(&db, "SELECT count() AS n FROM player_match GROUP ALL").await, 0);
+    assert_eq!(
+        count(&db, "SELECT count() AS n FROM match WHERE match_id = 'EUW1_LATE' GROUP ALL").await,
+        0
+    );
+    // With her games gone, the task now removes the old rows.
+    let purged = db::purge_match_cache(&db, cutoff, 7).await.unwrap();
+    assert_eq!(purged.matches, 20);
+}
