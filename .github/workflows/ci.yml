@@ -135,6 +135,9 @@ jobs:
       - name: No stalled requests in the server log
         if: always()
         run: |
+          # The log must hold the app's own lines, or the check below would
+          # pass on an empty or redirected log.
+          grep -aq 'Listening on' "$RUNNER_TEMP/server.log" || { echo "::error::the server log has no app lines"; exit 1; }
           if grep -a 'slow request .*no complete response' "$RUNNER_TEMP/server.log" | grep -v 'the client is not reading'; then
             echo "::error::requests that the server never completed (server::inflight lines above)"
             exit 1

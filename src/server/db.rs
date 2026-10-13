@@ -134,9 +134,27 @@ async fn ensure_owned(
 /// concurrent writes of the same unique key could both report success while
 /// only one row was kept, or both be kept (M6 review, tests
 /// `concurrent_signups_*`, `concurrent_board_saves_*`, `concurrent_joins_*`).
-pub async fn invariant_lock() -> tokio::sync::MutexGuard<'static, ()> {
+///
+/// The request that waits for it, holds it and releases it is noted in
+/// `server::inflight`, so a request stalled behind the lock names its holder
+/// in the watchdog's log line.
+pub async fn invariant_lock() -> InvariantGuard {
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    LOCK.lock().await
+    crate::server::inflight::invariant_lock_wait();
+    let guard = LOCK.lock().await;
+    crate::server::inflight::invariant_lock_taken();
+    InvariantGuard { _guard: guard }
+}
+
+/// Held while [`invariant_lock`] is held; dropping it releases the lock.
+pub struct InvariantGuard {
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for InvariantGuard {
+    fn drop(&mut self) {
+        crate::server::inflight::invariant_lock_released();
+    }
 }
 
 /// `table:id` must exist and belong to `team_id` (via its `team` field).

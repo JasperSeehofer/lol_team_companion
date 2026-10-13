@@ -24,6 +24,14 @@ use axum::response::Response;
 /// A request running longer than this is reported by the watchdog.
 pub const SLOW: Duration = Duration::from_secs(15);
 
+/// Words of the watchdog's line for a request without a complete response.
+/// CI's "No stalled requests in the server log" step greps for them (a unit
+/// test keeps `.github/workflows/ci.yml` and these in step).
+pub const NO_COMPLETE_RESPONSE: &str = "no complete response";
+/// How the watchdog describes a request whose client stopped reading (not a
+/// server stall; CI ignores those lines).
+pub const CLIENT_NOT_READING: &str = "the client is not reading (no poll since the last frame)";
+
 /// The id of one request, in its extensions (and so in the `Parts` that
 /// Leptos provides as context).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -218,13 +226,77 @@ fn take_slow(slow: Duration) -> Vec<(String, String, Duration, String)> {
                 } else if b.waiting_on_server {
                     "the server has nothing more to send yet (stream pending)"
                 } else {
-                    "the client is not reading (no poll since the last frame)"
+                    CLIENT_NOT_READING
                 }
             ));
             out.push((e.method.clone(), e.path.clone(), age, steps));
         }
     }
     out
+}
+
+/// Who holds `db::invariant_lock` (the global write lock) and since when:
+/// a request (its id) or a task outside any request (`None`).
+fn holder() -> std::sync::MutexGuard<'static, Option<(Option<RequestId>, Instant)>> {
+    static HOLDER: Mutex<Option<(Option<RequestId>, Instant)>> = Mutex::new(None);
+    HOLDER.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// `db::invariant_lock` is about to wait for the lock.
+pub fn invariant_lock_wait() {
+    note("invariant lock wait");
+}
+
+/// `db::invariant_lock` got the lock.
+pub fn invariant_lock_taken() {
+    let id = current();
+    if let Some(id) = id {
+        note_for(id, "invariant lock held");
+    }
+    *holder() = Some((id, Instant::now()));
+}
+
+/// The guard of `db::invariant_lock` was dropped.
+pub fn invariant_lock_released() {
+    let held = holder().take();
+    if let Some((Some(id), _)) = held {
+        note_for(id, "invariant lock released");
+    }
+}
+
+/// The lock's holder for the watchdog line: "free", or for how long and by
+/// which request (with that request's method, path and last steps).
+fn invariant_lock_state() -> String {
+    let held = *holder();
+    match held {
+        None => "free".into(),
+        Some((None, since)) => format!(
+            "held for {:.1}s by a task outside any request",
+            since.elapsed().as_secs_f64()
+        ),
+        Some((Some(id), since)) => {
+            let map = lock();
+            let who = map
+                .get(&id.0)
+                .map(|e| {
+                    let last = e
+                        .steps
+                        .iter()
+                        .rev()
+                        .take(3)
+                        .map(|(s, at)| format!("{s} @{:.2}s", at.as_secs_f64()))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("{} {} (last steps: {last})", e.method, e.path)
+                })
+                .unwrap_or_else(|| "a request that already ended".into());
+            format!(
+                "held for {:.1}s by request {} {who}",
+                since.elapsed().as_secs_f64(),
+                id.0
+            )
+        }
+    }
 }
 
 /// Number of requests in flight (tests and the shutdown log).
@@ -245,9 +317,10 @@ pub fn spawn_watchdog() -> tokio::task::JoinHandle<()> {
                 continue;
             }
             let held = crate::server::authz::held_handles();
+            let lock_state = invariant_lock_state();
             for (method, path, age, steps) in slow {
                 tracing::warn!(
-                    "slow request {method} {path}: no complete response after {:.0}s; steps: [{steps}]; database handles held: {held:?}",
+                    "slow request {method} {path}: {NO_COMPLETE_RESPONSE} after {:.0}s; steps: [{steps}]; database handles held: {held:?}; invariant lock: {lock_state}",
                     age.as_secs_f64()
                 );
             }
@@ -293,6 +366,62 @@ mod tests {
         assert!(
             !lock().values().any(|e| e.path == "/x"),
             "the entry is gone once the body ended"
+        );
+    }
+
+    /// CI fails the e2e job on a watchdog line for a request the server
+    /// never completed: its grep must match the words the watchdog writes,
+    /// or the step would pass whatever happened.
+    #[test]
+    fn the_ci_stall_check_matches_the_watchdog_line() {
+        let ci = include_str!("../../.github/workflows/ci.yml");
+        assert!(
+            ci.contains(&format!("'slow request .*{NO_COMPLETE_RESPONSE}'")),
+            "ci.yml greps for another wording than the watchdog writes"
+        );
+        let short = CLIENT_NOT_READING.split(" (").next().unwrap();
+        assert!(
+            ci.contains(&format!("grep -v '{short}'")),
+            "ci.yml filters slow clients with another wording"
+        );
+    }
+
+    /// The watchdog says who holds the global write lock (a request waiting
+    /// for it would otherwise only show "invariant lock wait").
+    #[tokio::test]
+    async fn the_invariant_lock_holder_is_named() {
+        let id = RequestId(9_000_000_002);
+        lock().insert(
+            id.0,
+            Entry {
+                method: "POST".into(),
+                path: "/api/holder-test".into(),
+                started: Instant::now(),
+                steps: Vec::new(),
+                reported: false,
+                body: BodyProgress::default(),
+            },
+        );
+        {
+            let _guard = CURRENT
+                .scope(id, async { crate::server::db::invariant_lock().await })
+                .await;
+            let state = invariant_lock_state();
+            assert!(
+                state.contains("POST /api/holder-test") && state.contains("invariant lock held"),
+                "{state}"
+            );
+        }
+        let steps: Vec<_> = lock()
+            .remove(&id.0)
+            .unwrap()
+            .steps
+            .iter()
+            .map(|(s, _)| *s)
+            .collect();
+        assert_eq!(
+            steps,
+            vec!["invariant lock wait", "invariant lock held", "invariant lock released"]
         );
     }
 
