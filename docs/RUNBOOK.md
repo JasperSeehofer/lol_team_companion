@@ -139,6 +139,7 @@ chmod +x healthcheck-remote.sh backup-watch.sh
   - `log`: reads `docker compose logs backup` on the VM over SSH (`WATCH_SSH=<user>@37.27.20.30`; the key must be allowed to run that command) and takes the last `backup <id> done` line, which `backup.sh` writes only after the upload was downloaded again and verified. This also catches an upload that failed its verification; `remote` would count that upload.
 - `HEALTHCHECK_PING_URL` in `deploy/backup.env` stays available for an external dead-man's switch (owner's choice, MISSION "ask first").
 - **Disk:** alert at 80 % (provider monitoring, or a cron line on the VM: `df --output=pcent / | tail -1`).
+- **Delivery:** `brain` has no mailer; the owner's own application on it forwards the alerts (`docs/ALERTING.md` is the contract: subjects, bodies, exit codes, state file). State on 13 Oct 2026: both timers run (`/opt/companion-watch`, scripts from v1.2, state in `/var/lib/companion-watch`, the watcher with the read-only sub-account's obscured password in `watch.systemd.env` and the pinned host key); alerts are logged only until that application exists.
 - **Certificates:** Caddy renews by itself; the uptime check catches a failure.
 
 **cron** (`sudo crontab -e` on the monitoring server: the lines below log to `/var/log`, which only root can write; in a user's crontab log to a file in its home instead. cron's `PATH` lacks `/usr/sbin`, the scripts look for `/usr/sbin/sendmail` themselves):
@@ -253,6 +254,8 @@ Read `CHANGELOG.md` for the release before updating. If it mentions a new migrat
 
 Clean up old images now and then: `docker image ls companion` and `docker image rm companion:<old>` (keep the current and previous tag).
 
+**A changed `deploy/Caddyfile`** needs `docker compose up -d --force-recreate caddy` (a few seconds of downtime), not a reload: the file is bind-mounted into the container as a single file, and `git checkout` writes a new file, so the container keeps seeing the old one; `caddy reload` inside it re-reads the old content (seen on 13 Oct 2026). Compose does not notice the change either, because the mount definition is unchanged.
+
 ## 5. Backups
 
 **What:** a cold copy of `/data/db` (SurrealKV) and `/data/inbox`, as `companion-<UTC timestamp>.tar.zst` with a `.sha256` and a `manifest.json` (image, revision, sizes, downtime), uploaded through an rclone crypt remote to `companion-backups/companion/<id>/` on the Storage Box (names and contents encrypted; section 5.1).
@@ -340,6 +343,8 @@ set -a; . deploy/backup.env; set +a
 sudo -E ./scripts/restore.sh drill <id>   # optional but recommended: proves the copy first
 sudo -E ./scripts/restore.sh apply <id>   # asks you to type the id
 ```
+
+With the Storage Box SSH key (5.1 steps 5 and 6), `backup.env` names the key and host-key files as the sidecar sees them; on the host set `RCLONE_CONFIG_OFFSITE_KEY_FILE=$PWD/deploy/backup-ssh/id_ed25519` and `RCLONE_CONFIG_OFFSITE_KNOWN_HOSTS_FILE=$PWD/deploy/backup-ssh/known_hosts` after sourcing it (`scripts/restore-drill.md` shows the lines). The host needs `rclone` and `zstd` (`apt install rclone zstd`).
 
 `apply` downloads and verifies the backup, stops the app, copies the backup into the volume next to the live data (`db.restoring`, owned by uid 10001), moves the current `db/` and `inbox/` to `/data/pre-restore-<timestamp>/`, renames the copy into place, starts the app and waits for "healthy". If anything fails after the stop, the script starts the app again on whatever is in place (a failed copy leaves the old data untouched). The old data stays until you delete it (the script prints the command); delete it within 30 days, because the privacy page promises that deleted data leaves the backups within 30 days and this copy is one. Restore with the image that made the backup or a newer one.
 
@@ -452,7 +457,7 @@ The thirteen checks from the M8 preparation, with where each one is proven. "CI"
 | 6 | Compose stack: HTTPS, security headers, zstd for `/pkg/*.wasm`, the "restarting" page while the app is stopped | CI validates `compose.yaml` and the Caddyfile (`caddy validate`); the live checks need a domain | done on the VM (13 Oct 2026, v1.2): Let's Encrypt certificate over IPv4 and IPv6, HTTP 308 to HTTPS, HSTS, nosniff, DENY, Referrer-Policy, the report-only CSP, `Content-Encoding: zstd` on the WASM, `/healthz` ok; the "restarting" page not yet watched |
 | 7 | Rate limiting sees client addresses through Caddy, not Caddy's | needs the stack | done on the VM (13 Oct 2026): IPv4 was right from the start, IPv6 arrived as `172.18.0.0` until `enable_ipv6` (section 2.5); both show the client now |
 | 8 | `docker compose run --rm backup now` ends with "remote copy verified"; the nightly loop fires | needs the Storage Box | done on the VM (13 Oct 2026): `20261013T094926Z-manual`, 54 KB, 1 s downtime, "remote copy verified", only encrypted names on the box; the sidecar reports its next run at 02:30 UTC, the first nightly run is still to be seen |
-| 9 | Restore drill against a real backup (`DRILL PASSED`, "authenticated read ok"); the drill's sign-in check matches the real responses | the sign-in check is the same request sequence as `scripts/smoke_signin.sh`, which CI runs against the image | VM (`scripts/restore-drill.md`) |
+| 9 | Restore drill against a real backup (`DRILL PASSED`, "authenticated read ok"); the drill's sign-in check matches the real responses | the sign-in check is the same request sequence as `scripts/smoke_signin.sh`, which CI runs against the image | done on the VM (13 Oct 2026, `20261013T103138Z-pre-drill`, PASSED in 4 s, after the root-ownership fix in `restore.sh`); off-VM still to do |
 | 10 | `restore.sh apply` rehearsal | needs a stack | VM or staging, before launch |
 | 11 | Typed config: a typo stops the server with every error listed; the CI environment starts with warnings only | unit tests in `config.rs`; dev (the debug binary in production mode with `TRUST_FORWARDED_FOR=ture`, `RATE_LIMIT_MULTIPLIER=1O`, a bad `ADMIN_EMAILS`: four errors, no start) | done |
 | 12 | Graceful shutdown: clean stop exit 0; drain bound; immediate restart without a lock error | dev (SIGTERM/SIGINT: about 0.1 to 1.3 s, exit 0, "database closed"; a slow download held open: warning after 10 s, exit 1 after 15 s; restart at once without a lock error); CI (`docker stop` exit 0 with "database closed", restart on the same volume and sign in again) | done |

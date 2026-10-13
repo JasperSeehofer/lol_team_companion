@@ -18,6 +18,11 @@ A backup counts only once it has been restored. This drill restores a backup int
 ```bash
 cd /opt/companion                         # the deploy checkout
 set -a; . deploy/backup.env; set +a        # RCLONE_* settings
+# Storage Box with an SSH key (RUNBOOK 5.1 steps 5 and 6): backup.env names
+# the key and known_hosts as the sidecar sees them (/config/ssh/...); on the
+# host they are under deploy/backup-ssh/, so override the two paths:
+export RCLONE_CONFIG_OFFSITE_KEY_FILE=$PWD/deploy/backup-ssh/id_ed25519
+export RCLONE_CONFIG_OFFSITE_KNOWN_HOSTS_FILE=$PWD/deploy/backup-ssh/known_hosts
 export DRILL_EMAIL=drill@your-domain DRILL_PASSWORD='...'
 sudo -E ./scripts/restore.sh list          # backups, oldest first
 sudo -E ./scripts/restore.sh drill latest  # or a specific id
@@ -40,7 +45,7 @@ Copy the line from `restore-drills.log` into the table below (commit it with the
 
 | Date (UTC) | Backup id | Image | Where | Result | Duration | Notes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-10-13T10:39Z | 20261013T103138Z-pre-drill | companion:2f004de | VM | PASSED | 4s | First drill. The first attempt failed with "Permission denied" on `/data`: as root the script left the scratch data directory root-only (fixed in `restore.sh` the same day). Without the two path overrides above, `rclone` could not find the key file. |
 
 ## If it fails
 

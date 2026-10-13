@@ -13,6 +13,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 #### Fixed
 - For operators: visitors over IPv6 all looked like one address to the rate limiter (Docker's proxy stood in front of them), so one person's sign-in lockout would have locked out everyone on IPv6. The production stack now gives its network IPv6 as well, and each visitor is seen as themselves.
 - For operators: invite links no longer leave their code in the web server's access log.
+- For operators: the restore drill run as root failed with "Permission denied" because the scratch directory stayed root-only; `restore.sh` now hands it to the image's user. The drill notes name the two path overrides needed with a Storage Box SSH key, the runbook says a changed Caddyfile needs the Caddy container recreated, and `docs/ALERTING.md` is the contract for whatever forwards the monitoring alerts.
 
 ### Launch follow-up (2026-10-12)
 

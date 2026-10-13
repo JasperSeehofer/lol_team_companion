@@ -18,6 +18,7 @@ A private coaching workspace for one League of Legends team: scouting, drafting,
 | `CHANGELOG.md` | Keep a Changelog. Add an entry under `Unreleased` for every user-visible change. |
 | `docs/RUNBOOK.md` | Running production (M8): first deploy, building the image, updates and rollback, backups, restore, logs, keys, failure recovery, migrations, incidents, and the verification checklist (what CI proves, what the owner checks on the VM). |
 | `docs/LAUNCH-CHECKLIST.md` | Everything to tick before the first outside team is invited, owner or agent per line, with the state after M8. |
+| `docs/ALERTING.md` | The contract for the application on the monitoring server that forwards the uptime and backup alerts (subjects, bodies, exit codes, state file). |
 | `docs/RIOT-REGISTRATION-CHECK.md` | What the code sends to and keeps from Riot, to compare with the existing Riot registration; `riot.txt` and production-key steps. |
 | `.claude/rules/*.md` | Path-scoped gotchas (SurrealDB, Leptos, WASM/e2e). Loaded automatically. |
 
