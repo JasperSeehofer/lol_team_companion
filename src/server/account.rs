@@ -122,6 +122,8 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
 /// the date and what admins wrote (status, public title and note, internal
 /// note, "fixed in"), so the bug board and its changelog links keep working.
 /// Bug reports have no other author field (no name is stored on them).
+/// The page stays, but an id in it is cut off ([`BUG_REPORT_PAGES_WITH_IDS`]):
+/// a report sent from one's own player card would otherwise name the user.
 pub const BUG_REPORT_AUTHOR_FIELDS: &[&str] = &[
     "description",
     "element_label",
@@ -129,6 +131,10 @@ pub const BUG_REPORT_AUTHOR_FIELDS: &[&str] = &[
     "viewport_h",
     "reporter_seen_at",
 ];
+
+/// Routes whose path holds an id (a user's player card, a share token, a
+/// game): deletion keeps only this prefix of a report's page.
+pub const BUG_REPORT_PAGES_WITH_IDS: &[&str] = &["/team/player/", "/s/", "/match/"];
 
 /// The tombstone row. Its email has no `@` and its username key is longer
 /// than registration allows, so no registration can collide with it; its
@@ -221,7 +227,8 @@ const DELETE_USER: &str = "\
     UPDATE proposal SET created_by = $tomb WHERE created_by = $u; \
     UPDATE proposal SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE bug_report SET triaged_by = $tomb WHERE triaged_by = $u; \
-    UPDATE bug_report SET user = $tomb, description = $removed, element_label = '', viewport_w = NONE, viewport_h = NONE, reporter_seen_at = NONE WHERE user = $u; \
+    UPDATE bug_report SET user = $tomb, description = $removed, element_label = '', viewport_w = NONE, viewport_h = NONE, reporter_seen_at = NONE, \
+        page_url = IF string::starts_with(page_url, '/team/player/') { '/team/player/' } ELSE IF string::starts_with(page_url, '/s/') { '/s/' } ELSE IF string::starts_with(page_url, '/match/') { '/match/' } ELSE { page_url } WHERE user = $u; \
     UPDATE ledger_month SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE site_text SET approved_by = $tomb WHERE approved_by = $u; \
     UPDATE site_text SET updated_by = $tomb WHERE updated_by = $u; \
@@ -582,6 +589,14 @@ mod tests {
                     "{t}: {field} is not cleared in `{stmt}`"
                 );
             }
+            for prefix in BUG_REPORT_PAGES_WITH_IDS {
+                assert!(
+                    stmt.contains(&format!(
+                        "string::starts_with(page_url, '{prefix}') {{ '{prefix}' }}"
+                    )),
+                    "{t}: an id after {prefix} is not cut off in `{stmt}`"
+                );
+            }
         }
         // Every bug_report field the reporter's browser sends is cleared;
         // the schema has no name field to forget.
@@ -599,6 +614,25 @@ mod tests {
                 "bug_report.{f} looks like an author field; clear it on deletion"
             );
         }
+    }
+
+    /// Every route with a parameter (an id in the path) is cut to its
+    /// prefix when a deleted user's bug reports are anonymised.
+    #[test]
+    fn every_route_with_an_id_is_cut_from_anonymised_reports() {
+        let app = include_str!("../app.rs");
+        let mut found = 0;
+        for chunk in app.split("path!(\"").skip(1) {
+            let route = chunk.split('"').next().unwrap_or_default();
+            if let Some((prefix, _)) = route.split_once(':') {
+                found += 1;
+                assert!(
+                    BUG_REPORT_PAGES_WITH_IDS.contains(&prefix),
+                    "{route}: add {prefix} to BUG_REPORT_PAGES_WITH_IDS"
+                );
+            }
+        }
+        assert_eq!(found, BUG_REPORT_PAGES_WITH_IDS.len());
     }
 
     /// Deleting a team removes (or unlinks) every row that points at it

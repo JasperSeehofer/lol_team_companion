@@ -433,6 +433,19 @@ async fn bug_reports_survive_deletion_anonymised() {
     )
     .await
     .unwrap();
+    // Sent from her own player card: the page names her account.
+    db::create_bug_report(
+        &db,
+        &ana,
+        format!("/team/player/{ana}"),
+        "Card".into(),
+        "My card looks wrong".into(),
+        "bug".into(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     db::create_bug_report(
         &db,
         &ben,
@@ -448,7 +461,7 @@ async fn bug_reports_survive_deletion_anonymised() {
     let reports = store::admin_list_bug_reports(&db, None).await.unwrap();
     let anas = reports
         .iter()
-        .find(|r| r.reporter == "ana")
+        .find(|r| r.reporter == "ana" && r.page_url.starts_with("/draft"))
         .unwrap()
         .id
         .clone();
@@ -471,8 +484,13 @@ async fn bug_reports_survive_deletion_anonymised() {
 
     // The export before the deletion has the report as she sent it.
     let doc = account::export_user_data(&db, &ana).await.unwrap();
-    let mine = doc["data"]["bug_reports"].as_array().unwrap();
-    assert_eq!(mine.len(), 1);
+    let mut mine = doc["data"]["bug_reports"].as_array().unwrap().clone();
+    assert_eq!(mine.len(), 2);
+    mine.retain(|r| {
+        r["page_url"]
+            .as_str()
+            .is_some_and(|p| p.starts_with("/draft"))
+    });
     assert_eq!(
         mine[0]["description"],
         "Saving fails. Thanks, Ana from Northgate"
@@ -485,7 +503,19 @@ async fn bug_reports_survive_deletion_anonymised() {
     account::delete_account(&db, &ana).await.unwrap();
 
     let after = store::admin_list_bug_reports(&db, None).await.unwrap();
-    assert_eq!(after.len(), 2, "both reports are still there");
+    assert_eq!(after.len(), 3, "every report is still there");
+    // The id in the page is cut off: the card no longer names her.
+    let card = after
+        .iter()
+        .find(|r| r.page_url.starts_with("/team/player"))
+        .unwrap();
+    assert_eq!(card.page_url, "/team/player/");
+    assert_eq!(card.reporter, "Former member");
+    let ana_key = ana.strip_prefix("user:").unwrap_or(&ana);
+    assert!(
+        !serde_json::to_string(&after).unwrap().contains(ana_key),
+        "nothing in the triage list names her account"
+    );
     let r = after.iter().find(|r| r.id == anas).unwrap();
     assert_eq!(r.reporter, "Former member");
     assert!(!r.description.contains("Ana"), "{}", r.description);
@@ -500,7 +530,7 @@ async fn bug_reports_survive_deletion_anonymised() {
     assert_eq!(r.category, "bug");
     assert_eq!(
         count(&db, "SELECT count() AS n FROM bug_report WHERE user = user:former_member AND reporter_seen_at = NONE GROUP ALL").await,
-        1
+        2
     );
     // The public board still shows it, with the admin-written text only.
     let board = store::list_bug_board(&db).await.unwrap();
