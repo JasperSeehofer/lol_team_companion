@@ -8,7 +8,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Leptos core (shared)
-leptos = { version = "0.8", features = [] }
+# 0.8.18+: 0.8.17's <Suspense> could miss its last task finishing on another
+# thread and never finish streaming (M11, the e2e "page.goto stall").
+leptos = { version = "0.8.22", features = [] }
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
 
@@ -30,9 +32,9 @@ hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 tower = { version = "0.5", features = ["full"], optional = true }
 tower-http = { version = "0.6", features = ["fs"], optional = true }
+http-body = { version = "1", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
-http-body = { version = "1", optional = true }
 dotenvy = { version = "0.15", optional = true }
 
 # Client-only
@@ -68,9 +70,9 @@ ssr = [
   "dep:sha2",
   "dep:tower",
   "dep:tower-http",
+  "dep:http-body",
   "dep:tracing",
   "dep:tracing-subscriber",
-  "dep:http-body",
   "dep:dotenvy",
   "leptos/ssr",
   "leptos_meta/ssr",

@@ -123,6 +123,23 @@ jobs:
         working-directory: e2e
         run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts --retries=1
 
+      # M11: every server-rendered page must finish streaming. leptos
+      # 0.8.17 left about one page in 8,000 pending forever under parallel
+      # load (the old "page.goto stall"); the check runs 12,000 requests.
+      - name: SSR load check (every page finishes streaming)
+        run: python3 scripts/ssr_stress.py "$BASE_URL" 12000 16 20
+
+      # server::inflight logs any request without a complete response after
+      # 15 s. One the server never finished (not a client that stopped
+      # reading) fails the job, with the steps it reached.
+      - name: No stalled requests in the server log
+        if: always()
+        run: |
+          if grep -a 'slow request .*no complete response' "$RUNNER_TEMP/server.log" | grep -v 'the client is not reading'; then
+            echo "::error::requests that the server never completed (server::inflight lines above)"
+            exit 1
+          fi
+
       - name: Server log
         if: always()
         run: tail -n 200 "$RUNNER_TEMP/server.log" || true

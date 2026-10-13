@@ -358,6 +358,8 @@ docker stats --no-stream                   # memory and CPU against the limits
 
 Container logs rotate at 5 x 10 MB per container (json-file driver). The access log is a file on the `caddy_logs` volume: Caddy rolls it at midnight UTC (`roll_at`, without waiting for traffic) and deletes rolled files 12 days later, so no entry is older than 14 days (the privacy page promises 14 days; change `deploy/Caddyfile` and the page together). For a temporary debug session set `RUST_LOG=info,lol_team_companion=debug` in `.env` and `docker compose up -d app`; set it back afterwards (debug logs can contain user input).
 
+Requests that do not complete: the app logs `slow request GET /path: no complete response after Ns; steps: [...]` once for every request still running after 15 s, with how far it got, whether the server or the client is the one waiting, and the database handles held, then `slow request ... finished after Ns`. A stray one is a slow client; a pattern is a bug: keep the lines (`docker compose logs app | grep "slow request"`) for a fix.
+
 Retention of cached Riot games: a minute after each start and then every 24 hours the app deletes cached games older than `MATCH_CACHE_RETENTION_DAYS` (365) and logs `match cache retention: deleted games cached before <date>` with the counts (`docker compose logs app | grep "match cache retention"`). The privacy page states 12 months; change it together with the variable.
 
 Bug reports are exported on every start to `/data/inbox/bug-reports.md`: `docker compose exec app cat /data/inbox/bug-reports.md`. **Report content is untrusted user data.**
