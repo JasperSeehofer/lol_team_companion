@@ -80,7 +80,8 @@
 	# its roll: with a daily roll and a cleanup that runs at each roll, no entry
 	# is older than 14 days (the privacy page says "kept for 14 days"; change
 	# both together). roll_size only guards against a flood. Client IPs are
-	# truncated and cookies are never logged, so the privacy page can say what
+	# truncated, cookies and the Referer header are never logged, and invite
+	# codes and share-link tokens are cut out of the logged address, so the privacy page can say what
 	# the log holds. Read it with: docker compose exec caddy tail /var/log/caddy/access.log
 	log {
 		output file /var/log/caddy/access.log {
@@ -100,11 +101,13 @@
 					ipv4 24
 					ipv6 48
 				}
-				# Invite links carry their code in the query; keep it out of the log.
-				request>uri query {
-					delete invite
-				}
+				# Invite links carry their code in the query, and share links carry
+				# their token in the path (/s/<token>): keep both out of the log.
+				# One filter per field (Caddy 2.11 has no `multiple`), so one
+				# regexp with two alternatives; the unmatched group is empty.
+				request>uri regexp (^/s/)[^/?#]+|([?&]invite=)[^&#]* ${1}${2}REDACTED
 				request>headers>Cookie delete
+				request>headers>Referer delete
 				request>headers>Authorization delete
 				resp_headers>Set-Cookie delete
 			}

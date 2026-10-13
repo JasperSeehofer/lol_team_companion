@@ -254,7 +254,7 @@ Read `CHANGELOG.md` for the release before updating. If it mentions a new migrat
 
 Clean up old images now and then: `docker image ls companion` and `docker image rm companion:<old>` (keep the current and previous tag).
 
-**A changed `deploy/Caddyfile`** needs `docker compose up -d --force-recreate caddy` (a few seconds of downtime), not a reload: the file is bind-mounted into the container as a single file, and `git checkout` writes a new file, so the container keeps seeing the old one; `caddy reload` inside it re-reads the old content (seen on 13 Oct 2026). Compose does not notice the change either, because the mount definition is unchanged.
+**A changed `deploy/Caddyfile`** needs `docker compose up -d --force-recreate caddy` (a few seconds of downtime), not a reload: the file is bind-mounted into the container as a single file, and `git checkout` writes a new file, so the container keeps seeing the old one; `caddy reload` inside it re-reads the old content (seen on 13 Oct 2026). Compose does not notice the change either, because the mount definition is unchanged. The access-log filter change (Referer dropped, share-link tokens redacted) takes effect this way.
 
 ## 5. Backups
 
@@ -354,7 +354,7 @@ With the Storage Box SSH key (5.1 steps 5 and 6), `backup.env` names the key and
 
 ```bash
 docker compose logs -f app                 # application (tracing, RUST_LOG=info)
-docker compose exec caddy tail -n 50 /var/log/caddy/access.log   # access log (JSON, client IPs truncated to /24 and /48, no cookies)
+docker compose exec caddy tail -n 50 /var/log/caddy/access.log   # access log (JSON, client IPs truncated to /24 and /48, no cookies, no Referer; invite codes and share-link tokens shown as REDACTED)
 docker compose logs --since 1h caddy       # Caddy's own log (certificates, errors)
 docker compose logs --since 48h backup     # backup runs
 docker compose ps                          # health
