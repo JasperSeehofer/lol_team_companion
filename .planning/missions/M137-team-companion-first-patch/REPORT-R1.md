@@ -1,7 +1,7 @@
 # M137 — Team Companion first patch · REPORT R1
 
 Branch `mission/M137-team-companion-first-patch` (worktree `lol_team_companion-wt/M137-team-companion-first-patch`),
-based on `origin/main` 2c6172a; `origin/main` merged in before this report (already up to date). Not pushed, not
+based on `origin/main` 2c6172a; `origin/main` merged in before this report (already up to date). Pushed to `origin` (branch only, so CI runs); not
 merged, not deployed. The **STOP RULE** was applied on the overseer's order at 9.7 of 11.0 M tokens: the host was
 swap-bound all round (load 11–14 on 4 cores; two runaway processes from 11 Oct, `npm test` PID 2623422 and
 `trellis asks` PID 590580, each holding a full core for two days; a ~3.5 GB memory cap on this worktree's
