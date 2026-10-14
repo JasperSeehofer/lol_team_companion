@@ -82,6 +82,11 @@ pub fn hub_rows(o: &AdminOverview) -> Vec<(&'static str, &'static str, String)> 
         ("Public texts", "/admin/texts", texts),
         ("Invites", "/admin/invites", invites),
         (
+            "Password resets",
+            "/admin/resets",
+            "One-time codes for forgotten passwords".to_string(),
+        ),
+        (
             "Champion traits",
             "/admin/traits",
             "Draft Graph trait table".to_string(),
@@ -146,6 +151,7 @@ mod tests {
             "/admin/ledger",
             "/admin/texts",
             "/admin/invites",
+            "/admin/resets",
             "/admin/traits",
             "/design",
         ] {

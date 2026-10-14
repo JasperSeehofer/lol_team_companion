@@ -46,6 +46,7 @@ pub async fn admin_update_bug_report(triage_json: String) -> Result<(), ServerFn
         .await
         .map_err(authz::server_err)?;
     tracing::info!(admin = %admin.id, report = %t.id, status = %t.status, "bug report triaged");
+    crate::server::bug_report_export::request_export();
     Ok(())
 }
 
@@ -58,6 +59,7 @@ pub async fn admin_bug_to_proposal(id: String) -> Result<String, ServerFnError> 
         .await
         .map_err(authz::server_err)?;
     tracing::info!(admin = %admin.id, report = %id, proposal = %p, "wishlist report turned into a proposal");
+    crate::server::bug_report_export::request_export();
     Ok(p)
 }
 

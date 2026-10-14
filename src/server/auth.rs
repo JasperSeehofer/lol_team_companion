@@ -34,8 +34,11 @@ impl From<DbUser> for AppUser {
         let admin_promoted = u.admin_promoted_at.is_some();
         AppUser {
             auth_hash: session_auth_hash_for(&u.password_hash),
-            is_admin: admin_promoted
-                || crate::server::config::get().grants_admin(admin_flag, &u.email),
+            is_admin: crate::server::config::get().is_effective_admin(
+                admin_flag,
+                admin_promoted,
+                &u.email,
+            ),
             admin_flag,
             admin_promoted,
             id: u.id.to_sql(),

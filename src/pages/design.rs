@@ -494,6 +494,7 @@ fn ButtonSection() -> impl IntoView {
                     <Sample label="Size Sm (28px)"><Button size=ButtonSize::Sm>"Compare"</Button></Sample>
                     <Sample label="Size Md (32px)"><Button size=ButtonSize::Md>"Compare"</Button></Sample>
                     <Sample label="Size Lg (40px)"><Button size=ButtonSize::Lg variant=ButtonVariant::Primary>"Sign in"</Button></Sample>
+                    <Sample label="Size Touch (44px on phones, 32px from md)"><Button size=ButtonSize::Touch>"Change password"</Button></Sample>
                     <Sample label="Icon slot"><Button icon=plus_icon>"Add plan"</Button></Sample>
                     <Sample label="Keycap hint"><Button variant=ButtonVariant::Primary shortcut="P">"Pick Rakan"</Button></Sample>
                     <Sample label="Icon only, labelled"><Button variant=ButtonVariant::Quiet aria_label="Add plan" icon=plus_icon>""</Button></Sample>

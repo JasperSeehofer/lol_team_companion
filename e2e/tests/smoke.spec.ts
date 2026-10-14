@@ -8,6 +8,7 @@ const PUBLIC_PAGES = [
   { path: "/", title: /Team Companion/i },
   { path: "/auth/login", title: /Team Companion/i },
   { path: "/auth/register", title: /Team Companion/i },
+  { path: "/auth/reset", title: /Team Companion/i },
   { path: "/closed-beta", title: /Team Companion/i },
   { path: "/legal/impressum", title: /Team Companion/i },
   { path: "/legal/datenschutz", title: /Team Companion/i },

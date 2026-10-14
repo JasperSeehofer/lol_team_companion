@@ -13,6 +13,12 @@ use crate::components::ui::{
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
+use leptos_router::hooks::use_query_map;
+
+/// The line under the password field for someone who forgot it. Only the
+/// app admin can reset a password (a team leader cannot), so it names the
+/// admin and what to ask for. Change the wording here.
+pub const FORGOT_PASSWORD_HINT: &str = "Forgot it? Ask the Team Companion admin for a reset code.";
 
 #[server]
 pub async fn login_action(email: String, password: String) -> Result<String, ServerFnError> {
@@ -81,6 +87,10 @@ pub fn LoginPage() -> impl IntoView {
         }
     });
 
+    // `?reset=1`: just came from `/auth/reset`.
+    let query = use_query_map();
+    let after_reset = move || query.read().get("reset").as_deref() == Some("1");
+
     let error = move || {
         login
             .value()
@@ -96,14 +106,22 @@ pub fn LoginPage() -> impl IntoView {
             // ActionForm has no `class` prop (leptos rule 7).
             <ActionForm action=login>
                 <div class="flex flex-col gap-5">
+                    {move || (after_reset() && error().is_none()).then(|| view! {
+                        <div role="status"><Callout tone=CalloutTone::Success>"Password changed. Sign in with the new one."</Callout></div>
+                    })}
                     {move || error().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
 
                     <Field id="login-email" label="Email">
                         <TextField kind=InputKind::Email name="email" required=true autocomplete="email" />
                     </Field>
-                    <Field id="login-password" label="Password">
-                        <TextField kind=InputKind::Password name="password" required=true autocomplete="current-password" />
-                    </Field>
+                    <div class="flex flex-col gap-1">
+                        <Field id="login-password" label="Password" hint=FORGOT_PASSWORD_HINT>
+                            <TextField kind=InputKind::Password name="password" required=true autocomplete="current-password" />
+                        </Field>
+                        <A href="/auth/reset" attr:class="inline-block self-start py-2.5 text-label font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                            "Have a reset code? Set a new password."
+                        </A>
+                    </div>
 
                     <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Lg full_width=true>
                         "Sign in"

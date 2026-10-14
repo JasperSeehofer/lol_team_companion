@@ -49,6 +49,9 @@ pub enum ButtonSize {
     Md,
     /// 40px: the one primary action on a form page.
     Lg,
+    /// 44px on phones, 32px from md: row actions and the one action a
+    /// phone user needs (A1: 44px touch targets below `md`).
+    Touch,
 }
 
 impl ButtonSize {
@@ -57,6 +60,7 @@ impl ButtonSize {
             ButtonSize::Sm => "h-7 px-2.5 text-label",
             ButtonSize::Md => "h-8 px-3 text-label",
             ButtonSize::Lg => "h-10 px-4 text-body",
+            ButtonSize::Touch => "h-11 px-4 text-body md:h-8 md:px-3 md:text-label",
         }
     }
 }

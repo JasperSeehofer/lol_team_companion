@@ -138,6 +138,13 @@ impl SecurityConfig {
     pub fn grants_admin(&self, stored_flag: bool, email: &str) -> bool {
         stored_flag && self.is_admin_email(email)
     }
+
+    /// The one admin rule (sign-in, every request and the feedback export):
+    /// promoted with the promote command, or the stored flag while the email
+    /// is still listed in `ADMIN_EMAILS`.
+    pub fn is_effective_admin(&self, stored_flag: bool, promoted: bool, email: &str) -> bool {
+        promoted || self.grants_admin(stored_flag, email)
+    }
 }
 
 /// One environment variable: what it is called, its default and what it
@@ -158,7 +165,7 @@ pub const VARIABLES: &[EnvVar] = &[
     EnvVar { name: "RIOT_GLOBAL_BUDGET_PER_SEC", default: "20", meaning: "process-wide Riot requests per second (1 to 100,000)", server: true },
     EnvVar { name: "RIOT_GLOBAL_BUDGET_PER_MIN", default: "50", meaning: "process-wide Riot requests per minute, two-minute burst (1 to 1,000,000)", server: true },
     EnvVar { name: "SURREAL_DATA_DIR", default: "./data", meaning: "database directory (SurrealKV, one process only)", server: true },
-    EnvVar { name: "BUG_REPORT_INBOX_PATH", default: "./docs/inbox/bug-reports.md", meaning: "bug-report export written on every start", server: true },
+    EnvVar { name: "BUG_REPORT_INBOX_PATH", default: "./docs/inbox/bug-reports.md", meaning: "bug-report export written on start and after every change (feedback.jsonl beside it)", server: true },
     EnvVar { name: "RUST_LOG", default: "info,lol_team_companion=debug", meaning: "tracing filter (an invalid filter is reported and the default used)", server: true },
     EnvVar { name: "APP_ENV", default: "unset (production)", meaning: "dev, development or local marks a development run (so does LEPTOS_ENV=DEV)", server: true },
     EnvVar { name: "LEPTOS_ENV", default: "unset (production)", meaning: "DEV marks a development run (set by cargo leptos watch); the image sets PROD", server: true },
@@ -930,5 +937,15 @@ mod tests {
         // Removed from ADMIN_EMAILS: the stale stored flag no longer counts.
         cfg.admin_emails.clear();
         assert!(!cfg.grants_admin(true, "admin@example.com"));
+    }
+
+    #[test]
+    fn effective_admin_is_promoted_or_listed_flag() {
+        let mut cfg = SecurityConfig::for_tests();
+        cfg.admin_emails = vec!["admin@example.com".into()];
+        assert!(cfg.is_effective_admin(true, false, "admin@example.com"));
+        assert!(!cfg.is_effective_admin(false, false, "admin@example.com"));
+        assert!(!cfg.is_effective_admin(true, false, "member@example.com"));
+        assert!(cfg.is_effective_admin(false, true, "member@example.com"));
     }
 }

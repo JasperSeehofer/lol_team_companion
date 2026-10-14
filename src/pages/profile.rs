@@ -150,6 +150,8 @@ pub async fn delete_my_account(
         team_deleted = deleted.team_deleted,
         "account deleted"
     );
+    // The reports are anonymised and the votes gone: rewrite the inbox.
+    crate::server::bug_report_export::request_export();
     let store = SurrealSessionStore::new(ctx.db.arc(), "sessions".to_string());
     match store.delete_for_user(&ctx.user.id).await {
         Ok(n) => tracing::info!(user = %ctx.user.id, sessions = n, "sessions ended"),
@@ -161,6 +163,72 @@ pub async fn delete_my_account(
     if let Err(e) = auth.logout().await {
         tracing::warn!("logout after account deletion failed: {e}");
     }
+    Ok(())
+}
+
+/// Shown when the current password given for a change is wrong.
+pub const WRONG_CURRENT_PASSWORD: &str = "That is not your current password.";
+/// Shown when the new password and its repetition differ.
+pub const NEW_PASSWORDS_DIFFER: &str = "The two new passwords do not match.";
+
+/// Change the signed-in user's password (M137 item 5). Verifies the current
+/// password (Argon2 on the blocking pool), hashes the new one with the same
+/// parameters as registration, ends every session of the account and signs
+/// this one in again, so only this device stays signed in. Rate limited per
+/// user (`Bucket::Account`, shared with deletion).
+#[server]
+pub async fn change_my_password(
+    current_password: String,
+    new_password: String,
+    confirm_password: String,
+) -> Result<(), ServerFnError> {
+    use crate::server::auth::{hash_password_async, verify_password_async, AuthSession};
+    use crate::server::rate_limit::Bucket;
+    use crate::server::session_store::SurrealSessionStore;
+    use crate::server::{authz, db, password};
+    use axum_login::AuthnBackend;
+
+    let ctx = authz::authed().await?;
+    authz::rate_limit_user(Bucket::Account, &ctx.user)?;
+    password::validate_new_password(&new_password).map_err(ServerFnError::new)?;
+    if new_password != confirm_password {
+        return Err(ServerFnError::new(NEW_PASSWORDS_DIFFER));
+    }
+    if current_password.len() > password::MAX_PASSWORD_BYTES {
+        return Err(ServerFnError::new(WRONG_CURRENT_PASSWORD));
+    }
+    let hash = db::password_hash_of(&ctx.db, &ctx.user.id)
+        .await
+        .map_err(authz::server_err)?;
+    if !verify_password_async(current_password, hash).await {
+        return Err(ServerFnError::new(WRONG_CURRENT_PASSWORD));
+    }
+    let new_hash = hash_password_async(new_password)
+        .await
+        .map_err(|e| authz::internal_error("hash password", e))?;
+    password::set_password_hash(&ctx.db, &ctx.user.id, new_hash)
+        .await
+        .map_err(authz::server_err)?;
+    // The new hash already ends every session (their auth hash no longer
+    // matches); delete the rows too, then sign this session in again with
+    // the new hash under a fresh session id.
+    let store = SurrealSessionStore::new(ctx.db.arc(), "sessions".to_string());
+    let ended = match store.delete_for_user(&ctx.user.id).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::warn!("could not delete the sessions after a password change: {e}");
+            0
+        }
+    };
+    let mut auth: AuthSession = leptos_axum::extract()
+        .await
+        .map_err(|e| authz::internal_error("extract auth session", e))?;
+    match auth.backend.get_user(&ctx.user.id).await {
+        Ok(Some(user)) => auth.login(&user).await.map_err(authz::server_err)?,
+        Ok(None) => return Err(authz::internal_error("password change", "user vanished")),
+        Err(e) => return Err(authz::internal_error("load user after password change", e)),
+    }
+    tracing::info!(user = %ctx.user.id, sessions = ended, "password changed");
     Ok(())
 }
 
@@ -392,6 +460,130 @@ fn DataSettings(username: String, card_hidden: bool) -> impl IntoView {
     }
 }
 
+/// "Password" on the profile (M137 item 5, atelier card C8): current, new
+/// and repeated password; errors on the field they are about; a persistent
+/// success line (not a toast).
+#[component]
+fn PasswordSettings() -> impl IntoView {
+    use crate::components::ui::{ButtonSize, InputKind};
+    let current = RwSignal::new(String::new());
+    let new_pw = RwSignal::new(String::new());
+    let repeat = RwSignal::new(String::new());
+    let current_err = RwSignal::new(None::<String>);
+    let new_err = RwSignal::new(None::<String>);
+    let repeat_err = RwSignal::new(None::<String>);
+    let general = RwSignal::new(None::<(CalloutTone, String)>);
+    let done = RwSignal::new(false);
+    let busy = RwSignal::new(false);
+    let min = crate::pages::auth::register::MIN_PASSWORD_LEN;
+
+    let focus = move |_id: &'static str| {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::JsCast;
+            if let Some(el) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id(_id))
+                .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+            {
+                let _ = el.focus();
+            }
+        }
+    };
+
+    let submit = Callback::new(move |_| {
+        if busy.get_untracked() {
+            return;
+        }
+        current_err.set(None);
+        new_err.set(None);
+        repeat_err.set(None);
+        general.set(None);
+        done.set(false);
+        let (c, n, r) = (
+            current.get_untracked(),
+            new_pw.get_untracked(),
+            repeat.get_untracked(),
+        );
+        if c.is_empty() {
+            current_err.set(Some("Enter your current password.".into()));
+            focus("password-current");
+            return;
+        }
+        if n.chars().count() < min {
+            new_err.set(Some(format!("Use {min} or more characters.")));
+            focus("password-new");
+            return;
+        }
+        if n != r {
+            repeat_err.set(Some(NEW_PASSWORDS_DIFFER.into()));
+            focus("password-repeat");
+            return;
+        }
+        busy.set(true);
+        leptos::task::spawn_local(async move {
+            match change_my_password(c, n, r).await {
+                Ok(()) => {
+                    current.set(String::new());
+                    new_pw.set(String::new());
+                    repeat.set(String::new());
+                    done.set(true);
+                }
+                Err(e) => {
+                    let msg = clean_error(e);
+                    if msg == WRONG_CURRENT_PASSWORD {
+                        current_err.set(Some(msg));
+                        focus("password-current");
+                    } else if msg == NEW_PASSWORDS_DIFFER {
+                        repeat_err.set(Some(msg));
+                        focus("password-repeat");
+                    } else if msg.starts_with("Password ") {
+                        new_err.set(Some(msg));
+                        focus("password-new");
+                    } else if msg.starts_with("Too many") || msg.contains("Try again") {
+                        general.set(Some((CalloutTone::Warning, msg)));
+                    } else {
+                        general.set(Some((CalloutTone::Danger, msg)));
+                    }
+                }
+            }
+            busy.set(false);
+        });
+    });
+
+    view! {
+        <section aria-labelledby="password-h" class="mt-12 scroll-mt-20 flex flex-col gap-4" id="password" data-password>
+            <SectionHeader title="Password" id="password-h" />
+            <div role="status" data-testid="password-status">
+                {move || done.get().then(|| view! {
+                    <Callout tone=CalloutTone::Success>"Password changed. Your other sessions were signed out."</Callout>
+                })}
+            </div>
+            {move || general.get().map(|(tone, msg)| view! { <Callout tone=tone>{msg}</Callout> })}
+            <form
+                class="flex max-w-md flex-col gap-4"
+                on:submit=move |ev| {
+                    ev.prevent_default();
+                    submit.run(());
+                }
+            >
+                <Field id="password-current" label="Current password" error=Signal::derive(move || current_err.get())>
+                    <TextField value=current name="current_password" kind=InputKind::Password autocomplete="current-password" />
+                </Field>
+                <Field id="password-new" label="New password" hint=format!("Use {min} or more characters.") error=Signal::derive(move || new_err.get())>
+                    <TextField value=new_pw name="new_password" kind=InputKind::Password autocomplete="new-password" />
+                </Field>
+                <Field id="password-repeat" label="Repeat new password" error=Signal::derive(move || repeat_err.get())>
+                    <TextField value=repeat name="confirm_password" kind=InputKind::Password autocomplete="new-password" />
+                </Field>
+                <div>
+                    <Button kind=ButtonType::Submit variant=ButtonVariant::Secondary size=ButtonSize::Touch loading=busy>"Change password"</Button>
+                </div>
+            </form>
+        </section>
+    }
+}
+
 #[component]
 fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
@@ -478,6 +670,8 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
                 <Button on_click=save_reg>"Save region"</Button>
             </div>
         </section>
+
+        <PasswordSettings />
 
         <section aria-labelledby="riot-h" class="mt-12 flex flex-col gap-4" data-riot>
             <SectionHeader title="Riot account" id="riot-h" />

@@ -12,7 +12,7 @@
 //! - Personal rows are deleted: the user, the membership, join requests,
 //!   pool, champion notes, learnings, goals, ranked snapshots, synced games,
 //!   votes, survey prompts and answers, guidance rows (what they saw or
-//!   muted), share links to the user's player card.
+//!   muted), share links to the user's player card, password reset codes.
 //! - Records that belong to the team (drafts, trees, series, plans, reviews,
 //!   boards, notes, pair notes, the next match, share links) and the global
 //!   records admins wrote (surveys, proposals, ledger months, site texts,
@@ -114,6 +114,8 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
     ("ledger_month", "updated_by", Treatment::Tombstone),
     ("site_text", "approved_by", Treatment::Tombstone),
     ("site_text", "updated_by", Treatment::Tombstone),
+    ("password_reset", "user", Treatment::Delete),
+    ("password_reset", "created_by", Treatment::Tombstone),
 ];
 
 /// What deletion clears on the user's bug reports: everything the reporter
@@ -203,6 +205,7 @@ const DELETE_USER: &str = "\
     DELETE survey_prompt WHERE user = $u; \
     DELETE user_guidance WHERE user = $u; \
     DELETE proposal_vote WHERE user = $u; \
+    DELETE password_reset WHERE user = $u; \
     DELETE share_link WHERE target = $u; \
     UPDATE match SET synced_by = $tomb WHERE synced_by = $u; \
     UPDATE draft SET created_by = $tomb WHERE created_by = $u; \
@@ -232,6 +235,7 @@ const DELETE_USER: &str = "\
     UPDATE ledger_month SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE site_text SET approved_by = $tomb WHERE approved_by = $u; \
     UPDATE site_text SET updated_by = $tomb WHERE updated_by = $u; \
+    UPDATE password_reset SET created_by = $tomb WHERE created_by = $u; \
     UPDATE action_item SET assigned_to = NONE WHERE team IN $my_teams AND assigned_to = $name; \
     DELETE $u;";
 
@@ -448,6 +452,10 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
     (
         "guidance",
         "SELECT key, seen_at, muted_at FROM user_guidance WHERE user = $u",
+    ),
+    (
+        "password_resets",
+        "SELECT created_at, expires_at, used_at FROM password_reset WHERE user = $u",
     ),
     (
         "team_records_created",

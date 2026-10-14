@@ -3,6 +3,7 @@ pub mod hub;
 pub mod invites;
 pub mod ledger;
 pub mod proposals;
+pub mod resets;
 pub mod surveys;
 pub mod texts;
 pub mod traits;

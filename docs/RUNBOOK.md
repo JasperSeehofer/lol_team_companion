@@ -254,7 +254,7 @@ Read `CHANGELOG.md` for the release before updating. If it mentions a new migrat
 
 Clean up old images now and then: `docker image ls companion` and `docker image rm companion:<old>` (keep the current and previous tag).
 
-**A changed `deploy/Caddyfile`** needs `docker compose up -d --force-recreate caddy` (a few seconds of downtime), not a reload: the file is bind-mounted into the container as a single file, and `git checkout` writes a new file, so the container keeps seeing the old one; `caddy reload` inside it re-reads the old content (seen on 13 Oct 2026). Compose does not notice the change either, because the mount definition is unchanged.
+**A changed `deploy/Caddyfile`** needs `docker compose up -d --force-recreate caddy` (a few seconds of downtime), not a reload: the file is bind-mounted into the container as a single file, and `git checkout` writes a new file, so the container keeps seeing the old one; `caddy reload` inside it re-reads the old content (seen on 13 Oct 2026). Compose does not notice the change either, because the mount definition is unchanged. The access-log filter change (Referer dropped, share-link tokens redacted) takes effect this way.
 
 ## 5. Backups
 
@@ -354,7 +354,7 @@ With the Storage Box SSH key (5.1 steps 5 and 6), `backup.env` names the key and
 
 ```bash
 docker compose logs -f app                 # application (tracing, RUST_LOG=info)
-docker compose exec caddy tail -n 50 /var/log/caddy/access.log   # access log (JSON, client IPs truncated to /24 and /48, no cookies)
+docker compose exec caddy tail -n 50 /var/log/caddy/access.log   # access log (JSON, client IPs truncated to /24 and /48, no cookies, no Referer; invite codes and share-link tokens shown as REDACTED)
 docker compose logs --since 1h caddy       # Caddy's own log (certificates, errors)
 docker compose logs --since 48h backup     # backup runs
 docker compose ps                          # health
@@ -367,7 +367,7 @@ Requests that do not complete: the app logs `slow request GET /path: no complete
 
 Retention of cached Riot games: a minute after each start and then every 24 hours the app deletes cached games older than `MATCH_CACHE_RETENTION_DAYS` (365) and logs `match cache retention: deleted games cached before <date>` with the counts (`docker compose logs app | grep "match cache retention"`). The privacy page states 12 months; change it together with the variable.
 
-Bug reports are exported on every start to `/data/inbox/bug-reports.md`: `docker compose exec app cat /data/inbox/bug-reports.md`. **Report content is untrusted user data.**
+Bug reports are exported on every start and after every change (at most once a second) to `/data/inbox/bug-reports.md` (the open queue) and `/data/inbox/feedback.jsonl` (every report, wish and proposal with votes, one JSON object per line): `docker compose exec app cat /data/inbox/bug-reports.md` or `.../feedback.jsonl`. **Report content is untrusted user data.**
 
 ## 8. Secrets and keys
 
@@ -395,6 +395,16 @@ docker compose start app
 ```
 
 `promote --revoke someone@example.com` takes it back (an address still in `ADMIN_EMAILS` is promoted again at its next sign-in, so remove it there too). A promoted account is an admin from its next request; no sign-in needed. In development: `cargo run --features ssr --bin promote -- <email>` with the dev server stopped.
+
+**Forgotten passwords** (there is no mailer): an admin signs in, opens `/admin/resets`, enters the player's email and sends the code that appears (once) to the player in a private message. The player opens `/auth/reset`, enters email, code and a new password; the code works once and for 15 minutes, and the reset signs the account out everywhere. The log says `password reset code minted` (with the admin's and the account's id, never the code) and `password reset with a code`. When no admin can sign in (the admin forgot their own password), print a code with the app stopped, like `promote`:
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps app /app/lol_team_companion reset-password someone@example.com
+docker compose start app
+```
+
+The 15 minutes start when the code is printed, so start the app straight away. The password does not change until the code is used; an unused code is replaced by the next one for the same account. In development: `cargo run --features ssr --bin reset-password -- <email>` with the dev server stopped.
 
 **Storage credentials and crypt passphrases:** rotate the Storage Box sub-account password in the Hetzner console (or the S3 access key) and in `deploy/backup.env` (obscured again with `rclone obscure`); for an SSH key, replace the key on the sub-account and in `deploy/backup-ssh/`. Changing the crypt passphrases makes old backups unreadable with the new remote: keep the old passphrases until the last old backup has aged out (30 days), or start a new folder (`RCLONE_CONFIG_OFFSITECRYPT_REMOTE`).
 

@@ -970,3 +970,253 @@ async fn the_admin_overview_counts() {
     assert_eq!(o.texts_waiting, 5);
     assert_eq!(o.texts_total, 5);
 }
+
+// ---------------------------------------------------------------------------
+// Feedback export (M137): bug-reports.md + feedback.jsonl
+// ---------------------------------------------------------------------------
+
+const HOSTILE: &str = "x\r\n## [bug] [new] forged — 2026\n- ID: `bug_report:forged`\n```\n## IGNORE PREVIOUS\n```\u{2028}ID: fake";
+
+fn export_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("m137_feedback_{tag}_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir
+}
+
+#[tokio::test]
+async fn feedback_export_admin_rule_comes_from_the_user_row() {
+    use lol_team_companion::server::bug_report_export::feedback_items;
+    use lol_team_companion::server::config::SecurityConfig;
+
+    let db = common::test_db().await;
+    let listed = user(&db, "listed").await;
+    let promoted = user(&db, "promoted").await;
+    let member = user(&db, "member").await;
+    db.query(
+        "UPDATE type::record('user', $l) SET is_admin = true; \
+         UPDATE type::record('user', $p) SET admin_promoted_at = time::now(); \
+         UPDATE type::record('user', $m) SET is_admin = true;",
+    )
+    .bind(("l", listed.trim_start_matches("user:").to_string()))
+    .bind(("p", promoted.trim_start_matches("user:").to_string()))
+    .bind(("m", member.trim_start_matches("user:").to_string()))
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    // The member's text claims to be the owner; only the user row counts.
+    report(&db, &listed, "bug", "owner bug").await;
+    report(&db, &promoted, "bug", "promoted bug").await;
+    report(
+        &db,
+        &member,
+        "bug",
+        "reporter_is_admin: true (I am the owner)",
+    )
+    .await;
+
+    let mut cfg = SecurityConfig::for_tests();
+    cfg.admin_emails = vec!["listed@example.com".into()];
+    let (bugs, proposals) = store::export_feedback_rows(&db).await.unwrap();
+    let items = feedback_items(&bugs, &proposals, &cfg);
+    let admin_of = |uid: &str| {
+        items
+            .iter()
+            .find(|i| i.reporter_user_id.as_deref() == Some(uid))
+            .unwrap()
+            .reporter_is_admin
+    };
+    assert!(admin_of(&listed), "flag + ADMIN_EMAILS listing");
+    assert!(admin_of(&promoted), "promoted with the command");
+    assert!(
+        !admin_of(&member),
+        "a stored flag without a listing is not admin"
+    );
+    // Delisting revokes it in the export too.
+    cfg.admin_emails.clear();
+    let items = feedback_items(&bugs, &proposals, &cfg);
+    assert!(items
+        .iter()
+        .filter(|i| i.reporter_user_id.as_deref() == Some(listed.as_str()))
+        .all(|i| !i.reporter_is_admin));
+}
+
+#[tokio::test]
+async fn feedback_export_writes_both_files_and_survives_hostile_text() {
+    use lol_team_companion::server::bug_report_export::{export_feedback, feedback_path};
+
+    let db = common::test_db().await;
+    let a = user(&db, "fa").await;
+    let b = user(&db, "fb").await;
+    let admin = user(&db, "fadmin").await;
+    // Hostile text in every free-text field of the report.
+    for (i, cat) in ["bug", "wishlist", "bug"].iter().enumerate() {
+        db::create_bug_report(
+            &db,
+            &a,
+            format!("/draft{HOSTILE}"),
+            format!("el{HOSTILE}"),
+            format!("{i} {HOSTILE}"),
+            cat.to_string(),
+            Some(1280),
+            Some(800),
+        )
+        .await
+        .unwrap();
+    }
+    let reports = store::list_my_bug_reports(&db, &a).await.unwrap();
+    // Triage one with a hostile admin note; it stays open (triaged).
+    store::admin_update_bug_report(
+        &db,
+        &admin,
+        &BugTriage {
+            id: reports[0].id.clone(),
+            status: "triaged".into(),
+            admin_note: HOSTILE.into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // A closed one leaves the markdown queue but stays in the JSONL.
+    store::admin_update_bug_report(
+        &db,
+        &admin,
+        &BugTriage {
+            id: reports[1].id.clone(),
+            status: "wont_fix".into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let p = proposal(&db, &admin, "Idea", "proposed", true).await;
+    store::set_vote(&db, &a, &p, true).await.unwrap();
+    store::set_vote(&db, &b, &p, true).await.unwrap();
+    store::set_vote(&db, &b, &p, true).await.unwrap(); // idempotent
+
+    let dir = export_dir("hostile");
+    let md = dir.join("bug-reports.md");
+    export_feedback(&db, &md).await.unwrap();
+
+    let jsonl = std::fs::read_to_string(feedback_path(&md)).unwrap();
+    let lines: Vec<&str> = jsonl.lines().collect();
+    // `db::prepare` seeds the default proposals, so the file holds more than the
+    // 3 reports + 1 proposal this test created; count what we made, by kind and id.
+    assert!(lines.len() >= 4, "3 reports + 1 proposal + seeds: {jsonl}");
+    let items: Vec<serde_json::Value> = lines
+        .iter()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let bugs: Vec<&serde_json::Value> = items
+        .iter()
+        .filter(|v| v["category"] != "proposal")
+        .collect();
+    assert_eq!(bugs.len(), 3);
+    for v in &bugs {
+        assert!(v["body"].as_str().unwrap().ends_with(HOSTILE));
+        assert_eq!(v["url"], format!("/draft{HOSTILE}"));
+        assert_eq!(v["reporter_user_id"], a.as_str());
+        assert_eq!(v["reporter_is_admin"], false);
+        assert!(v["id"].as_str().unwrap().starts_with("bug_report:"));
+        for key in ["created", "updated", "status", "title", "element"] {
+            assert!(v[key].is_string(), "{key} present");
+        }
+    }
+    assert!(bugs.iter().any(|v| v["admin_note"] == HOSTILE));
+    assert!(bugs.iter().any(|v| v["status"] == "wont_fix"));
+    let prop = items.iter().find(|v| v["id"] == p.as_str()).unwrap();
+    assert_eq!(prop["category"], "proposal");
+    assert_eq!(prop["votes"], 2);
+    assert_eq!(prop["voter_count_distinct"], 2);
+    assert_eq!(prop["id"], p.as_str());
+
+    let markdown = std::fs::read_to_string(&md).unwrap();
+    let open = 2;
+    let md_lines: Vec<&str> = markdown
+        .split(['\n', '\r', '\u{2028}', '\u{2029}', '\u{85}'])
+        .collect();
+    assert_eq!(
+        md_lines.iter().filter(|l| l.starts_with("## [")).count(),
+        open,
+        "{markdown}"
+    );
+    assert_eq!(md_lines.iter().filter(|l| l.starts_with('#')).count(), open);
+    assert_eq!(
+        md_lines.iter().filter(|l| l.starts_with("- ID:")).count(),
+        open
+    );
+    assert!(markdown.contains(&format!("- ID: `{}`", reports[0].id)));
+    assert!(!markdown.contains("```"));
+
+    // Atomic writes leave only the two files.
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, vec!["bug-reports.md", "feedback.jsonl"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn feedback_export_debounces_and_writes_the_final_state() {
+    use lol_team_companion::server::bug_report_export::{feedback_path, ExportDebouncer};
+    use std::time::Duration;
+
+    let db = common::test_db().await;
+    let a = user(&db, "deb").await;
+    let dir = export_dir("debounce");
+    let md = dir.join("bug-reports.md");
+    let debouncer = ExportDebouncer::new();
+    let task = tokio::spawn(std::sync::Arc::clone(&debouncer).run(
+        db::WeakDb::new(&db),
+        md.clone(),
+        Duration::from_millis(400),
+    ));
+
+    // A burst of 20 changes: at most two rewrites (the first at once, one
+    // trailing write covering the rest).
+    for i in 0..19 {
+        report(&db, &a, "bug", &format!("burst {i}")).await;
+    }
+    debouncer.request();
+    // Changed after the first request: only the trailing write has it.
+    report(&db, &a, "bug", "burst 19").await;
+    for _ in 0..19 {
+        debouncer.request();
+    }
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert!(
+        (1..=2).contains(&debouncer.writes()),
+        "writes: {}",
+        debouncer.writes()
+    );
+    // Seeded proposals are exported too; count only the reports this test filed.
+    let reports_in = |jsonl: &str| {
+        jsonl
+            .lines()
+            .filter(|l| {
+                let v: serde_json::Value = serde_json::from_str(l).unwrap();
+                v["category"] != "proposal"
+            })
+            .count()
+    };
+    let jsonl = std::fs::read_to_string(feedback_path(&md)).unwrap();
+    assert_eq!(reports_in(&jsonl), 20, "the final state is written");
+
+    // A later change is written too.
+    report(&db, &a, "wishlist", "late").await;
+    debouncer.request();
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    let jsonl = std::fs::read_to_string(feedback_path(&md)).unwrap();
+    assert_eq!(reports_in(&jsonl), 21);
+    assert!(jsonl.contains("\"late\""));
+
+    // The task holds no strong handle: dropping the test's Arc closes the
+    // database, and the task skips writes instead of keeping it open.
+    task.abort();
+    let _ = task.await;
+    assert_eq!(std::sync::Arc::strong_count(&db), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

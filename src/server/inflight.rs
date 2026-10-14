@@ -168,6 +168,17 @@ impl HttpBody for TrackedBody {
     }
 }
 
+/// The path as it may be logged: a share link's token is a bearer secret,
+/// so every path under `/s/` becomes `/s/REDACTED` (the access log does the
+/// same in the Caddyfile).
+fn redact_path(p: &str) -> String {
+    if p == "/s" || p.starts_with("/s/") {
+        "/s/REDACTED".to_string()
+    } else {
+        p.to_string()
+    }
+}
+
 /// Axum middleware (outermost layer): registers the request, runs the rest
 /// of the stack with the request id as task-local, and keeps the entry until
 /// the response body is complete.
@@ -178,7 +189,7 @@ pub async fn track(mut req: Request, next: Next) -> Response {
         id.0,
         Entry {
             method: req.method().to_string(),
-            path: req.uri().path().to_string(),
+            path: redact_path(req.uri().path()),
             started: Instant::now(),
             steps: Vec::new(),
             reported: false,
@@ -330,6 +341,18 @@ pub fn spawn_watchdog() -> tokio::task::JoinHandle<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn share_tokens_are_redacted_from_logged_paths() {
+        use super::redact_path;
+        assert_eq!(
+            redact_path("/s/abcdefghijklmnopqrstuvwxyz012345"),
+            "/s/REDACTED"
+        );
+        assert_eq!(redact_path("/s/"), "/s/REDACTED");
+        assert_eq!(redact_path("/stats"), "/stats");
+        assert_eq!(redact_path("/draft"), "/draft");
+    }
+
     use super::*;
 
     #[tokio::test]

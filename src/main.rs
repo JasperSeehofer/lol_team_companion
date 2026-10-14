@@ -183,6 +183,11 @@ async fn main() {
     if args.first().map(String::as_str) == Some("promote") {
         std::process::exit(lol_team_companion::server::promote::run(&args[1..]).await);
     }
+    // `lol_team_companion reset-password <email>`: a one-time password reset
+    // code (server::reset_password); the server must be stopped as well.
+    if args.first().map(String::as_str) == Some("reset-password") {
+        std::process::exit(lol_team_companion::server::reset_password::run(&args[1..]).await);
+    }
 
     // Logging. An invalid RUST_LOG is reported, not silently replaced.
     let filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
@@ -277,15 +282,20 @@ async fn main() {
     // Drop idle rate-limiter entries off the request path.
     let limiter_task = rate_limit::spawn_purge_task(Duration::from_secs(60));
 
-    // Export open bug reports to the triage inbox, once, before serving.
+    // Export the feedback (bug-reports.md and feedback.jsonl beside it)
+    // before serving, then after every change (at most once a second).
     // Write failures are logged and swallowed.
     let inbox_path = app_config.bug_inbox_path.clone();
-    if let Err(e) =
-        lol_team_companion::server::bug_report_export::export_open_reports(&surreal_db, &inbox_path)
-            .await
+    match lol_team_companion::server::bug_report_export::export_feedback(&surreal_db, &inbox_path)
+        .await
     {
-        tracing::warn!("Bug-report inbox export failed: {e}");
+        Ok(()) => tracing::info!("Feedback exported to {}", inbox_path.display()),
+        Err(e) => tracing::warn!("Bug-report inbox export failed: {e}"),
     }
+    let feedback_task = lol_team_companion::server::bug_report_export::spawn_exporter(
+        db::WeakDb::new(&surreal_db),
+        inbox_path,
+    );
 
     if let Some((code, max_uses)) = bootstrap_invite {
         match db::ensure_invite(&surreal_db, &code, max_uses).await {
@@ -323,6 +333,9 @@ async fn main() {
                 }
                 if let Err(e) = db::purge_deleted_team_notes(&db).await {
                     tracing::warn!("Deleted team note purge failed: {e}");
+                }
+                if let Err(e) = lol_team_companion::server::password::purge_old_resets(&db).await {
+                    tracing::warn!("Password reset purge failed: {e}");
                 }
             }
         })
@@ -476,6 +489,7 @@ async fn main() {
         match_cache_task,
         limiter_task,
         inflight_task,
+        feedback_task,
     ] {
         task.abort();
         let _ = task.await;
