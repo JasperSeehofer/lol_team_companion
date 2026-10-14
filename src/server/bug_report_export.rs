@@ -274,7 +274,7 @@ pub fn feedback_items(
             id: b.id.to_sql(),
             category: b.category.clone(),
             status: b.status.clone(),
-            updated: opt_dt(b.updated_at.clone()).unwrap_or_else(|| created.clone()),
+            updated: opt_dt(b.updated_at).unwrap_or_else(|| created.clone()),
             created,
             reporter_user_id: Some(b.user.to_sql()),
             reporter_is_admin: config.is_effective_admin(
@@ -301,8 +301,7 @@ pub fn feedback_items(
         let created = dt_to_string(&p.created_at);
         let updated = p
             .updated_at
-            .clone()
-            .or_else(|| p.status_changed_at.clone())
+            .or(p.status_changed_at)
             .map(|d| dt_to_string(&d))
             .unwrap_or_else(|| created.clone());
         items.push(FeedbackItem {
@@ -599,7 +598,12 @@ mod tests {
             page_url: format!("/draft{payload}"),
             element_label: format!("el `{payload}"),
             description: format!("{payload}\n{}", "y".repeat(5000)),
-            category: if i % 2 == 0 { "bug" } else { "wishlist" }.into(),
+            category: if i.is_multiple_of(2) {
+                "bug"
+            } else {
+                "wishlist"
+            }
+            .into(),
             viewport_w: Some(1),
             viewport_h: Some(1),
             created_at: Some(format!("2026-05-26T10:00:0{}Z", i % 10)),

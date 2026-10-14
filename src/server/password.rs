@@ -301,7 +301,7 @@ mod tests {
             .all(|c| ALPHABET.contains(&c)));
         // 16 characters of a 32-letter alphabet: 80 bits.
         assert_eq!(ALPHABET.len(), 32);
-        assert!(CODE_LEN * 5 >= 80);
+        const { assert!(CODE_LEN * 5 >= 80) };
     }
 
     #[test]
