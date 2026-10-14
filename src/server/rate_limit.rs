@@ -41,10 +41,14 @@ pub enum Bucket {
     /// The survey band's check on every route change, per user (M7 review).
     /// Over the limit the band simply shows nothing.
     SurveyCheck,
-    /// Data exports and account deletion attempts, per user (M8): each
-    /// export reads every personal table, and a deletion attempt checks the
-    /// password.
+    /// Data exports, account deletion and password change attempts, per
+    /// user (M8, M137): each export reads every personal table, and a
+    /// deletion or password change attempt checks the password.
     Account,
+    /// Password reset redeem attempts on the public `/auth/reset`, per
+    /// client IP (M137): with 80-bit codes that live 15 minutes, this keeps
+    /// guessing hopeless and Argon2 work bounded.
+    PasswordReset,
     /// Guidance writes (seen, muted, the switch, show again), per user (M9).
     Guidance,
     /// The guidance check on every route change, per user (M9). Over the
@@ -119,6 +123,11 @@ fn limit(bucket: Bucket) -> Limit {
         },
         // 5 exports or deletion attempts, then one a minute.
         Bucket::Account => Limit {
+            capacity: 5.0,
+            refill_per_sec: 1.0 / 60.0,
+        },
+        // 5 redeem attempts, then one a minute.
+        Bucket::PasswordReset => Limit {
             capacity: 5.0,
             refill_per_sec: 1.0 / 60.0,
         },

@@ -778,3 +778,23 @@ DEFINE FIELD IF NOT EXISTS guidance_enabled ON user TYPE option<bool>;
 -- ("Picking up again?") from a reader who comes every day.
 DEFINE FIELD IF NOT EXISTS last_seen_at ON user TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS prev_seen_at ON user TYPE option<datetime>;
+
+-- ===========================================================================
+-- Password reset codes (M137 item 5). There is no mailer: an admin mints a
+-- one-time code on /admin/resets (or with the `reset-password` command) and
+-- hands it to the player, who sets a new password on /auth/reset. Only the
+-- SHA-256 hash of the code is stored; a code works once (used_at) and for 15
+-- minutes (expires_at). created_by is the admin (NONE for the command).
+-- Rows of a deleted account are deleted with it; the admin link moves to the
+-- tombstone. Rows expired 30 days ago are purged hourly.
+-- ===========================================================================
+DEFINE TABLE IF NOT EXISTS password_reset SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS user ON password_reset TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS code_hash ON password_reset TYPE string
+  ASSERT string::len($value) = 64;
+DEFINE FIELD IF NOT EXISTS created_by ON password_reset TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS created_at ON password_reset TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS expires_at ON password_reset TYPE datetime;
+DEFINE FIELD IF NOT EXISTS used_at ON password_reset TYPE option<datetime>;
+DEFINE INDEX IF NOT EXISTS password_reset_user ON password_reset FIELDS user;
+DEFINE INDEX IF NOT EXISTS password_reset_code_unique ON password_reset FIELDS code_hash UNIQUE;

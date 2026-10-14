@@ -183,6 +183,11 @@ async fn main() {
     if args.first().map(String::as_str) == Some("promote") {
         std::process::exit(lol_team_companion::server::promote::run(&args[1..]).await);
     }
+    // `lol_team_companion reset-password <email>`: a one-time password reset
+    // code (server::reset_password); the server must be stopped as well.
+    if args.first().map(String::as_str) == Some("reset-password") {
+        std::process::exit(lol_team_companion::server::reset_password::run(&args[1..]).await);
+    }
 
     // Logging. An invalid RUST_LOG is reported, not silently replaced.
     let filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
@@ -328,6 +333,9 @@ async fn main() {
                 }
                 if let Err(e) = db::purge_deleted_team_notes(&db).await {
                     tracing::warn!("Deleted team note purge failed: {e}");
+                }
+                if let Err(e) = lol_team_companion::server::password::purge_old_resets(&db).await {
+                    tracing::warn!("Password reset purge failed: {e}");
                 }
             }
         })

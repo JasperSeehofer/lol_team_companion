@@ -32,6 +32,7 @@ pub const STORED: &[(&str, &[&str])] = &[
         &[
             "A session cookie (HttpOnly, SameSite=Strict) and the session it points to on the server. A session ends after 30 days without use; ended sessions are deleted.",
             "Invite codes with how often they were used and, for a team invite, the team and position it leads to.",
+            "Password reset codes an admin creates for you when you forgot your password: only a hash of the code, which admin created it, when it expires (15 minutes) and when it was used. They are deleted with your account.",
         ],
     ),
     (
@@ -278,6 +279,7 @@ mod tests {
         "survey",
         "survey_prompt",
         "user_guidance",
+        "password_reset",
         "proposal",
         "proposal_vote",
         "ledger_month",
