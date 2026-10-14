@@ -10,8 +10,14 @@
       "text": "Land mission/M137-team-companion-first-patch (items 1, 5, 6) once CI's integration and e2e jobs are green and VERIFY-R1 says PASS?",
       "kind": "merge",
       "chips": [
-        {"label": "Yes, merge", "consequence": "The overseer lands it after CI and the verifier pass. Deploy stays a separate step (RUNBOOK §4, including --force-recreate caddy for the log filter)."},
-        {"label": "Not yet", "consequence": "The branch stays open, and R2 builds the UI items on top of it before anything lands."}
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after CI and the verifier pass. Deploy stays a separate step (RUNBOOK §4, including --force-recreate caddy for the log filter)."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open, and R2 builds the UI items on top of it before anything lands."
+        }
       ],
       "recommend": "Yes, merge — the reset path and the export are what the beta is missing most, and they don't depend on the UI items."
     },
@@ -19,9 +25,18 @@
       "text": "Identity (react, don't pick): when an invited player opens a link from Discord on their phone, should the first screen feel like (A) a surveyor's field sheet, tightened and given its own role marks, (B) an analyst's table as dense as the sites they already use, or (C) a printed team sheet that stays dark in the app and turns to paper when shared? Full proposal with references: identity-proposal.md. Freeform welcome.",
       "kind": "ruling",
       "chips": [
-        {"label": "A, role marks first", "consequence": "R2+ draws the five role marks in /design first. Cheapest option; nothing else moves."},
-        {"label": "A + C on share page", "consequence": "A for the app, and a paper token set scoped to /s/{token} and print. B is skipped."},
-        {"label": "B on stats/lists only", "consequence": "A Dense density for /stats and list pages only; the rest stays as it is."}
+        {
+          "label": "A, role marks first",
+          "consequence": "R2+ draws the five role marks in /design first. Cheapest option; nothing else moves."
+        },
+        {
+          "label": "A + C on share page",
+          "consequence": "A for the app, and a paper token set scoped to /s/{token} and print. B is skipped."
+        },
+        {
+          "label": "B on stats/lists only",
+          "consequence": "A Dense density for /stats and list pages only; the rest stays as it is."
+        }
       ],
       "recommend": "A + C on share page — the shared page is what other teams see first, and A costs little. A fourth reaction is also legitimate: 'none, spend the effort on features'."
     },
@@ -29,8 +44,14 @@
       "text": "Item 7 wording: the register checkbox will read “I am 16 or older and accept the [Terms] and have read the [Privacy page]” (English, stored as terms_accepted_at). Is that wording OK, or does your adviser change it?",
       "kind": "ruling",
       "chips": [
-        {"label": "Use it", "consequence": "R2 ships the checkbox with this text, with a TODO(legal-wording) marker until the adviser confirms."},
-        {"label": "Wait for adviser", "consequence": "R2 builds the checkbox but keeps it unshipped until you paste the final text."}
+        {
+          "label": "Use it",
+          "consequence": "R2 ships the checkbox with this text, with a TODO(legal-wording) marker until the adviser confirms."
+        },
+        {
+          "label": "Wait for adviser",
+          "consequence": "R2 builds the checkbox but keeps it unshipped until you paste the final text."
+        }
       ],
       "recommend": "Use it — it states the age floor that the privacy page already assumes. The adviser can still change the words later without a code change."
     },
@@ -38,8 +59,14 @@
       "text": "Item 2: the closed-beta and Impressum pages say a leader “or coach” can invite, but only leaders can. Should coaches get invite rights, or should the copy stop saying they can?",
       "kind": "ruling",
       "chips": [
-        {"label": "Fix the copy", "consequence": "R2 drops 'or coach' on closed_beta.rs and impressum.rs. The rights stay leader-only."},
-        {"label": "Coaches may invite", "consequence": "R2 widens require_leader for minting team invites to coaches, and adds a cross-tenant test."}
+        {
+          "label": "Fix the copy",
+          "consequence": "R2 drops 'or coach' on closed_beta.rs and impressum.rs. The rights stay leader-only."
+        },
+        {
+          "label": "Coaches may invite",
+          "consequence": "R2 widens require_leader for minting team invites to coaches, and adds a cross-tenant test."
+        }
       ],
       "recommend": "Fix the copy — it's the smaller change, and no team has asked for it yet."
     },
@@ -47,18 +74,60 @@
       "text": "Login hint: the contract said “Forgot it? Ask your team admin.”, but a team leader cannot reset passwords; only the app admin can. Shipped: “Forgot it? Ask the Team Companion admin for a reset code.” Keep?",
       "kind": "ruling",
       "chips": [
-        {"label": "Keep", "consequence": "No change."},
-        {"label": "Reword", "consequence": "Send the text; it's one constant (FORGOT_PASSWORD_HINT in login.rs)."}
+        {
+          "label": "Keep",
+          "consequence": "No change."
+        },
+        {
+          "label": "Reword",
+          "consequence": "Send the text; it's one constant (FORGOT_PASSWORD_HINT in login.rs)."
+        }
       ],
       "recommend": "Keep — it names the one person who can actually help."
+    },
+    {
+      "text": "Frame strips: R1 added auth surfaces (/profile Password, /admin/resets, /auth/reset, login hint) without before/after captures at 390/1280 — the debug server never started on the swap-bound host. Waive strips for R1 and require them in R2?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Waive for R1, require in R2",
+          "consequence": "R1 lands on code review + CI; R2 captures every UI surface incl. these four before its card."
+        },
+        {
+          "label": "Not without strips",
+          "consequence": "R1 waits until a quiet-host capture run exists (adds a day)."
+        }
+      ],
+      "recommend": 0
     }
   ],
   "suggested": [],
-  "kind": ["merge", "ruling", "ruling", "ruling", "ruling"],
-  "yes": ["Yes, merge", "", "", "", ""],
+  "kind": [
+    "merge",
+    "ruling",
+    "ruling",
+    "ruling",
+    "ruling"
+  ],
+  "yes": [
+    "Yes, merge",
+    "",
+    "",
+    "",
+    ""
+  ],
   "links": [
-    {"label": "Report (context)", "href": "/app/previews/m137-r1-team-companion-first-patch/REPORT-R1.md"},
-    {"label": "Identity proposal (react)", "href": "/app/previews/m137-r1-team-companion-first-patch/identity-proposal.md"},
-    {"label": "Atelier critique and recipe cards (context)", "href": "/app/previews/m137-r1-team-companion-first-patch/atelier-critique.md"}
+    {
+      "label": "Report (context)",
+      "href": "/app/previews/m137-r1-team-companion-first-patch/REPORT-R1.md"
+    },
+    {
+      "label": "Identity proposal (react)",
+      "href": "/app/previews/m137-r1-team-companion-first-patch/identity-proposal.md"
+    },
+    {
+      "label": "Atelier critique and recipe cards (context)",
+      "href": "/app/previews/m137-r1-team-companion-first-patch/atelier-critique.md"
+    }
   ]
 }
