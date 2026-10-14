@@ -102,7 +102,9 @@ pub async fn submit_bug_report(
         clamp(viewport_h),
     )
     .await
-    .map_err(authz::server_err)
+    .map_err(authz::server_err)?;
+    crate::server::bug_report_export::request_export();
+    Ok(())
 }
 
 /// The widget: a docked trigger, the select-mode hint bar and the form.

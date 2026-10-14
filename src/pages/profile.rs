@@ -150,6 +150,8 @@ pub async fn delete_my_account(
         team_deleted = deleted.team_deleted,
         "account deleted"
     );
+    // The reports are anonymised and the votes gone: rewrite the inbox.
+    crate::server::bug_report_export::request_export();
     let store = SurrealSessionStore::new(ctx.db.arc(), "sessions".to_string());
     match store.delete_for_user(&ctx.user.id).await {
         Ok(n) => tracing::info!(user = %ctx.user.id, sessions = n, "sessions ended"),

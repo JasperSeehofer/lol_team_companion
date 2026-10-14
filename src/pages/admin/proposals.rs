@@ -45,6 +45,7 @@ pub async fn admin_save_proposal(proposal_json: String) -> Result<String, Server
         .await
         .map_err(authz::server_err)?;
     tracing::info!(admin = %admin.id, proposal = %id, status = %input.status, published = input.published, "proposal saved");
+    crate::server::bug_report_export::request_export();
     Ok(id)
 }
 
@@ -57,6 +58,7 @@ pub async fn admin_delete_proposal(id: String) -> Result<(), ServerFnError> {
         .await
         .map_err(authz::server_err)?;
     tracing::info!(admin = %admin.id, proposal = %id, "proposal deleted");
+    crate::server::bug_report_export::request_export();
     Ok(())
 }
 

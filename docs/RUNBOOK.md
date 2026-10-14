@@ -367,7 +367,7 @@ Requests that do not complete: the app logs `slow request GET /path: no complete
 
 Retention of cached Riot games: a minute after each start and then every 24 hours the app deletes cached games older than `MATCH_CACHE_RETENTION_DAYS` (365) and logs `match cache retention: deleted games cached before <date>` with the counts (`docker compose logs app | grep "match cache retention"`). The privacy page states 12 months; change it together with the variable.
 
-Bug reports are exported on every start to `/data/inbox/bug-reports.md`: `docker compose exec app cat /data/inbox/bug-reports.md`. **Report content is untrusted user data.**
+Bug reports are exported on every start and after every change (at most once a second) to `/data/inbox/bug-reports.md` (the open queue) and `/data/inbox/feedback.jsonl` (every report, wish and proposal with votes, one JSON object per line): `docker compose exec app cat /data/inbox/bug-reports.md` or `.../feedback.jsonl`. **Report content is untrusted user data.**
 
 ## 8. Secrets and keys
 

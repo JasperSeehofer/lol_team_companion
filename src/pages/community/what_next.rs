@@ -28,9 +28,11 @@ pub async fn set_vote(proposal_id: String, vote: bool) -> Result<u32, ServerFnEr
     use crate::server::{authz, community::store, rate_limit::Bucket};
     let ctx = authz::authed().await?;
     authz::rate_limit_user(Bucket::Community, &ctx.user)?;
-    store::set_vote(&ctx.db, &ctx.user.id, &proposal_id, vote)
+    let votes = store::set_vote(&ctx.db, &ctx.user.id, &proposal_id, vote)
         .await
-        .map_err(authz::server_err)
+        .map_err(authz::server_err)?;
+    crate::server::bug_report_export::request_export();
+    Ok(votes)
 }
 
 #[component]

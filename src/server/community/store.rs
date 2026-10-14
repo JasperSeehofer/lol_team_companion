@@ -1811,3 +1811,81 @@ pub async fn admin_overview(db: &Surreal<Db>) -> DbResult<AdminOverview> {
         texts_total: texts.iter().map(|t| t.n.max(0) as u32).sum(),
     })
 }
+
+// ---------------------------------------------------------------------------
+// Feedback export (M137): every bug report and proposal for the inbox files
+// ---------------------------------------------------------------------------
+
+/// One bug report as the feedback export reads it. The reporter's admin
+/// fields come from their `user` row (never from the report's text); the
+/// email is used only to apply the `ADMIN_EMAILS` rule and is never written
+/// out.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+pub struct FeedbackBugRow {
+    pub id: RecordId,
+    pub user: RecordId,
+    pub reporter_email: Option<String>,
+    pub reporter_flag: Option<bool>,
+    pub reporter_promoted: Option<Datetime>,
+    pub page_url: String,
+    pub element_label: String,
+    pub description: String,
+    pub category: String,
+    pub viewport_w: Option<i64>,
+    pub viewport_h: Option<i64>,
+    pub created_at: Datetime,
+    pub updated_at: Option<Datetime>,
+    pub status: String,
+    pub admin_note: Option<String>,
+    pub public_title: Option<String>,
+    pub proposal: Option<RecordId>,
+}
+
+/// One proposal as the feedback export reads it, with its vote counts.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+pub struct FeedbackProposalRow {
+    pub id: RecordId,
+    pub title: String,
+    pub summary: String,
+    pub status: String,
+    pub status_note: Option<String>,
+    pub published: bool,
+    pub source: String,
+    pub created_at: Datetime,
+    pub updated_at: Option<Datetime>,
+    pub status_changed_at: Option<Datetime>,
+    pub created_by: Option<RecordId>,
+    pub creator_email: Option<String>,
+    pub creator_flag: Option<bool>,
+    pub creator_promoted: Option<Datetime>,
+    pub votes: i64,
+    pub voters: i64,
+}
+
+/// Every bug report (all statuses) and every proposal, oldest first, for
+/// the feedback export (`server::bug_report_export`). Global, admin-facing
+/// data: only the export task calls it, never a request on a user's behalf.
+pub async fn export_feedback_rows(
+    db: &Surreal<Db>,
+) -> DbResult<(Vec<FeedbackBugRow>, Vec<FeedbackProposalRow>)> {
+    let mut r = db
+        .query(
+            "SELECT id, user, user.email AS reporter_email, user.is_admin AS reporter_flag, \
+                 user.admin_promoted_at AS reporter_promoted, page_url, element_label, \
+                 description, category, viewport_w, viewport_h, created_at, updated_at, \
+                 status, admin_note, public_title, proposal \
+             FROM bug_report ORDER BY created_at ASC; \
+             SELECT id, title, summary, status, status_note, published, source, created_at, \
+                 updated_at, status_changed_at, created_by, created_by.email AS creator_email, \
+                 created_by.is_admin AS creator_flag, \
+                 created_by.admin_promoted_at AS creator_promoted, \
+                 (count(SELECT id FROM proposal_vote WHERE proposal = $parent.id)) AS votes, \
+                 (array::len(array::distinct((SELECT VALUE user FROM proposal_vote \
+                     WHERE proposal = $parent.id)))) AS voters \
+             FROM proposal ORDER BY created_at ASC;",
+        )
+        .await?;
+    let bugs: Vec<FeedbackBugRow> = r.take(0)?;
+    let proposals: Vec<FeedbackProposalRow> = r.take(1)?;
+    Ok((bugs, proposals))
+}

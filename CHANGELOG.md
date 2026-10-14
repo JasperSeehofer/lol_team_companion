@@ -10,6 +10,9 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ### First deploy (2026-10-13)
 
+#### Changed
+- For operators: the bug-report inbox is rewritten after every report, triage, vote and proposal change (not only at start), and a `feedback.jsonl` beside it lists every report, wish and proposal with its votes, one line each. Text in a report can no longer break out of its entry in the inbox.
+
 #### Fixed
 - For operators: visitors over IPv6 all looked like one address to the rate limiter (Docker's proxy stood in front of them), so one person's sign-in lockout would have locked out everyone on IPv6. The production stack now gives its network IPv6 as well, and each visitor is seen as themselves.
 - For operators: invite links no longer leave their code in the web server's access log.
