@@ -19,10 +19,11 @@ use crate::pages::{
     admin::invites::AdminInvitesPage,
     admin::ledger::AdminLedgerPage,
     admin::proposals::AdminProposalsPage,
+    admin::resets::AdminResetsPage,
     admin::surveys::AdminSurveysPage,
     admin::texts::AdminTextsPage,
     admin::traits::AdminTraitsPage,
-    auth::{login::LoginPage, register::RegisterPage},
+    auth::{login::LoginPage, register::RegisterPage, reset::ResetPasswordPage},
     champion_pool::ChampionPoolPage,
     closed_beta::ClosedBetaPage,
     community::{
@@ -99,6 +100,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/profile") view=ProfilePage />
                         <Route path=path!("/auth/login") view=LoginPage />
                         <Route path=path!("/auth/register") view=RegisterPage />
+                        <Route path=path!("/auth/reset") view=ResetPasswordPage />
                         <Route path=path!("/team/dashboard") view=TeamDashboard />
                         <Route path=path!("/team/roster") view=RosterPage />
                         <Route path=path!("/team/player/:id") view=PlayerCardPage />
@@ -128,6 +130,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/admin/ledger") view=AdminLedgerPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/texts") view=AdminTextsPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/resets") view=AdminResetsPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/traits") view=AdminTraitsPage ssr=SsrMode::Async />
                         <Route path=path!("/design") view=DesignGalleryPage ssr=SsrMode::Async />
                         <Route path=path!("/legal/impressum") view=ImpressumPage />
