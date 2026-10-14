@@ -1101,7 +1101,9 @@ async fn feedback_export_writes_both_files_and_survives_hostile_text() {
 
     let jsonl = std::fs::read_to_string(feedback_path(&md)).unwrap();
     let lines: Vec<&str> = jsonl.lines().collect();
-    assert_eq!(lines.len(), 4, "3 reports + 1 proposal: {jsonl}");
+    // `db::prepare` seeds the default proposals, so the file holds more than the
+    // 3 reports + 1 proposal this test created; count what we made, by kind and id.
+    assert!(lines.len() >= 4, "3 reports + 1 proposal + seeds: {jsonl}");
     let items: Vec<serde_json::Value> = lines
         .iter()
         .map(|l| serde_json::from_str(l).unwrap())
@@ -1123,7 +1125,8 @@ async fn feedback_export_writes_both_files_and_survives_hostile_text() {
     }
     assert!(bugs.iter().any(|v| v["admin_note"] == HOSTILE));
     assert!(bugs.iter().any(|v| v["status"] == "wont_fix"));
-    let prop = items.iter().find(|v| v["category"] == "proposal").unwrap();
+    let prop = items.iter().find(|v| v["id"] == p.as_str()).unwrap();
+    assert_eq!(prop["category"], "proposal");
     assert_eq!(prop["votes"], 2);
     assert_eq!(prop["voter_count_distinct"], 2);
     assert_eq!(prop["id"], p.as_str());
@@ -1189,15 +1192,25 @@ async fn feedback_export_debounces_and_writes_the_final_state() {
         "writes: {}",
         debouncer.writes()
     );
+    // Seeded proposals are exported too; count only the reports this test filed.
+    let reports_in = |jsonl: &str| {
+        jsonl
+            .lines()
+            .filter(|l| {
+                let v: serde_json::Value = serde_json::from_str(l).unwrap();
+                v["category"] != "proposal"
+            })
+            .count()
+    };
     let jsonl = std::fs::read_to_string(feedback_path(&md)).unwrap();
-    assert_eq!(jsonl.lines().count(), 20, "the final state is written");
+    assert_eq!(reports_in(&jsonl), 20, "the final state is written");
 
     // A later change is written too.
     report(&db, &a, "wishlist", "late").await;
     debouncer.request();
     tokio::time::sleep(Duration::from_millis(1000)).await;
     let jsonl = std::fs::read_to_string(feedback_path(&md)).unwrap();
-    assert_eq!(jsonl.lines().count(), 21);
+    assert_eq!(reports_in(&jsonl), 21);
     assert!(jsonl.contains("\"late\""));
 
     // The task holds no strong handle: dropping the test's Arc closes the
