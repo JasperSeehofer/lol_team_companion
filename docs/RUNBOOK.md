@@ -396,6 +396,16 @@ docker compose start app
 
 `promote --revoke someone@example.com` takes it back (an address still in `ADMIN_EMAILS` is promoted again at its next sign-in, so remove it there too). A promoted account is an admin from its next request; no sign-in needed. In development: `cargo run --features ssr --bin promote -- <email>` with the dev server stopped.
 
+**Forgotten passwords** (there is no mailer): an admin signs in, opens `/admin/resets`, enters the player's email and sends the code that appears (once) to the player in a private message. The player opens `/auth/reset`, enters email, code and a new password; the code works once and for 15 minutes, and the reset signs the account out everywhere. The log says `password reset code minted` (with the admin's and the account's id, never the code) and `password reset with a code`. When no admin can sign in (the admin forgot their own password), print a code with the app stopped, like `promote`:
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps app /app/lol_team_companion reset-password someone@example.com
+docker compose start app
+```
+
+The 15 minutes start when the code is printed, so start the app straight away. The password does not change until the code is used; an unused code is replaced by the next one for the same account. In development: `cargo run --features ssr --bin reset-password -- <email>` with the dev server stopped.
+
 **Storage credentials and crypt passphrases:** rotate the Storage Box sub-account password in the Hetzner console (or the S3 access key) and in `deploy/backup.env` (obscured again with `rclone obscure`); for an SSH key, replace the key on the sub-account and in `deploy/backup-ssh/`. Changing the crypt passphrases makes old backups unreadable with the new remote: keep the old passphrases until the last old backup has aged out (30 days), or start a new folder (`RCLONE_CONFIG_OFFSITECRYPT_REMOTE`).
 
 ## 9. Failure recovery

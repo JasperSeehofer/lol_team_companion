@@ -10,6 +10,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ### First deploy (2026-10-13)
 
+#### Added
+- Change your password on your profile: type the current one and the new one twice. You stay signed in on this device; every other device is signed out.
+- Forgot your password? The sign-in page says what to do: ask the Team Companion admin for a reset code, then set a new password on the new "Set a new password" page (/auth/reset). A code works once and for 15 minutes, and setting the password signs the account out everywhere.
+- For admins: "Password resets" (/admin/resets) creates such a code for an account and shows it once; the page lists recent codes with who made them and whether they were used. For operators, the `reset-password <email>` command prints a code too (with the app stopped), for when no admin can sign in.
+
 #### Changed
 - For operators: the bug-report inbox is rewritten after every report, triage, vote and proposal change (not only at start), and a `feedback.jsonl` beside it lists every report, wish and proposal with its votes, one line each. Text in a report can no longer break out of its entry in the inbox.
 
