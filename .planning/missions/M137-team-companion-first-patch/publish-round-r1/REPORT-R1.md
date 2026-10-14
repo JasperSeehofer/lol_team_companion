@@ -108,3 +108,7 @@ No migration was needed, so that Ask class did not fire.
 The R1 slowness had an outside cause. PIDs 2623422 (`npm test`, running since 11 Oct) and 590580
 (`node tools/trellis/cli.ts asks …`, since 11 Oct) were still at about 100 % CPU each when this round ended. I did not kill
 them because they are not this mission's. Stopping them would roughly halve R2's build times.
+
+## R1b addendum (overseer, 2026-10-14 17:40 CEST) — after VERIFY-R1 `Verdict: FIX`
+
+CI's integration job was red on `c21250b`. Reproduced on brain outside the mission slice (`CARGO_BUILD_JOBS=1`, compile ≈ 25 min, no stall): `community::feedback_export_writes_both_files_and_survives_hostile_text` and `community::feedback_export_debounces_and_writes_the_final_state` failed because `db::prepare` seeds the default proposals into every fresh test database, and both tests assumed an empty proposals table (37 JSONL lines instead of 20; 21 instead of 4). The export is correct to include seeded proposals; the tests now count what they created (reports by category, the proposal by id). No production code changed. Full integration suite on brain: **188 passed, 0 failed**; `cargo fmt --check` clean. Branch pushed again for CI; a fresh verifier re-checks (judge-minted fix). Frame strips for the item 5 auth surfaces remain a card question (waiver for R1, required in R2).
