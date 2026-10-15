@@ -479,7 +479,7 @@ fn NewItemForm(members: Vec<String>) -> impl IntoView {
                     <Select value=owner options=owner_options />
                 </Field>
                 <Field id="ai-new-due" label="Due" error=Signal::derive(move || due_error.get())>
-                    <TextField value=due kind=InputKind::Date />
+                    <TextField value=due kind=InputKind::Date on_keydown=crate::components::ui::enter_submits(add) />
                 </Field>
                 <div class="md:pt-6">
                     <Button

@@ -3,6 +3,7 @@
 //! (placing, benching, removing players, answering requests) live on the
 //! team page.
 
+use crate::components::ui::enter_submits;
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, EmptySize, EmptyState, Field, HeadingLevel,
     InputKind, PageHeader, PageShell, PageWidth, Role, RoleLabel, SectionHeader, Select,
@@ -211,7 +212,7 @@ fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoV
     let query = RwSignal::new(String::new());
     let requested = RwSignal::new(Vec::<String>::new());
 
-    let create = Callback::new(move |_| {
+    let create = Callback::new(move |_: ()| {
         if name.get_untracked().trim().is_empty() {
             create_error.set(Some("Give the team a name.".into()));
             return;
@@ -260,13 +261,13 @@ fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoV
                 <p class="mb-4 text-body text-secondary">"You lead the team you create: you place players and answer join requests."</p>
                 <div class="flex max-w-md flex-col gap-4">
                     <Field id="create-team-name" label="Team name" required=true error=Signal::derive(move || create_error.get())>
-                        <TextField value=name name="name" maxlength=60 required=true />
+                        <TextField value=name name="name" maxlength=60 required=true on_keydown=enter_submits(create) />
                     </Field>
                     <Field id="create-team-region" label="Region">
                         <Select value=region name="region" options=region_options />
                     </Field>
                     <div>
-                        <Button variant=ButtonVariant::Primary on_click=create loading=creating attr:data-testid="create-team">"Create team"</Button>
+                        <Button variant=ButtonVariant::Primary on_click=Callback::new(move |_| create.run(())) loading=creating attr:data-testid="create-team">"Create team"</Button>
                     </div>
                 </div>
             </section>

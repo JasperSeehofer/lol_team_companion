@@ -317,6 +317,7 @@ Pointer: click a slot to choose it, click a champion to fill the current step, d
 - **Next step links.** Records link forward along the loop: a draft offers "Prep a game plan" and "Review this game", a plan "Start the review" (already linked), a review with action item lines creates the items and links to them.
 - **Honest emptiness.** Every list, panel and sub-section without data shows an `EmptyState` saying what will appear and how; nothing renders invented numbers. A guess is labelled as one.
 - **Focus after a change.** When a row moves (completed, restored, saved), focus follows it to its new place.
+- **Enter submits.** A single-line field with an attached primary button runs that button on Enter (a `<form>` whose submit is the button's action, or `on_keydown`); in a textarea Enter stays a newline and Ctrl+Enter submits.
 
 ### 6.7 Draft Graph, stage A: the ranked list, Why panel and comp profile (M4)
 

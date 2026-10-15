@@ -180,7 +180,7 @@ fn TextEditor(text: SiteText, on_saved: Callback<()>) -> impl IntoView {
                 </span>
             </div>
             <Field id=id.clone() label=title_for(&text.slug) hint=text.purpose.clone()>
-                <TextField value=body rows=rows maxlength=3000 />
+                <TextField value=body rows=rows maxlength=3000 on_keydown=crate::components::ui::ctrl_enter_submits(Callback::new(move |_| if !busy.get_untracked() && dirty.get_untracked() { call(true, false) })) />
             </Field>
             {move || error.get().map(|e| view! { <p class="mt-2 text-label text-danger" role="alert">{e}</p> })}
             <div class="mt-3 flex flex-wrap items-center gap-3">

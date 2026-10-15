@@ -60,7 +60,8 @@ pub use draft::{
 };
 pub use empty::{EmptySize, EmptyState, NoTeamState};
 pub use field::{
-    Combobox, Field, FieldContext, FieldSize, InputKind, Select, SelectOption, TextField,
+    ctrl_enter_submits, enter_submits, Combobox, Field, FieldContext, FieldSize, InputKind, Select,
+    SelectOption, TextField,
 };
 pub use layout::{
     Density, Edge, HeadingLevel, Layer, Pad, PageHeader, PageShell, PageWidth, SectionHeader,

@@ -10,6 +10,7 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::slot_meta;
 use crate::components::ui::a11y::focus_id;
+use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
     slot_dom_id, AvatarSize, AvatarState, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ChampionAvatar, ConfirmDialog, ConfirmTone, Density, Dialog, DraftBoard, DraftSide, EmptySize,
@@ -2421,7 +2422,7 @@ fn PlanSection(
 #[component]
 fn CommentsSection(ed: Editor) -> impl IntoView {
     let input = RwSignal::new(String::new());
-    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let add = Callback::new(move |_: ()| {
         let text = input.get_untracked().trim().to_string();
         if !text.is_empty() {
             ed.comments.update(|c| c.push(text));
@@ -2449,9 +2450,12 @@ fn CommentsSection(ed: Editor) -> impl IntoView {
                     }
                 }}
                 <Field id="draft-comment" label="Add a comment">
-                    <TextField value=input rows=2 placeholder="Ask the jungler about level 3 timings." />
+                    <TextField value=input rows=2 placeholder="Ask the jungler about level 3 timings." on_keydown=ctrl_enter_submits(add) />
                 </Field>
-                <div><Button on_click=add>"Add comment"</Button></div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button on_click=Callback::new(move |_| add.run(()))>"Add comment"</Button>
+                    <span class="inline-flex items-center gap-1 text-caption text-muted"><Keycap keys="Ctrl" /><Keycap keys="Enter" />" adds it"</span>
+                </div>
             </div>
         </section>
     }
@@ -2673,7 +2677,7 @@ fn BanPriorities() -> impl IntoView {
         );
         editing.set(true);
     });
-    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let add = Callback::new(move |_: ()| {
         let c = champ.get_untracked().trim().to_string();
         if c.is_empty() {
             return;
@@ -2745,12 +2749,12 @@ fn BanPriorities() -> impl IntoView {
                         }}
                         <div class="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_2fr_auto]">
                             <Field id="ban-champion" label="Champion">
-                                <TextField value=champ placeholder="Kalista" />
+                                <TextField value=champ placeholder="Kalista" on_keydown=enter_submits(add) />
                             </Field>
                             <Field id="ban-reason" label="Reason">
-                                <TextField value=reason placeholder="Their bot lane's comfort pick" />
+                                <TextField value=reason placeholder="Their bot lane's comfort pick" on_keydown=enter_submits(add) />
                             </Field>
-                            <Button on_click=add>"Add"</Button>
+                            <Button on_click=Callback::new(move |_| add.run(()))>"Add"</Button>
                         </div>
                         <div class="flex gap-2">
                             <Button variant=ButtonVariant::Primary on_click=save>"Save priorities"</Button>

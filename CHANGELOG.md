@@ -12,6 +12,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 #### Fixed
 - Champion pool: moving a champion to another tier, by dragging it or with Space and the arrow keys, no longer reloads the list or jumps the page back to the top. The champion moves at once; the page header says "Saving…" and then "Saved", and if the save fails it says "Could not save", puts the champion back and offers Retry. If your pool does not load, the page says so and offers "Try again". (Report vdgtxa2n)
+- Enter runs the button next to a field: "Add branch" in the tree drafter (the report), and everywhere else a single field has its own button: new tree, ban priorities, adding and refreshing a scouted player, the dossier name, team name and invite link, username and Riot ID on your profile, your goals on My games, the due date of a new action item. In a text box Enter stays a new line and Ctrl+Enter adds or saves (team notes, draft comments, dossier notes, survey answers). (Report zgoormwy)
 
 ### First deploy (2026-10-13)
 
