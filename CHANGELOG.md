@@ -14,7 +14,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 - Match detail: both teams' scoreboards are now the same size, blue above red, and never scroll; the same role sits on the same row in both, and pointing at a row (or tapping its position) highlights that role in both teams. Your champion carries a chalk outline instead of "(you)", and a K/D/A never breaks over two lines. On phones the table shows position, player and K/D/A; items, damage, gold and vision appear on wider screens. (Report xvqg64mb, 12wea0hr.)
 - Match detail: the timeline no longer shows "Recall" markers. They were shop undos ("undo purchase"), and Riot's game data has no event for recalling; games opened before this fix stop showing them too. (Report 96mhp4u3.)
 
+- My games: the LP history says where its points come from. Riot's game data carries no LP, so each point is your Solo/Duo standing read when you pressed Sync my games; the chart names the first and last sync, draws a single sync as one point, and claims nothing before your first sync or between syncs. Ranked snapshots are now deleted 12 months after the sync, like cached games, and the privacy page says so. (Report ux89riwg.)
+- Buttons keep their size: a loading spinner now sits over the label instead of pushing the button wider (Sync my games and every other button), and buttons whose label changes keep the width of their longest label. (Report l31jk71m.)
+
 #### Changed
+- Tables sort by column: click a column header (or press Enter or Space on it) to sort, again to reverse. On My games: champion trends (games, win rate, KDA, CS per minute, damage) and recent games ("Newest first" goes back); on Team games: games by member; on Draft: champions by appearances and the win rates by composition and first pick; on Game plan: win rate by strategy. (Report rucyy6k1.)
 - Match detail: the timeline is three rails, objectives and towers, kills and teamfights, and wards, each with its own toggles and one to hide or show the whole rail; markers that would overlap move to a second line. A shared playhead runs across the rails: drag or step it, jump between objectives with J and L, or step through events with Previous and Next, and the line under it says what happened near that minute. (Report 96mhp4u3, xvqg64mb.)
 
 ### First deploy (2026-10-13)

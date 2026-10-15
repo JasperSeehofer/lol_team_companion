@@ -365,6 +365,17 @@ async fn main() {
                     ),
                     Err(e) => tracing::warn!("match cache retention failed: {e}"),
                 }
+                // Ranked snapshots (the LP history, one per sync) follow the
+                // same retention (M141).
+                match db::purge_ranked_snapshots(&db, cutoff, db::MATCH_CACHE_BATCH).await {
+                    Ok(n) => tracing::info!(
+                        retention_days = days,
+                        ranked_snapshots = n,
+                        "ranked snapshot retention: deleted snapshots taken before {}",
+                        cutoff.format("%Y-%m-%d")
+                    ),
+                    Err(e) => tracing::warn!("ranked snapshot retention failed: {e}"),
+                }
             }
         })
     };

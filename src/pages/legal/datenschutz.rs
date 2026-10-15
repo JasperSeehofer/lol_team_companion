@@ -76,6 +76,11 @@ pub const STORED: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// How long the ranked standing snapshots behind the LP history are kept
+/// (M141: the same nightly task and `MATCH_CACHE_RETENTION_DAYS` as the
+/// match cache).
+pub const RANKED_SNAPSHOT_RETENTION: &str = "Ranked snapshots (your standing read from Riot at each sync, the points of your LP history): deleted 12 months after the sync by the same nightly task, or earlier when you delete your account.";
+
 /// How long the shared Riot match caches are kept: the default of
 /// `MATCH_CACHE_RETENTION_DAYS` (365). Change the page and the variable
 /// together; a test checks the default.
@@ -201,7 +206,8 @@ pub fn DatenschutzPage() -> impl IntoView {
             <section class="mt-10" aria-labelledby="retention-h">
                 <SectionHeader title="How long data is kept" id="retention-h" />
                 <ul class=ul>
-                    <li>"Your account, your own pages, synced games and ranked snapshots: until you delete your account."</li>
+                    <li>"Your account, your own pages and synced games: until you delete your account."</li>
+                    <li>{RANKED_SNAPSHOT_RETENTION}</li>
                     <li>"Your team's records: until the team deletes them, or the team is deleted. When you delete your account, what you wrote for the team stays with the team, shown as written by a former member."</li>
                     <li>"Deleted team notes: one day, so they can be restored. Sessions: 30 days after the last visit."</li>
                     <li>{MATCH_CACHE_RETENTION}</li>
@@ -310,6 +316,7 @@ mod tests {
             "the privacy page says 12 months"
         );
         assert!(super::MATCH_CACHE_RETENTION.contains("12 months after they were fetched"));
+        assert!(super::RANKED_SNAPSHOT_RETENTION.contains("12 months after the sync"));
     }
 
     /// Every purpose has a stated legal basis; no placeholder is left.

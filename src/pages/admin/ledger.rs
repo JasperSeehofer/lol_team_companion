@@ -288,7 +288,7 @@ pub fn AdminLedgerPage() -> impl IntoView {
             dismiss_on_scrim=false
             footer=move || view! {
                 <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| form.open.set(false))>"Cancel"</Button>
-                <Button variant=ButtonVariant::Primary loading=saving on_click=Callback::new(save)>
+                <Button variant=ButtonVariant::Primary loading=saving reserve=&["Save revision", "Save as draft"] on_click=Callback::new(save)>
                     {move || if editing_published.get() { "Save revision" } else { "Save as draft" }}
                 </Button>
             }

@@ -332,6 +332,8 @@ DEFINE FIELD IF NOT EXISTS wins ON ranked_snapshot TYPE int;
 DEFINE FIELD IF NOT EXISTS losses ON ranked_snapshot TYPE int;
 DEFINE FIELD IF NOT EXISTS snapshotted_at ON ranked_snapshot TYPE datetime DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS ranked_snapshot_user_queue ON ranked_snapshot FIELDS user, queue_type;
+-- The nightly retention task (M141) deletes snapshots by this time.
+DEFINE INDEX IF NOT EXISTS ranked_snapshot_snapshotted_at ON ranked_snapshot FIELDS snapshotted_at;
 
 -- Match detail cache (full 10-player scoreboard data)
 DEFINE TABLE IF NOT EXISTS match_detail SCHEMAFULL;

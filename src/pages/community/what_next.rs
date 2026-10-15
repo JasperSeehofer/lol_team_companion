@@ -133,7 +133,7 @@ fn Summary(text: String) -> impl IntoView {
             {move || if expanded.get() || !long { text.get_value() } else { format!("{short}\u{2026}") }}
         </p>
         {long.then(|| view! {
-            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| expanded.update(|e| *e = !*e))>
+            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet reserve=&["Less", "More"] on_click=Callback::new(move |_| expanded.update(|e| *e = !*e))>
                 {move || if expanded.get() { "Less" } else { "More" }}
             </Button>
         })}

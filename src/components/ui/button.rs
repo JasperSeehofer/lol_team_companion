@@ -103,15 +103,21 @@ impl Force {
     }
 }
 
-pub(crate) const BASE: &str = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary";
+pub(crate) const BASE: &str = "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary";
 
 /// A button, or a link styled as one when `href` is set (`on_click` runs
 /// for both; on a link it runs before the navigation).
 ///
+/// A button keeps its size (M141, DESIGN 6.1): while `loading` the spinner
+/// overlays the label's box instead of joining the row, and a label that
+/// changes between states passes every label in `reserve`, so the button
+/// takes the widest one's width in every state.
+///
 /// A11y: a native `<button type="button">` by default (Enter and Space
 /// work, focus is visible through the global 2px chalk outline). While
 /// `loading` it is disabled and sets `aria-busy`; the spinner is decorative
-/// and the label stays. `shortcut` draws a keycap and sets
+/// and the label stays in the accessibility tree (it is only made
+/// transparent, never hidden); reserved labels are `aria-hidden`. `shortcut` draws a keycap and sets
 /// `aria-keyshortcuts`; the keycap itself is hidden from screen readers.
 /// An icon is decorative: icon-only buttons must pass `aria_label`.
 /// `pressed` makes it a toggle button (`aria-pressed`, drawn with a
@@ -143,6 +149,10 @@ pub fn Button(
     /// Toggle button state (`aria-pressed`). `None`: a plain button.
     #[prop(optional, into)]
     pressed: Option<Signal<bool>>,
+    /// Every label this button shows in its states ("Sync my games",
+    /// "Synced"): hidden twins that reserve the widest label's width.
+    #[prop(optional)]
+    reserve: &'static [&'static str],
     children: Children,
 ) -> impl IntoView {
     // `try_get`: a derived `pressed` can be disposed with its row a tick
@@ -209,15 +219,21 @@ pub fn Button(
                     }
                 }
             >
+                // One grid cell holds the label and any reserved labels, so
+                // the box is the widest of them; the spinner overlays it.
+                <span class="grid place-items-center [&>*]:col-start-1 [&>*]:row-start-1">
+                    <span class=move || if loading.get() { "inline-flex items-center justify-center gap-2 opacity-0" } else { "inline-flex items-center justify-center gap-2" }>
+                        {icon_view}
+                        {children()}
+                        {keycap}
+                    </span>
+                    {reserve.iter().map(|l| view! { <span class="invisible" aria-hidden="true">{*l}</span> }).collect_view()}
+                </span>
                 {move || loading.get().then(|| view! {
-                    <span
-                        class="size-3.5 shrink-0 rounded-full border-2 border-current border-r-transparent animate-spin motion-reduce:animate-none"
-                        aria-hidden="true"
-                    ></span>
+                    <span class="absolute inset-0 grid place-items-center" aria-hidden="true" data-button-spinner>
+                        <span class="size-3.5 rounded-full border-2 border-current border-r-transparent animate-spin motion-reduce:animate-none"></span>
+                    </span>
                 })}
-                {icon_view}
-                {children()}
-                {keycap}
             </button>
         }
         .into_any(),

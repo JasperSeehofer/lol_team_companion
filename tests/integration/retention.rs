@@ -231,3 +231,32 @@ async fn syncs_and_retention_do_not_race() {
     let purged = db::purge_match_cache(&db, cutoff, 7).await.unwrap();
     assert_eq!(purged.matches, 20);
 }
+
+/// M141: ranked snapshots (the LP history, one per sync) follow the match
+/// cache's retention: older ones go, recent ones stay, a second run finds
+/// nothing.
+#[tokio::test]
+async fn old_ranked_snapshots_are_purged() {
+    let db = crate::common::test_db().await;
+    let ana = db::create_user(&db, "ana".into(), "ana@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        db::store_ranked_snapshot(&db, &ana, "RANKED_SOLO_5x5", "GOLD", "II", 40, 10, 9)
+            .await
+            .unwrap();
+    }
+    // Two of them are from more than a year ago.
+    db.query("LET $two = (SELECT VALUE id FROM ranked_snapshot LIMIT 2); UPDATE ranked_snapshot SET snapshotted_at = time::now() - 400d WHERE id IN $two;")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(365);
+    assert_eq!(db::purge_ranked_snapshots(&db, cutoff, 1).await.unwrap(), 2);
+    assert_eq!(
+        count(&db, "SELECT count() AS n FROM ranked_snapshot GROUP ALL").await,
+        1
+    );
+    assert_eq!(db::purge_ranked_snapshots(&db, cutoff, 1).await.unwrap(), 0);
+}

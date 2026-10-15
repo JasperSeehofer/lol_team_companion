@@ -6322,6 +6322,43 @@ pub async fn purge_match_cache(
     Ok(total)
 }
 
+/// Delete ranked standing snapshots (`ranked_snapshot`, one per sync: the
+/// only source of the LP history, M141) taken before `cutoff`, in batches.
+/// They are game information read from Riot, so they follow the match
+/// cache's retention (`MATCH_CACHE_RETENTION_DAYS`) and, like every
+/// personal row, account deletion. Returns how many were deleted.
+pub async fn purge_ranked_snapshots(
+    db: &Surreal<Db>,
+    cutoff: chrono::DateTime<chrono::Utc>,
+    batch: usize,
+) -> DbResult<usize> {
+    let cutoff = cutoff.to_rfc3339();
+    let batch = batch.max(1) as i64;
+    let mut total = 0usize;
+    loop {
+        let response = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $old = (SELECT VALUE id FROM ranked_snapshot WHERE snapshotted_at < <datetime>$cutoff LIMIT $batch); \
+                 DELETE ranked_snapshot WHERE id IN $old; \
+                 RETURN array::len($old); \
+                 COMMIT TRANSACTION;",
+            )
+            .bind(("cutoff", cutoff.clone()))
+            .bind(("batch", batch))
+            .await?;
+        let mut r = check_tx(response)?;
+        let n: Option<i64> = r.take(3)?;
+        let n = n.unwrap_or(0);
+        total += n as usize;
+        if n < batch {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    Ok(total)
+}
+
 // ---------------------------------------------------------------------------
 // Sand Table storage (M6; no UI yet)
 // ---------------------------------------------------------------------------

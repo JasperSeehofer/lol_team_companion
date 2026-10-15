@@ -51,6 +51,7 @@ const SECTIONS: &[(&str, &str)] = &[
     ("fields", "Fields"),
     ("badge", "Badge"),
     ("table", "Table"),
+    ("sort", "Sortable table"),
     ("tabs", "Tabs"),
     ("toggles", "Segmented and switch"),
     ("keycap", "Keycap"),
@@ -150,6 +151,7 @@ fn Gallery() -> impl IntoView {
             <FieldsSection />
             <BadgeSection />
             <TableSection />
+            <SortSection />
             <TabsSection />
             <TogglesSection />
             <KeycapSection />
@@ -500,6 +502,15 @@ fn ButtonSection() -> impl IntoView {
                     <Sample label="Icon only, labelled"><Button variant=ButtonVariant::Quiet aria_label="Add plan" icon=plus_icon>""</Button></Sample>
                     <Sample label="As a link"><Button href="#button">"Open brief"</Button></Sample>
                 </div>
+                <div class="flex flex-col gap-2">
+                    <span class="eyebrow">"A button keeps its size: idle, loading, done"</span>
+                    <div class="flex flex-wrap items-center gap-4" data-testid="button-size-demo">
+                        <Button variant=ButtonVariant::Primary reserve=&["Sync my games", "Synced"] attr:data-testid="button-size-idle">"Sync my games"</Button>
+                        <Button variant=ButtonVariant::Primary reserve=&["Sync my games", "Synced"] loading=true attr:data-testid="button-size-loading">"Sync my games"</Button>
+                        <Button variant=ButtonVariant::Primary reserve=&["Sync my games", "Synced"] attr:data-testid="button-size-done">"Synced"</Button>
+                    </div>
+                    <p class="text-caption text-muted">"The spinner overlays the label; "<code class="figures">"reserve"</code>" lists every label, so all three share the widest box."</p>
+                </div>
                 <div class="flex flex-wrap items-center gap-4" data-testid="button-demo">
                     <Button variant=ButtonVariant::Secondary on_click=count kind=ButtonType::Button>"Count a click"</Button>
                     <output class="figures text-label text-secondary" data-testid="button-count" aria-live="polite">
@@ -657,6 +668,59 @@ fn TableSection() -> impl IntoView {
                         <Tr><Td muted=true>"8 Oct"</Td><Td>"Night Owls"</Td><Td><Badge tone=BadgeTone::Loss label="Loss">"L"</Badge></Td><Td numeric=true>"31:12"</Td></Tr>
                         <Tr selected=true><Td muted=true>"5 Oct"</Td><Td>"Beta Dragons"</Td><Td><Badge tone=BadgeTone::Win label="Win">"W"</Badge></Td><Td numeric=true>"27:40"</Td></Tr>
                         <Tr><Td muted=true>"1 Oct"</Td><Td>"Gamma Foxes"</Td><Td><Badge tone=BadgeTone::Win label="Win">"W"</Badge></Td><Td numeric=true>"34:05"</Td></Tr>
+                    </tbody>
+                </Table>
+            </div>
+        </GallerySection>
+    }
+}
+
+#[component]
+fn SortSection() -> impl IntoView {
+    use crate::components::ui::{sort_rows, SortDir, SortState, SortStatus, SortTh};
+    const LABELS: &[(&str, &str)] = &[
+        ("champion", "Champion"),
+        ("games", "Games"),
+        ("winrate", "Win rate"),
+    ];
+    let rows: Vec<(&'static str, i32, f32)> = vec![
+        ("Orianna", 14, 57.1),
+        ("Azir", 9, 44.4),
+        ("Syndra", 14, 64.3),
+        ("Taliyah", 3, 66.7),
+    ];
+    let sort = RwSignal::new(SortState::by("games", SortDir::Descending));
+    view! {
+        <GallerySection id="sort" title="Sortable table" lede="SortTh: a click, Enter or Space sorts by the column; again flips it. Numbers start descending, words ascending; ties keep their order. The header names the direction with aria-sort and a chevron, a status line announces it.">
+            <div data-testid="sort-demo">
+                <SortStatus sort=sort labels=LABELS />
+                <Table caption="Champion trends (fixture)" caption_hidden=true>
+                    <thead>
+                        <tr>
+                            <SortTh label="Champion" key="champion" sort=sort />
+                            <SortTh label="Games" key="games" sort=sort numeric=true />
+                            <SortTh label="Win rate" key="winrate" sort=sort numeric=true />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {move || {
+                            let mut list = rows.clone();
+                            let st = sort.get();
+                            if let Some(key) = st.key {
+                                sort_rows(&mut list, st.dir, |a, b| match key {
+                                    "champion" => a.0.cmp(b.0),
+                                    "games" => a.1.cmp(&b.1),
+                                    _ => a.2.total_cmp(&b.2),
+                                });
+                            }
+                            list.into_iter().map(|(c, g, w)| view! {
+                                <Tr>
+                                    <Td header=true>{c}</Td>
+                                    <Td numeric=true>{g}</Td>
+                                    <Td numeric=true>{format!("{w:.1}%")}</Td>
+                                </Tr>
+                            }).collect_view()
+                        }}
                     </tbody>
                 </Table>
             </div>

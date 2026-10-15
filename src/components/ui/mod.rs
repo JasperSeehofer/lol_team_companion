@@ -71,7 +71,9 @@ pub use menu::{Menu, MenuAlign, MenuItem};
 pub use prep::{PrepEmphasis, PrepSequence, PrepState, PrepStep};
 pub use readout::{Delta, ReadoutSize, Sentiment, StatReadout, Trend};
 pub use skeleton::{Skeleton, SkeletonGroup, SkeletonShape};
-pub use table::{Align, RowLink, SortDir, Table, Td, Th, Tr};
+pub use table::{
+    sort_rows, Align, RowLink, SortDir, SortState, SortStatus, SortTh, Table, Td, Th, Tr,
+};
 pub use tabs::{TabItem, TabPanel, Tabs};
 pub use text::{Text, TextRole, TextTag, Tone};
 pub use timeline::{Moment, TimelineScrub};

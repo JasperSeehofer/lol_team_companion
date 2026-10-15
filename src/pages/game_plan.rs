@@ -10,7 +10,7 @@ use crate::components::ui::{
     ConfirmDialog, ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell,
     PrepEmphasis, PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment,
     SegmentSize, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
-    Table, Td, TextField, Th, Toast, ToastContext, Tr,
+    TextField, Toast, ToastContext,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -1526,22 +1526,7 @@ fn HistorySection(
                             }.into_any();
                         }
                         view! {
-                            <Table caption="Win rate by strategy" caption_hidden=true>
-                                <thead><tr><Th>"Strategy"</Th><Th numeric=true>"Games"</Th><Th numeric=true>"Won"</Th><Th numeric=true>"Win rate"</Th></tr></thead>
-                                <tbody>
-                                    {rows.into_iter().map(|(tag, games, wins)| {
-                                        let pct = if games > 0 { wins * 100 / games } else { 0 };
-                                        view! {
-                                            <Tr selected=tag == current>
-                                                <Td header=true>{tag}</Td>
-                                                <Td numeric=true>{games}</Td>
-                                                <Td numeric=true>{wins}</Td>
-                                                <Td numeric=true>{format!("{pct}%")}</Td>
-                                            </Tr>
-                                        }
-                                    }).collect_view()}
-                                </tbody>
-                            </Table>
+                            <crate::components::record_table::RecordTable caption="Win rate by strategy" caption_hidden=true first="Strategy" rows=rows current=current />
                         }.into_any()
                     })
                 }}
