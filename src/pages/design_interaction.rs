@@ -10,6 +10,7 @@ use crate::components::ui::{
     Menu, MenuAlign, MenuItem, Segment, SegmentedControl, Skeleton, SkeletonGroup, SkeletonShape,
     Switch, TextField, Toast, ToastContext, ToastEntry, ToastKind, Tooltip, TooltipPlacement,
 };
+use crate::components::ui::{LoadFailed, SaveState, SaveStatus};
 use crate::pages::design::{GallerySection, Sample};
 
 fn info_icon() -> impl IntoView {
@@ -256,6 +257,35 @@ pub fn CalloutSection() -> impl IntoView {
                 >
                     "The Riot API did not answer. Nothing was lost."
                 </Callout>
+            </div>
+        </GallerySection>
+    }
+}
+
+#[component]
+pub fn StatusSection() -> impl IntoView {
+    let states = [
+        ("Idle (nothing to say)", SaveState::Idle),
+        ("Not saved yet", SaveState::NotSaved),
+        ("Unsaved changes", SaveState::Unsaved),
+        ("Saving", SaveState::Saving),
+        ("Saved", SaveState::Saved),
+        (
+            "Failed, with Retry",
+            SaveState::Failed("Ahri to Match ready".into()),
+        ),
+    ];
+    view! {
+        <GallerySection id="status" title="Save state and load failure" lede="SaveStatus is the one line in a page header that says whether the last change reached the server; it says the state in words and offers Retry when a save failed. LoadFailed replaces a section that did not load, with Try again.">
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="flex flex-col gap-3">
+                    {states.into_iter().map(|(label, state)| view! {
+                        <Sample label=label>
+                            <SaveStatus state=Signal::stored(state) on_retry=Callback::new(|_| ()) />
+                        </Sample>
+                    }).collect_view()}
+                </div>
+                <LoadFailed what="Your pool" on_retry=Callback::new(|_| ()) />
             </div>
         </GallerySection>
     }

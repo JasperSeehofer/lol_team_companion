@@ -8,6 +8,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Feedback batch 1 (2026-10-16)
+
+#### Fixed
+- Champion pool: moving a champion to another tier, by dragging it or with Space and the arrow keys, no longer reloads the list or jumps the page back to the top. The champion moves at once; the page header says "Saving…" and then "Saved", and if the save fails it says "Could not save", puts the champion back and offers Retry. If your pool does not load, the page says so and offers "Try again". (Report vdgtxa2n)
+
 ### First deploy (2026-10-13)
 
 #### Added

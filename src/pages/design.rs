@@ -26,7 +26,7 @@ use crate::pages::design_domain::{
 };
 use crate::pages::design_interaction::{
     CalloutSection, CommandSection, DialogSection, EmptySection, KeycapSection, MenuSection,
-    SkeletonSection, ToastSection, TogglesSection, TooltipSection,
+    SkeletonSection, StatusSection, ToastSection, TogglesSection, TooltipSection,
 };
 
 /// Whether the caller may see the gallery: always in dev, else admins only.
@@ -55,6 +55,7 @@ const SECTIONS: &[(&str, &str)] = &[
     ("toggles", "Segmented and switch"),
     ("keycap", "Keycap"),
     ("callout", "Callout"),
+    ("status", "Save state"),
     ("toast", "Toast"),
     ("empty", "Empty state"),
     ("skeleton", "Skeleton"),
@@ -154,6 +155,7 @@ fn Gallery() -> impl IntoView {
             <TogglesSection />
             <KeycapSection />
             <CalloutSection />
+            <StatusSection />
             <ToastSection />
             <EmptySection />
             <SkeletonSection />
