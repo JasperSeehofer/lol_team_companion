@@ -72,15 +72,26 @@ test.describe("M141 frames", () => {
     void TEST_PASSWORD;
     await signInSeed(page);
 
-    // Match detail: first synced game linked from /stats, else the stats page itself.
-    await page.goto("/stats");
+    // Match detail: the seed tool's fictional demo game (seed-alpha-top
+    // "played" it); without the seed, the first synced game on /stats.
+    await page.goto("/match/SEED1_1000000001");
     await settle(page);
-    const link = page.locator('a[href^="/match/"]').first();
-    if (await link.count()) {
-      const href = await link.getAttribute("href");
-      await shoot(page, "match-detail", href!);
+    if (await page.locator("[data-scoreboard]").count()) {
+      await shoot(page, "match-detail", "/match/SEED1_1000000001");
+      // Hover state: the Mid pair highlighted in both teams.
+      await shoot(page, "match-detail-hover", "/match/SEED1_1000000001", async () => {
+        await page.locator("[data-scoreboard=blue] tbody tr").nth(2).hover().catch(() => {});
+      });
     } else {
-      await shoot(page, "match-detail-no-seeded-match-stats", "/stats");
+      await page.goto("/stats");
+      await settle(page);
+      const link = page.locator('a[href^="/match/"]').first();
+      if (await link.count()) {
+        const href = await link.getAttribute("href");
+        await shoot(page, "match-detail", href!);
+      } else {
+        await shoot(page, "match-detail-no-seeded-match-stats", "/stats");
+      }
     }
 
     await shoot(page, "game-plan", "/game-plan");

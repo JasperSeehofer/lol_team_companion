@@ -681,8 +681,10 @@ fn classify_event(
         "BUILDING_KILL" => Some(EventCategory::Tower),
         "CHAMPION_KILL" => Some(EventCategory::Kill),
         "WARD_PLACED" => Some(EventCategory::Ward),
-        "ITEM_UNDO" => Some(EventCategory::Recall), // Riot API uses ITEM_UNDO for recalls (per D-07)
-        _ => None,                                  // skip GAME_END, ITEM_PURCHASED, etc.
+        // ITEM_UNDO is the shop's "undo purchase", not a recall: Riot's
+        // Match-V5 timeline has no event for pressing B (M141), so nothing
+        // is classified as a recall. Skip it with GAME_END, ITEM_PURCHASED, etc.
+        _ => None,
     }
 }
 
@@ -922,10 +924,8 @@ mod tests {
             classify_event("WARD_PLACED", None, None),
             Some(EventCategory::Ward)
         ));
-        assert!(matches!(
-            classify_event("ITEM_UNDO", None, None),
-            Some(EventCategory::Recall)
-        ));
+        // An item undo is a shop action, never a recall (M141).
+        assert!(classify_event("ITEM_UNDO", None, None).is_none());
         assert!(classify_event("ITEM_PURCHASED", None, None).is_none());
         assert!(classify_event("GAME_END", None, None).is_none());
     }

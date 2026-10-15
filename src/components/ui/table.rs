@@ -26,7 +26,8 @@ fn ctx() -> TableCtx {
 /// `caption_hidden`); the scroll wrapper is a named, focusable region so
 /// keyboard users can scroll wide tables. Header cells are `th scope="col"`
 /// and carry `aria-sort` when sorted. Numbers are right-aligned with
-/// tabular figures.
+/// tabular figures. A `fit` table never scrolls, so it has no scroll region
+/// and no extra tab stop.
 #[component]
 pub fn Table(
     #[prop(into)] caption: String,
@@ -35,6 +36,12 @@ pub fn Table(
     /// Keep the header visible while the body scrolls (caps the height).
     #[prop(optional)]
     sticky_header: bool,
+    /// Fixed layout that fits its container and never scrolls (M141, the
+    /// match scoreboards): columns take the widths of a `<colgroup>`, cells
+    /// truncate instead of widening the table. Hide columns on phones rather
+    /// than letting the table overflow.
+    #[prop(optional)]
+    fit: bool,
     children: Children,
 ) -> impl IntoView {
     provide_context(TableCtx {
@@ -54,6 +61,17 @@ pub fn Table(
     } else {
         "pb-2 text-left text-label text-muted"
     };
+    if fit {
+        return view! {
+            <div class="relative">
+                <table class="w-full table-fixed border-collapse text-body tabular-nums" data-table-fit="true">
+                    <caption class=caption_class>{caption}</caption>
+                    {children()}
+                </table>
+            </div>
+        }
+        .into_any();
+    }
     let region_label = caption.clone();
     view! {
         <div class=wrapper role="region" aria-label=region_label tabindex="0">
@@ -63,6 +81,7 @@ pub fn Table(
             </table>
         </div>
     }
+    .into_any()
 }
 
 /// Alignment of a table cell.
@@ -101,12 +120,18 @@ pub fn Th(
     #[prop(optional)]
     numeric: bool,
     #[prop(optional)] sort: Option<SortDir>,
+    /// Extra classes, literal at the call site (for example
+    /// `hidden md:table-cell` to drop a column on phones).
+    #[prop(optional)]
+    class: &'static str,
     children: Children,
 ) -> impl IntoView {
     let c = ctx();
     let align = if numeric { Align::End } else { align };
+    let extra = class;
     let class = join(&[
         "eyebrow font-medium whitespace-nowrap border-b border-outline pr-4 last:pr-0",
+        extra,
         match c.density {
             Density::Compact => "py-2",
             Density::Comfortable => "py-3",
@@ -128,15 +153,31 @@ pub fn Th(
 /// A body row. Rows are hairline-separated; hover tints them.
 ///
 /// A11y: a plain `<tr>`; a row link is the [`RowLink`] in its first cell,
-/// so the row has one tab stop and a real link name.
+/// so the row has one tab stop and a real link name. `highlight` tints the
+/// row from outside (the same role in the other team's scoreboard); it is a
+/// visual echo only, the control that sets it carries the state. `current`
+/// sets `aria-current` (the signed-in player's row).
 #[component]
-pub fn Tr(#[prop(optional)] selected: bool, children: Children) -> impl IntoView {
-    let class = if selected {
-        "relative bg-ink-2"
-    } else {
-        "relative hover:bg-ink-2/70 transition-colors"
+pub fn Tr(
+    #[prop(optional)] selected: bool,
+    #[prop(optional, into)] highlight: Option<Signal<bool>>,
+    #[prop(optional)] current: bool,
+    children: Children,
+) -> impl IntoView {
+    let class = move || {
+        if selected {
+            "relative bg-ink-2"
+        } else if highlight.and_then(|h| h.try_get()).unwrap_or(false) {
+            "relative bg-ink-3 transition-colors"
+        } else {
+            "relative hover:bg-ink-2/70 transition-colors"
+        }
     };
-    view! { <tr class=class aria-selected=selected.then_some("true")>{children()}</tr> }
+    view! {
+        <tr class=class aria-selected=selected.then_some("true") aria-current=current.then_some("true")>
+            {children()}
+        </tr>
+    }
 }
 
 /// A body cell.
@@ -151,18 +192,28 @@ pub fn Td(
     #[prop(optional)]
     header: bool,
     #[prop(optional)] align: Align,
+    /// Extra classes, literal at the call site.
+    #[prop(optional)]
+    class: &'static str,
     children: Children,
 ) -> impl IntoView {
     let c = ctx();
     let align = if numeric { Align::End } else { align };
+    let extra = class;
     let class = join(&[
         "border-b border-rule pr-4 last:pr-0 align-baseline",
+        extra,
         match c.density {
             Density::Compact => "py-2",
             Density::Comfortable => "py-3",
         },
         align.class(),
-        if numeric { "figures" } else { "" },
+        // Numbers never wrap ("12 / 10 / 24" stays on one line, M141).
+        if numeric {
+            "figures whitespace-nowrap"
+        } else {
+            ""
+        },
         if muted { "text-muted" } else { "text-primary" },
         if header { "font-medium text-left" } else { "" },
     ]);

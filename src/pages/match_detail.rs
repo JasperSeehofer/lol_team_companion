@@ -4,9 +4,9 @@
 
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar, DraftSide,
-    GameResult, GlyphSize, PageHeader, PageShell, ResultGlyph, Role, RoleLabel, SectionHeader,
-    Segment, SegmentSize, SegmentedControl, SideMarker, SideText, Skeleton, SkeletonGroup,
-    SkeletonShape, Table, Td, Th, Tr,
+    GameResult, GlyphSize, Moment, PageHeader, PageShell, ResultGlyph, Role, RoleLabel,
+    SectionHeader, Segment, SegmentSize, SegmentedControl, SideMarker, SideText, Skeleton,
+    SkeletonGroup, SkeletonShape, Table, Td, Th, TimelineScrub, Tr,
 };
 use crate::models::match_data::{
     EventCategory, MatchDetail, MatchParticipant, PerformanceStats, TimelineEvent,
@@ -41,11 +41,27 @@ pub async fn fetch_match_detail(
             .await
             .map_err(authz::server_err)?
     {
-        let user_pid = participants
-            .iter()
-            .find(|p| p.puuid == user.riot_puuid.as_deref().unwrap_or(""))
-            .map(|p| p.participant_id)
-            .unwrap_or(1);
+        let by_puuid = user.riot_puuid.as_deref().and_then(|puuid| {
+            participants
+                .iter()
+                .find(|p| !puuid.is_empty() && p.puuid == puuid)
+                .map(|p| p.participant_id)
+        });
+        // Without a matching PUUID, the user's own synced row for this game
+        // names their champion (the seed tool's demo game has no real PUUIDs).
+        let user_pid = match by_puuid {
+            Some(pid) => pid,
+            None => db::user_champion_in_match(&surreal, &user.id, &match_id)
+                .await
+                .map_err(authz::server_err)?
+                .and_then(|champ| {
+                    participants
+                        .iter()
+                        .find(|p| p.champion_name.eq_ignore_ascii_case(&champ))
+                        .map(|p| p.participant_id)
+                })
+                .unwrap_or(1),
+        };
         let performance = riot::compute_performance(&participants, user_pid, game_duration);
 
         return Ok(crate::models::match_data::MatchDetail {
@@ -60,7 +76,11 @@ pub async fn fetch_match_detail(
         });
     }
 
-    // Cache miss: fetch from Riot API
+    // Cache miss: fetch from Riot API. The seed tool's fictional games
+    // (`SEED1_...`) are never looked up on Riot.
+    if crate::models::match_data::is_demo_match_id(&match_id) {
+        return Err(ServerFnError::new(authz::NOT_FOUND));
+    }
     authz::rate_limit(Bucket::Riot).await?;
     let riot_client = authz::riot()?;
     if !riot_client.is_configured() {
@@ -230,62 +250,140 @@ fn ItemIcon(item_id: i32) -> impl IntoView {
     }
 }
 
+/// "12 / 10 / 24" with no-break spaces, so a K/D/A never wraps.
+pub(crate) fn kda_text(kills: i32, deaths: i32, assists: i32) -> String {
+    format!("{kills}\u{00a0}/\u{00a0}{deaths}\u{00a0}/\u{00a0}{assists}")
+}
+
+/// Rows of one scoreboard in role order (Top to Support, unknown roles
+/// last), padded with empty slots to five so both teams' tables have the
+/// same rows and the same role sits on the same row in both.
+fn scoreboard_rows(mut participants: Vec<MatchParticipant>) -> Vec<Option<MatchParticipant>> {
+    let order = |p: &MatchParticipant| {
+        position_role(&p.team_position)
+            .and_then(|r| Role::ALL.iter().position(|x| *x == r))
+            .unwrap_or(Role::ALL.len())
+    };
+    participants.sort_by_key(|p| (order(p), p.participant_id));
+    let mut rows: Vec<Option<MatchParticipant>> = participants.into_iter().map(Some).collect();
+    while rows.len() < 5 {
+        rows.push(None);
+    }
+    rows
+}
+
 #[component]
 fn TeamScoreboard(
     side: DraftSide,
     team_win: bool,
     participants: Vec<MatchParticipant>,
     user_participant_id: i32,
+    /// Row under the pointer or focus, in either team (the same role).
+    hover_row: RwSignal<Option<usize>>,
+    /// Row pinned by a tap or click on its position, in either team.
+    pinned_row: RwSignal<Option<usize>>,
 ) -> impl IntoView {
     let id = match side {
         DraftSide::Blue => "blue-side-h",
         DraftSide::Red => "red-side-h",
     };
+    let rows = scoreboard_rows(participants);
+    let on_keydown = move |ev: leptos::ev::KeyboardEvent| {
+        if ev.key() == "Escape" && pinned_row.get_untracked().is_some() {
+            pinned_row.set(None);
+        }
+    };
     view! {
-        <section aria-labelledby=id data-scoreboard=side.label().to_lowercase()>
+        <section aria-labelledby=id data-scoreboard=side.label().to_lowercase() on:keydown=on_keydown>
             <h2 id=id class="mb-3 flex items-center gap-3 font-display text-heading font-semibold text-primary">
                 <SideMarker side=side text=SideText::Long />
                 <ResultGlyph result=GameResult::from_win(team_win) size=GlyphSize::Sm word=true />
             </h2>
-            <Table caption=format!("{} side scoreboard", side.label()) caption_hidden=true>
+            <Table caption=format!("{} side scoreboard", side.label()) caption_hidden=true fit=true>
                 <thead>
                     <tr>
-                        <Th>"Pos."</Th>
+                        <Th class="w-20">"Pos."</Th>
                         <Th>"Player"</Th>
-                        <Th numeric=true>"K / D / A"</Th>
-                        <Th>"Items"</Th>
-                        <Th numeric=true>"Damage"</Th>
-                        <Th numeric=true>"Gold"</Th>
-                        <Th numeric=true>"Vision"</Th>
+                        <Th numeric=true class="w-32">"K / D / A"</Th>
+                        <Th class="hidden w-48 lg:table-cell">"Items"</Th>
+                        <Th numeric=true class="hidden w-24 md:table-cell">"Damage"</Th>
+                        <Th numeric=true class="hidden w-20 md:table-cell">"Gold"</Th>
+                        <Th numeric=true class="hidden w-20 md:table-cell">"Vision"</Th>
                     </tr>
                 </thead>
                 <tbody>
-                    {participants.into_iter().map(|p| {
+                    {rows.into_iter().enumerate().map(|(i, p)| {
+                        let active = Signal::derive(move || pinned_row.get().or(hover_row.get()) == Some(i));
+                        let pinned = Signal::derive(move || pinned_row.get() == Some(i));
+                        let enter = move || hover_row.set(Some(i));
+                        let leave = move || {
+                            if hover_row.get_untracked() == Some(i) {
+                                hover_row.set(None);
+                            }
+                        };
+                        let Some(p) = p else {
+                            return view! {
+                                <Tr>
+                                    <Td><span class="block h-9"></span></Td>
+                                    <Td muted=true><span class="sr-only">"No player"</span></Td>
+                                    <Td>""</Td>
+                                    <Td class="hidden lg:table-cell">""</Td>
+                                    <Td class="hidden md:table-cell">""</Td>
+                                    <Td class="hidden md:table-cell">""</Td>
+                                    <Td class="hidden md:table-cell">""</Td>
+                                </Tr>
+                            }.into_any();
+                        };
                         let is_user = p.participant_id == user_participant_id;
                         let items = p.items;
+                        let role = position_role(&p.team_position);
+                        let role_word = role.map(|r| r.label().to_string()).unwrap_or_else(|| format!("row {}", i + 1));
+                        let avatar_class = if is_user {
+                            "inline-flex shrink-0 rounded-ctl outline outline-2 outline-offset-1 outline-accent"
+                        } else {
+                            "inline-flex shrink-0"
+                        };
                         view! {
-                            <Tr selected=is_user>
-                                <Td>{match position_role(&p.team_position) { Some(r) => view! { <RoleLabel role=r /> }.into_any(), None => view! { <span class="text-muted">"None"</span> }.into_any() }}</Td>
+                            <Tr highlight=active current=is_user on:mouseenter=move |_| enter() on:mouseleave=move |_| leave() on:focusin=move |_| enter() on:focusout=move |_| leave()>
                                 <Td>
-                                    <span class="flex min-w-0 items-center gap-2">
-                                        <ChampionAvatar name=p.champion_name.clone() size=AvatarSize::Sm decorative=true />
-                                        <span class="min-w-0">
-                                            <span class="block truncate font-medium text-primary">{p.summoner_name.clone()}{is_user.then_some(" (you)")}</span>
+                                    <Button
+                                        variant=ButtonVariant::Quiet
+                                        size=ButtonSize::Touch
+                                        pressed=pinned
+                                        aria_label=format!("Highlight {role_word} in both teams")
+                                        on_click=Callback::new(move |_| pinned_row.update(|r| *r = if *r == Some(i) { None } else { Some(i) }))
+                                    >
+                                        {match role {
+                                            Some(r) => view! { <RoleLabel role=r /> }.into_any(),
+                                            None => view! { <span class="text-caption text-muted">"None"</span> }.into_any(),
+                                        }}
+                                    </Button>
+                                </Td>
+                                <Td>
+                                    <span class="flex h-9 min-w-0 items-center gap-2" data-player-cell=is_user.then_some("you")>
+                                        <span class=avatar_class data-you-accent=is_user.then_some("true")>
+                                            <ChampionAvatar name=p.champion_name.clone() size=AvatarSize::Sm decorative=true />
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block truncate font-medium text-primary">
+                                                {p.summoner_name.clone()}
+                                                {is_user.then(|| view! { <span class="sr-only">", you"</span> })}
+                                            </span>
                                             <span class="block truncate text-caption text-muted">{p.champion_name.clone()}</span>
                                         </span>
                                     </span>
                                 </Td>
-                                <Td numeric=true>{format!("{} / {} / {}", p.kills, p.deaths, p.assists)}</Td>
-                                <Td>
+                                <Td numeric=true><span data-kda>{kda_text(p.kills, p.deaths, p.assists)}</span></Td>
+                                <Td class="hidden lg:table-cell">
                                     <span class="flex gap-1">
                                         {items.into_iter().map(|i| view! { <ItemIcon item_id=i /> }).collect_view()}
                                     </span>
                                 </Td>
-                                <Td numeric=true>{format_damage(p.damage)}</Td>
-                                <Td numeric=true>{format_gold(p.gold_earned)}</Td>
-                                <Td numeric=true>{p.vision_score}</Td>
+                                <Td numeric=true class="hidden md:table-cell">{format_damage(p.damage)}</Td>
+                                <Td numeric=true class="hidden md:table-cell">{format_gold(p.gold_earned)}</Td>
+                                <Td numeric=true class="hidden md:table-cell">{p.vision_score}</Td>
                             </Tr>
-                        }
+                        }.into_any()
                     }).collect_view()}
                 </tbody>
             </Table>
@@ -331,6 +429,75 @@ const CATEGORIES: [EventCategory; 6] = [
     EventCategory::Teamfight,
 ];
 
+/// One rail of the timeline: a group of event kinds on its own track.
+struct Rail {
+    key: &'static str,
+    name: &'static str,
+    kinds: &'static [EventCategory],
+    caption: Option<&'static str>,
+}
+
+/// The three rails, top to bottom (M141, the owner's grouping). Riot's
+/// Match-V5 timeline has no recall event (an `ITEM_UNDO` is the shop's undo
+/// button), so the vision rail draws wards only and says why.
+const RAILS: [Rail; 3] = [
+    Rail {
+        key: "objectives",
+        name: "Objectives",
+        kinds: &[EventCategory::Objective, EventCategory::Tower],
+        caption: None,
+    },
+    Rail {
+        key: "fights",
+        name: "Fights",
+        kinds: &[EventCategory::Kill, EventCategory::Teamfight],
+        caption: None,
+    },
+    Rail {
+        key: "vision",
+        name: "Vision",
+        kinds: &[EventCategory::Ward],
+        caption: Some("Wards: yours only. Riot's game data reports no recalls, so none are drawn."),
+    },
+];
+
+/// Within a rail, a marker closer than this (in percent of the game) to the
+/// previous one on its lane moves to the second lane instead of overlapping.
+const LANE_GAP_PCT: f64 = 1.2;
+
+/// Lane (0 or 1) for each position, given positions sorted by time. Markers
+/// never hide each other's whole shape: a crowded marker takes the lane whose
+/// last marker is furthest away.
+fn assign_lanes(sorted_pcts: &[f64]) -> Vec<u8> {
+    let mut last = [f64::NEG_INFINITY; 2];
+    sorted_pcts
+        .iter()
+        .map(|&p| {
+            let lane = if p - last[0] >= LANE_GAP_PCT {
+                0
+            } else if p - last[1] >= LANE_GAP_PCT || last[1] < last[0] {
+                1
+            } else {
+                0
+            };
+            last[lane as usize] = p;
+            lane
+        })
+        .collect()
+}
+
+/// The short name of an objective, for the scrubber's moments.
+fn objective_word(monster_type: Option<&str>) -> &'static str {
+    match monster_type.unwrap_or("") {
+        "DRAGON" => "Dragon",
+        "BARON_NASHOR" => "Baron",
+        "RIFTHERALD" => "Herald",
+        "HORDE" => "Voidgrubs",
+        "ATAKHAN" => "Atakhan",
+        _ => "Objective",
+    }
+}
+
 #[component]
 fn Timeline(
     d: MatchDetail,
@@ -341,80 +508,196 @@ fn Timeline(
     let shown: [RwSignal<bool>; 6] = std::array::from_fn(|_| RwSignal::new(true));
     let selected = RwSignal::new(None::<usize>);
     let duration = d.game_duration;
+    let duration_secs = duration.max(0) as u32;
+    let playhead = RwSignal::new(0u32);
     let user_pid = d.user_participant_id;
     let events = StoredValue::new(d.timeline_events.clone());
     let participants = StoredValue::new(d.participants.clone());
     let match_id = d.match_id.clone();
     let cat_index = |c: &EventCategory| CATEGORIES.iter().position(|x| x == c).unwrap_or(0);
+    let moments: Vec<Moment> = {
+        let mut m: Vec<Moment> = d
+            .timeline_events
+            .iter()
+            .filter(|e| e.category == EventCategory::Objective)
+            .map(|e| {
+                Moment::new(
+                    (e.timestamp_ms.max(0) / 1000) as u32,
+                    objective_word(e.monster_type.as_deref()),
+                )
+            })
+            .collect();
+        m.sort_by_key(|x| x.at);
+        m
+    };
+    // Visible events sorted by time, for Previous / Next.
+    let visible_order = move || {
+        let mut v: Vec<(usize, i64)> = events.with_value(|evs| {
+            evs.iter()
+                .enumerate()
+                .filter(|(_, e)| shown[cat_index(&e.category)].get())
+                .map(|(i, e)| (i, e.timestamp_ms))
+                .collect()
+        });
+        v.sort_by_key(|(i, t)| (*t, *i));
+        v
+    };
+    let step = move |forward: bool| {
+        let order = visible_order();
+        if order.is_empty() {
+            return;
+        }
+        let pos = selected
+            .get_untracked()
+            .and_then(|s| order.iter().position(|(i, _)| *i == s));
+        let next = match (pos, forward) {
+            (None, true) => 0,
+            (None, false) => order.len() - 1,
+            (Some(p), true) => (p + 1).min(order.len() - 1),
+            (Some(p), false) => p.saturating_sub(1),
+        };
+        let (idx, ts) = order[next];
+        selected.set(Some(idx));
+        playhead.set((ts.max(0) / 1000) as u32);
+    };
+    let playhead_pct = move || timeline_pct(playhead.get() as i64 * 1000, duration);
     view! {
         <section aria-labelledby="timeline-h" data-timeline>
             <SectionHeader title="Timeline" id="timeline-h" meta=format!("0:00 to {}", format_duration(duration)) />
-            <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="Show event kinds">
-                {CATEGORIES.iter().enumerate().map(|(i, c)| {
-                    let sig = shown[i];
+            <div class="flex flex-col gap-4">
+                {RAILS.iter().map(|rail| {
+                    let kinds: Vec<usize> = rail.kinds.iter().map(cat_index).collect();
+                    let kinds_any = kinds.clone();
+                    let kinds_all = kinds.clone();
+                    let kinds_toggle = kinds.clone();
+                    let kinds_track = kinds.clone();
+                    let total = events.with_value(|evs| evs.iter().filter(|e| kinds.contains(&cat_index(&e.category))).count());
+                    let any_shown = Signal::derive(move || kinds_any.iter().any(|&k| shown[k].get()));
                     view! {
-                        <Button size=ButtonSize::Sm variant=ButtonVariant::Secondary pressed=Signal::derive(move || sig.get()) on_click=Callback::new(move |_| sig.update(|v| *v = !*v))>
-                            <svg viewBox="0 0 16 16" class="size-3 text-secondary" aria-hidden="true">{marker_shape(c, false)}</svg>
-                            {category_word(c)}
-                        </Button>
+                        <div role="group" aria-label=format!("{} rail", rail.name) data-rail=rail.key class="grid grid-cols-[6rem_minmax(0,1fr)] gap-y-1.5">
+                            <div class="col-start-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                {rail.kinds.iter().map(|c| {
+                                    let sig = shown[cat_index(c)];
+                                    view! {
+                                        <Button size=ButtonSize::Sm variant=ButtonVariant::Secondary pressed=Signal::derive(move || sig.get()) on_click=Callback::new(move |_| sig.update(|v| *v = !*v))>
+                                            <svg viewBox="0 0 16 16" class="size-3 text-secondary" aria-hidden="true">{marker_shape(c, false)}</svg>
+                                            {category_word(c)}
+                                        </Button>
+                                    }
+                                }).collect_view()}
+                                {rail.caption.map(|c| view! { <span class="text-caption text-muted">{c}</span> })}
+                            </div>
+                            <div class="flex items-center pr-2">
+                                <Button
+                                    size=ButtonSize::Sm
+                                    variant=ButtonVariant::Quiet
+                                    pressed=any_shown
+                                    aria_label=format!("Show or hide all of {}", rail.name)
+                                    on_click=Callback::new(move |_| {
+                                        let on = !kinds_all.iter().any(|&k| shown[k].get_untracked());
+                                        for &k in &kinds_toggle {
+                                            shown[k].set(on);
+                                        }
+                                    })
+                                >
+                                    <span class="eyebrow">{rail.name}</span>
+                                </Button>
+                            </div>
+                            {move || {
+                                let parts = participants.get_value();
+                                let mut visible: Vec<(usize, TimelineEvent)> = events
+                                    .get_value()
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter(|(_, e)| kinds_track.contains(&cat_index(&e.category)) && shown[cat_index(&e.category)].get())
+                                    .collect();
+                                visible.sort_by_key(|(i, e)| (e.timestamp_ms, *i));
+                                let pcts: Vec<f64> = visible.iter().map(|(_, e)| timeline_pct(e.timestamp_ms, duration)).collect();
+                                let lanes = assign_lanes(&pcts);
+                                let two = lanes.contains(&1);
+                                let track = if two {
+                                    "relative h-16 w-full border border-rule bg-ink-1"
+                                } else {
+                                    "relative h-11 w-full border border-rule bg-ink-1"
+                                };
+                                let empty = if total == 0 { "None of these in this game." } else { "Hidden. Turn a kind on to show it." };
+                                view! {
+                                    <div class=track data-timeline-track=true>
+                                        <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-rule" aria-hidden="true"></div>
+                                        <span class="pointer-events-none absolute inset-y-0 z-10 w-px bg-accent" style=move || format!("left: {:.2}%", playhead_pct()) aria-hidden="true" data-playhead></span>
+                                        {visible.is_empty().then(|| view! { <p class="absolute inset-0 flex items-center justify-center text-label text-muted">{empty}</p> })}
+                                        {visible.into_iter().zip(pcts).zip(lanes).map(|(((idx, e), left), lane)| {
+                                            let label = event_tooltip(&e, &parts);
+                                            let big = matches!(e.monster_type.as_deref(), Some(m) if m.contains("BARON") || m.contains("HORDE"))
+                                                || e.category == EventCategory::Teamfight;
+                                            let side = match e.team_id {
+                                                Some(100) => "text-side-blue",
+                                                Some(200) => "text-side-red",
+                                                _ => "text-muted",
+                                            };
+                                            let mine = e.killer_participant_id == Some(user_pid) || e.involved_participants.contains(&user_pid);
+                                            let size = if big { "size-4" } else { "size-3" };
+                                            let top = match (two, lane) {
+                                                (false, _) => 50,
+                                                (true, 0) => 30,
+                                                (true, _) => 70,
+                                            };
+                                            let class = format!("absolute grid -translate-x-1/2 -translate-y-1/2 cursor-pointer place-items-center rounded-ctl p-2 md:p-1.5 {side}");
+                                            let shape = marker_shape(&e.category, big);
+                                            let svg_class = if mine { format!("{size} overflow-visible stroke-accent [stroke-width:1.5]") } else { format!("{size} overflow-visible") };
+                                            let at = (e.timestamp_ms.max(0) / 1000) as u32;
+                                            view! {
+                                                <button
+                                                    type="button"
+                                                    class=class
+                                                    style=format!("left: {left:.2}%; top: {top}%")
+                                                    aria-label=format!("{label}{}", if mine { ", you were involved" } else { "" })
+                                                    aria-pressed=move || (selected.get() == Some(idx)).to_string()
+                                                    data-event-category=category_word(&e.category)
+                                                    on:click=move |_| {
+                                                        selected.update(|s| *s = if *s == Some(idx) { None } else { Some(idx) });
+                                                        playhead.set(at);
+                                                    }
+                                                >
+                                                    <svg viewBox="0 0 16 16" class=svg_class aria-hidden="true">{shape}</svg>
+                                                </button>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                }
+                            }}
+                        </div>
                     }
                 }).collect_view()}
-            </div>
-            <div class="relative h-12 w-full border border-rule bg-ink-1" data-timeline-track>
-                <div class="absolute left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-rule" aria-hidden="true"></div>
-                {move || {
-                    let parts = participants.get_value();
-                    let visible: Vec<(usize, TimelineEvent)> = events
-                        .get_value()
-                        .into_iter()
-                        .enumerate()
-                        .filter(|(_, e)| shown[cat_index(&e.category)].get())
-                        .collect();
-                    if visible.is_empty() {
-                        return view! { <p class="absolute inset-0 flex items-center justify-center text-label text-muted">"No events of the chosen kinds."</p> }.into_any();
-                    }
-                    visible.into_iter().map(|(idx, e)| {
-                        let left = timeline_pct(e.timestamp_ms, duration);
-                        let label = event_tooltip(&e, &parts);
-                        let big = matches!(e.monster_type.as_deref(), Some(m) if m.contains("BARON") || m.contains("HORDE"))
-                            || e.category == EventCategory::Teamfight;
-                        let side = match e.team_id {
-                            Some(100) => "text-side-blue",
-                            Some(200) => "text-side-red",
-                            _ => "text-muted",
-                        };
-                        let mine = e.killer_participant_id == Some(user_pid) || e.involved_participants.contains(&user_pid);
-                        let size = if big { "size-4" } else { "size-3" };
-                        let class = format!("absolute top-1/2 grid -translate-x-1/2 -translate-y-1/2 cursor-pointer place-items-center rounded-ctl p-0.5 {side}");
-                        let shape = marker_shape(&e.category, big);
-                        let svg_class = if mine { format!("{size} overflow-visible stroke-accent [stroke-width:1.5]") } else { format!("{size} overflow-visible") };
-                        view! {
-                            <button
-                                type="button"
-                                class=class
-                                style=format!("left: {left:.2}%")
-                                aria-label=format!("{label}{}", if mine { " (you)" } else { "" })
-                                aria-pressed=move || (selected.get() == Some(idx)).to_string()
-                                data-event-category=category_word(&e.category)
-                                on:click=move |_| selected.update(|s| *s = if *s == Some(idx) { None } else { Some(idx) })
-                            >
-                                <svg viewBox="0 0 16 16" class=svg_class aria-hidden="true">{shape}</svg>
-                            </button>
+                <TimelineScrub label="Playhead over the timeline" duration=duration_secs value=playhead moments=moments />
+                <p class="text-label text-secondary" aria-live="polite" data-near-playhead>
+                    {move || {
+                        let at = playhead.get() as i64 * 1000;
+                        let parts = participants.get_value();
+                        let near: Vec<String> = events.with_value(|evs| {
+                            evs.iter()
+                                .filter(|e| shown[cat_index(&e.category)].get() && (e.timestamp_ms - at).abs() <= 30_000)
+                                .map(|e| event_tooltip(e, &parts))
+                                .collect()
+                        });
+                        if near.is_empty() {
+                            format!("Nothing shown within 30 seconds of {}.", format_duration((at / 1000) as i32))
+                        } else {
+                            format!("Near {}: {}", format_duration((at / 1000) as i32), near.join("; "))
                         }
-                    }).collect_view().into_any()
-                }}
+                    }}
+                </p>
             </div>
-            <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted" aria-label="Timeline legend">
-                {CATEGORIES.iter().map(|c| view! {
-                    <li class="inline-flex items-center gap-1.5">
-                        <svg viewBox="0 0 16 16" class="size-3 text-secondary" aria-hidden="true">{marker_shape(c, false)}</svg>
-                        {category_word(c)}
-                    </li>
-                }).collect_view()}
-                <li class="inline-flex items-center gap-1.5"><SideMarker side=DraftSide::Blue text=SideText::Short /></li>
-                <li class="inline-flex items-center gap-1.5"><SideMarker side=DraftSide::Red text=SideText::Short /></li>
-                <li>"Chalk outline: you were involved"</li>
-            </ul>
+            <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button size=ButtonSize::Touch on_click=Callback::new(move |_| step(false))>"Previous event"</Button>
+                <Button size=ButtonSize::Touch on_click=Callback::new(move |_| step(true))>"Next event"</Button>
+                <ul class="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted" aria-label="Timeline legend">
+                    <li class="inline-flex items-center gap-1.5"><SideMarker side=DraftSide::Blue text=SideText::Short /></li>
+                    <li class="inline-flex items-center gap-1.5"><SideMarker side=DraftSide::Red text=SideText::Short /></li>
+                    <li>"Chalk outline: you were involved"</li>
+                    <li>"Chalk line: the playhead"</li>
+                </ul>
+            </div>
             {move || selected.get().and_then(|idx| events.get_value().get(idx).cloned()).map(|e| {
                 let parts = participants.get_value();
                 let text = event_tooltip(&e, &parts);
@@ -560,8 +843,8 @@ pub fn MatchDetailPage() -> impl IntoView {
             <Suspense fallback=|| view! {
                 <SkeletonGroup label="Loading the match">
                     <Skeleton width="w-64 max-w-full" size="h-10" />
-                    <Skeleton shape=SkeletonShape::Block size="h-48" />
-                    <Skeleton shape=SkeletonShape::Block size="h-48" />
+                    <Skeleton shape=SkeletonShape::Block size="h-80" />
+                    <Skeleton shape=SkeletonShape::Block size="h-80" />
                 </SkeletonGroup>
             }>
                 {move || detail.get().map(|r| match r {
@@ -625,8 +908,10 @@ fn MatchBody(d: MatchDetail) -> impl IntoView {
     let red_win = red.first().map(|p| p.win).unwrap_or(false);
     let kda = user
         .as_ref()
-        .map(|p| format!("{} / {} / {}", p.kills, p.deaths, p.assists))
+        .map(|p| kda_text(p.kills, p.deaths, p.assists))
         .unwrap_or_default();
+    let hover_row = RwSignal::new(None::<usize>);
+    let pinned_row = RwSignal::new(None::<usize>);
     let learning_href = format!(
         "/personal-learnings/new?champion={}&opponent={}&match_id={}&result={}",
         user_champion,
@@ -649,7 +934,7 @@ fn MatchBody(d: MatchDetail) -> impl IntoView {
             eyebrow="Match detail"
             meta=move || view! {
                 {has_user.then(|| view! { <ResultGlyph result=GameResult::from_win(user_win) word=true /> })}
-                {(!kda.is_empty()).then(|| view! { <span class="figures">{kda.clone()}</span> })}
+                {(!kda.is_empty()).then(|| view! { <span class="figures whitespace-nowrap">{kda.clone()}</span> })}
                 <span>{format!("{mode} \u{00b7} {dur}")}</span>
                 <span class="figures text-muted">{mid.clone()}</span>
             }
@@ -658,9 +943,11 @@ fn MatchBody(d: MatchDetail) -> impl IntoView {
             })
         />
         <div class="flex flex-col gap-12">
-            <div class="grid gap-x-10 gap-y-10 xl:grid-cols-2">
-                <TeamScoreboard side=DraftSide::Blue team_win=blue_win participants=blue user_participant_id=d.user_participant_id />
-                <TeamScoreboard side=DraftSide::Red team_win=red_win participants=red user_participant_id=d.user_participant_id />
+            // Blue above red at full width: both tables have the same columns,
+            // the same five rows in role order and the same box (M141).
+            <div class="flex flex-col gap-8" on:mouseleave=move |_| hover_row.set(None)>
+                <TeamScoreboard side=DraftSide::Blue team_win=blue_win participants=blue user_participant_id=d.user_participant_id hover_row=hover_row pinned_row=pinned_row />
+                <TeamScoreboard side=DraftSide::Red team_win=red_win participants=red user_participant_id=d.user_participant_id hover_row=hover_row pinned_row=pinned_row />
             </div>
             <Timeline d=d.clone() user_champion=user_champion.clone() opponent_champion=opponent_champion.clone() user_win=user_win />
             {has_user.then(|| view! { <PerformanceSection perf=d.performance.clone() /> })}
@@ -680,5 +967,61 @@ mod tests {
         assert!((normalize_pct(10.0, 10.0) - 50.0).abs() < 0.01);
         assert_eq!(timeline_pct(900_000, 1800), 50.0);
         assert_eq!(position_role("UTILITY"), Some(Role::Support));
+    }
+
+    fn part(id: i32, team: i32, pos: &str) -> MatchParticipant {
+        MatchParticipant {
+            participant_id: id,
+            puuid: String::new(),
+            summoner_name: format!("P{id}"),
+            champion_name: "Ahri".into(),
+            team_id: team,
+            team_position: pos.into(),
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            cs: 0,
+            vision_score: 0,
+            damage: 0,
+            gold_earned: 0,
+            items: [0; 6],
+            win: false,
+        }
+    }
+
+    #[test]
+    fn scoreboard_rows_are_in_role_order_and_padded() {
+        let rows = scoreboard_rows(vec![
+            part(5, 100, "UTILITY"),
+            part(1, 100, "TOP"),
+            part(3, 100, "MIDDLE"),
+        ]);
+        assert_eq!(rows.len(), 5);
+        let ids: Vec<Option<i32>> = rows
+            .iter()
+            .map(|r| r.as_ref().map(|p| p.participant_id))
+            .collect();
+        assert_eq!(ids, vec![Some(1), Some(3), Some(5), None, None]);
+    }
+
+    #[test]
+    fn kda_never_breaks() {
+        let k = kda_text(12, 10, 24);
+        assert_eq!(k, "12\u{a0}/\u{a0}10\u{a0}/\u{a0}24");
+        assert!(!k.contains(' '));
+    }
+
+    #[test]
+    fn crowded_markers_take_the_second_lane() {
+        assert_eq!(assign_lanes(&[10.0, 10.5, 11.0, 30.0]), vec![0, 1, 0, 0]);
+        assert_eq!(assign_lanes(&[]), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn no_rail_draws_recalls() {
+        assert!(RAILS
+            .iter()
+            .all(|r| !r.kinds.contains(&EventCategory::Recall)));
+        assert_eq!(objective_word(Some("BARON_NASHOR")), "Baron");
     }
 }

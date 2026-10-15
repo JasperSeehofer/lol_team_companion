@@ -47,6 +47,19 @@ pub struct MatchParticipant {
     pub win: bool,
 }
 
+/// Prefix of the seed tool's fictional demo games (M141). No Riot platform
+/// is called "SEED", so a demo id can never name a real game, and the match
+/// page never sends one to Riot.
+pub const DEMO_MATCH_PREFIX: &str = "SEED1_";
+
+/// The seed tool's demo game for `seed-alpha-top`.
+pub const DEMO_MATCH_ID: &str = "SEED1_1000000001";
+
+/// Whether an id names a seed demo game (never looked up on Riot).
+pub fn is_demo_match_id(match_id: &str) -> bool {
+    match_id.starts_with(DEMO_MATCH_PREFIX)
+}
+
 /// Timeline event categories for UI filtering
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum EventCategory {
@@ -55,14 +68,17 @@ pub enum EventCategory {
     Kill,      // champion kills, first blood, multikills
     Ward,      // ward placements (user's own only)
     Teamfight, // 4+ participants within 10s window
-    Recall,    // champion recalls (per D-07)
+    // Riot's Match-V5 timeline has no recall event; nothing is classified
+    // as one since M141 (an ITEM_UNDO is the shop's undo). Kept so stored
+    // and serialized values stay readable.
+    Recall,
 }
 
 /// A single processed timeline event
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TimelineEvent {
     pub timestamp_ms: i64,
-    pub event_type: String, // "CHAMPION_KILL", "BUILDING_KILL", "ELITE_MONSTER_KILL", "WARD_PLACED", "ITEM_UNDO", "TEAMFIGHT"
+    pub event_type: String, // "CHAMPION_KILL", "BUILDING_KILL", "ELITE_MONSTER_KILL", "WARD_PLACED", "TEAMFIGHT"
     pub category: EventCategory,
     pub team_id: Option<i32>,
     pub killer_participant_id: Option<i32>,

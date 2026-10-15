@@ -6038,22 +6038,28 @@ struct DbTimelineEvent {
     pub involved_participants: Option<String>,
 }
 
-fn classify_db_event(
+/// The category of a cached timeline row, or `None` for a row that is not
+/// shown. Matches cached before M141 hold `ITEM_UNDO` rows that were drawn as
+/// recalls; an item undo is the shop's "undo purchase" and Riot reports no
+/// recall event, so those rows are skipped on read (no re-import needed).
+pub(crate) fn classify_db_event(
     event_type: &str,
     is_teamfight: bool,
-) -> crate::models::match_data::EventCategory {
+) -> Option<crate::models::match_data::EventCategory> {
     use crate::models::match_data::EventCategory;
-    if is_teamfight || event_type == "TEAMFIGHT" {
-        return EventCategory::Teamfight;
+    if event_type == "ITEM_UNDO" {
+        return None;
     }
-    match event_type {
+    if is_teamfight || event_type == "TEAMFIGHT" {
+        return Some(EventCategory::Teamfight);
+    }
+    Some(match event_type {
         "ELITE_MONSTER_KILL" => EventCategory::Objective,
         "BUILDING_KILL" => EventCategory::Tower,
         "CHAMPION_KILL" => EventCategory::Kill,
         "WARD_PLACED" => EventCategory::Ward,
-        "ITEM_UNDO" => EventCategory::Recall,
         _ => EventCategory::Kill,
-    }
+    })
 }
 
 pub async fn get_cached_match_detail(
@@ -6091,16 +6097,17 @@ pub async fn get_cached_match_detail(
     let tl_rows: Vec<DbTimelineEvent> = tl_result.take(0).unwrap_or_default();
     let timeline_events: Vec<crate::models::match_data::TimelineEvent> = tl_rows
         .into_iter()
-        .map(|r| {
+        .filter_map(|r| {
+            let category = classify_db_event(&r.event_type, r.is_teamfight)?;
             let involved: Vec<i32> = r
                 .involved_participants
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or_default();
-            crate::models::match_data::TimelineEvent {
+            Some(crate::models::match_data::TimelineEvent {
                 timestamp_ms: r.timestamp_ms,
                 event_type: r.event_type.clone(),
-                category: classify_db_event(&r.event_type, r.is_teamfight),
+                category,
                 team_id: r.team_id,
                 killer_participant_id: r.killer_participant_id,
                 victim_participant_id: r.victim_participant_id,
@@ -6111,7 +6118,7 @@ pub async fn get_cached_match_detail(
                 multi_kill_length: r.multi_kill_length,
                 is_teamfight: r.is_teamfight,
                 involved_participants: involved,
-            }
+            })
         })
         .collect();
 
@@ -6121,6 +6128,31 @@ pub async fn get_cached_match_detail(
         detail.game_duration,
         detail.game_mode.unwrap_or_default(),
     )))
+}
+
+/// The champion this user played in a synced game, from their own
+/// `player_match` row (user-scoped: another user's games are `None`). The
+/// match page uses it to find "you" when the account has no Riot PUUID that
+/// matches a participant (the seed tool's fictional demo game, M141).
+pub async fn user_champion_in_match(
+    db: &Surreal<Db>,
+    user_id: &str,
+    match_id: &str,
+) -> Result<Option<String>, DbError> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        champion: String,
+    }
+    let mut r = db
+        .query(
+            "SELECT champion FROM player_match \
+             WHERE user = type::record('user', $user_key) AND match.match_id = $match_id LIMIT 1",
+        )
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("match_id", match_id.to_string()))
+        .await?;
+    let row: Option<Row> = r.take(0)?;
+    Ok(row.map(|r| r.champion))
 }
 
 pub async fn store_match_detail(
@@ -7285,6 +7317,22 @@ pub async fn match_participants(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cached_item_undo_rows_are_not_recalls() {
+        use crate::models::match_data::EventCategory;
+        // M141: rows cached before the fix keep their ITEM_UNDO type; the read
+        // path drops them instead of drawing them as recalls.
+        assert_eq!(super::classify_db_event("ITEM_UNDO", false), None);
+        assert_eq!(
+            super::classify_db_event("CHAMPION_KILL", true),
+            Some(EventCategory::Teamfight)
+        );
+        assert_eq!(
+            super::classify_db_event("WARD_PLACED", false),
+            Some(EventCategory::Ward)
+        );
+    }
+
     use super::*;
     use crate::models::champion::{Champion, ChampionPoolEntry};
     use crate::models::game_plan::{
