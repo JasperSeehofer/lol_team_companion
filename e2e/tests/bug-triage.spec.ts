@@ -13,12 +13,12 @@ async function sendReport(page: Page, text: string) {
   // Wait for hydration: a click on the widget before it would do nothing.
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
-  await page.locator('button[aria-label="Report a bug or a wish"]').click();
+  await page.locator('button[aria-label="Give Feedback"]').click();
   await page.locator("[data-feedback-hint]").getByRole("button", { name: "Skip" }).click();
-  const d = page.getByRole("dialog", { name: "Report" });
+  const d = page.getByRole("dialog", { name: "Give Feedback" });
   await d.locator("textarea").fill(text);
-  await d.getByRole("button", { name: "Send report" }).click();
-  await expect(page.getByText("Thanks. Your report is in.")).toBeVisible({ timeout: 5000 });
+  await d.getByRole("button", { name: "Send feedback" }).click();
+  await expect(page.getByText("Thanks. Your feedback is in.")).toBeVisible({ timeout: 5000 });
 }
 
 async function openInTriage(admin: Page, firstLine: string, filter = "New") {

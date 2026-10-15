@@ -430,13 +430,13 @@ The page exposes the last run as attributes on `[data-graph-canvas]`: `data-sim-
 
 **Legal pages.** Reading width, `PageHeader`, a warning `Callout` only while something is still a placeholder or a draft (which it names); a missing owner's fact appears as `[OWNER: ...]` in mono warning ink (`OwnerPlaceholder`), never invented. The privacy page lists what the app stores by area; a unit test checks the tables it names exist in `schema.surql`.
 
-**Bug-report button.** Docked in the page flow above the footer at every width (an outlined "Report a bug" button), so it covers nothing. Rebuilt in M7, see 6.10.
+**Bug-report button.** Docked in the page flow above the footer at every width (an outlined "Give Feedback" button, 44 px on phones; renamed in M141, the dialog offers Bug, Idea and Praise as labels over the stored `bug` and `wishlist`), so it covers nothing. Rebuilt in M7, see 6.10.
 
 ### 6.10 Community pages (M7)
 
 **Where they live.** Not a hub (chrome recedes): the footer has a "Community" link group (Changelog and Transparency for everyone, What next and Bug board for signed-in users), the command bar lists them with the hint "Community", the phone menu has a Community group, and the account menu has "Your reports" (with "(N updated)") and, for admins, one "Admin" entry.
 
-**Widget.** The trigger starts select mode: a fixed hint bar under the app bar (an Info `Callout` on an opaque `ink-1` ground with the overlay shadow) says "Click the part of the page your report is about." with Skip and the Esc keycap (hidden on phones). The form is a `Dialog` (Md): "About" (the captured label or "The whole page"), a `SegmentedControl` Type (Bug / Wishlist), the text field with a privacy hint, Cancel (quiet) and Send report (primary). Success is a toast with the action "Your reports".
+**Widget.** The trigger starts select mode: a fixed hint bar under the app bar (an Info `Callout` on an opaque `ink-1` ground with the overlay shadow) says "Click the part of the page your report is about." with Skip and the Esc keycap (hidden on phones). The form is a `Dialog` (Md): "About" (the captured label or "The whole page"), a `SegmentedControl` Kind (Bug / Idea / Praise; labels only, praise is stored as `wishlist` with a `[praise] ` body prefix), the text field with a privacy hint (Ctrl+Enter sends), Cancel (quiet) and Send feedback (primary). Success is a toast with the action "Your reports".
 
 **Bug board and Your reports.** `Tabs` (Open, Fixed, Won't fix, Your reports) over plain tables; a legend line explains the statuses in words. Status badges: New, Triaged and Won't fix neutral, Planned info, Fixed success; "Updated" is the accent badge (it marks a change for this viewer). The board shows only admin-written titles and notes.
 

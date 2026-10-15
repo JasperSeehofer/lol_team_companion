@@ -1,11 +1,14 @@
-//! The bug-report widget (M7 rebuild on `components::ui`).
+//! The feedback widget (M7 rebuild on `components::ui`; "Give Feedback"
+//! since M141).
 //!
-//! A docked "Report a bug" button in the page flow above the footer (it
+//! A docked "Give Feedback" button in the page flow above the footer (it
 //! never covers content, at any width) starts select mode: a hint bar at
 //! the top asks the reporter to click the part of the page the report is
 //! about (any element with `data-feedback-label`), with "Skip" for the whole
 //! page and Escape to cancel. The form is a `Dialog`: what the report is
-//! about, the type (Bug or Wishlist), the text, and "Send report". On
+//! about, the kind (Bug, Idea or Praise: labels only, stored as `bug` or
+//! `wishlist`, praise with a `[praise] ` body prefix, see
+//! `models::bug_report::FeedbackKind`), the text, and "Send feedback". On
 //! success a toast offers "Your reports" (`/bugs?tab=mine`).
 //!
 //! Mounted in `app.rs`; it renders only for signed-in users and never on
@@ -16,9 +19,11 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::components::ui::{
-    Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Dialog, DialogSize, Field, Keycap,
-    Segment, SegmentSize, SegmentedControl, TextField, Toast, ToastContext,
+    ctrl_enter_submits, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Dialog,
+    DialogSize, Field, Keycap, Segment, SegmentSize, SegmentedControl, TextField, Toast,
+    ToastContext,
 };
+use crate::models::bug_report::FeedbackKind;
 use crate::pages::profile::get_current_user;
 
 /// Pathname prefixes on which the widget does not render.
@@ -62,15 +67,13 @@ pub async fn submit_bug_report(
 
     let description = clean_text(&description);
     if description.is_empty() {
-        return Err(ServerFnError::new(
-            "Please describe the problem or the wish.",
-        ));
+        return Err(ServerFnError::new("Please write a few words first."));
     }
     if description.chars().count() > MAX_BUG_DESCRIPTION {
         return Err(ServerFnError::new("Please keep it under 4,000 characters."));
     }
     if category != "bug" && category != "wishlist" {
-        return Err(ServerFnError::new("Choose Bug or Wishlist."));
+        return Err(ServerFnError::new("Choose Bug, Idea or Praise."));
     }
     let page_url: String = clean_text(&page_url).chars().take(300).collect();
     let page_url = if page_url.starts_with('/') {
@@ -138,6 +141,7 @@ pub fn BugReportWidget() -> impl IntoView {
 fn WidgetInner() -> impl IntoView {
     let state = RwSignal::new(WidgetState::Idle);
     let dialog_open = RwSignal::new(false);
+    // The dialog's kind: "bug" | "idea" | "praise" (FeedbackKind).
     let kind = RwSignal::new("bug".to_string());
     let text = RwSignal::new(String::new());
     let label = RwSignal::new(WHOLE_PAGE.to_string());
@@ -329,7 +333,7 @@ fn WidgetInner() -> impl IntoView {
         }
     });
 
-    let send = move |_| {
+    let send = Callback::new(move |_: ()| {
         if sending.get_untracked() {
             return;
         }
@@ -352,9 +356,14 @@ fn WidgetInner() -> impl IntoView {
             label.get_untracked(),
         );
         if t.trim().is_empty() {
-            error.set(Some("Please describe the problem or the wish.".into()));
+            error.set(Some("Please write a few words first.".into()));
             return;
         }
+        let (k, t) = {
+            let fk = FeedbackKind::parse(&k).unwrap_or(FeedbackKind::Bug);
+            let (cat, body) = fk.stored(&t);
+            (cat.to_string(), body)
+        };
         sending.set(true);
         spawn_local(async move {
             let result = submit_bug_report(page_url, l, t, k, vw, vh).await;
@@ -368,7 +377,7 @@ fn WidgetInner() -> impl IntoView {
                     if let Some(toast) = toast {
                         toast
                             .push
-                            .run(Toast::success("Thanks. Your report is in.").with_action(
+                            .run(Toast::success("Thanks. Your feedback is in.").with_action(
                                 "Your reports",
                                 Callback::new(move |_| {
                                     navigate.with_value(|n| n("/bugs?tab=mine", Default::default()))
@@ -379,25 +388,23 @@ fn WidgetInner() -> impl IntoView {
                 Err(e) => error.set(Some(crate::models::utils::error_text(&e))),
             }
         });
-    };
+    });
 
     let placeholder = Signal::derive(move || {
-        if kind.get() == "wishlist" {
-            "What would help your team, and when would you use it?"
-        } else {
-            "What did you do, what did you expect, what happened instead?"
-        }
+        FeedbackKind::parse(&kind.get())
+            .unwrap_or(FeedbackKind::Bug)
+            .placeholder()
     });
 
     view! {
         <div class="mx-auto flex max-w-7xl justify-end px-4 pt-10 sm:px-8" data-bug-report-dock>
             <Button
                 variant=ButtonVariant::Secondary
-                size=ButtonSize::Sm
-                aria_label="Report a bug or a wish"
+                size=ButtonSize::Touch
+                aria_label="Give Feedback"
                 on_click=Callback::new(move |_| start_select())
             >
-                "Report a bug"
+                "Give Feedback"
             </Button>
         </div>
 
@@ -429,12 +436,12 @@ fn WidgetInner() -> impl IntoView {
         <Dialog
             id="bug-report"
             open=dialog_open
-            title="Report"
+            title="Give Feedback"
             size=DialogSize::Md
             dismiss_on_scrim=false
             footer=move || view! {
                 <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| dialog_open.set(false))>"Cancel"</Button>
-                <Button variant=ButtonVariant::Primary loading=sending on_click=Callback::new(send)>"Send report"</Button>
+                <Button variant=ButtonVariant::Primary loading=sending on_click=Callback::new(move |_| send.run(()))>"Send feedback"</Button>
             }
         >
             <div class="flex flex-col gap-5">
@@ -444,19 +451,19 @@ fn WidgetInner() -> impl IntoView {
                 </div>
                 <SegmentedControl
                     id="bug-report-type"
-                    label="Type"
+                    label="Kind"
                     size=SegmentSize::Sm
-                    options=vec![Segment::new("bug", "Bug"), Segment::new("wishlist", "Wishlist")]
+                    options={FeedbackKind::ALL.iter().map(|k| Segment::new(k.as_str(), k.label())).collect::<Vec<_>>()}
                     value=kind
                 />
                 <Field
                     id="bug-report-text"
-                    label="What happened, or what would you like?"
+                    label="Your feedback"
                     hint="Please leave out passwords and other people's personal details."
                     error=Signal::derive(move || error.get())
                 >
                     {move || view! {
-                        <TextField value=text rows=5 maxlength=4000 placeholder=placeholder.get() />
+                        <TextField value=text rows=5 maxlength=4000 placeholder=placeholder.get() on_keydown=ctrl_enter_submits(send) />
                     }}
                 </Field>
             </div>

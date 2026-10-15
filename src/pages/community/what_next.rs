@@ -56,7 +56,7 @@ pub fn WhatNextPage() -> impl IntoView {
                     }.into_any(),
                 })}
             </Suspense>
-            <p class="mt-10 text-caption text-muted">"Missing an idea? Send it with Report a bug and choose Wishlist."</p>
+            <p class="mt-10 text-caption text-muted">"Missing an idea? Send it with Give Feedback and choose Idea."</p>
         </PageShell>
     }
 }

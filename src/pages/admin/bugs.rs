@@ -14,7 +14,7 @@ use crate::components::ui::{
     SkeletonGroup, Surface, TextField, ToastContext, ToastKind,
 };
 use crate::error_template::NotFound;
-use crate::models::bug_report::{category_label, BugReportAdmin, BugStatus, BugTriage};
+use crate::models::bug_report::{feedback_label, BugReportAdmin, BugStatus, BugTriage};
 use crate::models::community::{short_date, ChangelogChoice};
 use crate::pages::admin::ListRow;
 
@@ -149,7 +149,7 @@ fn Triage(
                                         <ListRow href=format!("/admin/bugs?id={}", id) selected=is_sel>
                                             <span class="flex w-full flex-col items-start gap-0.5 py-1 text-left">
                                                 <span class="text-body text-primary">{first_line(&r.description)}</span>
-                                                <span class="text-caption text-muted">{format!("{} · {} · {}", category_label(&r.category), crate::models::bug_report::status_label(&r.status), short_date(&r.created_at))}</span>
+                                                <span class="text-caption text-muted">{format!("{} · {} · {}", feedback_label(&r.category, &r.description), crate::models::bug_report::status_label(&r.status), short_date(&r.created_at))}</span>
                                             </span>
                                         </ListRow>
                                     </li>
@@ -273,7 +273,7 @@ fn Editor(
                 {fact("Page", report.page_url.clone())}
                 {fact("Element", report.element_label.clone())}
                 {fact("Screen size", viewport)}
-                {fact("Type", category_label(&report.category).to_string())}
+                {fact("Type", feedback_label(&report.category, &report.description).to_string())}
                 {report.triaged_by.clone().map(|t| fact("Last change", format!("{t}, {}", report.updated_at.as_deref().map(short_date).unwrap_or_default())))}
             </dl>
             <div>

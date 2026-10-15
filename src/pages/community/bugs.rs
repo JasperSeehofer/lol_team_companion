@@ -196,7 +196,7 @@ fn MyReports(rows: Vec<MyBugReport>) -> impl IntoView {
     if rows.is_empty() {
         return view! {
             <div class="mt-6">
-                <EmptyState size=EmptySize::Compact message="You have not sent a report yet. Use Report a bug at the bottom of any page; your reports and their status appear here." />
+                <EmptyState size=EmptySize::Compact message="You have not sent any feedback yet. Use Give Feedback at the bottom of any page; your reports and their status appear here." />
             </div>
         }
         .into_any();
