@@ -121,7 +121,9 @@ jobs:
 
       - name: Playwright smoke, hydration gate, auth, admin, legal, account, guidance and team invites
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts --retries=1
+        env:
+          M141_SHOTS_DIR: ${{ runner.temp }}/m141-frames
 
       # M11: every server-rendered page must finish streaming. leptos
       # 0.8.17 left about one page in 8,000 pending forever under parallel
@@ -146,6 +148,15 @@ jobs:
       - name: Server log
         if: always()
         run: tail -n 200 "$RUNNER_TEMP/server.log" || true
+
+      - name: Upload M141 frames
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m141-frames
+          path: ${{ runner.temp }}/m141-frames/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Playwright report
         if: failure()
