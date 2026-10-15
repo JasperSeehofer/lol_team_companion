@@ -61,6 +61,13 @@ test("triage reaches the reporter and the board; a fix links the changelog", asy
   await expect(mine).toContainText("Updated");
   await expect(mine).toContainText("We can reproduce it.");
   await expect(mine).toContainText("Triaged");
+  // M141 H3: the status timeline marks the current step without colour.
+  const current = mine.locator('[data-status-timeline] [aria-current="step"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText("Triaged");
+  await expect(mine.locator('[data-status-timeline] [data-step="new"]')).toBeVisible();
+  await expect(mine.locator('[data-status-timeline] [data-step="fixed"]')).toBeVisible();
+  await expect(mine).toContainText("Note from the team");
 
   // The board shows the admin's title, never the reporter's words.
   await user.goto("/bugs");
@@ -94,6 +101,6 @@ test("another user sees only their own reports", async ({ browser }) => {
   const b = await (await browser.newContext()).newPage();
   await authenticatePage(b);
   await b.goto("/bugs?tab=mine");
-  await expect(b.locator("#bugs-panel-mine")).toContainText("You have not sent a report yet.");
+  await expect(b.locator("#bugs-panel-mine")).toContainText("You have not sent any feedback yet.");
   await expect(b.locator("main")).not.toContainText(`Alice only ${stamp}`);
 });

@@ -65,6 +65,7 @@ struct DbMyReport {
     public_note: Option<String>,
     fixed_in: Option<String>,
     updated: bool,
+    status_changed_at: Option<Datetime>,
 }
 
 /// The caller's own reports, newest first.
@@ -72,7 +73,7 @@ pub async fn list_my_bug_reports(db: &Surreal<Db>, user_id: &str) -> DbResult<Ve
     let mut r = db
         .query(
             "SELECT id, created_at, page_url, element_label, description, category, status, \
-                 public_note, fixed_in, \
+                 public_note, fixed_in, status_changed_at, \
                  (status_changed_at != NONE AND (reporter_seen_at = NONE OR status_changed_at > reporter_seen_at)) AS updated \
              FROM bug_report WHERE user = type::record('user', $u) ORDER BY created_at DESC",
         )
@@ -93,6 +94,7 @@ pub async fn list_my_bug_reports(db: &Surreal<Db>, user_id: &str) -> DbResult<Ve
             fixed_in_title: b.fixed_in.as_deref().and_then(changelog::entry_title),
             fixed_in: b.fixed_in,
             updated: b.updated,
+            status_changed_at: opt_dt(b.status_changed_at),
         })
         .collect())
 }

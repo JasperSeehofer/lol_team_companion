@@ -169,6 +169,49 @@ pub struct MyBugReport {
     pub fixed_in_title: Option<String>,
     /// The status changed since the reporter last opened "Your reports".
     pub updated: bool,
+    /// When an admin last changed the status (M141: the current step's date).
+    #[serde(default)]
+    pub status_changed_at: Option<String>,
+}
+
+/// One step of a report's status timeline on "Your reports" (M141 H3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepState {
+    /// Passed on the way to the current step.
+    Reached,
+    /// Where the report is now.
+    Current,
+    /// Not reached yet.
+    Ahead,
+}
+
+/// The status timeline: new, triaged, planned, fixed; a declined report
+/// ends in "Won't fix" after triage instead of planned and fixed. An unknown
+/// status reads as new.
+pub fn status_timeline(status: &str) -> Vec<(BugStatus, StepState)> {
+    let current = BugStatus::parse(status).unwrap_or(BugStatus::New);
+    let path: &[BugStatus] = if current == BugStatus::WontFix {
+        &[BugStatus::New, BugStatus::Triaged, BugStatus::WontFix]
+    } else {
+        &[
+            BugStatus::New,
+            BugStatus::Triaged,
+            BugStatus::Planned,
+            BugStatus::Fixed,
+        ]
+    };
+    let at = path.iter().position(|s| *s == current).unwrap_or(0);
+    path.iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let state = match i.cmp(&at) {
+                std::cmp::Ordering::Less => StepState::Reached,
+                std::cmp::Ordering::Equal => StepState::Current,
+                std::cmp::Ordering::Greater => StepState::Ahead,
+            };
+            (*s, state)
+        })
+        .collect()
 }
 
 /// A report on the bug board: only what an admin wrote for everyone.
@@ -273,6 +316,29 @@ mod tests {
             assert_eq!(feedback_label(cat, &body), k.label());
         }
         assert_eq!(FeedbackKind::parse("wishlist"), None);
+    }
+
+    #[test]
+    fn timeline_follows_the_status() {
+        use StepState::*;
+        let t = status_timeline("planned");
+        assert_eq!(
+            t,
+            vec![
+                (BugStatus::New, Reached),
+                (BugStatus::Triaged, Reached),
+                (BugStatus::Planned, Current),
+                (BugStatus::Fixed, Ahead)
+            ]
+        );
+        assert_eq!(status_timeline("new")[0], (BugStatus::New, Current));
+        assert_eq!(status_timeline("bogus")[0], (BugStatus::New, Current));
+        let w = status_timeline("wont_fix");
+        assert_eq!(w.len(), 3);
+        assert_eq!(w[2], (BugStatus::WontFix, Current));
+        assert!(status_timeline("fixed")
+            .iter()
+            .all(|(s, st)| *st != Ahead && (*st == Current) == (*s == BugStatus::Fixed)));
     }
 
     #[test]

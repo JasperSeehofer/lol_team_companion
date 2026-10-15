@@ -15,6 +15,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 - Enter runs the button next to a field: "Add branch" in the tree drafter (the report), and everywhere else a single field has its own button: new tree, ban priorities, adding and refreshing a scouted player, the dossier name, team name and invite link, username and Riot ID on your profile, your goals on My games, the due date of a new action item. In a text box Enter stays a new line and Ctrl+Enter adds or saves (team notes, draft comments, dossier notes, survey answers). (Report zgoormwy)
 - For admins: on Beta invitations the "Mint a code" fields sit on one line, with the hints ("Empty: never", "Joins the account to this team") below their own fields instead of pushing them out of line; on a phone the fields stack. (Report 1jjv5ji2)
 - "Report a bug" is now "Give Feedback", a larger button on phones. The dialog asks whether it is a bug, an idea or praise, suggests what to write for each, and Ctrl+Enter sends it. Admins see the kind on the bug reports page; the What next page and Your reports point to the new name. (Report y1abg605)
+- Your reports (/bugs, "Your reports") shows where each report stands as a short timeline (new, triaged, planned, fixed, or won't fix) with the date of the last change, the team's note under it, and a link to the update that fixed it. It reads the same on a phone. (Report y1abg605)
 
 ### First deploy (2026-10-13)
 
