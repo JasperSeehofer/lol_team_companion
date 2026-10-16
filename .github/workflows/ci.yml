@@ -46,6 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     timeout-minutes: 60
+    # The mission summary step below commits its findings to the branch.
+    permissions:
+      contents: write
     env:
       RIOT_API_KEY: RGAPI-ci-dummy
       SURREAL_DATA_DIR: /tmp/surreal-data
@@ -121,9 +124,10 @@ jobs:
 
       - name: Playwright smoke, hydration gate, auth, admin, legal, account, guidance and team invites
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts match-detail.spec.ts sortable-tables.spec.ts post-game-fill.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts match-detail.spec.ts sortable-tables.spec.ts post-game-fill.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts --retries=1 --reporter=list,json,github
         env:
           M141_SHOTS_DIR: ${{ runner.temp }}/m141-frames
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-results.json
 
       # M11: every server-rendered page must finish streaming. leptos
       # 0.8.17 left about one page in 8,000 pending forever under parallel
@@ -157,6 +161,32 @@ jobs:
           path: ${{ runner.temp }}/m141-frames/
           if-no-files-found: ignore
           retention-days: 14
+
+      # Mission branches: no one can read the job logs from the mission
+      # host, so the failures, the server's error lines and the frames are
+      # committed to the branch. A push by GITHUB_TOKEN starts no new run.
+      - name: Commit the e2e summary and frames (mission branches)
+        if: always() && startsWith(github.ref_name, 'mission/M141')
+        env:
+          BRANCH: mission/M141-team-companion-feedback-batch-1
+          MISSION_DIR: .planning/missions/M141-team-companion-feedback-batch-1
+        run: |
+          python3 scripts/ci_e2e_summary.py "$RUNNER_TEMP/playwright-results.json" \
+            "$RUNNER_TEMP/server.log" "${{ github.run_id }}" "${{ github.sha }}" > "$RUNNER_TEMP/ci-e2e-summary.md"
+          git fetch --depth=1 origin "$BRANCH"
+          git checkout -f -B ci-summary FETCH_HEAD
+          mkdir -p "$MISSION_DIR/publish-round-r1/frames/after"
+          cp "$RUNNER_TEMP/ci-e2e-summary.md" "$MISSION_DIR/ci-e2e-summary.md"
+          if ls "$RUNNER_TEMP"/m141-frames/*.png >/dev/null 2>&1; then
+            cp "$RUNNER_TEMP"/m141-frames/*.png "$MISSION_DIR/publish-round-r1/frames/after/"
+          fi
+          git add "$MISSION_DIR"
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git -c user.name=ci -c user.email=ci@local commit -q -m "chore(ci): e2e summary and frames for run ${{ github.run_id }} (${{ github.sha }})"
+          git push origin "HEAD:$BRANCH"
 
       - name: Upload Playwright report
         if: failure()
