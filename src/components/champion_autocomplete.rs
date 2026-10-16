@@ -21,6 +21,11 @@ pub fn ChampionAutocomplete(
     #[prop(optional, into)]
     id: Option<String>,
     #[prop(optional, into)] aria_label: Option<String>,
+    /// Show the champion's icon beside the name once the value names a
+    /// champion (M141, report 8tiuijr4); a dashed slot of the same size
+    /// otherwise, so nothing shifts. The name stays in the field.
+    #[prop(optional)]
+    icon: bool,
 ) -> impl IntoView {
     let open = RwSignal::new(false);
     let text = RwSignal::new(String::new());
@@ -131,6 +136,31 @@ pub fn ChampionAutocomplete(
         })
     });
 
+    // The champion the value names, for the icon slot.
+    let picked = Memo::new(move |_| {
+        let v = value.get();
+        let v = v.trim().to_lowercase();
+        if v.is_empty() {
+            return None;
+        }
+        champions.with_value(|champs| {
+            champs
+                .iter()
+                .find(|c| c.id.to_lowercase() == v || c.name.to_lowercase() == v)
+                .map(|c| c.id.clone())
+        })
+    });
+    let input_class = if icon { "pl-10" } else { "" };
+    let icon_slot = icon.then(|| {
+        view! {
+            <span class="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2" aria-hidden="true" data-champion-icon-slot>
+                {move || match picked.get() {
+                    Some(id) => view! { <ChampionAvatar name=id size=AvatarSize::Sm decorative=true /> }.into_any(),
+                    None => view! { <span class="block size-6 rounded-ctl border border-dashed border-rule"></span> }.into_any(),
+                }}
+            </span>
+        }
+    });
     let placeholder = if placeholder.is_empty() {
         "Champion..."
     } else {
@@ -138,6 +168,7 @@ pub fn ChampionAutocomplete(
     };
     view! {
         <div class="relative">
+            {icon_slot}
             {match aria_label {
                 Some(label) => view! {
                     <TextField
@@ -150,6 +181,7 @@ pub fn ChampionAutocomplete(
                         on_keydown=on_keydown
                         on_blur=on_blur
                         combobox=Combobox { controls: list_id.clone(), active: active_dom }
+                        class=input_class
                     />
                 }.into_any(),
                 None => view! {
@@ -162,6 +194,7 @@ pub fn ChampionAutocomplete(
                         on_keydown=on_keydown
                         on_blur=on_blur
                         combobox=Combobox { controls: list_id.clone(), active: active_dom }
+                        class=input_class
                     />
                 }.into_any(),
             }}

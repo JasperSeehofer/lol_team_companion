@@ -184,7 +184,12 @@ pub fn TextField(
     /// Combobox wiring (single-line fields only).
     #[prop(optional)]
     combobox: Option<Combobox>,
+    /// Extra classes for a single-line input, literal at the call site
+    /// (`pl-10` leaves room for a leading icon slot).
+    #[prop(optional)]
+    class: &'static str,
 ) -> impl IntoView {
+    let extra = class;
     let ctx = use_context::<FieldContext>();
     let id = id.or_else(|| ctx.as_ref().map(|c| c.id.clone()));
     let described_by = ctx.as_ref().map(|c| c.described_by);
@@ -273,7 +278,7 @@ pub fn TextField(
             .into_any()
         }
         (None, Some(v)) => {
-            let class = join(&[CONTROL, size.class()]);
+            let class = join(&[CONTROL, size.class(), extra]);
             view! {
                 <input
                     id=id
@@ -304,7 +309,7 @@ pub fn TextField(
             .into_any()
         }
         (None, None) => {
-            let class = join(&[CONTROL, size.class()]);
+            let class = join(&[CONTROL, size.class(), extra]);
             view! {
                 <input
                     id=id
