@@ -268,7 +268,7 @@ pub fn SurveyBand(
         }
         _ => view! {
             <div class="flex w-full max-w-xl flex-col gap-2">
-                <TextField value=text rows=2 maxlength=500 aria_label=prompt.question.clone() disabled=Signal::derive(move || preview) />
+                <TextField value=text rows=2 maxlength=500 aria_label=prompt.question.clone() disabled=Signal::derive(move || preview) on_keydown=crate::components::ui::ctrl_enter_submits(Callback::new(move |_| if !busy.get_untracked() { submit.with_value(|f| f(SurveyAnswer::Text(text.get_untracked()))) })) />
                 <div class="flex items-center justify-between gap-3">
                     <span class="figures text-caption text-muted">{move || format!("{} of 500", text.get().chars().count())}</span>
                     <Button size=ButtonSize::Sm variant=ButtonVariant::Secondary disabled=busy

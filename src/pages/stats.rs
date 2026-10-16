@@ -7,8 +7,8 @@ use crate::components::local_time::LocalTime;
 use crate::components::ui::{
     AvatarSize, Button, ButtonVariant, Callout, CalloutTone, ChampionAvatar, EmptyState,
     GameResult, GlyphSize, NoTeamState, PageHeader, PageShell, ReadoutSize, ResultGlyph,
-    SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton, SkeletonGroup, StatReadout,
-    Table, Td, Th, Toast, ToastContext, Tr,
+    SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton, SkeletonGroup, SortState,
+    SortStatus, SortTh, StatReadout, Table, Td, Toast, ToastContext, Tr,
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -222,6 +222,29 @@ pub fn group_matches(rows: &[TeamMatchRow]) -> Vec<MatchGroup> {
 }
 
 /// Per member: (username, games, wins, kills, deaths, assists).
+/// Sort keys of the games-by-member table (M141, report rucyy6k1).
+const MEMBER_SORT: &[(&str, &str)] = &[
+    ("member", "Member"),
+    ("games", "Games"),
+    ("winrate", "Win rate"),
+    ("kda", "KDA"),
+];
+
+/// Member rows (name, games, wins, kills, deaths, assists) in the table's
+/// order, stably; unsorted is the summary's own order.
+pub fn sort_members(rows: &mut [(String, u32, u32, i32, i32, i32)], sort: SortState) {
+    let Some(key) = sort.key else { return };
+    let rate = |r: &(String, u32, u32, i32, i32, i32)| r.2 as f32 / r.1.max(1) as f32;
+    let kda = |r: &(String, u32, u32, i32, i32, i32)| (r.3 + r.5) as f32 / r.4.max(1) as f32;
+    crate::components::ui::sort_rows(rows, sort.dir, |a, b| match key {
+        "member" => a.0.to_lowercase().cmp(&b.0.to_lowercase()),
+        "games" => a.1.cmp(&b.1),
+        "winrate" => rate(a).total_cmp(&rate(b)),
+        "kda" => kda(a).total_cmp(&kda(b)),
+        _ => std::cmp::Ordering::Equal,
+    });
+}
+
 pub fn member_summary(rows: &[TeamMatchRow]) -> Vec<(String, u32, u32, i32, i32, i32)> {
     let mut out: Vec<(String, u32, u32, i32, i32, i32)> = Vec::new();
     for r in rows {
@@ -351,6 +374,7 @@ pub fn StatsPage() -> impl IntoView {
 fn StatsBody(rows: Vec<TeamMatchRow>) -> impl IntoView {
     let groups = group_matches(&rows);
     let members = member_summary(&rows);
+    let member_sort = RwSignal::new(SortState::none());
     let games = groups.len();
     let wins = groups.iter().filter(|g| g.win).count();
     let rate = if games > 0 {
@@ -398,24 +422,29 @@ fn StatsBody(rows: Vec<TeamMatchRow>) -> impl IntoView {
             </section>
             <section aria-labelledby="members-sum-h" data-member-summary>
                 <SectionHeader title="By member" id="members-sum-h" />
+                <SortStatus sort=member_sort labels=MEMBER_SORT />
                 <Table caption="Games by member" caption_hidden=true>
                     <thead>
                         <tr>
-                            <Th>"Member"</Th>
-                            <Th numeric=true>"Games"</Th>
-                            <Th numeric=true>"Win rate"</Th>
-                            <Th numeric=true>"KDA"</Th>
+                            <SortTh label="Member" key="member" sort=member_sort />
+                            <SortTh label="Games" key="games" sort=member_sort numeric=true />
+                            <SortTh label="Win rate" key="winrate" sort=member_sort numeric=true />
+                            <SortTh label="KDA" key="kda" sort=member_sort numeric=true />
                         </tr>
                     </thead>
                     <tbody>
-                        {members.into_iter().map(|(name, games, wins, k, d, a)| view! {
-                            <Tr>
-                                <Td>{name}</Td>
-                                <Td numeric=true>{games}</Td>
-                                <Td numeric=true>{format!("{:.0}%", wins as f32 * 100.0 / games.max(1) as f32)}</Td>
-                                <Td numeric=true>{format!("{:.1}", (k + a) as f32 / d.max(1) as f32)}</Td>
-                            </Tr>
-                        }).collect_view()}
+                        {move || {
+                            let mut rows = members.clone();
+                            sort_members(&mut rows, member_sort.get());
+                            rows.into_iter().map(|(name, games, wins, k, d, a)| view! {
+                                <Tr>
+                                    <Td>{name}</Td>
+                                    <Td numeric=true>{games}</Td>
+                                    <Td numeric=true>{format!("{:.0}%", wins as f32 * 100.0 / games.max(1) as f32)}</Td>
+                                    <Td numeric=true>{format!("{:.1}", (k + a) as f32 / d.max(1) as f32)}</Td>
+                                </Tr>
+                            }).collect_view()
+                        }}
                     </tbody>
                 </Table>
             </section>

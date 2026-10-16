@@ -13,12 +13,12 @@ async function sendReport(page: Page, text: string) {
   // Wait for hydration: a click on the widget before it would do nothing.
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
-  await page.locator('button[aria-label="Report a bug or a wish"]').click();
+  await page.locator('button[aria-label="Give Feedback"]').click();
   await page.locator("[data-feedback-hint]").getByRole("button", { name: "Skip" }).click();
-  const d = page.getByRole("dialog", { name: "Report" });
+  const d = page.getByRole("dialog", { name: "Give Feedback" });
   await d.locator("textarea").fill(text);
-  await d.getByRole("button", { name: "Send report" }).click();
-  await expect(page.getByText("Thanks. Your report is in.")).toBeVisible({ timeout: 5000 });
+  await d.getByRole("button", { name: "Send feedback" }).click();
+  await expect(page.getByText("Thanks. Your feedback is in.")).toBeVisible({ timeout: 5000 });
 }
 
 async function openInTriage(admin: Page, firstLine: string, filter = "New") {
@@ -61,6 +61,13 @@ test("triage reaches the reporter and the board; a fix links the changelog", asy
   await expect(mine).toContainText("Updated");
   await expect(mine).toContainText("We can reproduce it.");
   await expect(mine).toContainText("Triaged");
+  // M141 H3: the status timeline marks the current step without colour.
+  const current = mine.locator('[data-status-timeline] [aria-current="step"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText("Triaged");
+  await expect(mine.locator('[data-status-timeline] [data-step="new"]')).toBeVisible();
+  await expect(mine.locator('[data-status-timeline] [data-step="fixed"]')).toBeVisible();
+  await expect(mine).toContainText("Note from the team");
 
   // The board shows the admin's title, never the reporter's words.
   await user.goto("/bugs");
@@ -94,6 +101,6 @@ test("another user sees only their own reports", async ({ browser }) => {
   const b = await (await browser.newContext()).newPage();
   await authenticatePage(b);
   await b.goto("/bugs?tab=mine");
-  await expect(b.locator("#bugs-panel-mine")).toContainText("You have not sent a report yet.");
+  await expect(b.locator("#bugs-panel-mine")).toContainText("You have not sent any feedback yet.");
   await expect(b.locator("main")).not.toContainText(`Alice only ${stamp}`);
 });

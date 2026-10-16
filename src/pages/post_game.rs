@@ -3,10 +3,10 @@
 //! the patterns that recur across reviews.
 
 use crate::components::ui::{
-    Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ConfirmDialog, ConfirmTone, Density,
-    EmptySize, EmptyState, Field, GameResult, GlyphSize, PageHeader, PageShell, ResultGlyph, Role,
-    RoleLabel, SectionHeader, Segment, SegmentedControl, Select, SelectOption, Skeleton,
-    SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
+    Badge, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ConfirmDialog, ConfirmTone,
+    Density, EmptySize, EmptyState, Field, GameResult, GlyphSize, PageHeader, PageShell,
+    ResultGlyph, Role, RoleLabel, SectionHeader, Segment, SegmentedControl, Select, SelectOption,
+    Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
 };
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
@@ -104,6 +104,117 @@ pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
         .map(|r| r.riot_match_id)
         .collect();
     Ok(ids)
+}
+
+/// What a synced team match can answer for a review (M141, report
+/// 3z6n0emq): the team's result, the side, the length and the picks. Read
+/// only; nothing here is invented: a fact the data lacks is `None`.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct MatchFacts {
+    pub match_id: String,
+    /// The team's result (from the members' synced rows).
+    pub win: bool,
+    /// "blue" or "red", from the stored scoreboard; `None` without one.
+    pub side: Option<String>,
+    pub duration_secs: i32,
+    /// When the game ended (RFC 3339), if Riot said.
+    pub played_at: Option<String>,
+    /// (member, champion) for each team member who synced the game.
+    pub members: Vec<(String, String)>,
+    /// Both teams' champions from the stored scoreboard (empty without one).
+    pub our_picks: Vec<String>,
+    pub their_picks: Vec<String>,
+}
+
+/// The facts of one of the team's synced matches, or `None` when the match
+/// is not the team's (team-scoped: another team's game answers nothing).
+#[server]
+pub async fn get_match_facts(match_id: String) -> Result<Option<MatchFacts>, ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&surreal, &user).await? else {
+        return Ok(None);
+    };
+    if match_id.is_empty() || match_id.len() > 32 {
+        return Ok(None);
+    }
+    let rows: Vec<db::TeamMatchRow> = db::get_team_match_stats(&surreal, &team_id)
+        .await
+        .map_err(authz::server_err)?
+        .into_iter()
+        .filter(|r| r.riot_match_id == match_id)
+        .collect();
+    let Some(first) = rows.first() else {
+        return Ok(None);
+    };
+    let members: Vec<(String, String)> = rows
+        .iter()
+        .map(|r| (r.username.clone(), r.champion.clone()))
+        .collect();
+    // The stored scoreboard (cached when someone opened the match) gives the
+    // side and both teams' picks; the members' champions find our side.
+    let detail = db::get_cached_match_detail(&surreal, &match_id)
+        .await
+        .map_err(authz::server_err)?;
+    let (side, our_picks, their_picks) = match detail {
+        Some((participants, _, _, _)) => {
+            let ours = participants.iter().find(|p| {
+                rows.iter()
+                    .any(|r| r.champion.eq_ignore_ascii_case(&p.champion_name))
+            });
+            match ours.map(|p| p.team_id) {
+                Some(team) => {
+                    let picks = |t: i32| {
+                        participants
+                            .iter()
+                            .filter(|p| p.team_id == t)
+                            .map(|p| p.champion_name.clone())
+                            .collect::<Vec<_>>()
+                    };
+                    let side = if team == 100 { "blue" } else { "red" };
+                    (
+                        Some(side.to_string()),
+                        picks(team),
+                        picks(if team == 100 { 200 } else { 100 }),
+                    )
+                }
+                None => (None, Vec::new(), Vec::new()),
+            }
+        }
+        None => (None, Vec::new(), Vec::new()),
+    };
+    Ok(Some(MatchFacts {
+        match_id,
+        win: first.win,
+        side,
+        duration_secs: first.game_duration,
+        played_at: first.game_end.clone(),
+        members,
+        our_picks,
+        their_picks,
+    }))
+}
+
+/// Fields a match filled in, so the note can name them and Undo restore
+/// what was there before.
+#[derive(Clone, Debug, PartialEq)]
+struct AutoFill {
+    match_id: String,
+    /// The outcome before the fill ("" when it was empty).
+    before_outcome: String,
+    /// The outcome the match set.
+    outcome: String,
+}
+
+/// The outcome a match fills in, or `None` when the field must stay: a
+/// value someone set is never overwritten; one the previous match filled
+/// in (still unchanged) is replaced.
+fn outcome_fill(current: &str, auto: Option<&AutoFill>, win: bool) -> Option<String> {
+    let value = if win { "win" } else { "loss" };
+    let ours = auto.is_some_and(|a| a.outcome == current);
+    (current.is_empty() || ours).then(|| value.to_string())
 }
 
 #[server]
@@ -356,6 +467,11 @@ struct ReviewEd {
     rating: RwSignal<String>,
     /// The draft this review was linked to was deleted.
     draft_deleted: RwSignal<bool>,
+    /// The match as loaded (or cleared): a different value is a choice
+    /// someone made, which fills the form from the match (M141).
+    loaded_match: RwSignal<String>,
+    /// What the last match choice filled in, for the note and Undo.
+    auto: RwSignal<Option<AutoFill>>,
 }
 
 impl ReviewEd {
@@ -373,11 +489,15 @@ impl ReviewEd {
             outcome: s(),
             rating: s(),
             draft_deleted: RwSignal::new(false),
+            loaded_match: s(),
+            auto: RwSignal::new(None),
         }
     }
     fn clear(&self) {
         self.id.set(None);
         self.draft_deleted.set(false);
+        self.loaded_match.set(String::new());
+        self.auto.set(None);
         for sig in [
             self.match_id,
             self.plan_id,
@@ -394,6 +514,9 @@ impl ReviewEd {
     }
     fn load(&self, r: &PostGameLearning) {
         self.id.set(r.id.clone());
+        self.loaded_match
+            .set(r.match_riot_id.clone().unwrap_or_default());
+        self.auto.set(None);
         self.match_id
             .set(r.match_riot_id.clone().unwrap_or_default());
         self.plan_id.set(r.game_plan_id.clone().unwrap_or_default());
@@ -467,6 +590,48 @@ pub fn PostGamePage() -> impl IntoView {
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
     let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
     let ed = ReviewEd::new();
+    // The chosen match's facts (M141): created before any Suspense.
+    let facts = Resource::new(
+        move || ed.match_id.get(),
+        |id| async move {
+            if id.is_empty() {
+                Ok(None)
+            } else {
+                get_match_facts(id).await
+            }
+        },
+    );
+    // A match someone picks fills the fields it can answer.
+    Effect::new(move |_| {
+        let Some(Ok(Some(f))) = facts.get() else {
+            return;
+        };
+        if f.match_id != ed.match_id.get_untracked()
+            || f.match_id == ed.loaded_match.get_untracked()
+        {
+            return;
+        }
+        let auto = ed.auto.get_untracked();
+        if auto.as_ref().is_some_and(|a| a.match_id == f.match_id) {
+            return;
+        }
+        let current = ed.outcome.get_untracked();
+        match outcome_fill(&current, auto.as_ref(), f.win) {
+            Some(v) => {
+                let before = match &auto {
+                    Some(a) if a.outcome == current => a.before_outcome.clone(),
+                    _ => current,
+                };
+                ed.outcome.set(v.clone());
+                ed.auto.set(Some(AutoFill {
+                    match_id: f.match_id.clone(),
+                    before_outcome: before,
+                    outcome: v,
+                }));
+            }
+            None => ed.auto.set(None),
+        }
+    });
     let created_items = RwSignal::new(None::<usize>);
     // The open review as loaded or last saved (as the editor builds it).
     let saved = RwSignal::new(None::<PostGameLearning>);
@@ -742,7 +907,7 @@ pub fn PostGamePage() -> impl IntoView {
                     <PatternsSection reviews=reviews />
                 </div>
                 <div class="flex min-w-0 flex-col gap-12">
-                    <LinksSection ed=ed plans=plans drafts=drafts match_ids=match_ids />
+                    <LinksSection ed=ed plans=plans drafts=drafts match_ids=match_ids facts=facts />
                     <OutcomeSection ed=ed />
                     <section aria-labelledby="review-points-heading" class="flex flex-col gap-4">
                         <SectionHeader title="What we learned" id="review-points-heading" />
@@ -774,10 +939,23 @@ fn LinksSection(
     plans: Resource<Result<Vec<GamePlan>, ServerFnError>>,
     drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
     match_ids: Resource<Result<Vec<String>, ServerFnError>>,
+    facts: Resource<Result<Option<MatchFacts>, ServerFnError>>,
 ) -> impl IntoView {
     view! {
         <section aria-labelledby="review-links-heading" class="flex flex-col gap-4">
             <SectionHeader title="Game" id="review-links-heading" />
+            // Always mounted, so the fill note is announced when it appears.
+            <div role="status" data-testid="review-filled-note">
+                {move || ed.auto.get().map(|a| view! {
+                    <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
+                        <span>"Filled from match: Result. Change it if it is wrong."</span>
+                        <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| {
+                            ed.outcome.set(a.before_outcome.clone());
+                            ed.auto.set(None);
+                        })>"Undo"</Button>
+                    </p>
+                })}
+            </div>
             <div class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
                 <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
                     {move || match_ids.get().map(|r| {
@@ -813,11 +991,80 @@ fn LinksSection(
             {move || (ed.draft_id.get().is_empty() && ed.draft_deleted.get()).then(|| view! {
                 <p class="text-caption text-muted" data-testid="review-draft-deleted">"Draft deleted: the draft this review was linked to no longer exists."</p>
             })}
+            <Suspense fallback=|| ()>
+                {move || facts.get().map(|r| match r {
+                    Ok(Some(f)) => view! { <MatchFactsBlock f=f /> }.into_any(),
+                    _ => ().into_any(),
+                })}
+            </Suspense>
             {move || {
                 let pid = ed.plan_id.get();
                 (!pid.is_empty()).then(|| view! { <LinkedPlan plan_id=pid /> })
             }}
         </section>
+    }
+}
+
+fn duration_words(secs: i32) -> String {
+    format!("{}:{:02}", secs / 60, secs % 60)
+}
+
+/// Read-only facts of the chosen match that have no field in the review.
+#[component]
+fn MatchFactsBlock(f: MatchFacts) -> impl IntoView {
+    use crate::components::ui::{DraftSide, ReadoutSize, SideMarker, SideText, StatReadout};
+    let side = f.side.as_deref().map(|s| {
+        if s == "blue" {
+            DraftSide::Blue
+        } else {
+            DraftSide::Red
+        }
+    });
+    let has_picks = !f.our_picks.is_empty();
+    let members = f
+        .members
+        .iter()
+        .map(|(u, c)| format!("{u} ({c})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let match_href = format!("/match/{}", f.match_id);
+    view! {
+        <div class="border border-rule bg-ink-1 p-4" data-testid="review-match-facts">
+            <h3 class="eyebrow mb-3">"From the match"</h3>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+                <StatReadout label="Result" value=if f.win { "Win" } else { "Loss" } size=ReadoutSize::Sm />
+                <div class="flex flex-col gap-1">
+                    <span class="text-label text-secondary">"Side"</span>
+                    {match side {
+                        Some(s) => view! { <span class="text-body text-primary"><SideMarker side=s text=SideText::Long /></span> }.into_any(),
+                        None => view! { <span class="text-caption text-muted">"Open the match once to store its scoreboard."</span> }.into_any(),
+                    }}
+                </div>
+                <StatReadout label="Length" value=duration_words(f.duration_secs) size=ReadoutSize::Sm />
+                <div class="flex flex-col gap-1">
+                    <span class="text-label text-secondary">"Played"</span>
+                    {match f.played_at.clone() {
+                        Some(t) => view! { <span class="text-body text-primary"><crate::components::local_time::LocalTime iso=t /></span> }.into_any(),
+                        None => view! { <span class="text-caption text-muted">"Not reported"</span> }.into_any(),
+                    }}
+                </div>
+            </div>
+            <dl class="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 text-label sm:grid-cols-[8rem_minmax(0,1fr)]">
+                <dt class="text-secondary">"Team members"</dt>
+                <dd class="text-primary">{members}</dd>
+                {has_picks.then(|| view! {
+                    <dt class="text-secondary">"Our picks"</dt>
+                    <dd class="text-primary">{f.our_picks.join(", ")}</dd>
+                    <dt class="text-secondary">"Their picks"</dt>
+                    <dd class="text-primary">{f.their_picks.join(", ")}</dd>
+                })}
+                <dt class="text-secondary">"Bans"</dt>
+                <dd class="text-muted">"Not in the synced game data."</dd>
+            </dl>
+            <div class="mt-3">
+                <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet href=match_href>"Open the match"</Button>
+            </div>
+        </div>
     }
 }
 
@@ -849,9 +1096,16 @@ fn OutcomeSection(ed: ReviewEd) -> impl IntoView {
     view! {
         <section aria-labelledby="review-outcome-heading" class="flex flex-col gap-4">
             <SectionHeader title="Result" id="review-outcome-heading" />
-            <div class="flex flex-wrap items-end gap-x-10 gap-y-4">
+            // Tops aligned: the segmented control (34px) and the select (36px)
+            // start one label line below the row's top (M141).
+            <div class="flex flex-wrap items-start gap-x-10 gap-y-4">
                 <div class="flex flex-col gap-1.5">
-                    <span class="text-label font-medium text-secondary">"Outcome"</span>
+                    <span class="flex items-center gap-2 text-label font-medium text-secondary">
+                        "Outcome"
+                        {move || ed.auto.get().filter(|a| a.outcome == ed.outcome.get()).map(|_| view! {
+                            <span class="-my-px" data-testid="review-outcome-from-match"><Badge>"From match"</Badge></span>
+                        })}
+                    </span>
                     <div>
                         <SegmentedControl
                             id="review-outcome"
@@ -960,5 +1214,29 @@ fn LinkedPlan(plan_id: String) -> impl IntoView {
                 Err(_) => view! { <p class="text-label text-muted">"The linked plan did not load."</p> }.into_any(),
             })}
         </Suspense>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_match_fills_only_empty_or_its_own_outcome() {
+        assert_eq!(outcome_fill("", None, true).as_deref(), Some("win"));
+        // Someone's own choice is never overwritten.
+        assert_eq!(outcome_fill("loss", None, true), None);
+        // A value the previous match filled in is replaced.
+        let a = AutoFill {
+            match_id: "EUW1_1".into(),
+            before_outcome: String::new(),
+            outcome: "win".into(),
+        };
+        assert_eq!(
+            outcome_fill("win", Some(&a), false).as_deref(),
+            Some("loss")
+        );
+        // ...unless it was changed since.
+        assert_eq!(outcome_fill("loss", Some(&a), true), None);
     }
 }

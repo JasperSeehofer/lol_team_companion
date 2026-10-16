@@ -56,7 +56,7 @@ pub fn WhatNextPage() -> impl IntoView {
                     }.into_any(),
                 })}
             </Suspense>
-            <p class="mt-10 text-caption text-muted">"Missing an idea? Send it with Report a bug and choose Wishlist."</p>
+            <p class="mt-10 text-caption text-muted">"Missing an idea? Send it with Give Feedback and choose Idea."</p>
         </PageShell>
     }
 }
@@ -133,7 +133,7 @@ fn Summary(text: String) -> impl IntoView {
             {move || if expanded.get() || !long { text.get_value() } else { format!("{short}\u{2026}") }}
         </p>
         {long.then(|| view! {
-            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| expanded.update(|e| *e = !*e))>
+            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet reserve=&["Less", "More"] on_click=Callback::new(move |_| expanded.update(|e| *e = !*e))>
                 {move || if expanded.get() { "Less" } else { "More" }}
             </Button>
         })}
@@ -187,6 +187,7 @@ fn OpenIdea(rank: usize, p: ProposalView) -> impl IntoView {
                     <ProposalStatusBadge status=p.status.clone() />
                 </div>
                 <Summary text=p.summary.clone() />
+                {p.agent_proposed_on.clone().map(|d| view! { <p class="text-caption text-muted">{crate::models::community::agent_attribution(&d)}</p> })}
             </div>
             <div class="col-start-2 flex items-center gap-3 sm:col-start-3 sm:flex-col sm:items-end">
                 <span class="figures text-label text-secondary" data-testid="vote-count">{move || votes_label(votes.get())}</span>
@@ -214,6 +215,7 @@ fn ClosedIdea(p: ProposalView) -> impl IntoView {
                 <ProposalStatusBadge status=p.status.clone() />
             </div>
             <Summary text=p.summary.clone() />
+            {p.agent_proposed_on.clone().map(|d| view! { <p class="text-caption text-muted">{crate::models::community::agent_attribution(&d)}</p> })}
             {if shipped {
                 view! {
                     <p class="mt-2 text-label text-secondary">

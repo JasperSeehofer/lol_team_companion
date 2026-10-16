@@ -10,7 +10,7 @@ use crate::components::ui::{
     ConfirmDialog, ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell,
     PrepEmphasis, PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment,
     SegmentSize, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
-    Table, Td, TextField, Th, Toast, ToastContext, Tr,
+    TextField, Toast, ToastContext,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -1117,11 +1117,19 @@ fn MatchupSection(
                                             {move || if ed.from_draft.get() {
                                                 let v = sig.get();
                                                 let name = champs.with_value(|l| l.iter().find(|c| c.id == v || c.name == v).map(|c| c.name.clone())).unwrap_or_else(|| v.clone());
+                                                // Same geometry as the editable row (icon slot at
+                                                // the left, the name where the input's text starts),
+                                                // so "Edit picks" does not shift a line.
                                                 if v.is_empty() {
-                                                    view! { <span class="text-label text-muted">"\u{2014}"</span> }.into_any()
+                                                    view! {
+                                                        <span class="flex h-9 min-w-0 items-center gap-2 pl-2">
+                                                            <span class="block size-6 shrink-0 rounded-ctl border border-dashed border-rule" aria-hidden="true"></span>
+                                                            <span class="text-label text-muted">"\u{2014}"</span>
+                                                        </span>
+                                                    }.into_any()
                                                 } else {
                                                     view! {
-                                                        <span class="flex min-w-0 items-center gap-2">
+                                                        <span class="flex h-9 min-w-0 items-center gap-2 pl-2">
                                                             <ChampionAvatar name=name.clone() size=AvatarSize::Sm decorative=true />
                                                             <span class="truncate text-label font-medium text-primary">{name}</span>
                                                         </span>
@@ -1129,7 +1137,7 @@ fn MatchupSection(
                                                 }
                                             } else {
                                                 view! {
-                                                    <ChampionAutocomplete champions=champs.get_value() value=sig placeholder="Champion" id=id.clone() aria_label=aria.clone() />
+                                                    <ChampionAutocomplete champions=champs.get_value() value=sig placeholder="Champion" id=id.clone() aria_label=aria.clone() icon=true />
                                                 }.into_any()
                                             }}
                                         </li>
@@ -1526,22 +1534,7 @@ fn HistorySection(
                             }.into_any();
                         }
                         view! {
-                            <Table caption="Win rate by strategy" caption_hidden=true>
-                                <thead><tr><Th>"Strategy"</Th><Th numeric=true>"Games"</Th><Th numeric=true>"Won"</Th><Th numeric=true>"Win rate"</Th></tr></thead>
-                                <tbody>
-                                    {rows.into_iter().map(|(tag, games, wins)| {
-                                        let pct = if games > 0 { wins * 100 / games } else { 0 };
-                                        view! {
-                                            <Tr selected=tag == current>
-                                                <Td header=true>{tag}</Td>
-                                                <Td numeric=true>{games}</Td>
-                                                <Td numeric=true>{wins}</Td>
-                                                <Td numeric=true>{format!("{pct}%")}</Td>
-                                            </Tr>
-                                        }
-                                    }).collect_view()}
-                                </tbody>
-                            </Table>
+                            <crate::components::record_table::RecordTable caption="Win rate by strategy" caption_hidden=true first="Strategy" rows=rows current=current />
                         }.into_any()
                     })
                 }}

@@ -88,6 +88,8 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
     ("ranked_snapshot", "user", Treatment::Delete),
     ("personal_learning", "user", Treatment::Delete),
     ("personal_goal", "user", Treatment::Delete),
+    // Anonymise: the text and browser details are cleared, and the report's
+    // screenshot file (ATTACHMENTS_DIR, M141 H2) is deleted in `delete_account`.
     ("bug_report", "user", Treatment::Anonymise),
     ("board", "created_by", Treatment::Tombstone),
     ("board_version", "author", Treatment::Tombstone),
@@ -291,6 +293,9 @@ pub async fn delete_account(db: &Surreal<Db>, user_id: &str) -> DbResult<Deleted
     }
     let team_ids: Vec<RecordId> = led.into_iter().map(|t| t.id).collect();
     let team_deleted = !team_ids.is_empty();
+    // Their reports' screenshots (M141 H2) go with the account: the rows
+    // stay anonymised, the pictures could show anything.
+    let report_ids = crate::server::community::store::user_report_ids(db, user_id).await?;
 
     let query = format!(
         "BEGIN TRANSACTION; \
@@ -312,6 +317,13 @@ pub async fn delete_account(db: &Surreal<Db>, user_id: &str) -> DbResult<Deleted
         ))
         .await?;
     check_tx(response)?;
+    let removed = crate::server::attachments::remove_all(&report_ids);
+    if removed > 0 {
+        tracing::info!(
+            screenshots = removed,
+            "deleted account's feedback screenshots"
+        );
+    }
     Ok(Deleted { team_deleted })
 }
 

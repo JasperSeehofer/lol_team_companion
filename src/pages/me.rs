@@ -12,8 +12,8 @@ use crate::components::ui::{
     AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ChampionAvatar, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind, PageHeader,
     PageShell, ReadoutSize, ResultGlyph, SectionHeader, Segment, SegmentSize, SegmentedControl,
-    Select, SelectOption, Skeleton, SkeletonGroup, StatReadout, Table, Td, TextField, Th, Toast,
-    ToastContext, Tr,
+    Select, SelectOption, Skeleton, SkeletonGroup, SortDir, SortState, SortStatus, SortTh,
+    StatReadout, Table, Td, TextField, Th, Toast, ToastContext, Tr,
 };
 use crate::models::match_data::{
     ChampionTrend, GoalProgress, GoalProgressPayload, PlayerMatchStats, RankedSnapshot,
@@ -370,45 +370,92 @@ fn Standing(ranked: Option<RankedInfo>) -> impl IntoView {
     }
 }
 
+/// Sort keys of the recent games table.
+const RECENT_SORT: &[(&str, &str)] = &[
+    ("result", "Result"),
+    ("champion", "Champion"),
+    ("kda", "K / D / A"),
+    ("cs", "CS"),
+    ("damage", "Damage"),
+];
+
+/// (K + A) / max(D, 1): the order of a K/D/A column.
+fn kda_ratio(kills: i32, deaths: i32, assists: i32) -> f32 {
+    (kills + assists) as f32 / deaths.max(1) as f32
+}
+
+/// Recent games in the table's order; unsorted is the incoming order,
+/// newest first.
+fn sort_recent(rows: &mut [PlayerMatchStats], sort: SortState) {
+    let Some(key) = sort.key else { return };
+    crate::components::ui::sort_rows(rows, sort.dir, |a, b| match key {
+        "result" => a.win.cmp(&b.win),
+        "champion" => a.champion.to_lowercase().cmp(&b.champion.to_lowercase()),
+        "kda" => kda_ratio(a.kills, a.deaths, a.assists)
+            .total_cmp(&kda_ratio(b.kills, b.deaths, b.assists)),
+        "cs" => a.cs.cmp(&b.cs),
+        "damage" => a.damage.cmp(&b.damage),
+        _ => std::cmp::Ordering::Equal,
+    });
+}
+
 #[component]
 fn RecentGames(matches: Vec<PlayerMatchStats>) -> impl IntoView {
+    let sort = RwSignal::new(SortState::none());
     view! {
         <section aria-labelledby="recent-h" data-my-recent>
-            <SectionHeader title="Recent games" id="recent-h" meta="Your last 20 synced games" />
+            <SectionHeader
+                title="Recent games"
+                id="recent-h"
+                meta="Your last 20 synced games, newest first"
+                actions=move || view! {
+                    {move || sort.get().key.is_some().then(|| view! {
+                        <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| sort.set(SortState::none()))>"Newest first"</Button>
+                    })}
+                }
+            />
             {if matches.is_empty() {
                 view! { <EmptyState size=EmptySize::Compact message="No games synced yet. Link your Riot account and sync; your last 20 games appear here, each with its full scoreboard." /> }.into_any()
             } else {
+                let rows = StoredValue::new(matches);
                 view! {
+                    <SortStatus sort=sort labels=RECENT_SORT />
                     <Table caption="Your recent games" caption_hidden=true>
                         <thead>
                             <tr>
-                                <Th>"Result"</Th>
-                                <Th>"Champion"</Th>
-                                <Th numeric=true>"K / D / A"</Th>
-                                <Th numeric=true>"CS"</Th>
-                                <Th numeric=true>"Damage"</Th>
+                                <SortTh label="Result" key="result" sort=sort />
+                                <SortTh label="Champion" key="champion" sort=sort />
+                                <SortTh label="K / D / A" key="kda" sort=sort numeric=true />
+                                // Phones drop CS and damage so the table fits without a
+                                // hidden right edge (M141); the match page has them.
+                                <SortTh label="CS" key="cs" sort=sort numeric=true class="hidden md:table-cell" />
+                                <SortTh label="Damage" key="damage" sort=sort numeric=true class="hidden md:table-cell" />
                                 <Th>"Game"</Th>
                             </tr>
                         </thead>
                         <tbody>
-                            {matches.into_iter().map(|m| {
-                                let href = format!("/match/{}", m.match_id);
-                                view! {
-                                    <Tr>
-                                        <Td><ResultGlyph result=GameResult::from_win(m.win) size=GlyphSize::Sm /></Td>
-                                        <Td>
-                                            <span class="flex items-center gap-2">
-                                                <ChampionAvatar name=m.champion.clone() size=AvatarSize::Xs decorative=true />
-                                                {m.champion.clone()}
-                                            </span>
-                                        </Td>
-                                        <Td numeric=true>{format!("{} / {} / {}", m.kills, m.deaths, m.assists)}</Td>
-                                        <Td numeric=true>{m.cs}</Td>
-                                        <Td numeric=true>{format!("{:.1}k", m.damage as f32 / 1000.0)}</Td>
-                                        <Td><A href=href attr:class="text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Details"</A></Td>
-                                    </Tr>
-                                }
-                            }).collect_view()}
+                            {move || {
+                                let mut list = rows.get_value();
+                                sort_recent(&mut list, sort.get());
+                                list.into_iter().map(|m| {
+                                    let href = format!("/match/{}", m.match_id);
+                                    view! {
+                                        <Tr>
+                                            <Td><ResultGlyph result=GameResult::from_win(m.win) size=GlyphSize::Sm /></Td>
+                                            <Td>
+                                                <span class="flex items-center gap-2">
+                                                    <ChampionAvatar name=m.champion.clone() size=AvatarSize::Xs decorative=true />
+                                                    {m.champion.clone()}
+                                                </span>
+                                            </Td>
+                                            <Td numeric=true>{crate::pages::match_detail::kda_text(m.kills, m.deaths, m.assists)}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{m.cs}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{format!("{:.1}k", m.damage as f32 / 1000.0)}</Td>
+                                            <Td><A href=href attr:class="text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Details"</A></Td>
+                                        </Tr>
+                                    }
+                                }).collect_view()
+                            }}
                         </tbody>
                     </Table>
                 }.into_any()
@@ -456,6 +503,18 @@ pub fn lp_points(snaps: &[RankedSnapshot]) -> Vec<(f32, f32)> {
         .collect()
 }
 
+/// The LP history's source line (M141, report ux89riwg): where the points
+/// come from and what is not drawn.
+pub fn lp_source_text(points: usize) -> String {
+    let n = match points {
+        1 => "1 point".to_string(),
+        n => format!("{n} points"),
+    };
+    format!(
+        "Source: one point each time you press Sync my games (your Solo/Duo standing at that moment). {n} in this period. Riot's game data carries no LP, so nothing is drawn before your first sync or between syncs."
+    )
+}
+
 #[component]
 fn LpHistory(
     window: RwSignal<String>,
@@ -473,39 +532,60 @@ fn LpHistory(
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading LP history"><Skeleton lines=3 /></SkeletonGroup> }>
                 {move || history.get().map(|r| {
                     let snaps = r.unwrap_or_default();
-                    if snaps.len() < 2 {
-                        return view! { <EmptyState size=EmptySize::Compact message="Not enough points in this period. Each sync stores your Solo/Duo standing; the line appears from two syncs on." /> }.into_any();
+                    if snaps.is_empty() {
+                        let msg = if window.get_untracked() == "all" {
+                            "No ranked standing stored yet. Press Sync my games: each sync stores your Solo/Duo standing as one point, and the line starts from your first sync."
+                        } else {
+                            "No sync in this period. Each sync stores your Solo/Duo standing as one point; choose All to see every sync so far."
+                        };
+                        return view! { <EmptyState size=EmptySize::Compact message=msg /> }.into_any();
                     }
                     let pts = lp_points(&snaps);
                     let path = pts.iter().enumerate().map(|(i, (x, y))| format!("{}{x:.1},{y:.1}", if i == 0 { "M" } else { " L" })).collect::<String>();
-                    let first = snaps.first().cloned();
-                    let last = snaps.last().cloned();
-                    let (first, last) = (first.unwrap_or_else(|| snaps[0].clone()), last.unwrap_or_else(|| snaps[0].clone()));
-                    let summary = format!(
-                        "LP history, {} points: from {} {} LP to {} {} LP",
-                        snaps.len(),
-                        rank_words(&first.tier, &first.division), first.lp,
-                        rank_words(&last.tier, &last.division), last.lp,
-                    );
+                    let first = snaps[0].clone();
+                    let last = snaps[snaps.len() - 1].clone();
+                    let single = snaps.len() == 1;
+                    let summary = if single {
+                        format!("LP history, 1 point: {} {} LP", rank_words(&first.tier, &first.division), first.lp)
+                    } else {
+                        format!(
+                            "LP history, {} points: from {} {} LP to {} {} LP",
+                            snaps.len(),
+                            rank_words(&first.tier, &first.division), first.lp,
+                            rank_words(&last.tier, &last.division), last.lp,
+                        )
+                    };
+                    let source = lp_source_text(snaps.len());
                     view! {
                         <figure>
                             <svg viewBox="-8 -8 616 176" class="h-auto w-full text-secondary" role="img" aria-label=summary.clone()>
                                 <line x1="0" y1="158" x2="600" y2="158" class="stroke-rule" stroke-width="1" />
-                                <path d=path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                {(!single).then(|| view! { <path d=path.clone() fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" /> })}
                                 {pts.iter().zip(snaps.iter()).map(|((x, y), s)| view! {
                                     <circle cx=format!("{x:.1}") cy=format!("{y:.1}") r="4" class="fill-ink-1" stroke="currentColor" stroke-width="2">
                                         <title>{format!("{} {} LP", rank_words(&s.tier, &s.division), s.lp)}</title>
                                     </circle>
                                 }).collect_view()}
                             </svg>
-                            <figcaption class="mt-2 flex justify-between gap-3 text-caption text-muted">
-                                <span><LocalTime iso=first.snapshotted_at.clone() style=TimeStyle::DayMonth />{format!(": {} {} LP", rank_words(&first.tier, &first.division), first.lp)}</span>
-                                <span><LocalTime iso=last.snapshotted_at.clone() style=TimeStyle::DayMonth />{format!(": {} {} LP", rank_words(&last.tier, &last.division), last.lp)}</span>
+                            <figcaption class="mt-2 flex flex-col gap-1 text-caption text-muted">
+                                {if single {
+                                    view! {
+                                        <span><LocalTime iso=first.snapshotted_at.clone() style=TimeStyle::DayMonth />{format!(": {} {} LP. A second sync draws the line.", rank_words(&first.tier, &first.division), first.lp)}</span>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <span class="flex flex-wrap justify-between gap-x-3">
+                                            <span>"First sync "<LocalTime iso=first.snapshotted_at.clone() style=TimeStyle::DayMonth />{format!(": {} {} LP", rank_words(&first.tier, &first.division), first.lp)}</span>
+                                            <span>"Last sync "<LocalTime iso=last.snapshotted_at.clone() style=TimeStyle::DayMonth />{format!(": {} {} LP", rank_words(&last.tier, &last.division), last.lp)}</span>
+                                        </span>
+                                    }.into_any()
+                                }}
+                                <span data-lp-source>{source}</span>
                             </figcaption>
                             <details class="mt-2 text-label text-secondary">
                                 <summary class="cursor-pointer text-muted">"All points as a table"</summary>
-                                <Table caption="LP history points" caption_hidden=true>
-                                    <thead><tr><Th>"When"</Th><Th>"Rank"</Th><Th numeric=true>"LP"</Th></tr></thead>
+                                <Table caption="LP history points, one per sync" caption_hidden=true>
+                                    <thead><tr><Th>"Synced"</Th><Th>"Rank"</Th><Th numeric=true>"LP"</Th></tr></thead>
                                     <tbody>
                                         {snaps.clone().into_iter().map(|s| view! {
                                             <Tr>
@@ -525,11 +605,41 @@ fn LpHistory(
     }
 }
 
+/// Sort keys of the champion trends table.
+const TRENDS_SORT: &[(&str, &str)] = &[
+    ("champion", "Champion"),
+    ("games", "Games"),
+    ("winrate", "Win rate"),
+    ("kda", "KDA"),
+    ("cs", "CS per minute"),
+    ("damage", "Damage"),
+];
+
+fn win_rate(t: &ChampionTrend) -> f32 {
+    t.wins as f32 / t.games.max(1) as f32
+}
+
+/// Champion trends in the table's order (stable: ties keep the incoming
+/// order, most games first).
+pub fn sort_trends(rows: &mut [ChampionTrend], sort: SortState) {
+    let Some(key) = sort.key else { return };
+    crate::components::ui::sort_rows(rows, sort.dir, |a, b| match key {
+        "champion" => a.champion.to_lowercase().cmp(&b.champion.to_lowercase()),
+        "games" => a.games.cmp(&b.games),
+        "winrate" => win_rate(a).total_cmp(&win_rate(b)),
+        "kda" => a.avg_kda.total_cmp(&b.avg_kda),
+        "cs" => a.cs_per_min.total_cmp(&b.cs_per_min),
+        "damage" => a.avg_damage.cmp(&b.avg_damage),
+        _ => std::cmp::Ordering::Equal,
+    });
+}
+
 #[component]
 fn ChampionTrends(
     window: RwSignal<String>,
     trends: Resource<Result<Vec<ChampionTrend>, ServerFnError>>,
 ) -> impl IntoView {
+    let sort = RwSignal::new(SortState::by("games", SortDir::Descending));
     view! {
         <section aria-labelledby="trends-h" data-champion-trends>
             <SectionHeader
@@ -539,40 +649,51 @@ fn ChampionTrends(
                     <SegmentedControl id="trends-window" label="Champion trends period" options=WINDOWS.iter().map(|(k, l)| Segment::new(*k, *l)).collect() value=window size=SegmentSize::Sm />
                 }
             />
+            <SortStatus sort=sort labels=TRENDS_SORT />
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading champion trends"><Skeleton lines=3 /></SkeletonGroup> }>
                 {move || trends.get().map(|r| {
                     let list = r.unwrap_or_default();
                     if list.is_empty() {
                         return view! { <EmptyState size=EmptySize::Compact message="No synced games in this period. Your champions appear here with games, win rate, KDA, CS per minute and damage." /> }.into_any();
                     }
+                    // The header is outside the sorted closure: re-sorting
+                    // re-renders only the rows, so focus stays on the header.
                     view! {
                         <Table caption="Champion trends" caption_hidden=true>
                             <thead>
                                 <tr>
-                                    <Th>"Champion"</Th>
-                                    <Th numeric=true>"Games"</Th>
-                                    <Th numeric=true>"Win rate"</Th>
-                                    <Th numeric=true>"KDA"</Th>
-                                    <Th numeric=true>"CS / min"</Th>
-                                    <Th numeric=true>"Damage"</Th>
+                                    <SortTh label="Champion" key="champion" sort=sort />
+                                    <SortTh label="Games" key="games" sort=sort numeric=true />
+                                    <SortTh label="Win rate" key="winrate" sort=sort numeric=true />
+                                    // Phones keep champion, games and win rate; KDA returns
+                                    // from `sm`, CS and damage from `md` (M141).
+                                    <SortTh label="KDA" key="kda" sort=sort numeric=true class="hidden sm:table-cell" />
+                                    <SortTh label="CS / min" key="cs" sort=sort numeric=true class="hidden md:table-cell" />
+                                    <SortTh label="Damage" key="damage" sort=sort numeric=true class="hidden md:table-cell" />
                                 </tr>
                             </thead>
                             <tbody>
-                                {list.into_iter().map(|t| view! {
-                                    <Tr>
-                                        <Td>
-                                            <span class="flex items-center gap-2">
-                                                <ChampionAvatar name=t.champion.clone() size=AvatarSize::Xs decorative=true />
-                                                {t.champion.clone()}
-                                            </span>
-                                        </Td>
-                                        <Td numeric=true>{t.games}</Td>
-                                        <Td numeric=true>{format!("{:.0}%", t.wins as f32 * 100.0 / t.games.max(1) as f32)}</Td>
-                                        <Td numeric=true>{format!("{:.1}", t.avg_kda)}</Td>
-                                        <Td numeric=true>{format!("{:.1}", t.cs_per_min)}</Td>
-                                        <Td numeric=true>{format!("{:.1}k", t.avg_damage as f32 / 1000.0)}</Td>
-                                    </Tr>
-                                }).collect_view()}
+                                {move || {
+                                    let mut rows = list.clone();
+                                    sort_trends(&mut rows, sort.get());
+                                    rows.into_iter().map(|t| {
+                                        let rate = format!("{:.0}%", win_rate(&t) * 100.0);
+                                        view! {
+                                        <Tr>
+                                            <Td>
+                                                <span class="flex items-center gap-2">
+                                                    <ChampionAvatar name=t.champion.clone() size=AvatarSize::Xs decorative=true />
+                                                    {t.champion.clone()}
+                                                </span>
+                                            </Td>
+                                            <Td numeric=true>{t.games}</Td>
+                                            <Td numeric=true>{rate}</Td>
+                                            <Td numeric=true class="hidden sm:table-cell">{format!("{:.1}", t.avg_kda)}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{format!("{:.1}", t.cs_per_min)}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{format!("{:.1}k", t.avg_damage as f32 / 1000.0)}</Td>
+                                        </Tr>
+                                    }}).collect_view()
+                                }}
                             </tbody>
                         </Table>
                     }.into_any()
@@ -661,7 +782,7 @@ fn Goals(goals: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl In
                                 {progress_line(&g.cs, |v| format!("{v:.1}"))}
                                 <div class="mt-2 flex flex-wrap items-end gap-2">
                                     <Field id="goal-cs" label="Target">
-                                        <TextField value=cs kind=InputKind::Number placeholder="7.5" size=crate::components::ui::FieldSize::Sm />
+                                        <TextField value=cs kind=InputKind::Number placeholder="7.5" size=crate::components::ui::FieldSize::Sm on_keydown=crate::components::ui::enter_submits(Callback::new(move |_| save.run(("cs_per_min", cs.get_untracked())))) />
                                     </Field>
                                     <Button size=ButtonSize::Sm on_click=Callback::new(move |_| save.run(("cs_per_min", cs.get_untracked())))>"Set CS goal"</Button>
                                 </div>
@@ -671,7 +792,7 @@ fn Goals(goals: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl In
                                 {progress_line(&g.deaths, |v| format!("{v:.1}"))}
                                 <div class="mt-2 flex flex-wrap items-end gap-2">
                                     <Field id="goal-deaths" label="At most">
-                                        <TextField value=deaths kind=InputKind::Number placeholder="4" size=crate::components::ui::FieldSize::Sm />
+                                        <TextField value=deaths kind=InputKind::Number placeholder="4" size=crate::components::ui::FieldSize::Sm on_keydown=crate::components::ui::enter_submits(Callback::new(move |_| save.run(("deaths_per_game", deaths.get_untracked())))) />
                                     </Field>
                                     <Button size=ButtonSize::Sm on_click=Callback::new(move |_| save.run(("deaths_per_game", deaths.get_untracked())))>"Set deaths goal"</Button>
                                 </div>
@@ -702,6 +823,37 @@ mod tests {
     fn ranks_read_as_words() {
         assert_eq!(rank_words("GOLD", "II"), "Gold II");
         assert_eq!(rank_words("MASTER", "I"), "Master");
+    }
+
+    #[test]
+    fn lp_source_says_where_points_come_from() {
+        let t = lp_source_text(1);
+        assert!(t.contains("1 point in this period"));
+        assert!(t.contains("Sync my games"));
+        assert!(t.contains("nothing is drawn before your first sync"));
+        assert!(lp_source_text(3).contains("3 points"));
+    }
+
+    #[test]
+    fn trends_sort_by_any_column_stably() {
+        let t = |c: &str, games: i32, wins: i32| ChampionTrend {
+            champion: c.into(),
+            games,
+            wins,
+            avg_kda: 2.0,
+            cs_per_min: 7.0,
+            avg_damage: 20_000,
+        };
+        let mut rows = vec![t("Ahri", 5, 1), t("Zed", 2, 2), t("Lux", 5, 4)];
+        sort_trends(&mut rows, SortState::by("winrate", SortDir::Descending));
+        let names: Vec<&str> = rows.iter().map(|r| r.champion.as_str()).collect();
+        assert_eq!(names, vec!["Zed", "Lux", "Ahri"]);
+        sort_trends(&mut rows, SortState::by("games", SortDir::Descending));
+        let names: Vec<&str> = rows.iter().map(|r| r.champion.as_str()).collect();
+        // Ties (Lux, Ahri: 5 games) keep the order they came in.
+        assert_eq!(names, vec!["Lux", "Ahri", "Zed"]);
+        sort_trends(&mut rows, SortState::by("champion", SortDir::Ascending));
+        assert_eq!(rows[0].champion, "Ahri");
     }
 
     #[test]

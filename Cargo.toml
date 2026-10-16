@@ -38,22 +38,28 @@ http-body = { version = "1", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 dotenvy = { version = "0.15", optional = true }
+# M141 H2: screenshot attachments are decoded (PNG, JPEG, WebP) and
+# re-encoded to WebP on the server, which strips every metadata block.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"], optional = true }
 
 # Client-only
 console_error_panic_hook = { version = "0.1", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
+# M141 H2: the feedback dialog uploads an attached image with fetch().
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
 
 # Shared
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "HtmlDocument", "HtmlDialogElement", "HtmlImageElement", "Element", "HtmlElement", "Node", "Storage", "Navigator", "Clipboard", "SvgsvgElement", "SvgGraphicsElement", "DomRect", "Performance", "MediaQueryList", "PointerEvent", "MouseEvent"] }
+web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "HtmlDocument", "HtmlDialogElement", "HtmlImageElement", "Element", "HtmlElement", "Node", "Storage", "Navigator", "Clipboard", "SvgsvgElement", "SvgGraphicsElement", "DomRect", "Performance", "MediaQueryList", "PointerEvent", "MouseEvent", "FocusOptions", "File", "FileList", "Blob", "HtmlInputElement", "ClipboardEvent", "DataTransferItemList", "DataTransferItem", "Request", "RequestInit", "Response", "Url"] }
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 
 [features]
 default = []
-hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
+hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys"]
 ssr = [
   "dep:leptos_axum",
   "dep:axum",
@@ -77,6 +83,7 @@ ssr = [
   "dep:tracing",
   "dep:tracing-subscriber",
   "dep:dotenvy",
+  "dep:image",
   "leptos/ssr",
   "leptos_meta/ssr",
   "leptos_router/ssr",

@@ -10,7 +10,10 @@ use crate::components::ui::{
     EmptyState, PageHeader, PageShell, PageWidth, Skeleton, SkeletonGroup, TabItem, TabPanel,
     Table, Tabs, Td, Th, Tr,
 };
-use crate::models::bug_report::{category_label, BugStatus, MyBugReport, PublicBugReport};
+use crate::models::bug_report::{
+    category_label, feedback_label, status_timeline, BugStatus, MyBugReport, PublicBugReport,
+    StepState,
+};
 use crate::models::community::short_date;
 use crate::pages::community::{redirect_signed_out, BugStatusBadge};
 
@@ -196,67 +199,92 @@ fn MyReports(rows: Vec<MyBugReport>) -> impl IntoView {
     if rows.is_empty() {
         return view! {
             <div class="mt-6">
-                <EmptyState size=EmptySize::Compact message="You have not sent a report yet. Use Report a bug at the bottom of any page; your reports and their status appear here." />
+                <EmptyState size=EmptySize::Compact message="You have not sent any feedback yet. Use Give Feedback at the bottom of any page; your reports and their status appear here." />
             </div>
         }
         .into_any();
     }
     let full_open = RwSignal::new(false);
     let full: RwSignal<(String, String)> = RwSignal::new((String::new(), String::new()));
+    // One structure at every width (M141 H3): a ruled row per report with
+    // its words, the status timeline, the team's note and the fix.
     view! {
         <div class="mt-6">
-            <Table caption="Reports you sent" caption_hidden=true>
-                <thead>
-                    <tr>
-                        <Th>"Sent"</Th>
-                        <Th>"Page"</Th>
-                        <Th>"Your report"</Th>
-                        <Th>"Status"</Th>
-                        <Th>"Note from the team"</Th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.into_iter().map(|r| {
-                        let short: String = r.description.chars().take(160).collect();
-                        let long = r.description.chars().count() > 160;
-                        let sent = short_date(&r.created_at);
-                        let (title, body) = (format!("Your report from {sent}"), r.description.clone());
-                        view! {
-                            <Tr>
-                                <Td muted=true>{sent.clone()}</Td>
-                                <Td><code class="font-mono text-caption text-secondary">{r.page_url.clone()}</code></Td>
-                                <Td>
-                                    <span class="whitespace-pre-wrap text-body text-primary">{short}{long.then_some("\u{2026}")}</span>
-                                    {long.then(|| view! {
-                                        <span class="ml-2">
-                                            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| {
-                                                full.set((title.clone(), body.clone()));
-                                                full_open.set(true);
-                                            })>"Show all"</Button>
-                                        </span>
-                                    })}
-                                </Td>
-                                <Td>
-                                    <span class="flex flex-wrap items-center gap-2">
-                                        <BugStatusBadge status=r.status.clone() />
-                                        {r.updated.then(|| view! { <Badge tone=BadgeTone::Accent>"Updated"</Badge> })}
+            <h2 class="sr-only">"Reports you sent"</h2>
+            <ul class="border-t border-rule" aria-label="Reports you sent">
+                {rows.into_iter().map(|r| {
+                    let short: String = r.description.chars().take(160).collect();
+                    let long = r.description.chars().count() > 160;
+                    let sent = short_date(&r.created_at);
+                    let (title, body) = (format!("Your report from {sent}"), r.description.clone());
+                    let kind = feedback_label(&r.category, &r.description);
+                    let changed = r.status_changed_at.as_deref().map(short_date);
+                    view! {
+                        <li class="flex flex-col gap-3 border-b border-rule py-4" data-my-report>
+                            <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
+                                <span class="figures">{format!("Sent {sent}")}</span>
+                                <span>{kind}</span>
+                                <code class="font-mono text-caption text-secondary">{r.page_url.clone()}</code>
+                                {r.updated.then(|| view! { <Badge tone=BadgeTone::Accent>"Updated"</Badge> })}
+                            </p>
+                            <p class="text-body text-primary">
+                                <span class="whitespace-pre-wrap">{short}{long.then_some("\u{2026}")}</span>
+                                {long.then(|| view! {
+                                    <span class="ml-2">
+                                        <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| {
+                                            full.set((title.clone(), body.clone()));
+                                            full_open.set(true);
+                                        })>"Show all"</Button>
                                     </span>
-                                </Td>
-                                <Td>
-                                    <span class="whitespace-pre-wrap text-body text-secondary">{r.public_note.clone().unwrap_or_else(|| "\u{2014}".into())}</span>
-                                    {r.fixed_in_title.clone().zip(r.fixed_in.clone()).map(|(t, slug)| view! {
-                                        <a href=format!("/changelog#{slug}") class="mt-1 block text-caption text-primary underline decoration-rule underline-offset-4">{format!("Fixed in {t}")}</a>
-                                    })}
-                                </Td>
-                            </Tr>
-                        }
-                    }).collect_view()}
-                </tbody>
-            </Table>
+                                })}
+                            </p>
+                            <StatusTimeline status=r.status.clone() changed=changed />
+                            {r.public_note.clone().map(|n| view! {
+                                <div class="border-l border-rule pl-3">
+                                    <p class="text-caption text-muted">"Note from the team"</p>
+                                    <p class="whitespace-pre-wrap text-body text-secondary">{n}</p>
+                                </div>
+                            })}
+                            {r.fixed_in_title.clone().zip(r.fixed_in.clone()).map(|(t, slug)| view! {
+                                <a href=format!("/changelog#{slug}") class="self-start text-label text-primary underline decoration-rule underline-offset-4 hover:decoration-accent">{format!("Fixed in {t}")}</a>
+                            })}
+                        </li>
+                    }
+                }).collect_view()}
+            </ul>
             <FullText open=full_open full=full />
         </div>
     }
     .into_any()
+}
+
+/// New, triaged, planned, fixed (or won't fix): where a report stands. The
+/// current step is marked in words for screen readers and by weight and an
+/// accent square on screen, never by colour alone.
+#[component]
+fn StatusTimeline(status: String, changed: Option<String>) -> impl IntoView {
+    let steps = status_timeline(&status);
+    view! {
+        <ol class="flex flex-wrap gap-x-4 gap-y-1 text-caption" aria-label="Status" data-status-timeline>
+            {steps.into_iter().map(|(step, state)| {
+                let (row, mark) = match state {
+                    StepState::Reached => ("inline-flex items-center gap-1.5 text-primary", "size-1.5 shrink-0 bg-primary"),
+                    StepState::Current => ("inline-flex items-center gap-1.5 font-semibold text-primary", "size-1.5 shrink-0 bg-accent"),
+                    StepState::Ahead => ("inline-flex items-center gap-1.5 text-muted", "size-1.5 shrink-0 border border-outline"),
+                };
+                let current = state == StepState::Current;
+                let date = changed.clone().filter(|_| current && step != BugStatus::New);
+                view! {
+                    <li class=row aria-current=current.then_some("step") data-step=step.as_str()>
+                        <span class=mark aria-hidden="true"></span>
+                        <span>{step.label()}</span>
+                        {current.then(|| view! { <span class="sr-only">" (current)"</span> })}
+                        {date.map(|d| view! { <span class="figures font-normal text-muted">{d}</span> })}
+                    </li>
+                }
+            }).collect_view()}
+        </ol>
+    }
 }
 
 #[component]

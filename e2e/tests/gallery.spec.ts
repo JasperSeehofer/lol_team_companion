@@ -23,10 +23,12 @@ const SECTIONS = [
   "fields",
   "badge",
   "table",
+  "sort",
   "tabs",
   "toggles",
   "keycap",
   "callout",
+  "status",
   "toast",
   "empty",
   "skeleton",
@@ -415,4 +417,39 @@ test.describe("gallery access", () => {
     expect(member?.status()).toBe(404);
     await expect(authedPage.locator("h1")).toHaveText(/page not found/i);
   });
+});
+
+// M141 (reports l31jk71m, rucyy6k1): a button keeps its size in every state,
+// and a sortable header sorts by click and keyboard with aria-sort.
+test("a button keeps its size while loading and with a changed label", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const idle = await adminPage.getByTestId("button-size-idle").boundingBox();
+  const loading = await adminPage.getByTestId("button-size-loading").boundingBox();
+  const done = await adminPage.getByTestId("button-size-done").boundingBox();
+  expect(idle && loading && done).toBeTruthy();
+  expect(Math.abs(idle!.width - loading!.width)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(idle!.height - loading!.height)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(idle!.width - done!.width)).toBeLessThanOrEqual(0.5);
+  // The label stays in the accessible name while loading.
+  await expect(adminPage.getByTestId("button-size-loading")).toHaveAccessibleName(/Sync my games/);
+});
+
+test("sortable headers sort by click and keyboard, with aria-sort", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const demo = adminPage.getByTestId("sort-demo");
+  const firstCell = demo.locator("tbody tr").first().locator("th, td").first();
+  const games = demo.locator("th", { has: adminPage.getByRole("button", { name: "Sort by Games" }) });
+  await expect(games).toHaveAttribute("aria-sort", "descending");
+  // Ties keep their order: Orianna (14) before Syndra (14).
+  await expect(firstCell).toHaveText("Orianna");
+  const byName = demo.getByRole("button", { name: "Sort by Champion" });
+  await byName.click();
+  await expect(firstCell).toHaveText("Azir");
+  await expect(games).not.toHaveAttribute("aria-sort", /.+/);
+  // Keyboard: focus stays on the header, Enter flips the order.
+  await expect(byName).toBeFocused();
+  await adminPage.keyboard.press("Enter");
+  await expect(firstCell).toHaveText("Taliyah");
+  await expect(demo.locator("th").first()).toHaveAttribute("aria-sort", "descending");
+  await expect(demo.getByRole("status")).toHaveText("Sorted by Champion, descending");
 });

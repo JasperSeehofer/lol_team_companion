@@ -10,6 +10,7 @@
 use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::slot_meta;
 use crate::components::ui::a11y::focus_id;
+use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
     slot_dom_id, AvatarSize, AvatarState, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ChampionAvatar, ConfirmDialog, ConfirmTone, Density, Dialog, DraftBoard, DraftSide, EmptySize,
@@ -18,6 +19,7 @@ use crate::components::ui::{
     SkeletonGroup, SkeletonShape, StatReadout, Switch, TabItem, TabPanel, Table, Tabs, Td,
     TextField, Th, Toast, ToastContext, Tr, TOURNAMENT_ORDER,
 };
+use crate::components::ui::{SortDir, SortState, SortStatus, SortTh};
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
 };
@@ -2421,7 +2423,7 @@ fn PlanSection(
 #[component]
 fn CommentsSection(ed: Editor) -> impl IntoView {
     let input = RwSignal::new(String::new());
-    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let add = Callback::new(move |_: ()| {
         let text = input.get_untracked().trim().to_string();
         if !text.is_empty() {
             ed.comments.update(|c| c.push(text));
@@ -2449,9 +2451,12 @@ fn CommentsSection(ed: Editor) -> impl IntoView {
                     }
                 }}
                 <Field id="draft-comment" label="Add a comment">
-                    <TextField value=input rows=2 placeholder="Ask the jungler about level 3 timings." />
+                    <TextField value=input rows=2 placeholder="Ask the jungler about level 3 timings." on_keydown=ctrl_enter_submits(add) />
                 </Field>
-                <div><Button on_click=add>"Add comment"</Button></div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button on_click=Callback::new(move |_| add.run(()))>"Add comment"</Button>
+                    <span class="inline-flex items-center gap-1 text-caption text-muted"><Keycap keys="Ctrl" /><Keycap keys="Enter" />" adds it"</span>
+                </div>
             </div>
         </section>
     }
@@ -2673,7 +2678,7 @@ fn BanPriorities() -> impl IntoView {
         );
         editing.set(true);
     });
-    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let add = Callback::new(move |_: ()| {
         let c = champ.get_untracked().trim().to_string();
         if c.is_empty() {
             return;
@@ -2745,12 +2750,12 @@ fn BanPriorities() -> impl IntoView {
                         }}
                         <div class="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_2fr_auto]">
                             <Field id="ban-champion" label="Champion">
-                                <TextField value=champ placeholder="Kalista" />
+                                <TextField value=champ placeholder="Kalista" on_keydown=enter_submits(add) />
                             </Field>
                             <Field id="ban-reason" label="Reason">
-                                <TextField value=reason placeholder="Their bot lane's comfort pick" />
+                                <TextField value=reason placeholder="Their bot lane's comfort pick" on_keydown=enter_submits(add) />
                             </Field>
-                            <Button on_click=add>"Add"</Button>
+                            <Button on_click=Callback::new(move |_| add.run(()))>"Add"</Button>
                         </div>
                         <div class="flex gap-2">
                             <Button variant=ButtonVariant::Primary on_click=save>"Save priorities"</Button>
@@ -2790,6 +2795,28 @@ fn BanPriorities() -> impl IntoView {
 }
 
 /// Champions that keep appearing in the same step of the team's drafts.
+/// Sort keys of the champions-by-appearances table (M141, report rucyy6k1).
+const APPEARANCE_SORT: &[(&str, &str)] = &[
+    ("champion", "Champion"),
+    ("drafts", "Drafts"),
+    ("step", "Most common step"),
+    ("share", "Share"),
+];
+
+/// (champion, drafts, most common step's order, count at that step) in the
+/// table's order, stably.
+fn sort_appearances(rows: &mut [(String, i32, i32, i32)], sort: SortState) {
+    let Some(key) = sort.key else { return };
+    let share = |r: &(String, i32, i32, i32)| r.3 as f64 / r.1.max(1) as f64;
+    crate::components::ui::sort_rows(rows, sort.dir, |a, b| match key {
+        "champion" => a.0.to_lowercase().cmp(&b.0.to_lowercase()),
+        "drafts" => a.1.cmp(&b.1),
+        "step" => a.2.cmp(&b.2),
+        "share" => share(a).total_cmp(&share(b)),
+        _ => std::cmp::Ordering::Equal,
+    });
+}
+
 #[component]
 fn Tendencies() -> impl IntoView {
     let data = Resource::new(|| (), |_| get_draft_tendency_data());
@@ -2814,6 +2841,7 @@ fn Tendencies() -> impl IntoView {
                         .map(|(c, (total, order, count))| (c, total, order, count))
                         .collect();
                     list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                    let sort = RwSignal::new(SortState::by("drafts", SortDir::Descending));
                     if list.is_empty() {
                         return view! {
                             <EmptyState size=EmptySize::Compact message="Tendencies appear once a champion shows up in two or more saved drafts: which step it usually takes, and whether that is predictable." />
@@ -2836,32 +2864,37 @@ fn Tendencies() -> impl IntoView {
                                     </ul>
                                 </Callout>
                             })}
+                            <SortStatus sort=sort labels=APPEARANCE_SORT />
                             <Table caption="Champions by appearances in saved drafts">
                                 <thead>
                                     <tr>
-                                        <Th>"Champion"</Th>
-                                        <Th numeric=true>"Drafts"</Th>
-                                        <Th>"Most common step"</Th>
-                                        <Th numeric=true>"Share"</Th>
+                                        <SortTh label="Champion" key="champion" sort=sort />
+                                        <SortTh label="Drafts" key="drafts" sort=sort numeric=true />
+                                        <SortTh label="Most common step" key="step" sort=sort />
+                                        <SortTh label="Share" key="share" sort=sort numeric=true />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {list.into_iter().map(|(c, total, order, count)| {
-                                        let step = TOURNAMENT_ORDER.get(order as usize).map(|s| s.describe()).unwrap_or_default();
-                                        let share = (count as f64 / total.max(1) as f64 * 100.0).round() as i32;
-                                        view! {
-                                            <Tr>
-                                                <Td header=true>
-                                                    <span class="inline-flex items-center gap-2">
-                                                        <ChampionAvatar name=c.clone() size=AvatarSize::Xs decorative=true />{c}
-                                                    </span>
-                                                </Td>
-                                                <Td numeric=true>{total}</Td>
-                                                <Td>{step}</Td>
-                                                <Td numeric=true>{format!("{share}%")}</Td>
-                                            </Tr>
-                                        }
-                                    }).collect_view()}
+                                    {move || {
+                                        let mut rows = list.clone();
+                                        sort_appearances(&mut rows, sort.get());
+                                        rows.into_iter().map(|(c, total, order, count)| {
+                                            let step = TOURNAMENT_ORDER.get(order as usize).map(|s| s.describe()).unwrap_or_default();
+                                            let share = (count as f64 / total.max(1) as f64 * 100.0).round() as i32;
+                                            view! {
+                                                <Tr>
+                                                    <Td header=true>
+                                                        <span class="inline-flex items-center gap-2">
+                                                            <ChampionAvatar name=c.clone() size=AvatarSize::Xs decorative=true />{c}
+                                                        </span>
+                                                    </Td>
+                                                    <Td numeric=true>{total}</Td>
+                                                    <Td>{step}</Td>
+                                                    <Td numeric=true>{format!("{share}%")}</Td>
+                                                </Tr>
+                                            }
+                                        }).collect_view()
+                                    }}
                                 </tbody>
                             </Table>
                         </div>
@@ -2903,19 +2936,7 @@ fn Outcomes() -> impl IntoView {
                     };
                     let table = |caption: &'static str, first: &'static str, rows: Vec<(String, i32, i32)>| {
                         (!rows.is_empty()).then(|| view! {
-                            <Table caption=caption>
-                                <thead><tr><Th>{first}</Th><Th numeric=true>"Games"</Th><Th numeric=true>"Won"</Th><Th numeric=true>"Win rate"</Th></tr></thead>
-                                <tbody>
-                                    {rows.into_iter().map(|(k, g, w)| view! {
-                                        <Tr>
-                                            <Td header=true>{k}</Td>
-                                            <Td numeric=true>{g}</Td>
-                                            <Td numeric=true>{w}</Td>
-                                            <Td numeric=true>{format!("{}%", if g > 0 { (w as f64 / g as f64 * 100.0).round() as i32 } else { 0 })}</Td>
-                                        </Tr>
-                                    }).collect_view()}
-                                </tbody>
-                            </Table>
+                            <crate::components::record_table::RecordTable caption=caption first=first rows=rows />
                         })
                     };
                     view! {

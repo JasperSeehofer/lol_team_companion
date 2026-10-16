@@ -28,6 +28,9 @@ use lol_team_companion::{
         draft::DraftAction,
         game_plan::{GamePlan, PostGameLearning},
         graph::{NewRelation, RelationKind},
+        match_data::{
+            EventCategory, MatchParticipant, TimelineEvent, DEMO_MATCH_ID, DEMO_MATCH_PREFIX,
+        },
     },
     server::{
         auth::hash_password,
@@ -219,6 +222,10 @@ async fn main() {
             "  2 bug reports (one triaged and on the bug board, one new) and votes on 3 seeded \
              What next ideas (ideas stay unpublished until an admin publishes them; no ledger figures)"
         );
+        println!(
+            "  a fictional demo game {DEMO_MATCH_ID} (scoreboards and timeline, never looked up on Riot), \
+             in seed-alpha-top's games"
+        );
         println!("  guidance demo: seed-beta-sup is a returning user (account 40 days old, writes 30 days old)");
         println!("  1 invite code (25 uses, 30 days)");
         return;
@@ -268,6 +275,11 @@ async fn main() {
         std::process::exit(1);
     }
 
+    if let Err(e) = demo_match(&db, &teams).await {
+        eprintln!("The demo match failed: {e}");
+        std::process::exit(1);
+    }
+
     if let Err(e) = returning_user(&db, &teams).await {
         eprintln!("Backdating the returning demo user failed: {e}");
         std::process::exit(1);
@@ -284,6 +296,7 @@ async fn main() {
     )
     .await;
 
+    println!("Demo match page (as seed-alpha-top): /match/{DEMO_MATCH_ID}");
     println!("\nSeed complete. Logins (password for all: {PASSWORD}):");
     for (spec, team) in TEAMS.iter().zip(&teams) {
         println!("  {}:", team.name);
@@ -423,6 +436,313 @@ async fn community(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String>
 }
 
 // ---------------------------------------------------------------------------
+// Demo match (M141)
+// ---------------------------------------------------------------------------
+
+/// One fictional game between the two seed teams, so the match page has a
+/// scoreboard and a timeline without Riot: Northgate Academy on blue (the
+/// first draft's picks, seed-alpha-top on Darius) beats Riverside Rooks.
+/// Stored like a cached Riot game (`match_detail` with its timeline rows)
+/// plus seed-alpha-top's synced row, under an id no Riot platform uses
+/// (`SEED1_...`; the match page never sends it to Riot). Cleanup removes it.
+async fn demo_match(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String> {
+    let err = |e: db::DbError| e.to_string();
+    let Some(alpha) = teams.first() else {
+        return Ok(());
+    };
+    let Some(user_id) = alpha.members.first() else {
+        return Ok(());
+    };
+    const DURATION: i32 = 29 * 60 + 14;
+    // (name, champion, position, k, d, a, cs, vision, damage, gold, items)
+    type Line = (
+        &'static str,
+        &'static str,
+        &'static str,
+        i32,
+        i32,
+        i32,
+        i32,
+        i32,
+        i32,
+        i32,
+        [i32; 6],
+    );
+    // (k, d, a, cs, vision, damage, gold, items)
+    type Stats = (i32, i32, i32, i32, i32, i32, i32, [i32; 6]);
+    let positions = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
+    let blue_champs = ["Darius", "Hecarim", "Azir", "Jinx", "Thresh"];
+    let red_champs = ["Gnar", "LeeSin", "Viktor", "Ezreal", "Braum"];
+    let blue_stats: [Stats; 5] = [
+        (
+            7,
+            3,
+            6,
+            214,
+            21,
+            24_310,
+            13_420,
+            [3071, 3053, 3047, 6333, 0, 0],
+        ),
+        (
+            5,
+            4,
+            12,
+            168,
+            34,
+            15_880,
+            11_250,
+            [3742, 3065, 3111, 3076, 0, 0],
+        ),
+        (
+            6,
+            2,
+            9,
+            256,
+            26,
+            28_940,
+            13_980,
+            [3115, 3020, 4645, 3089, 0, 0],
+        ),
+        (
+            9,
+            3,
+            7,
+            271,
+            19,
+            26_105,
+            14_320,
+            [3031, 3006, 3085, 3094, 3036, 0],
+        ),
+        (0, 4, 18, 41, 72, 6_420, 8_130, [3190, 3117, 3109, 0, 0, 0]),
+    ];
+    let red_stats: [Stats; 5] = [
+        (
+            3,
+            5,
+            4,
+            198,
+            18,
+            17_240,
+            10_870,
+            [3078, 3047, 3748, 0, 0, 0],
+        ),
+        (4, 6, 5, 151, 29, 13_120, 9_640, [6692, 3111, 3071, 0, 0, 0]),
+        (
+            2,
+            6,
+            6,
+            239,
+            22,
+            21_480,
+            11_210,
+            [3165, 3020, 3157, 0, 0, 0],
+        ),
+        (
+            5,
+            5,
+            3,
+            248,
+            17,
+            19_930,
+            11_660,
+            [3078, 3158, 3042, 0, 0, 0],
+        ),
+        (0, 5, 9, 37, 61, 4_980, 7_020, [3190, 3047, 3109, 0, 0, 0]),
+    ];
+    let names = |t: usize| {
+        TEAMS[t]
+            .players
+            .iter()
+            .map(|p| p.username)
+            .collect::<Vec<_>>()
+    };
+    let mut lines: Vec<(i32, Line)> = Vec::new();
+    for (team, champs, stats) in [
+        (0usize, blue_champs, blue_stats),
+        (1, red_champs, red_stats),
+    ] {
+        let names = names(team);
+        for i in 0..5 {
+            let (k, d, a, cs, vis, dmg, gold, items) = stats[i];
+            lines.push((
+                if team == 0 { 100 } else { 200 },
+                (
+                    names[i],
+                    champs[i],
+                    positions[i],
+                    k,
+                    d,
+                    a,
+                    cs,
+                    vis,
+                    dmg,
+                    gold,
+                    items,
+                ),
+            ));
+        }
+    }
+    let participants: Vec<MatchParticipant> = lines
+        .iter()
+        .enumerate()
+        .map(|(i, (team_id, l))| MatchParticipant {
+            participant_id: i as i32 + 1,
+            puuid: format!("seed-demo-{}", i + 1),
+            summoner_name: l.0.to_string(),
+            champion_name: l.1.to_string(),
+            team_id: *team_id,
+            team_position: l.2.to_string(),
+            kills: l.3,
+            deaths: l.4,
+            assists: l.5,
+            cs: l.6,
+            vision_score: l.7,
+            damage: l.8,
+            gold_earned: l.9,
+            items: l.10,
+            win: *team_id == 100,
+        })
+        .collect();
+
+    let ms = |m: i64, s: i64| (m * 60 + s) * 1000;
+    let ev = |ts: i64, kind: &str, cat: EventCategory, team: Option<i32>| TimelineEvent {
+        timestamp_ms: ts,
+        event_type: kind.to_string(),
+        category: cat,
+        team_id: team,
+        killer_participant_id: None,
+        victim_participant_id: None,
+        monster_type: None,
+        monster_sub_type: None,
+        building_type: None,
+        is_first_blood: false,
+        multi_kill_length: None,
+        is_teamfight: false,
+        involved_participants: Vec::new(),
+    };
+    let kill = |ts: i64, killer: i32, victim: i32, assists: &[i32], fight: bool| {
+        let mut e = ev(
+            ts,
+            "CHAMPION_KILL",
+            EventCategory::Kill,
+            Some(if killer <= 5 { 100 } else { 200 }),
+        );
+        e.killer_participant_id = Some(killer);
+        e.victim_participant_id = Some(victim);
+        e.involved_participants = [&[killer, victim][..], assists].concat();
+        e.is_teamfight = fight;
+        if fight {
+            e.category = EventCategory::Teamfight;
+        }
+        e
+    };
+    let monster = |ts: i64, team: i32, killer: i32, kind: &str, sub: Option<&str>| {
+        let mut e = ev(
+            ts,
+            "ELITE_MONSTER_KILL",
+            EventCategory::Objective,
+            Some(team),
+        );
+        e.killer_participant_id = Some(killer);
+        e.monster_type = Some(kind.to_string());
+        e.monster_sub_type = sub.map(str::to_string);
+        e.involved_participants = vec![killer];
+        e
+    };
+    let building = |ts: i64, team: i32, killer: i32, kind: &str| {
+        let mut e = ev(ts, "BUILDING_KILL", EventCategory::Tower, Some(team));
+        e.killer_participant_id = Some(killer);
+        e.building_type = Some(kind.to_string());
+        e.involved_participants = vec![killer];
+        e
+    };
+    let mut first = kill(ms(3, 12), 2, 6, &[1], false);
+    first.is_first_blood = true;
+    let mut fight = ev(ms(18, 24), "TEAMFIGHT", EventCategory::Teamfight, None);
+    fight.is_teamfight = true;
+    fight.involved_participants = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let mut events = vec![
+        // A stored shop undo, as matches cached before M141 hold them: the
+        // read path skips it, so the page draws no recall from it.
+        ev(ms(0, 48), "ITEM_UNDO", EventCategory::Recall, None),
+        ev(ms(1, 30), "WARD_PLACED", EventCategory::Ward, None),
+        first,
+        ev(ms(4, 55), "WARD_PLACED", EventCategory::Ward, None),
+        monster(ms(6, 2), 200, 7, "HORDE", None),
+        kill(ms(6, 40), 9, 4, &[10], false),
+        monster(ms(7, 5), 100, 2, "DRAGON", Some("FIRE_DRAGON")),
+        ev(ms(9, 40), "WARD_PLACED", EventCategory::Ward, None),
+        building(ms(11, 30), 100, 1, "TOWER_BUILDING"),
+        kill(ms(12, 5), 1, 6, &[2], false),
+        monster(ms(13, 32), 200, 7, "DRAGON", Some("WATER_DRAGON")),
+        kill(ms(14, 10), 3, 8, &[5], false),
+        ev(ms(14, 20), "WARD_PLACED", EventCategory::Ward, None),
+        kill(ms(16, 2), 7, 1, &[6], false),
+        kill(ms(18, 20), 4, 9, &[5, 3], true),
+        kill(ms(18, 23), 1, 6, &[2], true),
+        kill(ms(18, 26), 8, 2, &[7], true),
+        kill(ms(18, 29), 3, 7, &[4, 5], true),
+        fight,
+        monster(ms(19, 10), 100, 2, "DRAGON", Some("AIR_DRAGON")),
+        building(ms(20, 4), 100, 4, "TOWER_BUILDING"),
+        ev(ms(21, 0), "WARD_PLACED", EventCategory::Ward, None),
+        kill(ms(22, 45), 1, 10, &[], false),
+        monster(ms(24, 30), 100, 2, "BARON_NASHOR", None),
+        building(ms(25, 40), 100, 3, "TOWER_BUILDING"),
+        building(ms(27, 10), 100, 1, "INHIBITOR_BUILDING"),
+        kill(ms(28, 30), 4, 8, &[1, 3], false),
+    ];
+    events.sort_by_key(|e| e.timestamp_ms);
+
+    db::store_match_detail(
+        db,
+        DEMO_MATCH_ID,
+        &participants,
+        &events,
+        DURATION,
+        "CLASSIC",
+    )
+    .await
+    .map_err(err)?;
+    let me = &participants[0];
+    db::store_matches(
+        db,
+        user_id,
+        vec![riot::MatchData {
+            match_id: DEMO_MATCH_ID.to_string(),
+            queue_id: 420,
+            game_duration: DURATION,
+            game_end_epoch_ms: Some(
+                (chrono::Utc::now() - chrono::Duration::days(1)).timestamp_millis(),
+            ),
+            champion: me.champion_name.clone(),
+            kills: me.kills,
+            deaths: me.deaths,
+            assists: me.assists,
+            cs: me.cs,
+            vision_score: me.vision_score,
+            damage: me.damage,
+            win: me.win,
+        }],
+    )
+    .await
+    .map_err(err)?;
+    // The game is the team's too (Team games, the post-game review's match list).
+    let response = db
+        .query(
+            "UPDATE match SET team_id = type::record('team', $team_key) WHERE match_id = $match_id",
+        )
+        .bind(("team_key", db::record_key(&alpha.id, "team")))
+        .bind(("match_id", DEMO_MATCH_ID.to_string()))
+        .await
+        .map_err(|e| e.to_string())?;
+    response.check().map_err(|e| e.to_string())?;
+    println!("Stored the demo match {DEMO_MATCH_ID}.");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Cleanup
 // ---------------------------------------------------------------------------
 
@@ -478,8 +798,15 @@ async fn cleanup(db: &Surreal<Db>) -> Result<(), String> {
         DELETE bug_report WHERE user IN $users; \
         DELETE user WHERE id IN $users; \
         DELETE invite WHERE note = 'seed'; \
+        DELETE match_timeline_event WHERE string::starts_with(match_id, $demo_prefix); \
+        DELETE match_detail WHERE string::starts_with(match_id, $demo_prefix); \
+        DELETE match WHERE string::starts_with(match_id, $demo_prefix); \
         COMMIT TRANSACTION;";
-    let response = db.query(q).await.map_err(|e| e.to_string())?;
+    let response = db
+        .query(q)
+        .bind(("demo_prefix", DEMO_MATCH_PREFIX.to_string()))
+        .await
+        .map_err(|e| e.to_string())?;
     db::check_tx(response).map_err(|e| e.to_string())?;
     println!("Removed earlier seed data (if any).");
     Ok(())

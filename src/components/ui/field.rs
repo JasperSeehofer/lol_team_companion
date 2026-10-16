@@ -3,6 +3,7 @@
 //! `Field` owns the ids and wires them to the control inside it through
 //! context, so a control never needs its own label plumbing.
 
+use leptos::context::Provider;
 use leptos::prelude::*;
 
 use super::button::Force;
@@ -56,12 +57,17 @@ pub fn Field(
     // dialog in a panel that unmounts) may run once more after its Field's
     // signals are gone; that must not panic.
     let invalid = Signal::derive(move || error.try_with(|e| e.is_some()).unwrap_or(false));
-    provide_context(FieldContext {
+    // A `Provider`, not `provide_context`: a component has no owner of its
+    // own, so a second Field on the same parent would overwrite this one's
+    // context, and a control rendered lazily inside this field (in a
+    // `move ||` closure) would take the other field's id (M141: the
+    // feedback text took the screenshot field's id).
+    let field_ctx = FieldContext {
         id: id.clone(),
         described_by,
         invalid,
         required,
-    });
+    };
 
     view! {
         <div class="flex flex-col gap-1.5">
@@ -69,7 +75,7 @@ pub fn Field(
                 {label}
                 {required.then(|| view! { <span class="font-normal text-muted">" (required)"</span> })}
             </label>
-            {children()}
+            <Provider value=field_ctx>{children()}</Provider>
             {hint.map(|h| view! { <p id=hint_id class="text-caption text-muted">{h}</p> })}
             {move || error.get().map(|e| view! {
                 <p id=error_id.clone() role="alert" class="flex items-start gap-1.5 text-caption text-danger">
@@ -144,6 +150,54 @@ pub struct Combobox {
     pub active: Signal<Option<String>>,
 }
 
+/// Which key press submits a field's attached action (DESIGN 6.6, "Enter
+/// submits"): plain Enter in a single-line field, Ctrl+Enter (or Cmd+Enter)
+/// in a textarea, where Enter stays a newline. Never while an input method
+/// is composing.
+pub fn submits_on(
+    key: &str,
+    ctrl_or_meta: bool,
+    shift_or_alt: bool,
+    composing: bool,
+    multiline: bool,
+) -> bool {
+    if key != "Enter" || composing || shift_or_alt {
+        return false;
+    }
+    if multiline {
+        ctrl_or_meta
+    } else {
+        !ctrl_or_meta
+    }
+}
+
+fn submit_handler(submit: Callback<()>, multiline: bool) -> Callback<leptos::ev::KeyboardEvent> {
+    Callback::new(move |ev: leptos::ev::KeyboardEvent| {
+        if submits_on(
+            &ev.key(),
+            ev.ctrl_key() || ev.meta_key(),
+            ev.shift_key() || ev.alt_key(),
+            ev.is_composing(),
+            multiline,
+        ) {
+            ev.prevent_default();
+            submit.run(());
+        }
+    })
+}
+
+/// `on_keydown` for a single-line [`TextField`] with an attached primary
+/// button: Enter runs `submit` (the button's action).
+pub fn enter_submits(submit: Callback<()>) -> Callback<leptos::ev::KeyboardEvent> {
+    submit_handler(submit, false)
+}
+
+/// `on_keydown` for a textarea with an attached button: Ctrl+Enter (Cmd+Enter
+/// on a Mac) runs `submit`; Enter alone stays a newline.
+pub fn ctrl_enter_submits(submit: Callback<()>) -> Callback<leptos::ev::KeyboardEvent> {
+    submit_handler(submit, true)
+}
+
 const CONTROL: &str = "w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger";
 
 /// A single-line text input, or a textarea when `rows` is set.
@@ -184,7 +238,12 @@ pub fn TextField(
     /// Combobox wiring (single-line fields only).
     #[prop(optional)]
     combobox: Option<Combobox>,
+    /// Extra classes for a single-line input, literal at the call site
+    /// (`pl-10` leaves room for a leading icon slot).
+    #[prop(optional)]
+    class: &'static str,
 ) -> impl IntoView {
+    let extra = class;
     let ctx = use_context::<FieldContext>();
     let id = id.or_else(|| ctx.as_ref().map(|c| c.id.clone()));
     let described_by = ctx.as_ref().map(|c| c.described_by);
@@ -273,7 +332,7 @@ pub fn TextField(
             .into_any()
         }
         (None, Some(v)) => {
-            let class = join(&[CONTROL, size.class()]);
+            let class = join(&[CONTROL, size.class(), extra]);
             view! {
                 <input
                     id=id
@@ -304,7 +363,7 @@ pub fn TextField(
             .into_any()
         }
         (None, None) => {
-            let class = join(&[CONTROL, size.class()]);
+            let class = join(&[CONTROL, size.class(), extra]);
             view! {
                 <input
                     id=id
@@ -444,5 +503,20 @@ pub fn Select(
                 <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod enter_tests {
+    use super::*;
+
+    #[test]
+    fn enter_submits_single_line_and_ctrl_enter_submits_textareas() {
+        assert!(submits_on("Enter", false, false, false, false));
+        assert!(!submits_on("Enter", false, false, true, false), "composing");
+        assert!(!submits_on("Enter", false, true, false, false), "shift");
+        assert!(!submits_on("a", false, false, false, false));
+        assert!(!submits_on("Enter", false, false, false, true), "newline");
+        assert!(submits_on("Enter", true, false, false, true));
     }
 }

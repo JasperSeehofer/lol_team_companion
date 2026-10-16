@@ -579,6 +579,115 @@ pub struct ProposalView {
     pub published: bool,
     pub source: String,
     pub wishlist_report: Option<String>,
+    /// Imported from the Team Companion agent (M141 H4): the import date
+    /// (YYYY-MM-DD). Shown with the proposal, for admins and users.
+    #[serde(default)]
+    pub agent_proposed_on: Option<String>,
+}
+
+/// Agent proposals (M141 H4): `seed_key` prefix of an imported proposal.
+pub const AGENT_KEY_PREFIX: &str = "agent:";
+/// Largest import accepted, in bytes of JSON.
+pub const MAX_IMPORT_BYTES: usize = 64 * 1024;
+/// Most proposals in one import.
+pub const MAX_IMPORT_PROPOSALS: usize = 20;
+/// Longest `key` of an imported proposal.
+pub const MAX_IMPORT_KEY: usize = 60;
+
+/// The "Import proposals (JSON)" document (schema in CLAUDE.md). Unknown
+/// fields are refused.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProposalImport {
+    /// Always 1.
+    pub version: u32,
+    pub proposals: Vec<ImportedProposal>,
+}
+
+/// One imported proposal. Saved as a draft, unpublished, attributed to the
+/// Team Companion agent.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImportedProposal {
+    /// Stable id, lowercase letters, digits and dashes: importing the same
+    /// key twice is refused.
+    pub key: String,
+    pub title: String,
+    #[serde(default)]
+    pub summary: String,
+}
+
+/// Parse and check an import: every problem is listed (one line each), and
+/// nothing is imported unless there are none.
+pub fn parse_proposal_import(json: &str) -> Result<Vec<ImportedProposal>, Vec<String>> {
+    if json.len() > MAX_IMPORT_BYTES {
+        return Err(vec![format!(
+            "The file is too large (up to {} KB).",
+            MAX_IMPORT_BYTES / 1024
+        )]);
+    }
+    let doc: ProposalImport = serde_json::from_str(json)
+        .map_err(|e| vec![format!("This is not a proposals file: {e}.")])?;
+    if doc.version != 1 {
+        return Err(vec!["Unknown version (expected 1).".into()]);
+    }
+    if doc.proposals.is_empty() {
+        return Err(vec!["The file holds no proposals.".into()]);
+    }
+    if doc.proposals.len() > MAX_IMPORT_PROPOSALS {
+        return Err(vec![format!(
+            "Up to {MAX_IMPORT_PROPOSALS} proposals per import."
+        )]);
+    }
+    let mut errors = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (i, p) in doc.proposals.iter().enumerate() {
+        let n = i + 1;
+        let key = p.key.trim();
+        let key_ok = !key.is_empty()
+            && key.chars().count() <= MAX_IMPORT_KEY
+            && key
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && !key.starts_with('-');
+        if !key_ok {
+            errors.push(format!(
+                "Proposal {n}: the key must be 1 to {MAX_IMPORT_KEY} lowercase letters, digits or dashes."
+            ));
+        } else if !seen.insert(key.to_string()) {
+            errors.push(format!(
+                "Proposal {n}: the key \u{201c}{key}\u{201d} appears twice."
+            ));
+        }
+        let title = clean_text(&p.title);
+        if title.is_empty() || title.chars().count() > MAX_PROPOSAL_TITLE {
+            errors.push(format!(
+                "Proposal {n}: the title must be 1 to {MAX_PROPOSAL_TITLE} characters."
+            ));
+        }
+        let summary = clean_text(&p.summary);
+        if summary.chars().count() > MAX_PROPOSAL_SUMMARY {
+            errors.push(format!(
+                "Proposal {n}: the summary must be up to {MAX_PROPOSAL_SUMMARY} characters."
+            ));
+        }
+        out.push(ImportedProposal {
+            key: key.to_string(),
+            title,
+            summary,
+        });
+    }
+    if errors.is_empty() {
+        Ok(out)
+    } else {
+        Err(errors)
+    }
+}
+
+/// The attribution line of an agent proposal.
+pub fn agent_attribution(date: &str) -> String {
+    format!("Proposed by the Team Companion agent \u{2014} {date}")
 }
 
 /// An admin's proposal form, sent as JSON.
@@ -1104,6 +1213,49 @@ pub struct AdminOverview {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn proposal_import_is_strict() {
+        let ok = r#"{"version":1,"proposals":[{"key":"chips","title":"Suggestion chips","summary":"Short."},{"key":"roles-2","title":"Roles"}]}"#;
+        let list = parse_proposal_import(ok).expect("valid");
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[1].summary, "");
+        // Unknown fields, at the top and per proposal.
+        assert!(parse_proposal_import(r#"{"version":1,"proposals":[],"x":1}"#).is_err());
+        assert!(parse_proposal_import(
+            r#"{"version":1,"proposals":[{"key":"a","title":"T","published":true}]}"#
+        )
+        .is_err());
+        assert!(
+            parse_proposal_import(r#"{"version":2,"proposals":[{"key":"a","title":"T"}]}"#)
+                .is_err()
+        );
+        assert!(parse_proposal_import(r#"{"version":1,"proposals":[]}"#).is_err());
+        let errs = parse_proposal_import(
+            r#"{"version":1,"proposals":[{"key":"Bad Key","title":""},{"key":"a","title":"T"},{"key":"a","title":"T"}]}"#,
+        )
+        .unwrap_err();
+        assert_eq!(errs.len(), 3, "{errs:?}");
+        let long = format!(
+            r#"{{"version":1,"proposals":[{{"key":"a","title":"{}"}}]}}"#,
+            "x".repeat(MAX_PROPOSAL_TITLE + 1)
+        );
+        assert!(parse_proposal_import(&long).is_err());
+        let many: Vec<String> = (0..=MAX_IMPORT_PROPOSALS)
+            .map(|i| format!(r#"{{"key":"k{i}","title":"T"}}"#))
+            .collect();
+        assert!(parse_proposal_import(&format!(
+            r#"{{"version":1,"proposals":[{}]}}"#,
+            many.join(",")
+        ))
+        .is_err());
+        let huge = format!(
+            r#"{{"version":1,"proposals":[],"pad":"{}"}}"#,
+            "x".repeat(MAX_IMPORT_BYTES)
+        );
+        assert!(parse_proposal_import(&huge).unwrap_err()[0].contains("too large"));
+    }
+
     use super::*;
 
     fn p(id: &str, status: &str, votes: u32, created: &str, changed: Option<&str>) -> ProposalView {
@@ -1122,6 +1274,7 @@ mod tests {
             published: true,
             source: "admin".into(),
             wishlist_report: None,
+            agent_proposed_on: None,
         }
     }
 
@@ -1374,5 +1527,14 @@ mod tests {
         assert_eq!(clean_text("  a\u{7}b\nc  "), "ab\nc");
         assert!(clean_limited(&"x".repeat(11), 10).is_err());
         assert_eq!(group_thousands(4000), "4,000");
+    }
+
+    /// The agent's batch-1 file stays importable with the real parser.
+    #[test]
+    fn agent_proposals_batch1_file_imports() {
+        let json = include_str!("../../docs/agent-proposals/2026-10-batch1.json");
+        let list = parse_proposal_import(json).expect("docs/agent-proposals/2026-10-batch1.json");
+        assert_eq!(list.len(), 8);
+        assert!(list.iter().all(|p| !p.summary.is_empty()));
     }
 }

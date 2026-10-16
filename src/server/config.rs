@@ -166,6 +166,7 @@ pub const VARIABLES: &[EnvVar] = &[
     EnvVar { name: "RIOT_GLOBAL_BUDGET_PER_MIN", default: "50", meaning: "process-wide Riot requests per minute, two-minute burst (1 to 1,000,000)", server: true },
     EnvVar { name: "SURREAL_DATA_DIR", default: "./data", meaning: "database directory (SurrealKV, one process only)", server: true },
     EnvVar { name: "BUG_REPORT_INBOX_PATH", default: "./docs/inbox/bug-reports.md", meaning: "bug-report export written on start and after every change (feedback.jsonl beside it)", server: true },
+    EnvVar { name: "ATTACHMENTS_DIR", default: "./attachments", meaning: "directory for feedback screenshots (<report id>.webp, admin-only; deleted with the reporter's account); must not be inside SURREAL_DATA_DIR", server: true },
     EnvVar { name: "RUST_LOG", default: "info,lol_team_companion=debug", meaning: "tracing filter (an invalid filter is reported and the default used)", server: true },
     EnvVar { name: "APP_ENV", default: "unset (production)", meaning: "dev, development or local marks a development run (so does LEPTOS_ENV=DEV)", server: true },
     EnvVar { name: "LEPTOS_ENV", default: "unset (production)", meaning: "DEV marks a development run (set by cargo leptos watch); the image sets PROD", server: true },
@@ -197,6 +198,8 @@ pub struct AppConfig {
     pub security: SecurityConfig,
     pub data_dir: PathBuf,
     pub bug_inbox_path: PathBuf,
+    /// `ATTACHMENTS_DIR`: feedback screenshots (M141 H2, `server::attachments`).
+    pub attachments_dir: PathBuf,
     pub riot: RiotConfig,
     pub shutdown: ShutdownConfig,
     /// `MATCH_CACHE_RETENTION_DAYS`: how long the shared Riot match caches
@@ -232,6 +235,8 @@ pub struct ShutdownConfig {
 }
 
 pub const DEFAULT_DATA_DIR: &str = "./data";
+/// Where feedback screenshots go when `ATTACHMENTS_DIR` is not set (M141).
+pub const DEFAULT_ATTACHMENTS_DIR: &str = "./attachments";
 pub const DEFAULT_RUST_LOG: &str = "info,lol_team_companion=debug";
 /// Twelve months (owner's decision, 12 October 2026).
 pub const DEFAULT_MATCH_CACHE_RETENTION_DAYS: u32 = 365;
@@ -528,6 +533,23 @@ impl AppConfig {
                 bug_inbox_path.display()
             ));
         }
+        let attachments_dir = PathBuf::from(
+            r.raw("ATTACHMENTS_DIR")
+                .unwrap_or_else(|| DEFAULT_ATTACHMENTS_DIR.into()),
+        );
+        if attachments_dir.exists() && !attachments_dir.is_dir() {
+            r.errors.push(format!(
+                "ATTACHMENTS_DIR={} exists but is not a directory",
+                attachments_dir.display()
+            ));
+        }
+        if attachments_dir.starts_with(&data_dir) {
+            r.errors.push(format!(
+                "ATTACHMENTS_DIR={} is inside SURREAL_DATA_DIR={}; keep it beside the database, not in it",
+                attachments_dir.display(),
+                data_dir.display()
+            ));
+        }
         // Read here for the table test; main.rs builds the filter itself.
         let _ = r.raw("RUST_LOG");
 
@@ -615,6 +637,7 @@ impl AppConfig {
                     security,
                     data_dir,
                     bug_inbox_path,
+                    attachments_dir,
                     riot: RiotConfig {
                         api_key,
                         budget_per_sec,

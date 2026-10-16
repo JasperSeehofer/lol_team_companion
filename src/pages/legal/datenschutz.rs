@@ -60,9 +60,10 @@ pub const STORED: &[(&str, &[&str])] = &[
         ],
     ),
     (
-        "Bug reports",
+        "Feedback",
         &[
-            "What you send with the bug-report button: the page, the element you pointed at, your text, the category and the window size. Open reports are also written to a file on the server for the maintainer to read.",
+            "What you send with Give Feedback: the page, the element you pointed at, your text, the kind (bug, idea or praise) and the window size. Open reports are also written to a file on the server for the maintainer to read.",
+            "A screenshot, if you attach one: stored on the server as a picture file next to the report (converted to WebP, which removes what the original file carried about where, when and on what device it was taken), seen only by admins. It can show other people, for example scouted players' Riot IDs; admins delete such a picture when it should not be kept, and it is deleted with your account.",
             "What the team does with a report: its status, a title and a note the team writes (shown on the bug board only when the team puts it there), an internal note, which admin changed it and when, and when you last looked at your reports.",
         ],
     ),
@@ -75,6 +76,11 @@ pub const STORED: &[(&str, &[&str])] = &[
         ],
     ),
 ];
+
+/// How long the ranked standing snapshots behind the LP history are kept
+/// (M141: the same nightly task and `MATCH_CACHE_RETENTION_DAYS` as the
+/// match cache).
+pub const RANKED_SNAPSHOT_RETENTION: &str = "Ranked snapshots (your standing read from Riot at each sync, the points of your LP history): deleted 12 months after the sync by the same nightly task, or earlier when you delete your account.";
 
 /// How long the shared Riot match caches are kept: the default of
 /// `MATCH_CACHE_RETENTION_DAYS` (365). Change the page and the variable
@@ -201,11 +207,12 @@ pub fn DatenschutzPage() -> impl IntoView {
             <section class="mt-10" aria-labelledby="retention-h">
                 <SectionHeader title="How long data is kept" id="retention-h" />
                 <ul class=ul>
-                    <li>"Your account, your own pages, synced games and ranked snapshots: until you delete your account."</li>
+                    <li>"Your account, your own pages and synced games: until you delete your account."</li>
+                    <li>{RANKED_SNAPSHOT_RETENTION}</li>
                     <li>"Your team's records: until the team deletes them, or the team is deleted. When you delete your account, what you wrote for the team stays with the team, shown as written by a former member."</li>
                     <li>"Deleted team notes: one day, so they can be restored. Sessions: 30 days after the last visit."</li>
                     <li>{MATCH_CACHE_RETENTION}</li>
-                    <li>"Bug reports: until an admin deletes them. When you delete your account, your reports stay without your name, shown as from a former member, and your text, the element you pointed at and your window size are removed from them."</li>
+                    <li>"Feedback: until an admin deletes it. When you delete your account, your reports stay without your name, shown as from a former member, and your text, the element you pointed at, your window size and any screenshot are removed. An admin can delete a screenshot at any time, for example when it shows someone who asks for that."</li>
                     <li>"Backups: 30 days. Data you delete disappears from the backups within 30 days. If nightly backups stop working for a while, the last good copies are kept until new ones succeed, so that a working copy always exists."</li>
                 </ul>
             </section>
@@ -286,6 +293,42 @@ mod tests {
         "site_text",
         "champion_trait",
     ];
+    /// Personal data kept outside the database, by the variable that names
+    /// where (M141 H2): each must be described in `STORED` and covered by
+    /// the account deletion.
+    const STORED_FILES: &[(&str, &str)] = &[("ATTACHMENTS_DIR", "screenshot")];
+
+    #[test]
+    fn files_outside_the_database_are_described() {
+        let text: String = super::STORED
+            .iter()
+            .flat_map(|(_, items)| items.iter())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        for (var, word) in STORED_FILES {
+            assert!(
+                text.contains(word),
+                "the privacy page does not describe what {var} holds ({word})"
+            );
+        }
+        #[cfg(feature = "ssr")]
+        for (var, _) in STORED_FILES {
+            assert!(
+                crate::server::config::VARIABLES
+                    .iter()
+                    .any(|v| v.name == *var),
+                "{var} is not a configured variable"
+            );
+        }
+        let account = include_str!("../../server/account.rs");
+        assert!(
+            account.contains("attachments::remove_all"),
+            "account deletion does not delete feedback screenshots"
+        );
+    }
+
     /// Tables that hold nothing about a person or a team: migration
     /// bookkeeping, the champion data cache and patch changes. (Champion
     /// traits are listed above: they record the admin who edited them.)
@@ -310,6 +353,7 @@ mod tests {
             "the privacy page says 12 months"
         );
         assert!(super::MATCH_CACHE_RETENTION.contains("12 months after they were fetched"));
+        assert!(super::RANKED_SNAPSHOT_RETENTION.contains("12 months after the sync"));
     }
 
     /// Every purpose has a stated legal basis; no placeholder is left.

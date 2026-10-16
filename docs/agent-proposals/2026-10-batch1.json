@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "proposals": [
+    {
+      "key": "role-responsibilities",
+      "title": "Role responsibilities for team members, with feedback per responsibility",
+      "summary": "Let a team give each member named responsibilities (shot-calling, summoner spell timers, vision, objective calls) and tag lines in post-game reviews with them, so each player sees feedback grouped by what they own."
+    },
+    {
+      "key": "game-plan-suggestion-chips",
+      "title": "Suggestion chips in the game plan, from the Draft Graph",
+      "summary": "Show a few suggestions in the game plan, each with a one-sentence reason from the Draft Graph's synergy and counter evidence. The team accepts or dismisses each one; dismissals are remembered per plan."
+    },
+    {
+      "key": "season-schedule-availability",
+      "title": "Season schedule with availability and a confirmed count",
+      "summary": "A list of upcoming matches and scrims (next 14 days) on Match Day, with a Yes, Maybe or No from each member and a '4 of 5 confirmed' count."
+    },
+    {
+      "key": "share-draft-discord",
+      "title": "Share a draft read-only and post it to Discord",
+      "summary": "Add the draft board to share links, and let a team save one Discord webhook address so a leader can post a match's share link and a three-line summary to the team channel."
+    },
+    {
+      "key": "review-tags-pattern-count",
+      "title": "Review tags and a pattern count on Match Day",
+      "summary": "Let each review line carry a tag (draft, lane, objectives, fights, comms), count tags over the last five reviews on Match Day, and offer 'turn into action item' on a line, with a soft cap of three open items."
+    },
+    {
+      "key": "chalk-means-you",
+      "title": "Chalk means you: a principle for the accent colour",
+      "summary": "State in the design document that the chalk accent marks what is yours (your champion, your involvement, your selected row), and review the other places where accent is only decoration."
+    },
+    {
+      "key": "replay-map-signature",
+      "title": "Replay map on the match page as its signature moment",
+      "summary": "Make the match detail page quiet except for one moment: the replay map with a shared playhead, importing the timeline the first time a match is opened."
+    },
+    {
+      "key": "margin-notes-praise-count",
+      "title": "Margin notes for replies and a praise count for the owner",
+      "summary": "Show the team's reply to a report as a margin note in the app's serif italic voice, and add a count of praise reports to the admin hub so the owner sees what to protect."
+    }
+  ]
+}

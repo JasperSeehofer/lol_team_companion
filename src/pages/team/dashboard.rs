@@ -4,6 +4,7 @@
 //! Real data only; every empty part says how it fills.
 
 use crate::components::local_time::{LocalTime, TimeStyle};
+use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
     Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind, Menu, MenuAlign,
@@ -840,7 +841,7 @@ fn EditTeam(
     let name = RwSignal::new(name);
     let region = RwSignal::new(team_region);
     let error = RwSignal::new(None::<String>);
-    let save = Callback::new(move |_| {
+    let save = Callback::new(move |_: ()| {
         leptos::task::spawn_local(async move {
             match update_team_info(name.get_untracked(), region.get_untracked()).await {
                 Ok(()) => {
@@ -864,12 +865,12 @@ fn EditTeam(
             title="Edit team"
             footer=move || view! {
                 <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| open.set(false))>"Cancel"</Button>
-                <Button variant=ButtonVariant::Primary on_click=save>"Save team"</Button>
+                <Button variant=ButtonVariant::Primary on_click=Callback::new(move |_| save.run(()))>"Save team"</Button>
             }
         >
             <div class="flex flex-col gap-4">
                 <Field id="team-name" label="Team name" required=true error=Signal::derive(move || error.get())>
-                    <TextField value=name maxlength=60 required=true />
+                    <TextField value=name maxlength=60 required=true on_keydown=enter_submits(save) />
                 </Field>
                 <Field id="team-region" label="Region" hint="Riot calls for team syncs and scouting use it.">
                     <Select value=region options=options.get_value() />
@@ -893,7 +894,7 @@ fn InvitePlayers(
     let error = RwSignal::new(None::<String>);
     let minting = RwSignal::new(false);
     let minted = RwSignal::new(None::<String>);
-    let mint = Callback::new(move |_| {
+    let mint = Callback::new(move |_: ()| {
         let (Ok(u), Ok(d)) = (
             uses.get_untracked().trim().parse::<i64>(),
             days.get_untracked().trim().parse::<i64>(),
@@ -940,10 +941,10 @@ fn InvitePlayers(
             <p class="mb-4 text-body text-secondary">{format!("A link that signs a new player up straight into {team_name}. They start as \u{201c}not placed yet\u{201d} until you place them.")}</p>
             <div class="grid grid-cols-2 gap-4">
                 <Field id="team-invite-uses" label="Uses" hint=format!("Up to {TEAM_INVITE_MAX_USES}")>
-                    <TextField kind=InputKind::Number value=uses />
+                    <TextField kind=InputKind::Number value=uses on_keydown=enter_submits(mint) />
                 </Field>
                 <Field id="team-invite-days" label="Expires in days" hint=format!("1 to {TEAM_INVITE_MAX_DAYS}")>
-                    <TextField kind=InputKind::Number value=days />
+                    <TextField kind=InputKind::Number value=days on_keydown=enter_submits(mint) />
                 </Field>
             </div>
             <div class="mt-4">
@@ -952,7 +953,7 @@ fn InvitePlayers(
                 </Field>
             </div>
             <div class="mt-4">
-                <Button on_click=mint loading=minting attr:data-testid="mint-team-invite">"Create invite link"</Button>
+                <Button on_click=Callback::new(move |_| mint.run(())) loading=minting attr:data-testid="mint-team-invite">"Create invite link"</Button>
             </div>
             {move || minted.get().map(|link| view! {
                 <p class="mt-4 text-body text-secondary" data-testid="team-invite-link">
@@ -1076,7 +1077,7 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
     let edit_text = RwSignal::new(String::new());
     let adding = RwSignal::new(false);
 
-    let add = Callback::new(move |_| {
+    let add = Callback::new(move |_: ()| {
         let content = draft.get_untracked();
         if content.trim().is_empty() {
             return;
@@ -1155,10 +1156,11 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
             <SectionHeader title="Team notes" id="notes-h" meta="Everyone on the team can edit them." />
             <div class="flex flex-col gap-2">
                 <Field id="new-team-note" label="New note">
-                    <TextField value=draft rows=3 maxlength=4000 placeholder="Something the whole team should know" />
+                    <TextField value=draft rows=3 maxlength=4000 placeholder="Something the whole team should know" on_keydown=ctrl_enter_submits(add) />
                 </Field>
-                <div>
-                    <Button on_click=add loading=adding attr:data-testid="add-team-note">"Add note"</Button>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button on_click=Callback::new(move |_| add.run(())) loading=adding attr:data-testid="add-team-note">"Add note"</Button>
+                    <span class="inline-flex items-center gap-1 text-caption text-muted"><Keycap keys="Ctrl" /><Keycap keys="Enter" />" adds it"</span>
                 </div>
             </div>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading notes"><Skeleton lines=3 /></SkeletonGroup> }>
@@ -1190,7 +1192,7 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
                                                 let id_save = id_save.clone();
                                                 view! {
                                                     <div class="flex flex-col gap-2">
-                                                        <TextField value=edit_text rows=4 maxlength=4000 aria_label="Edit note" />
+                                                        <TextField value=edit_text rows=4 maxlength=4000 aria_label="Edit note" on_keydown=ctrl_enter_submits(Callback::new({ let id = id_save.clone(); move |_| save_edit.run(id.clone()) })) />
                                                         <div class="flex gap-2">
                                                             <Button size=ButtonSize::Sm on_click=Callback::new(move |_| save_edit.run(id_save.clone()))>"Save note"</Button>
                                                             <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| editing.set(None))>"Cancel"</Button>

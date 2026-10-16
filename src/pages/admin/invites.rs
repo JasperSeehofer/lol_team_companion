@@ -182,28 +182,25 @@ pub fn AdminInvitesPage() -> impl IntoView {
                             <section aria-labelledby="mint-h">
                                 <SectionHeader title="Mint a code" id="mint-h" />
                                 <ActionForm action=mint>
-                                    <div class="flex flex-wrap items-end gap-3">
-                                        <div class="w-32">
-                                            <Field id="invite-max-uses" label="Max uses">
-                                                <TextField kind=InputKind::Number name="max_uses" value=max_uses required=true />
-                                            </Field>
+                                    <div class="grid grid-cols-1 items-start gap-x-3 gap-y-4 sm:grid-cols-2 lg:grid-cols-[8rem_10rem_minmax(12rem,1fr)_minmax(12rem,1.2fr)_auto]" data-testid="mint-row">
+                                        <Field id="invite-max-uses" label="Max uses">
+                                            <TextField kind=InputKind::Number name="max_uses" value=max_uses required=true />
+                                        </Field>
+                                        <Field id="invite-expiry" label="Expires in days" hint="Empty: never">
+                                            <TextField kind=InputKind::Number name="expires_in_days" value=expiry />
+                                        </Field>
+                                        <Field id="invite-team" label="Team (optional)" hint="Joins the account to this team">
+                                            <Select name="team_id" value=team options=team_options />
+                                        </Field>
+                                        <Field id="invite-note" label="Note (optional)">
+                                            <TextField name="note" value=note maxlength=200 placeholder="Who is this for?" />
+                                        </Field>
+                                        <div class="flex flex-col gap-1.5">
+                                            <span class="hidden text-label lg:block" aria-hidden="true">"\u{a0}"</span>
+                                            <div class="flex items-center lg:h-9">
+                                                <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Touch full_width=true>"Mint code"</Button>
+                                            </div>
                                         </div>
-                                        <div class="w-40">
-                                            <Field id="invite-expiry" label="Expires in days" hint="Empty: never">
-                                                <TextField kind=InputKind::Number name="expires_in_days" value=expiry />
-                                            </Field>
-                                        </div>
-                                        <div class="min-w-48">
-                                            <Field id="invite-team" label="Team (optional)" hint="Joins the account to this team">
-                                                <Select name="team_id" value=team options=team_options />
-                                            </Field>
-                                        </div>
-                                        <div class="min-w-48 flex-1">
-                                            <Field id="invite-note" label="Note (optional)">
-                                                <TextField name="note" value=note maxlength=200 placeholder="Who is this for?" />
-                                            </Field>
-                                        </div>
-                                        <Button kind=ButtonType::Submit variant=ButtonVariant::Primary>"Mint code"</Button>
                                     </div>
                                 </ActionForm>
                                 {move || last_code().map(|code| {
@@ -227,14 +224,16 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                         <Table caption="Invite codes" caption_hidden=true>
                                             <thead>
                                                 <tr>
+                                                    // Phones keep code, status, uses and the action;
+                                                    // narrow screens drop created and note (M141).
                                                     <Th>"Code"</Th>
                                                     <Th>"Status"</Th>
                                                     <Th numeric=true>"Uses"</Th>
-                                                    <Th>"Team"</Th>
-                                                    <Th>"Expires"</Th>
-                                                    <Th>"Created"</Th>
-                                                    <Th>"Note"</Th>
-                                                    <Th><span class="sr-only">"Actions"</span></Th>
+                                                    <Th class="hidden md:table-cell">"Team"</Th>
+                                                    <Th class="hidden md:table-cell">"Expires"</Th>
+                                                    <Th class="hidden lg:table-cell">"Created"</Th>
+                                                    <Th class="hidden lg:table-cell">"Note"</Th>
+                                                    <Th class="w-24"><span class="sr-only">"Actions"</span></Th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -242,20 +241,25 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     let status = inv.status(&now);
                                                     let can_disable = !inv.disabled;
                                                     let id = inv.id.clone();
-                                                    let created = match &inv.created_by {
-                                                        Some(by) => format!("{} by {by}", short_date(&inv.created_at)),
-                                                        None => short_date(&inv.created_at),
-                                                    };
+                                                    let created = short_date(&inv.created_at);
+                                                    let created_by = inv.created_by.clone().map(|by| {
+                                                        let title = by.clone();
+                                                        view! { <span class="block max-w-32 truncate text-caption" title=title>"by "{by}</span> }
+                                                    });
+                                                    let team_name = inv.team_name.clone().unwrap_or_else(|| "None".to_string());
+                                                    let team_title = team_name.clone();
+                                                    let note = inv.note.clone().unwrap_or_default();
+                                                    let note_title = note.clone();
                                                     view! {
                                                         <Tr>
-                                                            <Td><code class="font-mono text-caption text-primary">{inv.code.clone()}</code></Td>
-                                                            <Td><span class=status_class(status)>{status}</span></Td>
+                                                            <Td class="whitespace-nowrap"><code class="font-mono text-caption text-primary">{inv.code.clone()}</code></Td>
+                                                            <Td class="whitespace-nowrap"><span class=status_class(status)>{status}</span></Td>
                                                             <Td numeric=true>{format!("{} / {}", inv.uses, inv.max_uses)}</Td>
-                                                            <Td muted=inv.team_name.is_none()>{inv.team_name.clone().unwrap_or_else(|| "None".to_string())}</Td>
-                                                            <Td>{inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}</Td>
-                                                            <Td muted=true>{created}</Td>
-                                                            <Td muted=true>{inv.note.clone().unwrap_or_default()}</Td>
-                                                            <Td>
+                                                            <Td class="hidden md:table-cell" muted=inv.team_name.is_none()><span class="block max-w-32 truncate" title=team_title>{team_name}</span></Td>
+                                                            <Td class="hidden whitespace-nowrap md:table-cell">{inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}</Td>
+                                                            <Td class="hidden lg:table-cell" muted=true><span class="whitespace-nowrap">{created}</span>{created_by}</Td>
+                                                            <Td class="hidden lg:table-cell" muted=true><span class="block max-w-32 truncate" title=note_title>{note}</span></Td>
+                                                            <Td class="whitespace-nowrap">
                                                                 {can_disable.then(|| view! {
                                                                     <Button size=ButtonSize::Sm variant=ButtonVariant::Danger on_click=Callback::new(move |_| { disable.dispatch(DisableInviteFn { id: id.clone() }); })>"Disable"</Button>
                                                                 })}

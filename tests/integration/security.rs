@@ -1954,3 +1954,51 @@ async fn team_codes_redeem_into_their_own_team_and_visits_stay_per_user() {
     let bob_seen: Vec<Option<surrealdb::types::Datetime>> = r.take(0).unwrap();
     assert_eq!(bob_seen, vec![None]);
 }
+
+#[tokio::test]
+async fn champion_in_a_synced_game_is_private_to_its_owner() {
+    // M141: the match page finds "you" from the user's own player_match row
+    // when no PUUID matches; another user's rows never answer.
+    use lol_team_companion::server::riot::MatchData;
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    db::store_matches(
+        &db,
+        &t.a,
+        vec![MatchData {
+            match_id: "SEED1_1000000042".into(),
+            queue_id: 420,
+            game_duration: 1800,
+            game_end_epoch_ms: None,
+            champion: "Darius".into(),
+            kills: 1,
+            deaths: 2,
+            assists: 3,
+            cs: 100,
+            vision_score: 10,
+            damage: 1000,
+            win: true,
+        }],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        db::user_champion_in_match(&db, &t.a, "SEED1_1000000042")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("Darius")
+    );
+    assert_eq!(
+        db::user_champion_in_match(&db, &t.b, "SEED1_1000000042")
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        db::user_champion_in_match(&db, &t.a, "SEED1_1000000043")
+            .await
+            .unwrap(),
+        None
+    );
+}

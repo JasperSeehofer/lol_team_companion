@@ -4276,7 +4276,7 @@ pub async fn create_bug_report(
     category: String,
     viewport_w: Option<i32>,
     viewport_h: Option<i32>,
-) -> DbResult<()> {
+) -> DbResult<String> {
     // T-19-02 mitigation: reject whitespace-only descriptions at the DB layer
     // so any caller (server-fn, future CLI, etc.) gets the same guarantee.
     if description.trim().is_empty() {
@@ -4284,26 +4284,38 @@ pub async fn create_bug_report(
     }
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     // Owned `String` for every `.bind` per surreal-patterns rule 4.
-    db.query(
-        "CREATE bug_report SET \
+    let r = db
+        .query(
+            "CREATE bug_report SET \
              user = type::record('user', $user_key), \
              page_url = $page_url, \
              element_label = $element_label, \
              description = $description, \
              category = $category, \
              viewport_w = $viewport_w, \
-             viewport_h = $viewport_h",
-    )
-    .bind(("user_key", user_key))
-    .bind(("page_url", page_url))
-    .bind(("element_label", element_label))
-    .bind(("description", description))
-    .bind(("category", category))
-    .bind(("viewport_w", viewport_w.map(|v| v as i64)))
-    .bind(("viewport_h", viewport_h.map(|v| v as i64)))
-    .await?
-    .check()?; // surreal-patterns rule 27: .check() on writes
-    Ok(())
+             viewport_h = $viewport_h \
+         RETURN id",
+        )
+        .bind(("user_key", user_key))
+        .bind(("page_url", page_url))
+        .bind(("element_label", element_label))
+        .bind(("description", description))
+        .bind(("category", category))
+        .bind(("viewport_w", viewport_w.map(|v| v as i64)))
+        .bind(("viewport_h", viewport_h.map(|v| v as i64)))
+        .await?
+        .check()?; // surreal-patterns rule 27: .check() on writes
+    let mut r = r;
+    let rows: Vec<CreatedId> = r.take(0)?;
+    rows.into_iter()
+        .next()
+        .map(|r| r.id.to_sql())
+        .ok_or_else(|| DbError::Other("bug report not created".into()))
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct CreatedId {
+    id: RecordId,
 }
 
 pub async fn list_bug_reports(db: &Surreal<Db>, status: Option<&str>) -> DbResult<Vec<BugReport>> {
@@ -6038,22 +6050,28 @@ struct DbTimelineEvent {
     pub involved_participants: Option<String>,
 }
 
-fn classify_db_event(
+/// The category of a cached timeline row, or `None` for a row that is not
+/// shown. Matches cached before M141 hold `ITEM_UNDO` rows that were drawn as
+/// recalls; an item undo is the shop's "undo purchase" and Riot reports no
+/// recall event, so those rows are skipped on read (no re-import needed).
+pub(crate) fn classify_db_event(
     event_type: &str,
     is_teamfight: bool,
-) -> crate::models::match_data::EventCategory {
+) -> Option<crate::models::match_data::EventCategory> {
     use crate::models::match_data::EventCategory;
-    if is_teamfight || event_type == "TEAMFIGHT" {
-        return EventCategory::Teamfight;
+    if event_type == "ITEM_UNDO" {
+        return None;
     }
-    match event_type {
+    if is_teamfight || event_type == "TEAMFIGHT" {
+        return Some(EventCategory::Teamfight);
+    }
+    Some(match event_type {
         "ELITE_MONSTER_KILL" => EventCategory::Objective,
         "BUILDING_KILL" => EventCategory::Tower,
         "CHAMPION_KILL" => EventCategory::Kill,
         "WARD_PLACED" => EventCategory::Ward,
-        "ITEM_UNDO" => EventCategory::Recall,
         _ => EventCategory::Kill,
-    }
+    })
 }
 
 pub async fn get_cached_match_detail(
@@ -6091,16 +6109,17 @@ pub async fn get_cached_match_detail(
     let tl_rows: Vec<DbTimelineEvent> = tl_result.take(0).unwrap_or_default();
     let timeline_events: Vec<crate::models::match_data::TimelineEvent> = tl_rows
         .into_iter()
-        .map(|r| {
+        .filter_map(|r| {
+            let category = classify_db_event(&r.event_type, r.is_teamfight)?;
             let involved: Vec<i32> = r
                 .involved_participants
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or_default();
-            crate::models::match_data::TimelineEvent {
+            Some(crate::models::match_data::TimelineEvent {
                 timestamp_ms: r.timestamp_ms,
                 event_type: r.event_type.clone(),
-                category: classify_db_event(&r.event_type, r.is_teamfight),
+                category,
                 team_id: r.team_id,
                 killer_participant_id: r.killer_participant_id,
                 victim_participant_id: r.victim_participant_id,
@@ -6111,7 +6130,7 @@ pub async fn get_cached_match_detail(
                 multi_kill_length: r.multi_kill_length,
                 is_teamfight: r.is_teamfight,
                 involved_participants: involved,
-            }
+            })
         })
         .collect();
 
@@ -6121,6 +6140,31 @@ pub async fn get_cached_match_detail(
         detail.game_duration,
         detail.game_mode.unwrap_or_default(),
     )))
+}
+
+/// The champion this user played in a synced game, from their own
+/// `player_match` row (user-scoped: another user's games are `None`). The
+/// match page uses it to find "you" when the account has no Riot PUUID that
+/// matches a participant (the seed tool's fictional demo game, M141).
+pub async fn user_champion_in_match(
+    db: &Surreal<Db>,
+    user_id: &str,
+    match_id: &str,
+) -> Result<Option<String>, DbError> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        champion: String,
+    }
+    let mut r = db
+        .query(
+            "SELECT champion FROM player_match \
+             WHERE user = type::record('user', $user_key) AND match.match_id = $match_id LIMIT 1",
+        )
+        .bind(("user_key", record_key(user_id, "user")))
+        .bind(("match_id", match_id.to_string()))
+        .await?;
+    let row: Option<Row> = r.take(0)?;
+    Ok(row.map(|r| r.champion))
 }
 
 pub async fn store_match_detail(
@@ -6282,6 +6326,43 @@ pub async fn purge_match_cache(
         drop(guard);
         let n = n.unwrap_or(0);
         total.matches += n as usize;
+        if n < batch {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    Ok(total)
+}
+
+/// Delete ranked standing snapshots (`ranked_snapshot`, one per sync: the
+/// only source of the LP history, M141) taken before `cutoff`, in batches.
+/// They are game information read from Riot, so they follow the match
+/// cache's retention (`MATCH_CACHE_RETENTION_DAYS`) and, like every
+/// personal row, account deletion. Returns how many were deleted.
+pub async fn purge_ranked_snapshots(
+    db: &Surreal<Db>,
+    cutoff: chrono::DateTime<chrono::Utc>,
+    batch: usize,
+) -> DbResult<usize> {
+    let cutoff = cutoff.to_rfc3339();
+    let batch = batch.max(1) as i64;
+    let mut total = 0usize;
+    loop {
+        let response = db
+            .query(
+                "BEGIN TRANSACTION; \
+                 LET $old = (SELECT VALUE id FROM ranked_snapshot WHERE snapshotted_at < <datetime>$cutoff LIMIT $batch); \
+                 DELETE ranked_snapshot WHERE id IN $old; \
+                 RETURN array::len($old); \
+                 COMMIT TRANSACTION;",
+            )
+            .bind(("cutoff", cutoff.clone()))
+            .bind(("batch", batch))
+            .await?;
+        let mut r = check_tx(response)?;
+        let n: Option<i64> = r.take(3)?;
+        let n = n.unwrap_or(0);
+        total += n as usize;
         if n < batch {
             break;
         }
@@ -7285,6 +7366,22 @@ pub async fn match_participants(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cached_item_undo_rows_are_not_recalls() {
+        use crate::models::match_data::EventCategory;
+        // M141: rows cached before the fix keep their ITEM_UNDO type; the read
+        // path drops them instead of drawing them as recalls.
+        assert_eq!(super::classify_db_event("ITEM_UNDO", false), None);
+        assert_eq!(
+            super::classify_db_event("CHAMPION_KILL", true),
+            Some(EventCategory::Teamfight)
+        );
+        assert_eq!(
+            super::classify_db_event("WARD_PLACED", false),
+            Some(EventCategory::Ward)
+        );
+    }
+
     use super::*;
     use crate::models::champion::{Champion, ChampionPoolEntry};
     use crate::models::game_plan::{

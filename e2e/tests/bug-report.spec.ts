@@ -6,12 +6,12 @@
 import { test, expect } from "./fixtures";
 import { captureErrors, filterRealErrors } from "./helpers";
 
-const REPORT_BUTTON = 'button[aria-label="Report a bug or a wish"]';
+const REPORT_BUTTON = 'button[aria-label="Give Feedback"]';
 const HINT = "[data-feedback-hint]";
 const TAGGED_DRAFT_ELEMENT = '[data-feedback-label*="Draft"]';
 
 const dialog = (page: import("@playwright/test").Page) =>
-  page.getByRole("dialog", { name: "Report" });
+  page.getByRole("dialog", { name: "Give Feedback" });
 
 test.describe("bug-report widget", () => {
   test("docked on signed-in pages, absent on public ones", async ({ authedPage, browser }) => {
@@ -80,11 +80,11 @@ test.describe("bug-report widget", () => {
     await authedPage.locator(REPORT_BUTTON).click();
     await authedPage.locator(HINT).getByRole("button", { name: "Skip" }).click();
     const d = dialog(authedPage);
-    await d.getByRole("radio", { name: "Wishlist" }).click();
+    await d.getByRole("radio", { name: "Idea" }).click();
     const text = `e2e wish ${Date.now()}`;
     await d.locator("textarea").fill(text);
-    await d.getByRole("button", { name: "Send report" }).click();
-    await expect(authedPage.getByText("Thanks. Your report is in.")).toBeVisible({ timeout: 5000 });
+    await d.getByRole("button", { name: "Send feedback" }).click();
+    await expect(authedPage.getByText("Thanks. Your feedback is in.")).toBeVisible({ timeout: 5000 });
     await expect(d).toBeHidden();
     await authedPage.getByRole("button", { name: "Your reports" }).click();
     await authedPage.waitForURL("**/bugs?tab=mine");
@@ -94,13 +94,33 @@ test.describe("bug-report widget", () => {
     expect(filterRealErrors(errors)).toHaveLength(0);
   });
 
+  test("Give Feedback offers Bug, Idea and Praise; praise is sent (M141, report y1abg605)", async ({ authedPage }) => {
+    await authedPage.setViewportSize({ width: 390, height: 844 });
+    await authedPage.goto("/draft");
+    await authedPage.waitForTimeout(500);
+    const trigger = authedPage.locator(REPORT_BUTTON);
+    await expect(trigger).toHaveText("Give Feedback");
+    const box = await trigger.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await trigger.click();
+    await authedPage.locator(HINT).getByRole("button", { name: "Skip" }).click();
+    const d = dialog(authedPage);
+    for (const name of ["Bug", "Idea", "Praise"]) await expect(d.getByRole("radio", { name })).toBeVisible();
+    await d.getByRole("radio", { name: "Praise" }).click();
+    await expect(d.locator("textarea")).toHaveAttribute("placeholder", "What worked well for you?");
+    const text = `e2e praise ${Date.now()}`;
+    await d.locator("textarea").fill(text);
+    await d.locator("textarea").press("Control+Enter");
+    await expect(authedPage.getByText("Thanks. Your feedback is in.")).toBeVisible({ timeout: 5000 });
+  });
+
   test("an empty report is refused in the dialog", async ({ authedPage }) => {
     await authedPage.goto("/draft");
     await authedPage.waitForTimeout(500);
     await authedPage.locator(REPORT_BUTTON).click();
     await authedPage.locator(HINT).getByRole("button", { name: "Skip" }).click();
-    await dialog(authedPage).getByRole("button", { name: "Send report" }).click();
-    await expect(dialog(authedPage)).toContainText("Please describe the problem or the wish.");
+    await dialog(authedPage).getByRole("button", { name: "Send feedback" }).click();
+    await expect(dialog(authedPage)).toContainText("Please write a few words first.");
   });
 
   test("widget DOM has no forbidden characters", async ({ authedPage }) => {

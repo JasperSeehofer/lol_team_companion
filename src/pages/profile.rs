@@ -2,6 +2,7 @@
 //! Riot account link and signing out. Part of the personal layer with My
 //! games, Learnings and the champion pool.
 
+use crate::components::ui::enter_submits;
 use crate::components::ui::{
     Button, ButtonType, ButtonVariant, Callout, CalloutTone, Field, PageHeader, PageShell,
     PageWidth, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, TextField, Toast,
@@ -603,7 +604,7 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
     let riot_error = RwSignal::new(None::<String>);
     let linking = RwSignal::new(false);
 
-    let save_name = Callback::new(move |_| {
+    let save_name = Callback::new(move |_: ()| {
         leptos::task::spawn_local(async move {
             match update_profile(username.get_untracked()).await {
                 Ok(()) => {
@@ -623,7 +624,7 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
             }
         });
     });
-    let link = Callback::new(move |_| {
+    let link = Callback::new(move |_: ()| {
         linking.set(true);
         leptos::task::spawn_local(async move {
             match link_riot_account(riot_id.get_untracked()).await {
@@ -652,10 +653,10 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
             <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-0 flex-1">
                     <Field id="profile-username" label="Username" hint="Shown to your team; unique, 3 to 24 characters." error=Signal::derive(move || name_error.get())>
-                        <TextField value=username name="username" maxlength=24 required=true />
+                        <TextField value=username name="username" maxlength=24 required=true on_keydown=enter_submits(save_name) />
                     </Field>
                 </div>
-                <Button on_click=save_name>"Save username"</Button>
+                <Button on_click=Callback::new(move |_| save_name.run(()))>"Save username"</Button>
             </div>
             <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-y-1 text-body">
                 <dt class="text-muted">"Email"</dt>
@@ -682,10 +683,10 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
             <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-0 flex-1">
                     <Field id="profile-riot" label="Riot ID" hint="GameName#TAG, as shown in the Riot client." error=Signal::derive(move || riot_error.get())>
-                        <TextField value=riot_id name="riot_id" placeholder="GameName#TAG" />
+                        <TextField value=riot_id name="riot_id" placeholder="GameName#TAG" on_keydown=enter_submits(link) />
                     </Field>
                 </div>
-                <Button on_click=link loading=linking>"Link account"</Button>
+                <Button on_click=Callback::new(move |_| link.run(())) loading=linking>"Link account"</Button>
             </div>
             <Callout tone=CalloutTone::Info>
                 "Linking makes one request to Riot. Syncing your games (on My games) makes about 21 and is possible once a minute; when the server's shared Riot budget is used up, it asks you to try again in a few seconds."

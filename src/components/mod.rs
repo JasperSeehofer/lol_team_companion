@@ -9,6 +9,7 @@ pub mod guidance;
 pub mod icon;
 pub mod local_time;
 pub mod nav;
+pub mod record_table;
 pub mod survey_prompt;
 pub mod tree_graph;
 pub mod ui;
