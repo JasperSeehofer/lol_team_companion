@@ -20,11 +20,11 @@ use crate::models::bug_report::{
     BugReportAdmin, BugStatus, BugTriage, MyBugReport, PublicBugReport,
 };
 use crate::models::community::{
-    clean_limited, AdminOverview, EntryLinks, LedgerMonth, ProposalInput, ProposalStatus,
-    ProposalView, SiteText, Survey, SurveyAnswer, SurveyCounts, SurveyInput, SurveyKind,
-    SurveyPromptView, SurveyResults, SurveyStatus, SurveyTrigger, SurveyVersionResult,
-    SurveyWording, MAX_ADMIN_NOTE, MAX_PROPOSAL_SUMMARY, MAX_PROPOSAL_TITLE, MAX_PUBLIC_NOTE,
-    MAX_PUBLIC_TITLE, MAX_STATUS_NOTE, SITE_TEXTS,
+    clean_limited, AdminOverview, EntryLinks, ImportedProposal, LedgerMonth, ProposalInput,
+    ProposalStatus, ProposalView, SiteText, Survey, SurveyAnswer, SurveyCounts, SurveyInput,
+    SurveyKind, SurveyPromptView, SurveyResults, SurveyStatus, SurveyTrigger, SurveyVersionResult,
+    SurveyWording, AGENT_KEY_PREFIX, MAX_ADMIN_NOTE, MAX_IMPORT_PROPOSALS, MAX_PROPOSAL_SUMMARY,
+    MAX_PROPOSAL_TITLE, MAX_PUBLIC_NOTE, MAX_PUBLIC_TITLE, MAX_STATUS_NOTE, SITE_TEXTS,
 };
 use crate::server::community::{changelog, surveys, wording_hash};
 use crate::server::db::{dt_to_string, invariant_lock, opt_dt, record_key, DbError, DbResult};
@@ -392,19 +392,26 @@ struct DbProposal {
     status_changed_at: Option<Datetime>,
     published: bool,
     source: String,
+    seed_key: Option<String>,
     votes: i64,
     mine: i64,
     report: Option<RecordId>,
 }
 
 const PROPOSAL_FIELDS: &str = "id, title, summary, status, status_note, shipped_in, created_at, \
-     status_changed_at, published, source, \
+     status_changed_at, published, source, seed_key, \
      (count(SELECT id FROM proposal_vote WHERE proposal = $parent.id)) AS votes, \
      (count(SELECT id FROM proposal_vote WHERE proposal = $parent.id AND user = type::record('user', $u))) AS mine, \
      (SELECT VALUE id FROM bug_report WHERE proposal = $parent.id LIMIT 1)[0] AS report";
 
 fn proposal_view(p: DbProposal, admin: bool) -> ProposalView {
+    let agent_proposed_on = p
+        .seed_key
+        .as_deref()
+        .is_some_and(|k| k.starts_with(AGENT_KEY_PREFIX))
+        .then(|| dt_to_string(&p.created_at).chars().take(10).collect());
     ProposalView {
+        agent_proposed_on,
         id: p.id.to_sql(),
         title: p.title,
         summary: p.summary,
@@ -436,6 +443,70 @@ pub async fn list_proposals(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<Pro
     let mut list: Vec<ProposalView> = rows.into_iter().map(|p| proposal_view(p, false)).collect();
     crate::models::community::sort_proposals(&mut list);
     Ok(list)
+}
+
+#[derive(Debug, serde::Serialize, SurrealValue)]
+struct ImportRow {
+    seed_key: String,
+    title: String,
+    summary: String,
+}
+
+/// Import agent proposals (M141 H4): every one a draft, unpublished, keyed
+/// `agent:<key>` and created by the importing admin. All or nothing: a key
+/// that was imported before refuses the whole import. Input comes from
+/// [`crate::models::community::parse_proposal_import`].
+pub async fn admin_import_proposals(
+    db: &Surreal<Db>,
+    admin_id: &str,
+    items: &[ImportedProposal],
+) -> DbResult<usize> {
+    if items.is_empty() || items.len() > MAX_IMPORT_PROPOSALS {
+        return Err(DbError::Invalid("Nothing to import.".into()));
+    }
+    let rows: Vec<ImportRow> = items
+        .iter()
+        .map(|p| ImportRow {
+            seed_key: format!("{AGENT_KEY_PREFIX}{}", p.key),
+            title: p.title.clone(),
+            summary: p.summary.clone(),
+        })
+        .collect();
+    let keys: Vec<String> = rows.iter().map(|r| r.seed_key.clone()).collect();
+    let _guard = invariant_lock().await;
+    let mut r = db
+        .query("SELECT VALUE seed_key FROM proposal WHERE seed_key IN $keys")
+        .bind(("keys", keys))
+        .await?;
+    let existing: Vec<Option<String>> = r.take(0)?;
+    let existing: Vec<String> = existing
+        .into_iter()
+        .flatten()
+        .map(|k| k.trim_start_matches(AGENT_KEY_PREFIX).to_string())
+        .collect();
+    if !existing.is_empty() {
+        return Err(DbError::Invalid(format!(
+            "Already imported, nothing was saved: {}.",
+            existing.join(", ")
+        )));
+    }
+    let n = rows.len();
+    let r = db
+        .query(
+            "BEGIN TRANSACTION; \
+             FOR $p IN $rows { \
+                 CREATE proposal SET seed_key = $p.seed_key, title = $p.title, summary = $p.summary, \
+                     status = 'draft', source = 'mission', published = false, \
+                     created_by = type::record('user', $admin), created_at = time::now(), \
+                     status_changed_at = time::now(); \
+             }; \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("rows", rows))
+        .bind(("admin", user_key(admin_id)))
+        .await?;
+    crate::server::db::check_tx(r)?;
+    Ok(n)
 }
 
 /// Every proposal, for admins (votes counted, own vote irrelevant).
