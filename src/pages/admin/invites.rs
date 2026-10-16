@@ -224,14 +224,16 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                         <Table caption="Invite codes" caption_hidden=true>
                                             <thead>
                                                 <tr>
+                                                    // Phones keep code, status, uses and the action;
+                                                    // narrow screens drop created and note (M141).
                                                     <Th>"Code"</Th>
                                                     <Th>"Status"</Th>
                                                     <Th numeric=true>"Uses"</Th>
-                                                    <Th>"Team"</Th>
-                                                    <Th>"Expires"</Th>
-                                                    <Th>"Created"</Th>
-                                                    <Th>"Note"</Th>
-                                                    <Th><span class="sr-only">"Actions"</span></Th>
+                                                    <Th class="hidden md:table-cell">"Team"</Th>
+                                                    <Th class="hidden md:table-cell">"Expires"</Th>
+                                                    <Th class="hidden lg:table-cell">"Created"</Th>
+                                                    <Th class="hidden lg:table-cell">"Note"</Th>
+                                                    <Th class="w-24"><span class="sr-only">"Actions"</span></Th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -239,20 +241,23 @@ pub fn AdminInvitesPage() -> impl IntoView {
                                                     let status = inv.status(&now);
                                                     let can_disable = !inv.disabled;
                                                     let id = inv.id.clone();
-                                                    let created = match &inv.created_by {
-                                                        Some(by) => format!("{} by {by}", short_date(&inv.created_at)),
-                                                        None => short_date(&inv.created_at),
-                                                    };
+                                                    let created = short_date(&inv.created_at);
+                                                    let created_by = inv.created_by.clone().map(|by| {
+                                                        let title = by.clone();
+                                                        view! { <span class="block max-w-40 truncate text-caption" title=title>"by "{by}</span> }
+                                                    });
+                                                    let note = inv.note.clone().unwrap_or_default();
+                                                    let note_title = note.clone();
                                                     view! {
                                                         <Tr>
-                                                            <Td><code class="font-mono text-caption text-primary">{inv.code.clone()}</code></Td>
-                                                            <Td><span class=status_class(status)>{status}</span></Td>
+                                                            <Td class="whitespace-nowrap"><code class="font-mono text-caption text-primary">{inv.code.clone()}</code></Td>
+                                                            <Td class="whitespace-nowrap"><span class=status_class(status)>{status}</span></Td>
                                                             <Td numeric=true>{format!("{} / {}", inv.uses, inv.max_uses)}</Td>
-                                                            <Td muted=inv.team_name.is_none()>{inv.team_name.clone().unwrap_or_else(|| "None".to_string())}</Td>
-                                                            <Td>{inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}</Td>
-                                                            <Td muted=true>{created}</Td>
-                                                            <Td muted=true>{inv.note.clone().unwrap_or_default()}</Td>
-                                                            <Td>
+                                                            <Td class="hidden md:table-cell" muted=inv.team_name.is_none()>{inv.team_name.clone().unwrap_or_else(|| "None".to_string())}</Td>
+                                                            <Td class="hidden whitespace-nowrap md:table-cell">{inv.expires_at.as_deref().map(short_date).unwrap_or_else(|| "never".to_string())}</Td>
+                                                            <Td class="hidden lg:table-cell" muted=true><span class="whitespace-nowrap">{created}</span>{created_by}</Td>
+                                                            <Td class="hidden lg:table-cell" muted=true><span class="block max-w-48 truncate" title=note_title>{note}</span></Td>
+                                                            <Td class="whitespace-nowrap">
                                                                 {can_disable.then(|| view! {
                                                                     <Button size=ButtonSize::Sm variant=ButtonVariant::Danger on_click=Callback::new(move |_| { disable.dispatch(DisableInviteFn { id: id.clone() }); })>"Disable"</Button>
                                                                 })}
