@@ -32,8 +32,9 @@ test("enter submits: tree drafter adds a branch on Enter", async ({ teamPage }) 
   // No navigation: the form only runs the action.
   expect(page.url()).toBe(before);
 
-  // An empty label is refused and nothing is added.
-  await page.getByRole("treeitem").first().getByRole("button", { name: "Branch", exact: true }).click();
+  // An empty label is refused and nothing is added. The root's treeitem
+  // now holds the new child's Branch button too; its own comes first.
+  await page.getByRole("treeitem").first().getByRole("button", { name: "Branch", exact: true }).first().click();
   await page.locator("#branch-label").press("Enter");
   await expect(page.getByText("Give the branch a label.")).toBeVisible();
 

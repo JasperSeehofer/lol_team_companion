@@ -35,7 +35,7 @@ test.describe("post-game: filled from match", () => {
     await page.goto("/post-game");
     const select = page.locator("#review-match");
     await expect(select.locator(`option[value="${DEMO}"]`)).toHaveCount(1);
-    const outcome = page.locator("#review-outcome");
+    const outcome = page.locator('[data-segmented="review-outcome"]');
     await expect(outcome.getByRole("radio", { name: "Not set" })).toHaveAttribute("aria-checked", "true");
 
     await select.selectOption(DEMO);
@@ -62,7 +62,7 @@ test.describe("post-game: filled from match", () => {
 
   test("a result someone set is never overwritten", async ({ page }) => {
     await page.goto("/post-game");
-    const outcome = page.locator("#review-outcome");
+    const outcome = page.locator('[data-segmented="review-outcome"]');
     await outcome.getByRole("radio", { name: "Loss" }).click();
     await page.locator("#review-match").selectOption(DEMO);
     await expect(page.getByTestId("review-match-facts")).toBeVisible();

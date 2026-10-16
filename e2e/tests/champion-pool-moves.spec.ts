@@ -68,10 +68,14 @@ test("champion-pool moves: drag and drop keeps the scroll", async ({ teamPage })
   await navigateTo(page, "/champion-pool");
   for (const name of ["Ahri", "Garen", "Lux"]) await addTop(page, name);
 
-  const before = await scrollToLedger(page);
-  await page
-    .locator(`${TOP} li[data-champion="Garen"]`)
-    .dragTo(page.locator(`${TOP} [data-tier="scrim_ready"]`));
+  await scrollToLedger(page);
+  // The drag itself scrolls the source and then the target into view (what
+  // `dragTo` does too); the page must keep the scroll from the drop on.
+  await page.locator(`${TOP} li[data-champion="Garen"]`).hover();
+  await page.mouse.down();
+  await page.locator(`${TOP} [data-tier="scrim_ready"]`).hover();
+  const before = await page.evaluate(() => window.scrollY);
+  await page.mouse.up();
 
   await expect(page.locator(`${TOP} [data-tier="scrim_ready"] li[data-champion="Garen"]`)).toBeVisible();
   await expect(page.locator('[data-save-state="saved"]')).toBeVisible({ timeout: 5000 });

@@ -36,7 +36,7 @@ test.describe("sortable tables", () => {
     await expect(games).toHaveAttribute("aria-sort", "descending");
     const rate = trends.getByRole("button", { name: "Sort by Win rate" });
     await rate.click();
-    const rateTh = trends.locator("th", { has: rate });
+    const rateTh = trends.locator("th", { has: page.getByRole("button", { name: "Sort by Win rate" }) });
     await expect(rateTh).toHaveAttribute("aria-sort", "descending");
     await expect(games).not.toHaveAttribute("aria-sort", /.+/);
     await expect(rate).toBeFocused();
@@ -51,12 +51,14 @@ test.describe("sortable tables", () => {
     await expect(recent.locator("tbody tr").first()).toBeVisible();
     await expect(recent.getByRole("button", { name: "Newest first" })).toHaveCount(0);
     const cs = recent.getByRole("button", { name: "Sort by CS" });
+    // `has` is matched inside the th: a page-rooted locator, not one under `recent`.
+    const csTh = recent.locator("th", { has: page.getByRole("button", { name: "Sort by CS" }) });
     await cs.click();
-    await expect(recent.locator("th", { has: cs })).toHaveAttribute("aria-sort", "descending");
+    await expect(csTh).toHaveAttribute("aria-sort", "descending");
     const reset = recent.getByRole("button", { name: "Newest first" });
     await expect(reset).toBeVisible();
     await reset.click();
-    await expect(recent.locator("th", { has: cs })).not.toHaveAttribute("aria-sort", /.+/);
+    await expect(csTh).not.toHaveAttribute("aria-sort", /.+/);
   });
 
   test("team games by member sort by column", async ({ page }) => {
@@ -68,6 +70,6 @@ test.describe("sortable tables", () => {
     }
     const kda = members.getByRole("button", { name: "Sort by KDA" });
     await kda.click();
-    await expect(members.locator("th", { has: kda })).toHaveAttribute("aria-sort", "descending");
+    await expect(members.locator("th", { has: page.getByRole("button", { name: "Sort by KDA" }) })).toHaveAttribute("aria-sort", "descending");
   });
 });
