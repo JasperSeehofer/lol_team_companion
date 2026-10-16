@@ -1,0 +1,16 @@
+/* T3 schematic (recipe card T3): flat terrain fills on canvas, tokens only.
+   A ground, not ink: no outlines on shapes, one fill per element; the only
+   stroke is the 1 px rule frame. Text never sits on terrain: the chalk label
+   and the mark words carry a canvas halo. Loaded by surface.js via t3.json. */
+[data-art] .t3-ground { fill: var(--color-canvas); stroke: var(--color-rule); stroke-width: 1px; vector-effect: non-scaling-stroke; shape-rendering: crispEdges; }
+[data-art] .t3-jungle path { fill: var(--color-terrain-jungle); stroke: none; }
+[data-art] .t3-river { fill: var(--color-terrain-river); stroke: none; }
+[data-art] .t3-lane path { fill: var(--color-terrain-lane); stroke: none; }
+[data-art] .t3-base { stroke: none; }
+[data-art] .t3-base-blue { fill: var(--color-side-blue-deep); }
+[data-art] .t3-base-red { fill: var(--color-side-red-deep); }
+/* Match Day field card: no side colours in the inset; the shapes still tell the sides. */
+[data-art="inset"] .t3-base-blue, [data-art="inset"] .t3-base-red { fill: var(--color-terrain-lane); }
+/* Halos: canvas behind the chalk label (hero and share) and the mark words. */
+[data-t="t3"] .art-label, [data-t="t3"] .art-label.halo { background: var(--color-canvas); padding: 0 calc(var(--spacing) * 1); }
+[data-t="t3"] .art-mark { background: var(--color-canvas); padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1); }
