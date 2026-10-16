@@ -1528,4 +1528,13 @@ mod tests {
         assert!(clean_limited(&"x".repeat(11), 10).is_err());
         assert_eq!(group_thousands(4000), "4,000");
     }
+
+    /// The agent's batch-1 file stays importable with the real parser.
+    #[test]
+    fn agent_proposals_batch1_file_imports() {
+        let json = include_str!("../../docs/agent-proposals/2026-10-batch1.json");
+        let list = parse_proposal_import(json).expect("docs/agent-proposals/2026-10-batch1.json");
+        assert_eq!(list.len(), 8);
+        assert!(list.iter().all(|p| !p.summary.is_empty()));
+    }
 }

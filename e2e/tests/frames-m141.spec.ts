@@ -104,7 +104,7 @@ test.describe("M141 frames", () => {
     // Feedback widget opened: trigger -> select mode -> Skip -> report dialog.
     await shoot(page, "feedback-widget", "/", async () => {
       if (await page.getByRole("dialog").count()) return;
-      await page.getByRole("button", { name: "Report a bug or a wish" }).first().click().catch(() => {});
+      await page.getByRole("button", { name: "Give Feedback" }).first().click().catch(() => {});
       await page.waitForTimeout(300);
       const skip = page.getByRole("button", { name: /skip/i }).first();
       if (await skip.isVisible().catch(() => false)) await skip.click().catch(() => {});

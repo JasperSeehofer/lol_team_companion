@@ -1,106 +1,45 @@
-[
-  {
-    "title": "Role responsibilities for team members, with feedback per responsibility",
-    "summary": "Let a team give each member named responsibilities (shot-calling, summoner spell timers, vision, objective calls) and tag lines in post-game reviews with them, so each player sees feedback grouped by what they own.",
-    "extras": {
-      "source": "bug_report:1oe8iqmnh39gnsvy9sco",
-      "rationale": "Owner wish from the team page. New teams usually have no shared idea of who calls what; the review loop is the product's core, and today review notes are free text with no link to a person's job. Mission-sized: it touches the roster, reviews, action items and the player card. Not implemented in batch 1.",
-      "audience": "New Prime League teams get a ready-made list of jobs to hand out. Semi-pro teams get accountability per job and a record of who called what over a split.",
-      "smallest": "A short fixed list of responsibilities (shot-calling, summoner spell timers, vision, objective timing, draft calls). The leader assigns up to two per member on the roster. In a review, each line can be tagged with one responsibility; the player card and My games show the tagged lines for that player. No scoring and no generated advice.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown. Responsibilities are team-written text, not Riot data; nothing is derived from game memory or hidden information.",
-      "stance": "try small",
-      "stance_reason": "Valuable and on the core loop, but only the tagged-lines slice is small. Per-player automatic feedback from game data is a later step and needs a mission of its own."
+{
+  "version": 1,
+  "proposals": [
+    {
+      "key": "role-responsibilities",
+      "title": "Role responsibilities for team members, with feedback per responsibility",
+      "summary": "Let a team give each member named responsibilities (shot-calling, summoner spell timers, vision, objective calls) and tag lines in post-game reviews with them, so each player sees feedback grouped by what they own."
+    },
+    {
+      "key": "game-plan-suggestion-chips",
+      "title": "Suggestion chips in the game plan, from the Draft Graph",
+      "summary": "Show a few suggestions in the game plan, each with a one-sentence reason from the Draft Graph's synergy and counter evidence. The team accepts or dismisses each one; dismissals are remembered per plan."
+    },
+    {
+      "key": "season-schedule-availability",
+      "title": "Season schedule with availability and a confirmed count",
+      "summary": "A list of upcoming matches and scrims (next 14 days) on Match Day, with a Yes, Maybe or No from each member and a '4 of 5 confirmed' count."
+    },
+    {
+      "key": "share-draft-discord",
+      "title": "Share a draft read-only and post it to Discord",
+      "summary": "Add the draft board to share links, and let a team save one Discord webhook address so a leader can post a match's share link and a three-line summary to the team channel."
+    },
+    {
+      "key": "review-tags-pattern-count",
+      "title": "Review tags and a pattern count on Match Day",
+      "summary": "Let each review line carry a tag (draft, lane, objectives, fights, comms), count tags over the last five reviews on Match Day, and offer 'turn into action item' on a line, with a soft cap of three open items."
+    },
+    {
+      "key": "chalk-means-you",
+      "title": "Chalk means you: a principle for the accent colour",
+      "summary": "State in the design document that the chalk accent marks what is yours (your champion, your involvement, your selected row), and review the other places where accent is only decoration."
+    },
+    {
+      "key": "replay-map-signature",
+      "title": "Replay map on the match page as its signature moment",
+      "summary": "Make the match detail page quiet except for one moment: the replay map with a shared playhead, importing the timeline the first time a match is opened."
+    },
+    {
+      "key": "margin-notes-praise-count",
+      "title": "Margin notes for replies and a praise count for the owner",
+      "summary": "Show the team's reply to a report as a margin note in the app's serif italic voice, and add a count of praise reports to the admin hub so the owner sees what to protect."
     }
-  },
-  {
-    "title": "Suggestion chips in the game plan, from the Draft Graph",
-    "summary": "Show a few suggestions in the game plan, each with a one-sentence reason from the Draft Graph's synergy and counter evidence. The team accepts or dismisses each one; dismissals are remembered per plan.",
-    "extras": {
-      "source": "bug_report:fy9o9cmhfvz2siqs5cet",
-      "rationale": "Owner wish: make the system more helpful without letting it decide. The Draft Graph already ranks candidates with reasons, so the evidence exists. The design rule is that every decision stays conscious and the reason teaches why. In this direction a suggestion looks like a surveyor's annotation (serif italic note), never a chat bubble. Accept and Dismiss are two quiet buttons.",
-      "audience": "New teams learn what to think about (counters, lane synergy). Semi-pro teams get a prompt they can overrule in one click; the dismissal record shows what they considered.",
-      "smallest": "Up to three chips per plan, built only from existing Draft Graph rules for the plan's draft. Accept writes a plain line into the plan's notes that the team can edit. Dismiss hides that chip for this plan. Each chip names its evidence. No text generation, no new data.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown. Suggestions come from the team's own drafts and the public champion trait table; no hidden-information advantage.",
-      "stance": "try small",
-      "stance_reason": "Fits small on existing data, but it needs a design pass on the annotation style first; build after the game-plan icons land."
-    }
-  },
-  {
-    "title": "Season schedule with availability and a confirmed count",
-    "summary": "A list of upcoming matches and scrims (next 14 days) on Match Day, with a Yes, Maybe or No from each member and a '4 of 5 confirmed' count.",
-    "extras": {
-      "source": "audit ui-ux G01; market research opportunity 1",
-      "rationale": "The weekly cycle starts with 'who can play on Thursday', and the app only knows the next match and cannot collect answers. Competitors are generic Discord bots; none ties the schedule to drafts and reviews.",
-      "audience": "Prime League teams play on fixed weekly slots, so this is used every week. Friend-group teams without a coach get the most from it.",
-      "smallest": "Show the upcoming matches the team already stores as a list, add one availability answer per member per match, and show the count. Phone-friendly. No calendar feed, no email.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown.",
-      "stance": "adopt",
-      "stance_reason": "Highest weekly value in both audiences, small data model, no external service."
-    }
-  },
-  {
-    "title": "Share a draft read-only and post it to Discord",
-    "summary": "Add the draft board to share links, and let a team save one Discord webhook address so a leader can post a match's share link and a three-line summary to the team channel.",
-    "extras": {
-      "source": "audit ui-ux G02 and G03; market research opportunity 7",
-      "rationale": "Amateur teams organise in Discord. The read-only board and the share-link machinery already exist, so a draft link is a small step; the webhook removes copy and paste. The webhook address is a team secret and needs care.",
-      "audience": "Coaches post the draft before a scrim; subs and scrim partners read it on a phone without an account.",
-      "smallest": "Phase 1: draft share links (same expiry and revoke rules as plans). Phase 2: one webhook per team, stored server-side and shown only masked; one 'Post to Discord' button on a plan. No bot, no reminders yet.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown. A shared draft shows only the team's own picks and bans; it names no scouted player's Riot ID.",
-      "stance": "adopt",
-      "stance_reason": "Reuses existing parts; do phase 1 first and phase 2 after the privacy page lists the webhook as stored data."
-    }
-  },
-  {
-    "title": "Review tags and a pattern count on Match Day",
-    "summary": "Let each review line carry a tag (draft, lane, objectives, fights, comms), count tags over the last five reviews on Match Day, and offer 'turn into action item' on a line, with a soft cap of three open items.",
-    "extras": {
-      "source": "audit ui-ux G05; market research opportunities 2 and 6",
-      "rationale": "Today patterns are found by exact text match, so they rarely appear. A fixed tag set makes repeat problems visible and keeps the action-item loop short, which is the product's main difference from other tools.",
-      "audience": "New teams get a review structure they did not have. Semi-pro coaches see recurring themes across a split.",
-      "smallest": "Five fixed tags, one per line, a count of the most common tag over the last five reviews, and one checkbox per line that creates an action item. No analysis of game data.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown.",
-      "stance": "try small",
-      "stance_reason": "Share the tag field with the responsibility proposal so the review editor changes once."
-    }
-  },
-  {
-    "title": "Chalk means you: a principle for the accent colour",
-    "summary": "State in the design document that the chalk accent marks what is yours (your champion, your involvement, your selected row), and review the other places where accent is only decoration.",
-    "extras": {
-      "source": "atelier critique, identity finding 1",
-      "rationale": "The app already uses the accent this way on the match timeline and for the player's champion. Writing it down keeps later screens consistent and strengthens the Survey direction, where a surveyor's mark is a personal station mark.",
-      "audience": "Both audiences gain a clearer reading of every screen: the highlighted thing is theirs.",
-      "smallest": "One paragraph in DESIGN.md section 4 and a one-time audit list of accent uses. Any visual change follows in a separate round.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown.",
-      "stance": "adopt",
-      "stance_reason": "Almost no cost and it removes a recurring design question."
-    }
-  },
-  {
-    "title": "Replay map on the match page as its signature moment",
-    "summary": "Make the match detail page quiet except for one moment: the replay map with a shared playhead, importing the timeline the first time a match is opened.",
-    "extras": {
-      "source": "atelier critique, identity findings 2 and 6",
-      "rationale": "Coaches look at this page after every game and today it is stacked tables. The Sand Table was meant to carry the product's invention; this page is where it would be used most. A wide layout with the two teams mirrored comes with it.",
-      "audience": "Semi-pro coaches doing VOD review; new teams get a visual way into a game.",
-      "smallest": "Not small: a Sand Table milestone. The first step is to decide whether the replay import runs on first open of a match, and what it costs in Riot requests.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown. Replay data is Riot Game Information: it follows the 12-month retention already stated on the privacy page and must not show anything the player could not see in the client.",
-      "stance": "hold",
-      "stance_reason": "Large, depends on request budget and retention checks; revisit after the feedback loop and review work."
-    }
-  },
-  {
-    "title": "Margin notes for replies and a praise count for the owner",
-    "summary": "Show the team's reply to a report as a margin note in the app's serif italic voice, and add a count of praise reports to the admin hub so the owner sees what to protect.",
-    "extras": {
-      "source": "atelier critique, identity finding 3",
-      "rationale": "The feedback loop is generic: Bug, Idea, Praise. A reply in the product's own annotation style makes the loop feel like part of the product, and praise currently disappears into the queue.",
-      "audience": "Closed-beta teams see that reports are read; the owner learns which parts of the app work.",
-      "smallest": "Style the admin note on 'Your reports' as a margin note; one praise count tile on the admin hub. No new fields.",
-      "riot": "No product-name issue; uses only data the app already stores or the player types in; no new Riot data, nothing unapproved shown. Reports remain untrusted user text and are never shown to other users.",
-      "stance": "try small",
-      "stance_reason": "Depends on the reporter status view from this batch; do it right after."
-    }
-  }
-]
+  ]
+}
