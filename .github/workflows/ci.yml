@@ -133,6 +133,9 @@ jobs:
       # 0.8.17 left about one page in 8,000 pending forever under parallel
       # load (the old "page.goto stall"); the check runs 12,000 requests.
       - name: SSR load check (every page finishes streaming)
+        # Also after a failed spec: the server is still up, and a stall is
+        # worth knowing in the same run.
+        if: always()
         run: python3 scripts/ssr_stress.py "$BASE_URL" 12000 16 20
 
       # server::inflight logs any request without a complete response after
