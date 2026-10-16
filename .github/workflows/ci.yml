@@ -127,6 +127,7 @@ jobs:
         run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts match-detail.spec.ts sortable-tables.spec.ts post-game-fill.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts --retries=1 --reporter=list,json,github
         env:
           M141_SHOTS_DIR: ${{ runner.temp }}/m141-frames
+          GALLERY_SHOTS_DIR: ${{ runner.temp }}/gallery-shots
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-results.json
 
       # M11: every server-rendered page must finish streaming. leptos
@@ -169,19 +170,31 @@ jobs:
       # host, so the failures, the server's error lines and the frames are
       # committed to the branch. A push by GITHUB_TOKEN starts no new run.
       - name: Commit the e2e summary and frames (mission branches)
-        if: always() && startsWith(github.ref_name, 'mission/M141')
+        if: always() && startsWith(github.ref_name, 'mission/M1')
         env:
-          BRANCH: mission/M141-team-companion-feedback-batch-1
-          MISSION_DIR: .planning/missions/M141-team-companion-feedback-batch-1
+          BRANCH: ${{ github.ref_name }}
         run: |
+          case "$BRANCH" in
+            mission/M141*)
+              MISSION_DIR=.planning/missions/M141-team-companion-feedback-batch-1
+              FRAMES_DIR="$MISSION_DIR/publish-round-r1/frames/after"
+              SHOTS_SRC="$RUNNER_TEMP/m141-frames" ;;
+            mission/M151*)
+              MISSION_DIR=.planning/missions/M151
+              FRAMES_DIR="$MISSION_DIR/publish-round-r0/frames/ci"
+              SHOTS_SRC="$RUNNER_TEMP/gallery-shots" ;;
+            *)
+              echo "no mission directory for $BRANCH"
+              exit 0 ;;
+          esac
           python3 scripts/ci_e2e_summary.py "$RUNNER_TEMP/playwright-results.json" \
             "$RUNNER_TEMP/server.log" "${{ github.run_id }}" "${{ github.sha }}" > "$RUNNER_TEMP/ci-e2e-summary.md"
           git fetch --depth=1 origin "$BRANCH"
           git checkout -f -B ci-summary FETCH_HEAD
-          mkdir -p "$MISSION_DIR/publish-round-r1/frames/after"
+          mkdir -p "$FRAMES_DIR"
           cp "$RUNNER_TEMP/ci-e2e-summary.md" "$MISSION_DIR/ci-e2e-summary.md"
-          if ls "$RUNNER_TEMP"/m141-frames/*.png >/dev/null 2>&1; then
-            cp "$RUNNER_TEMP"/m141-frames/*.png "$MISSION_DIR/publish-round-r1/frames/after/"
+          if ls "$SHOTS_SRC"/*.png >/dev/null 2>&1; then
+            cp "$SHOTS_SRC"/*.png "$FRAMES_DIR/"
           fi
           git add "$MISSION_DIR"
           if git diff --cached --quiet; then
