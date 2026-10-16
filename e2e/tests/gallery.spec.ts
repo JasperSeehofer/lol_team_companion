@@ -38,6 +38,7 @@ const SECTIONS = [
   "command",
   "avatar",
   "markers",
+  "marks",
   "readout",
   "bar",
   "draft",
@@ -396,6 +397,17 @@ test("champion avatars use the app's image endpoint only", async ({ adminPage })
   await expect(img).toHaveAttribute("src", /^\/img\/champion\/.+\/icon/);
   await expect(adminPage.locator('[data-gallery="markers"] [data-role="Jungle"]').first()).toContainText("JGL");
   expect(external, external.join("\n")).toEqual([]);
+});
+
+test("marks are hidden from screen readers and stand beside their word", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const section = adminPage.locator('[data-gallery="marks"]');
+  // Nine inline marks, nine at 24 and nine 64 px specimens, all aria-hidden.
+  await expect(section.locator("svg")).toHaveCount(27);
+  await expect(section.locator('svg:not([aria-hidden="true"])')).toHaveCount(0);
+  for (const word of ["Top", "Jungle", "Mid", "Bot", "Support", "Dragon", "Baron", "Herald", "Tower"]) {
+    await expect(section.locator('[data-testid="marks-inline"]')).toContainText(word);
+  }
 });
 
 // Outside dev builds the gallery is admin-only: everyone else gets the 404

@@ -28,6 +28,7 @@ use crate::pages::design_interaction::{
     CalloutSection, CommandSection, DialogSection, EmptySection, KeycapSection, MenuSection,
     SkeletonSection, StatusSection, ToastSection, TogglesSection, TooltipSection,
 };
+use crate::pages::design_marks::MarksSection;
 
 /// Whether the caller may see the gallery: always in dev, else admins only.
 #[server]
@@ -66,6 +67,7 @@ const SECTIONS: &[(&str, &str)] = &[
     ("command", "Command bar"),
     ("avatar", "Champion avatar"),
     ("markers", "Role, side, result"),
+    ("marks", "Marks"),
     ("readout", "Stat readout"),
     ("bar", "Proportion bar"),
     ("draft", "Tournament draft"),
@@ -167,6 +169,7 @@ fn Gallery() -> impl IntoView {
             <CommandSection />
             <AvatarSection />
             <MarkersSection />
+            <MarksSection />
             <ReadoutSection />
             <BarSection />
             <DraftSection />
