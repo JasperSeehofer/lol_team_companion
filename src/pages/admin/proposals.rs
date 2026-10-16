@@ -8,14 +8,14 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_query_map};
 
 use crate::components::ui::{
-    Badge, BadgeTone, Button, ButtonVariant, Checkbox, ConfirmDialog, ConfirmTone, EmptySize,
-    EmptyState, Field, PageHeader, PageShell, PageWidth, Select, SelectOption, Skeleton,
-    SkeletonGroup, TextField, ToastContext, ToastKind,
+    Badge, BadgeTone, Button, ButtonVariant, Callout, CalloutTone, Checkbox, ConfirmDialog,
+    ConfirmTone, Dialog, DialogSize, EmptySize, EmptyState, Field, PageHeader, PageShell,
+    PageWidth, Select, SelectOption, Skeleton, SkeletonGroup, TextField, ToastContext, ToastKind,
 };
 use crate::error_template::NotFound;
 use crate::models::community::{
-    proposal_source_label, votes_label, ChangelogChoice, ProposalInput, ProposalStatus,
-    ProposalView,
+    agent_attribution, parse_proposal_import, proposal_source_label, votes_label, ChangelogChoice,
+    ProposalInput, ProposalStatus, ProposalView,
 };
 use crate::pages::admin::bugs::err_text;
 use crate::pages::admin::ListRow;
@@ -49,6 +49,27 @@ pub async fn admin_save_proposal(proposal_json: String) -> Result<String, Server
     Ok(id)
 }
 
+/// Import agent proposals from JSON (M141 H4; schema in CLAUDE.md): admins
+/// only, every proposal a draft that members never see until it is
+/// published. Returns how many were imported and the date (YYYY-MM-DD).
+#[server]
+pub async fn admin_import_proposals(json: String) -> Result<(usize, String), ServerFnError> {
+    use crate::models::community::parse_proposal_import;
+    use crate::server::rate_limit::Bucket;
+    use crate::server::{authz, community::store};
+    let admin = authz::require_admin().await?;
+    authz::rate_limit_user(Bucket::Community, &admin)
+        .map_err(|_| ServerFnError::new("Too many imports in a short time. Wait a minute."))?;
+    let items = parse_proposal_import(&json).map_err(|errs| ServerFnError::new(errs.join("\n")))?;
+    let db = authz::db()?;
+    let n = store::admin_import_proposals(&db, &admin.id, &items)
+        .await
+        .map_err(authz::server_err)?;
+    tracing::info!(admin = %admin.id, count = n, "agent proposals imported as drafts");
+    crate::server::bug_report_export::request_export();
+    Ok((n, chrono::Utc::now().format("%Y-%m-%d").to_string()))
+}
+
 #[server]
 pub async fn admin_delete_proposal(id: String) -> Result<(), ServerFnError> {
     use crate::server::{authz, community::store};
@@ -67,7 +88,18 @@ pub fn AdminProposalsPage() -> impl IntoView {
     let data = Resource::new(|| (), |_| admin_list_proposals());
     let query = use_query_map();
     let selected = Signal::derive(move || query.get().get("id"));
+    let import_open = RwSignal::new(false);
+    let imported = RwSignal::new(None::<String>);
     view! {
+        {move || imported.get().map(|msg| view! {
+            <div class="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-8" data-testid="import-result">
+                <Callout tone=CalloutTone::Success>{msg}</Callout>
+            </div>
+        })}
+        <ImportDialog open=import_open on_done=Callback::new(move |msg: String| {
+            imported.set(Some(msg));
+            data.refetch();
+        }) />
         <Suspense fallback=|| view! { <PageShell><SkeletonGroup label="Loading proposals"><Skeleton lines=6 /></SkeletonGroup></PageShell> }>
             {move || data.get().map(|r| match r {
                 Err(_) => view! { <NotFound /> }.into_any(),
@@ -77,8 +109,9 @@ pub fn AdminProposalsPage() -> impl IntoView {
                             title="What next proposals"
                             eyebrow="Admin"
                             meta=|| view! { <span>"Ideas on the board, their status, and the release that shipped them. Users see only published ideas."</span> }
-                            actions=|| view! {
+                            actions=move || view! {
                                 <Button href="/admin" variant=ButtonVariant::Quiet>"All admin areas"</Button>
+                                <Button variant=ButtonVariant::Secondary on_click=Callback::new(move |_| import_open.set(true))>"Import proposals (JSON)"</Button>
                                 <Button href="/admin/proposals?id=new" variant=ButtonVariant::Secondary>"New proposal"</Button>
                             }
                         />
@@ -127,6 +160,9 @@ fn Proposals(
                                                     }}
                                                     <span class="figures">{votes_label(p.votes)}</span>
                                                 </span>
+                                                {p.agent_proposed_on.clone().map(|d| view! {
+                                                    <span class="text-caption text-muted">{agent_attribution(&d)}</span>
+                                                })}
                                             </span>
                                         </ListRow>
                                     </li>
@@ -254,7 +290,10 @@ fn Editor(
             {existing.as_ref().map(|p| view! {
                 <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-4 gap-y-2">
                     <dt class="text-caption text-muted">"Source"</dt>
-                    <dd class="text-body text-primary">{proposal_source_label(&p.source)}</dd>
+                    <dd class="text-body text-primary">{match p.agent_proposed_on.clone() {
+                        Some(d) => agent_attribution(&d),
+                        None => proposal_source_label(&p.source).to_string(),
+                    }}</dd>
                     <dt class="text-caption text-muted">"Votes"</dt>
                     <dd class="figures text-body text-primary">{p.votes}</dd>
                     {p.wishlist_report.clone().map(|r| view! {
@@ -298,5 +337,84 @@ fn Editor(
                 on_confirm=delete
             />
         </div>
+    }
+}
+
+/// "Import proposals (JSON)": paste or load a proposals file (schema in
+/// CLAUDE.md); everything imported is a draft until published one by one.
+#[component]
+fn ImportDialog(open: RwSignal<bool>, on_done: Callback<String>) -> impl IntoView {
+    let json = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+    let parsed = Memo::new(move |_| {
+        let text = json.get();
+        if text.trim().is_empty() {
+            None
+        } else {
+            Some(parse_proposal_import(&text).map(|l| l.len()))
+        }
+    });
+    let import = Callback::new(move |_: ()| {
+        if busy.get_untracked() || !matches!(parsed.get_untracked(), Some(Ok(_))) {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        let body = json.get_untracked();
+        spawn_local(async move {
+            let r = admin_import_proposals(body).await;
+            busy.set(false);
+            match r {
+                Ok((n, today)) => {
+                    let word = if n == 1 { "draft" } else { "drafts" };
+                    json.set(String::new());
+                    open.set(false);
+                    on_done.run(format!(
+                        "{n} {word} imported, proposed by the Team Companion agent on {today}. Members see none of them until you publish each one."
+                    ));
+                }
+                Err(e) => error.set(Some(err_text(&e))),
+            }
+        });
+    });
+    view! {
+        <Dialog
+            id="proposal-import"
+            open=open
+            title="Import proposals (JSON)"
+            size=DialogSize::Md
+            dismiss_on_scrim=false
+            footer=move || view! {
+                <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| open.set(false))>"Cancel"</Button>
+                <Button
+                    variant=ButtonVariant::Primary
+                    loading=busy
+                    disabled=Signal::derive(move || !matches!(parsed.get(), Some(Ok(_))))
+                    on_click=Callback::new(move |_| import.run(()))
+                >"Import as drafts"</Button>
+            }
+        >
+            <div class="flex flex-col gap-4">
+                <Field id="proposal-import-json" label="Proposals file" hint="Imported proposals are saved as drafts, invisible to members until you publish each one. Up to 20 per file; the format is in CLAUDE.md.">
+                    <TextField value=json rows=10 placeholder="{\"version\": 1, \"proposals\": [{\"key\": \"...\", \"title\": \"...\", \"summary\": \"...\"}]}" />
+                </Field>
+                <p class="text-label text-secondary" data-testid="import-count">{move || match parsed.get() {
+                    None => "Paste the JSON of a proposals file.".to_string(),
+                    Some(Ok(1)) => "1 proposal found.".to_string(),
+                    Some(Ok(n)) => format!("{n} proposals found."),
+                    Some(Err(_)) => "The file has problems; nothing will be imported.".to_string(),
+                }}</p>
+                {move || match parsed.get() {
+                    Some(Err(errs)) => Some(view! {
+                        <Callout tone=CalloutTone::Danger title="Fix these first">
+                            <ul class="list-disc pl-5">{errs.into_iter().map(|e| view! { <li>{e}</li> }).collect_view()}</ul>
+                        </Callout>
+                    }),
+                    _ => None,
+                }}
+                {move || error.get().map(|e| view! { <Callout tone=CalloutTone::Danger>{e}</Callout> })}
+            </div>
+        </Dialog>
     }
 }

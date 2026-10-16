@@ -73,3 +73,20 @@ test("admin can mint a code that registers a new account, then disable it", asyn
   await row.locator('button:has-text("Disable")').click();
   await expect(row.locator("td", { hasText: "disabled" })).toBeVisible({ timeout: 10000 });
 });
+
+test("mint row: the four controls share one line, hints sit below (M141, report 1jjv5ji2)", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signInAsAdmin(page);
+  const resp = await page.goto("/admin/invites", { waitUntil: "networkidle" });
+  test.skip(resp?.status() === 404, `server not started with ADMIN_EMAILS=${ADMIN_EMAIL}`);
+  const tops = await Promise.all(
+    ["#invite-max-uses", "#invite-expiry", "#invite-team", "#invite-note"].map(async (sel) => {
+      const box = await page.locator(sel).boundingBox();
+      return Math.round(box?.y ?? -1);
+    })
+  );
+  for (const t of tops) expect(Math.abs(t - tops[0])).toBeLessThanOrEqual(1);
+  const control = await page.locator("#invite-expiry").boundingBox();
+  const hint = await page.getByText("Empty: never").boundingBox();
+  expect((hint?.y ?? 0)).toBeGreaterThan((control?.y ?? 0) + (control?.height ?? 0) - 1);
+});

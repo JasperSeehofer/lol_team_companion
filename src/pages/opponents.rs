@@ -3,6 +3,7 @@
 //! surveyed; the detail holds the players by role, scouting notes and the
 //! Riot intel refresh. Images come only from `/img/...`.
 
+use crate::components::ui::{ctrl_enter_submits, enter_submits};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar,
     ConfirmDialog, ConfirmTone, Density, Dialog, EmptySize, EmptyState, Field, HeadingLevel,
@@ -700,7 +701,7 @@ fn OpponentDetail(
     let refreshing = RwSignal::new(false);
     let players = StoredValue::new(players);
 
-    let save = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let save = Callback::new(move |_: ()| {
         let (i, n, t) = (id.get_value(), name.get_untracked(), notes.get_untracked());
         if n.trim().is_empty() {
             toast.push.run(Toast::error("The team needs a name."));
@@ -785,13 +786,13 @@ fn OpponentDetail(
                 <SectionHeader title="Team" id="dossier-notes-heading" level=HeadingLevel::H3 />
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                     <Field id="opp-name" label="Name">
-                        <TextField value=name />
+                        <TextField value=name on_keydown=enter_submits(save) />
                     </Field>
                     <Field id="opp-notes" label="Scouting notes">
-                        <TextField value=notes rows=3 placeholder="How they draft, where they play, what they avoid" />
+                        <TextField value=notes rows=3 placeholder="How they draft, where they play, what they avoid" on_keydown=ctrl_enter_submits(save) />
                     </Field>
                 </div>
-                <div><Button variant=ButtonVariant::Primary on_click=save>"Save dossier"</Button></div>
+                <div><Button variant=ButtonVariant::Primary on_click=Callback::new(move |_| save.run(()))>"Save dossier"</Button></div>
             </section>
             <section aria-labelledby="dossier-players-heading" class="flex flex-col gap-3">
                 <SectionHeader title="Players" id="dossier-players-heading" level=HeadingLevel::H3 />
@@ -835,7 +836,7 @@ fn EmptyRole(
     let value = RwSignal::new(String::new());
     let label = Role::parse(role).map(|r| r.label()).unwrap_or(role);
     let opp = StoredValue::new(opponent_id);
-    let add = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let add = Callback::new(move |_: ()| {
         let v = value.get_untracked().trim().to_string();
         if v.is_empty() {
             toast
@@ -877,9 +878,9 @@ fn EmptyRole(
         <li class="grid grid-cols-1 items-end gap-2 border-b border-rule py-3 sm:grid-cols-[3rem_minmax(0,1fr)_auto]" data-role=role>
             {Role::parse(role).map(|r| view! { <span class="pb-2"><RoleLabel role=r /></span> })}
             <Field id=format!("opp-add-{role}") label=format!("{label} player")>
-                <TextField value=value placeholder="Name#Tag or a name" />
+                <TextField value=value placeholder="Name#Tag or a name" on_keydown=enter_submits(add) />
             </Field>
-            <Button on_click=add>"Add player"</Button>
+            <Button on_click=Callback::new(move |_| add.run(()))>"Add player"</Button>
         </li>
     }
 }
@@ -913,7 +914,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
         .as_deref()
         .is_some_and(|r| !r.trim().is_empty());
 
-    let refresh = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let refresh = Callback::new(move |_: ()| {
         let rid = riot_id.get_untracked().trim().to_string();
         if !valid_riot_id(&rid) || rid.is_empty() {
             error.set(Some("Use Name#Tag, for example Faker#KR1.".into()));
@@ -1007,9 +1008,9 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
             })}
             <div class="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <Field id=field_id label="Riot ID" error=Signal::derive(move || error.get())>
-                    <TextField value=riot_id placeholder="Name#Tag" />
+                    <TextField value=riot_id placeholder="Name#Tag" on_keydown=enter_submits(refresh) />
                 </Field>
-                <Button on_click=refresh loading=Signal::derive(move || fetching.get())>"Refresh"</Button>
+                <Button on_click=Callback::new(move |_| refresh.run(())) loading=Signal::derive(move || fetching.get())>"Refresh"</Button>
                 <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| confirm.set(true))>"Remove"</Button>
             </div>
             <ConfirmDialog

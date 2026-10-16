@@ -6,12 +6,13 @@ use crate::components::champion_picker::ChampionPicker;
 use crate::components::draft_board::slot_meta;
 use crate::components::tree_graph::TreeGraph;
 use crate::components::ui::a11y::{focus_id, focus_id_later};
+use crate::components::ui::enter_submits;
 use crate::components::ui::{
-    slot_dom_id, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
-    ConfirmDialog, ConfirmTone, Density, DraftBoard, EmptySize, EmptyState, Field, HeadingLevel,
-    NoTeamState, PageHeader, PageShell, SectionHeader, Segment, SegmentSize, SegmentedControl,
-    Skeleton, SkeletonGroup, SkeletonShape, Switch, TextField, Toast, ToastContext,
-    TOURNAMENT_ORDER,
+    slot_dom_id, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, Callout,
+    CalloutTone, ConfirmDialog, ConfirmTone, Density, DraftBoard, EmptySize, EmptyState, Field,
+    HeadingLevel, NoTeamState, PageHeader, PageShell, SectionHeader, Segment, SegmentSize,
+    SegmentedControl, Skeleton, SkeletonGroup, SkeletonShape, Switch, TextField, Toast,
+    ToastContext, TOURNAMENT_ORDER,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
@@ -348,7 +349,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let new_name = RwSignal::new(String::new());
     let new_opp = RwSignal::new(String::new());
     let new_error = RwSignal::new(None::<String>);
-    let create = Callback::new(move |_: leptos::ev::MouseEvent| {
+    let create = Callback::new(move |_: ()| {
         let name = new_name.get_untracked();
         if name.trim().is_empty() {
             new_error.set(Some("Give the tree a name.".into()));
@@ -477,12 +478,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     <div class="flex flex-col gap-3 border-t border-rule pt-5">
                         <h3 class="font-display text-heading font-semibold text-primary">"New tree"</h3>
                         <Field id="tree-name" label="Name" required=true error=Signal::derive(move || new_error.get())>
-                            <TextField value=new_name placeholder="Blue side vs Riverside" />
+                            <TextField value=new_name placeholder="Blue side vs Riverside" on_keydown=enter_submits(create) />
                         </Field>
                         <Field id="tree-opponent" label="Opponent">
-                            <TextField value=new_opp placeholder="Riverside Rooks" />
+                            <TextField value=new_opp placeholder="Riverside Rooks" on_keydown=enter_submits(create) />
                         </Field>
-                        <div><Button on_click=create>"Create tree"</Button></div>
+                        <div><Button on_click=Callback::new(move |_| create.run(()))>"Create tree"</Button></div>
                     </div>
                 </section>
 
@@ -559,7 +560,9 @@ fn TreeEditor(
         branch_label.set(String::new());
         focus_id_later("branch-label");
     });
-    let do_add = Callback::new(move |_: leptos::ev::MouseEvent| {
+    // Run by the branch form's submit: the button or Enter in the field
+    // (DESIGN 6.6 "Enter submits").
+    let do_add = Callback::new(move |_: ()| {
         let Some(tree_id) = selected_tree.get_untracked() else {
             return;
         };
@@ -689,17 +692,24 @@ fn TreeEditor(
                 })}
             </Suspense>
             {move || adding_to.get().map(|parent| view! {
-                <div class="flex flex-col gap-3 border-t border-rule pt-4 sm:flex-row sm:items-end">
+                <form
+                    class="flex flex-col gap-3 border-t border-rule pt-4 sm:flex-row sm:items-end"
+                    data-testid="branch-form"
+                    on:submit=move |ev: leptos::ev::SubmitEvent| {
+                        ev.prevent_default();
+                        do_add.run(());
+                    }
+                >
                     <div class="min-w-0 flex-1">
                         <Field id="branch-label" label=if parent.is_some() { "New branch" } else { "Root draft" }>
                             <TextField value=branch_label placeholder="If they ban Jinx" />
                         </Field>
                     </div>
                     <div class="flex gap-2">
-                        <Button variant=ButtonVariant::Primary on_click=do_add>"Add branch"</Button>
+                        <Button variant=ButtonVariant::Primary kind=ButtonType::Submit>"Add branch"</Button>
                         <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| adding_to.set(None))>"Cancel"</Button>
                     </div>
-                </div>
+                </form>
             })}
         </section>
         <NodeEditorSection ned=ned champions=champions selected_tree=selected_tree nodes=nodes />

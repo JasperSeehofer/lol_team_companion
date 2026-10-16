@@ -28,6 +28,7 @@ const SECTIONS = [
   "toggles",
   "keycap",
   "callout",
+  "status",
   "toast",
   "empty",
   "skeleton",

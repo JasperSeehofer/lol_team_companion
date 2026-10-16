@@ -13,7 +13,8 @@
 # for the copy (seconds for a small database) and started again at once.
 # The trap restarts it on any failure. See docs/RUNBOOK.md "Backups".
 #
-# Steps: preflight -> stop app -> tar + compress db/ and inbox/ -> start app ->
+# Steps: preflight -> stop app -> tar + compress db/, inbox/ and attachments/
+# (feedback screenshots, M141) -> start app ->
 # test the archive -> sha256 -> manifest -> upload -> download again and compare
 # the sha256 -> prune remote backups older than RETENTION_DAYS (always keeping
 # the newest KEEP_MIN) -> prune local staging -> optional ping.
@@ -23,7 +24,7 @@
 #                        "offsite:companion-backups". Credentials come from
 #                        RCLONE_CONFIG_* variables or an rclone.conf.
 #   BACKUP_PREFIX        folder under the remote (default: companion)
-#   DATA_SRC             directory that holds db/ and inbox/ (default: /data)
+#   DATA_SRC             directory that holds db/, inbox/ and attachments/ (default: /data)
 #   STAGING_DIR          local working directory (default: /staging)
 #   COMPOSE_PROJECT      compose project of the app (default: companion)
 #   APP_SERVICE          compose service name of the app (default: app)
@@ -43,7 +44,7 @@
 set -Eeuo pipefail
 umask 077
 
-usage() { sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; }
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
 
 : "${RCLONE_REMOTE:?RCLONE_REMOTE is required (e.g. offsitecrypt:)}"
@@ -179,8 +180,10 @@ rclone mkdir "$REMOTE_BASE" || die "cannot reach $REMOTE_BASE (check RCLONE_* se
 rclone lsf --max-depth 1 "$REMOTE_BASE" >/dev/null || die "cannot list $REMOTE_BASE"
 
 DATA_BYTES="$(du -sb "$DATA_SRC/db" | cut -f1)"
+ATTACH_BYTES=0
+if [[ -d "$DATA_SRC/attachments" ]]; then ATTACH_BYTES="$(du -sb "$DATA_SRC/attachments" | cut -f1)"; fi
 FREE_BYTES="$(( $(df -Pk "$STAGING_DIR" | awk 'NR==2 {print $4}') * 1024 ))"
-NEED_BYTES="$(( DATA_BYTES + DATA_BYTES / 5 + 50 * 1024 * 1024 ))"
+NEED_BYTES="$(( DATA_BYTES + DATA_BYTES / 5 + ATTACH_BYTES + 50 * 1024 * 1024 ))"
 (( FREE_BYTES > NEED_BYTES )) || die "not enough space in $STAGING_DIR: need $NEED_BYTES bytes, have $FREE_BYTES"
 
 CONTAINER="$(resolve_container)"
@@ -202,6 +205,7 @@ fi
 
 PARTS=(db)
 [[ -d "$DATA_SRC/inbox" ]] && PARTS+=(inbox)
+[[ -d "$DATA_SRC/attachments" ]] && PARTS+=(attachments)
 log "archiving ${PARTS[*]} ($DATA_BYTES bytes in db/)"
 tar -C "$DATA_SRC" --numeric-owner -cf - "${PARTS[@]}" | "${COMPRESS_CMD[@]}" > "$WORK/$ARCHIVE"
 

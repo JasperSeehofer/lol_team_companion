@@ -115,7 +115,7 @@ RUN apt-get update \
  && groupadd --system --gid 10001 companion \
  && useradd --system --uid 10001 --gid companion --home-dir /app --no-create-home \
       --shell /usr/sbin/nologin companion \
- && mkdir -p /data/db /data/inbox \
+ && mkdir -p /data/db /data/inbox /data/attachments \
  && chown -R companion:companion /data
 
 WORKDIR /app
@@ -134,10 +134,12 @@ ENV LEPTOS_OUTPUT_NAME=lol_team_companion \
     LEPTOS_ENV=PROD \
     SURREAL_DATA_DIR=/data/db \
     BUG_REPORT_INBOX_PATH=/data/inbox/bug-reports.md \
+    ATTACHMENTS_DIR=/data/attachments \
     RUST_LOG=info
 
 # /data holds the SurrealKV directory (/data/db, exclusive lock: one process
-# only) and the bug-report inbox export (/data/inbox). A new named volume is
+# only), the bug-report inbox export (/data/inbox) and the feedback
+# screenshots (/data/attachments, M141). A new named volume is
 # initialised from this directory, so it starts owned by uid 10001.
 VOLUME ["/data"]
 USER 10001:10001

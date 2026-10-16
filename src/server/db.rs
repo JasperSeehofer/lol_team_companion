@@ -4276,7 +4276,7 @@ pub async fn create_bug_report(
     category: String,
     viewport_w: Option<i32>,
     viewport_h: Option<i32>,
-) -> DbResult<()> {
+) -> DbResult<String> {
     // T-19-02 mitigation: reject whitespace-only descriptions at the DB layer
     // so any caller (server-fn, future CLI, etc.) gets the same guarantee.
     if description.trim().is_empty() {
@@ -4284,26 +4284,38 @@ pub async fn create_bug_report(
     }
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
     // Owned `String` for every `.bind` per surreal-patterns rule 4.
-    db.query(
-        "CREATE bug_report SET \
+    let r = db
+        .query(
+            "CREATE bug_report SET \
              user = type::record('user', $user_key), \
              page_url = $page_url, \
              element_label = $element_label, \
              description = $description, \
              category = $category, \
              viewport_w = $viewport_w, \
-             viewport_h = $viewport_h",
-    )
-    .bind(("user_key", user_key))
-    .bind(("page_url", page_url))
-    .bind(("element_label", element_label))
-    .bind(("description", description))
-    .bind(("category", category))
-    .bind(("viewport_w", viewport_w.map(|v| v as i64)))
-    .bind(("viewport_h", viewport_h.map(|v| v as i64)))
-    .await?
-    .check()?; // surreal-patterns rule 27: .check() on writes
-    Ok(())
+             viewport_h = $viewport_h \
+         RETURN id",
+        )
+        .bind(("user_key", user_key))
+        .bind(("page_url", page_url))
+        .bind(("element_label", element_label))
+        .bind(("description", description))
+        .bind(("category", category))
+        .bind(("viewport_w", viewport_w.map(|v| v as i64)))
+        .bind(("viewport_h", viewport_h.map(|v| v as i64)))
+        .await?
+        .check()?; // surreal-patterns rule 27: .check() on writes
+    let mut r = r;
+    let rows: Vec<CreatedId> = r.take(0)?;
+    rows.into_iter()
+        .next()
+        .map(|r| r.id.to_sql())
+        .ok_or_else(|| DbError::Other("bug report not created".into()))
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct CreatedId {
+    id: RecordId,
 }
 
 pub async fn list_bug_reports(db: &Surreal<Db>, status: Option<&str>) -> DbResult<Vec<BugReport>> {

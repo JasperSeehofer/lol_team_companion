@@ -97,7 +97,7 @@ fetch() {
     *) die "unknown archive type: $archive" ;;
   esac
   [[ -d "$dir/data/db" ]] || die "archive has no db/ directory"
-  mkdir -p "$dir/data/inbox"
+  mkdir -p "$dir/data/inbox" "$dir/data/attachments"
   # A LOCK file in the copy is harmless: SurrealKV uses an OS file lock
   # (flock); the file's content (an old PID) is informational only.
   log "extracted to $dir/data ($(du -sh "$dir/data/db" | cut -f1) in db/)"
@@ -267,18 +267,22 @@ apply() {
   # image (it has sh and cp). The backup is copied next to the live data
   # first and swapped in with two renames, so a failed copy (disk full)
   # leaves the old data in place. The old data stays in
-  # /data/pre-restore-<ts>; backup.sh only archives db/ and inbox/, so it is
+  # /data/pre-restore-<ts>; backup.sh only archives db/, inbox/ and
+  # attachments/ (feedback screenshots, restored with the database), so it is
   # not backed up again (delete it within 30 days: privacy page retention).
   "$DOCKER" run --rm --user 0 --entrypoint sh \
     -v "$DATA_VOLUME:/data" -v "$dir/data:/restore:ro" "$image" -c "
       set -e
-      rm -rf /data/db.restoring
+      rm -rf /data/db.restoring /data/attachments.restoring
       cp -a /restore/db /data/db.restoring
-      chown -R 10001:10001 /data/db.restoring
+      cp -a /restore/attachments /data/attachments.restoring
+      chown -R 10001:10001 /data/db.restoring /data/attachments.restoring
       mkdir -p /data/pre-restore-$ts
       if [ -d /data/db ]; then mv /data/db /data/pre-restore-$ts/db; fi
       if [ -d /data/inbox ]; then mv /data/inbox /data/pre-restore-$ts/inbox; fi
+      if [ -d /data/attachments ]; then mv /data/attachments /data/pre-restore-$ts/attachments; fi
       mv /data/db.restoring /data/db
+      mv /data/attachments.restoring /data/attachments
       mkdir -p /data/inbox
       chown 10001:10001 /data/inbox
     "

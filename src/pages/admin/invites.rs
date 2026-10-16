@@ -182,28 +182,25 @@ pub fn AdminInvitesPage() -> impl IntoView {
                             <section aria-labelledby="mint-h">
                                 <SectionHeader title="Mint a code" id="mint-h" />
                                 <ActionForm action=mint>
-                                    <div class="flex flex-wrap items-end gap-3">
-                                        <div class="w-32">
-                                            <Field id="invite-max-uses" label="Max uses">
-                                                <TextField kind=InputKind::Number name="max_uses" value=max_uses required=true />
-                                            </Field>
+                                    <div class="grid grid-cols-1 items-start gap-x-3 gap-y-4 sm:grid-cols-2 lg:grid-cols-[8rem_10rem_minmax(12rem,1fr)_minmax(12rem,1.2fr)_auto]" data-testid="mint-row">
+                                        <Field id="invite-max-uses" label="Max uses">
+                                            <TextField kind=InputKind::Number name="max_uses" value=max_uses required=true />
+                                        </Field>
+                                        <Field id="invite-expiry" label="Expires in days" hint="Empty: never">
+                                            <TextField kind=InputKind::Number name="expires_in_days" value=expiry />
+                                        </Field>
+                                        <Field id="invite-team" label="Team (optional)" hint="Joins the account to this team">
+                                            <Select name="team_id" value=team options=team_options />
+                                        </Field>
+                                        <Field id="invite-note" label="Note (optional)">
+                                            <TextField name="note" value=note maxlength=200 placeholder="Who is this for?" />
+                                        </Field>
+                                        <div class="flex flex-col gap-1.5">
+                                            <span class="hidden text-label lg:block" aria-hidden="true">"\u{a0}"</span>
+                                            <div class="flex items-center lg:h-9">
+                                                <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Touch full_width=true>"Mint code"</Button>
+                                            </div>
                                         </div>
-                                        <div class="w-40">
-                                            <Field id="invite-expiry" label="Expires in days" hint="Empty: never">
-                                                <TextField kind=InputKind::Number name="expires_in_days" value=expiry />
-                                            </Field>
-                                        </div>
-                                        <div class="min-w-48">
-                                            <Field id="invite-team" label="Team (optional)" hint="Joins the account to this team">
-                                                <Select name="team_id" value=team options=team_options />
-                                            </Field>
-                                        </div>
-                                        <div class="min-w-48 flex-1">
-                                            <Field id="invite-note" label="Note (optional)">
-                                                <TextField name="note" value=note maxlength=200 placeholder="Who is this for?" />
-                                            </Field>
-                                        </div>
-                                        <Button kind=ButtonType::Submit variant=ButtonVariant::Primary>"Mint code"</Button>
                                     </div>
                                 </ActionForm>
                                 {move || last_code().map(|code| {

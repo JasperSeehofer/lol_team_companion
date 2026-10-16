@@ -20,11 +20,11 @@ use crate::models::bug_report::{
     BugReportAdmin, BugStatus, BugTriage, MyBugReport, PublicBugReport,
 };
 use crate::models::community::{
-    clean_limited, AdminOverview, EntryLinks, LedgerMonth, ProposalInput, ProposalStatus,
-    ProposalView, SiteText, Survey, SurveyAnswer, SurveyCounts, SurveyInput, SurveyKind,
-    SurveyPromptView, SurveyResults, SurveyStatus, SurveyTrigger, SurveyVersionResult,
-    SurveyWording, MAX_ADMIN_NOTE, MAX_PROPOSAL_SUMMARY, MAX_PROPOSAL_TITLE, MAX_PUBLIC_NOTE,
-    MAX_PUBLIC_TITLE, MAX_STATUS_NOTE, SITE_TEXTS,
+    clean_limited, AdminOverview, EntryLinks, ImportedProposal, LedgerMonth, ProposalInput,
+    ProposalStatus, ProposalView, SiteText, Survey, SurveyAnswer, SurveyCounts, SurveyInput,
+    SurveyKind, SurveyPromptView, SurveyResults, SurveyStatus, SurveyTrigger, SurveyVersionResult,
+    SurveyWording, AGENT_KEY_PREFIX, MAX_ADMIN_NOTE, MAX_IMPORT_PROPOSALS, MAX_PROPOSAL_SUMMARY,
+    MAX_PROPOSAL_TITLE, MAX_PUBLIC_NOTE, MAX_PUBLIC_TITLE, MAX_STATUS_NOTE, SITE_TEXTS,
 };
 use crate::server::community::{changelog, surveys, wording_hash};
 use crate::server::db::{dt_to_string, invariant_lock, opt_dt, record_key, DbError, DbResult};
@@ -65,6 +65,7 @@ struct DbMyReport {
     public_note: Option<String>,
     fixed_in: Option<String>,
     updated: bool,
+    status_changed_at: Option<Datetime>,
 }
 
 /// The caller's own reports, newest first.
@@ -72,7 +73,7 @@ pub async fn list_my_bug_reports(db: &Surreal<Db>, user_id: &str) -> DbResult<Ve
     let mut r = db
         .query(
             "SELECT id, created_at, page_url, element_label, description, category, status, \
-                 public_note, fixed_in, \
+                 public_note, fixed_in, status_changed_at, \
                  (status_changed_at != NONE AND (reporter_seen_at = NONE OR status_changed_at > reporter_seen_at)) AS updated \
              FROM bug_report WHERE user = type::record('user', $u) ORDER BY created_at DESC",
         )
@@ -93,8 +94,45 @@ pub async fn list_my_bug_reports(db: &Surreal<Db>, user_id: &str) -> DbResult<Ve
             fixed_in_title: b.fixed_in.as_deref().and_then(changelog::entry_title),
             fixed_in: b.fixed_in,
             updated: b.updated,
+            status_changed_at: opt_dt(b.status_changed_at),
         })
         .collect())
+}
+
+/// The caller's report, sent within the attachment window (M141 H2);
+/// `NotFound` for someone else's report, an old one or a missing one.
+pub async fn report_open_for_attachment(
+    db: &Surreal<Db>,
+    user_id: &str,
+    report_id: &str,
+) -> DbResult<()> {
+    let mut r = db
+        .query(
+            "SELECT id FROM bug_report WHERE id = type::record('bug_report', $k) \
+               AND user = type::record('user', $u) \
+               AND created_at > time::now() - duration::from_secs($window)",
+        )
+        .bind(("k", record_key(report_id, "bug_report")))
+        .bind(("u", user_key(user_id)))
+        .bind(("window", crate::server::attachments::ATTACH_WINDOW_SECS))
+        .await?;
+    let rows: Vec<IdRow> = r.take(0)?;
+    if rows.is_empty() {
+        Err(DbError::NotFound)
+    } else {
+        Ok(())
+    }
+}
+
+/// The ids of every report a user sent (their screenshots go with the
+/// account, M141 H2).
+pub async fn user_report_ids(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<String>> {
+    let mut r = db
+        .query("SELECT id FROM bug_report WHERE user = type::record('user', $u)")
+        .bind(("u", user_key(user_id)))
+        .await?;
+    let rows: Vec<IdRow> = r.take(0)?;
+    Ok(rows.into_iter().map(|r| r.id.to_sql()).collect())
 }
 
 /// Mark every report of the caller as seen ("Your reports" was opened).
@@ -217,6 +255,7 @@ pub async fn admin_list_bug_reports(
             triaged_by: b.triaged_by_name,
             updated_at: opt_dt(b.updated_at),
             proposal_id: b.proposal.map(|p| p.to_sql()),
+            attachment: crate::server::attachments::exists(&b.id.to_sql()),
         })
         .collect())
 }
@@ -390,19 +429,26 @@ struct DbProposal {
     status_changed_at: Option<Datetime>,
     published: bool,
     source: String,
+    seed_key: Option<String>,
     votes: i64,
     mine: i64,
     report: Option<RecordId>,
 }
 
 const PROPOSAL_FIELDS: &str = "id, title, summary, status, status_note, shipped_in, created_at, \
-     status_changed_at, published, source, \
+     status_changed_at, published, source, seed_key, \
      (count(SELECT id FROM proposal_vote WHERE proposal = $parent.id)) AS votes, \
      (count(SELECT id FROM proposal_vote WHERE proposal = $parent.id AND user = type::record('user', $u))) AS mine, \
      (SELECT VALUE id FROM bug_report WHERE proposal = $parent.id LIMIT 1)[0] AS report";
 
 fn proposal_view(p: DbProposal, admin: bool) -> ProposalView {
+    let agent_proposed_on = p
+        .seed_key
+        .as_deref()
+        .is_some_and(|k| k.starts_with(AGENT_KEY_PREFIX))
+        .then(|| dt_to_string(&p.created_at).chars().take(10).collect());
     ProposalView {
+        agent_proposed_on,
         id: p.id.to_sql(),
         title: p.title,
         summary: p.summary,
@@ -434,6 +480,70 @@ pub async fn list_proposals(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<Pro
     let mut list: Vec<ProposalView> = rows.into_iter().map(|p| proposal_view(p, false)).collect();
     crate::models::community::sort_proposals(&mut list);
     Ok(list)
+}
+
+#[derive(Debug, serde::Serialize, SurrealValue)]
+struct ImportRow {
+    seed_key: String,
+    title: String,
+    summary: String,
+}
+
+/// Import agent proposals (M141 H4): every one a draft, unpublished, keyed
+/// `agent:<key>` and created by the importing admin. All or nothing: a key
+/// that was imported before refuses the whole import. Input comes from
+/// [`crate::models::community::parse_proposal_import`].
+pub async fn admin_import_proposals(
+    db: &Surreal<Db>,
+    admin_id: &str,
+    items: &[ImportedProposal],
+) -> DbResult<usize> {
+    if items.is_empty() || items.len() > MAX_IMPORT_PROPOSALS {
+        return Err(DbError::Invalid("Nothing to import.".into()));
+    }
+    let rows: Vec<ImportRow> = items
+        .iter()
+        .map(|p| ImportRow {
+            seed_key: format!("{AGENT_KEY_PREFIX}{}", p.key),
+            title: p.title.clone(),
+            summary: p.summary.clone(),
+        })
+        .collect();
+    let keys: Vec<String> = rows.iter().map(|r| r.seed_key.clone()).collect();
+    let _guard = invariant_lock().await;
+    let mut r = db
+        .query("SELECT VALUE seed_key FROM proposal WHERE seed_key IN $keys")
+        .bind(("keys", keys))
+        .await?;
+    let existing: Vec<Option<String>> = r.take(0)?;
+    let existing: Vec<String> = existing
+        .into_iter()
+        .flatten()
+        .map(|k| k.trim_start_matches(AGENT_KEY_PREFIX).to_string())
+        .collect();
+    if !existing.is_empty() {
+        return Err(DbError::Invalid(format!(
+            "Already imported, nothing was saved: {}.",
+            existing.join(", ")
+        )));
+    }
+    let n = rows.len();
+    let r = db
+        .query(
+            "BEGIN TRANSACTION; \
+             FOR $p IN $rows { \
+                 CREATE proposal SET seed_key = $p.seed_key, title = $p.title, summary = $p.summary, \
+                     status = 'draft', source = 'mission', published = false, \
+                     created_by = type::record('user', $admin), created_at = time::now(), \
+                     status_changed_at = time::now(); \
+             }; \
+             COMMIT TRANSACTION;",
+        )
+        .bind(("rows", rows))
+        .bind(("admin", user_key(admin_id)))
+        .await?;
+    crate::server::db::check_tx(r)?;
+    Ok(n)
 }
 
 /// Every proposal, for admins (votes counted, own vote irrelevant).
@@ -1851,6 +1961,8 @@ pub struct FeedbackProposalRow {
     pub status_note: Option<String>,
     pub published: bool,
     pub source: String,
+    /// `agent:<key>` for an imported agent proposal (M141 H4).
+    pub seed_key: Option<String>,
     pub created_at: Datetime,
     pub updated_at: Option<Datetime>,
     pub status_changed_at: Option<Datetime>,
@@ -1875,7 +1987,7 @@ pub async fn export_feedback_rows(
                  description, category, viewport_w, viewport_h, created_at, updated_at, \
                  status, admin_note, public_title, proposal \
              FROM bug_report ORDER BY created_at ASC; \
-             SELECT id, title, summary, status, status_note, published, source, created_at, \
+             SELECT id, title, summary, status, status_note, published, source, seed_key, created_at, \
                  updated_at, status_changed_at, created_by, created_by.email AS creator_email, \
                  created_by.is_admin AS creator_flag, \
                  created_by.admin_promoted_at AS creator_promoted, \

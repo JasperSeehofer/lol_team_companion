@@ -5,9 +5,9 @@
 use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::ui::{
     AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog,
-    ConfirmTone, Density, Dialog, EmptySize, EmptyState, Field, Keycap, PageHeader, PageShell,
-    Role, RoleLabel, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TabItem,
-    TabPanel, Tabs, TextField, Toast, ToastContext,
+    ConfirmTone, Density, Dialog, EmptySize, EmptyState, Field, Keycap, LoadFailed, PageHeader,
+    PageShell, Role, RoleLabel, SaveStatus, SaveTracker, Select, SelectOption, Skeleton,
+    SkeletonGroup, SkeletonShape, TabItem, TabPanel, Tabs, TextField, Toast, ToastContext,
 };
 use crate::models::champion::{
     note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
@@ -293,6 +293,74 @@ pub fn ChampionPoolPage() -> impl IntoView {
     let role_tab = RwSignal::new("Top".to_string());
     let selected = RwSignal::new(None::<(String, String)>);
     let announce = RwSignal::new(String::new());
+    // The pool as the page shows it (M141 R-C1): moves change it at once and
+    // reach the server after; every load of `pool` replaces it. Rendering
+    // from it (inside a `Transition`) means a move never swaps the tiers for
+    // a skeleton, so the page keeps its height and its scroll position.
+    let local = RwSignal::new(None::<Vec<ChampionPoolEntry>>);
+    Effect::new(move |_| {
+        if let Some(Ok(list)) = pool.get() {
+            local.set(Some(list));
+        }
+    });
+    let save = crate::components::ui::use_save_state();
+    // What "Retry" in the header does: the last change that failed.
+    let retry_action = StoredValue::new(None::<Callback<()>>);
+    let retry = Callback::new(move |_| {
+        if let Some(cb) = retry_action.get_value() {
+            cb.run(());
+        }
+    });
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    // `move_to` cannot name itself; its retry goes through this stored copy.
+    let move_store = StoredValue::new(None::<Callback<(String, String, String, &'static str)>>);
+    // Move a champion to another tier: optimistic, reverted on failure.
+    let move_to = Callback::new(
+        move |(champion, stored, name, tier): (String, String, String, &'static str)| {
+            let before = local.with_untracked(|l| {
+                l.as_ref().and_then(|l| {
+                    l.iter()
+                        .find(|e| e.champion == champion && e.role == stored)
+                        .map(|e| e.tier.clone())
+                })
+            });
+            let optimistic = before.is_some();
+            if optimistic {
+                set_local_tier(local, &champion, &stored, tier);
+            }
+            announce.set(format!("{name} moved to {}.", tier_label(tier)));
+            save.saving();
+            leptos::task::spawn_local(async move {
+                match set_champion_tier(champion.clone(), stored.clone(), tier.to_string()).await {
+                    Ok(()) => {
+                        save.saved();
+                        retry_action.set_value(None);
+                        if !optimistic {
+                            pool.refetch();
+                        }
+                    }
+                    Err(e) => {
+                        if let Some(old) = before.as_deref() {
+                            set_local_tier(local, &champion, &stored, old);
+                        }
+                        announce.set(format!("{name} could not be moved."));
+                        save.failed(format!("{name} to {}", tier_label(tier)));
+                        let (c, st, n) = (champion.clone(), stored.clone(), name.clone());
+                        retry_action.set_value(Some(Callback::new(move |_| {
+                            if let Some(cb) = move_store.get_value() {
+                                cb.run((c.clone(), st.clone(), n.clone(), tier));
+                            }
+                        })));
+                        toast.push.run(Toast::error(format!(
+                            "Could not move: {}",
+                            crate::models::utils::error_text(&e)
+                        )));
+                    }
+                }
+            });
+        },
+    );
+    move_store.set_value(Some(move_to));
 
     view! {
         <PageShell density=Density::Compact attr:data-feedback-label="Champion pool">
@@ -301,13 +369,14 @@ pub fn ChampionPoolPage() -> impl IntoView {
                 eyebrow="Strategy"
                 meta=move || view! {
                     <span>"Your champions per role, from comfort picks to the ones you are learning. The draft page shows them to your team."</span>
+                    <SaveStatus state=save.state on_retry=retry />
                 }
             />
             <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::PoolTiers title="Tiers say how ready a champion is" class="mb-6">
                 "Each role has five tiers, from \u{201c}Comfort\u{201d} (play it in any game) to \u{201c}To practise\u{201d}. Move a champion by dragging it, or pick it up with Space, choose a tier with the arrow keys and drop it with Space. The draft page shows your team these tiers."
             </crate::components::guidance::FirstUseHint>
             <p class="sr-only" aria-live="polite" data-testid="pool-announce">{move || announce.get()}</p>
-            <Suspense fallback=|| view! { <SkeletonGroup label="Loading your pool"><Skeleton shape=SkeletonShape::Line lines=6 /></SkeletonGroup> }>
+            <Transition fallback=|| view! { <SkeletonGroup label="Loading your pool"><Skeleton shape=SkeletonShape::Line lines=6 /></SkeletonGroup> }>
                 {move || Suspend::new(async move {
                     let champs = champions_resource.await.unwrap_or_default();
                     let champs = StoredValue::new(champs);
@@ -325,19 +394,21 @@ pub fn ChampionPoolPage() -> impl IntoView {
                                         <RoleLedger
                                             role=role
                                             pool=pool
+                                            local=local
                                             stats=stats_resource
                                             champs=champs
                                             selected=selected
                                             announce=announce
+                                            move_to=move_to
                                         />
                                     </TabPanel>
                                 }).collect_view()}
                             </div>
-                            <ChampionDetail pool=pool champs=champs selected=selected />
+                            <ChampionDetail pool=pool local=local champs=champs selected=selected save=save retry_action=retry_action />
                         </div>
                     }
                 })}
-            </Suspense>
+            </Transition>
         </PageShell>
     }
 }
@@ -347,10 +418,12 @@ pub fn ChampionPoolPage() -> impl IntoView {
 fn RoleLedger(
     role: &'static str,
     pool: Resource<Result<Vec<ChampionPoolEntry>, ServerFnError>>,
+    local: RwSignal<Option<Vec<ChampionPoolEntry>>>,
     stats: Resource<Result<Vec<ChampionStatSummary>, ServerFnError>>,
     champs: StoredValue<Vec<Champion>>,
     selected: RwSignal<Option<(String, String)>>,
     announce: RwSignal<String>,
+    move_to: Callback<(String, String, String, &'static str)>,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let add_value = RwSignal::new(String::new());
@@ -373,8 +446,8 @@ fn RoleLedger(
         };
         // Older entries keep their old role spelling ("ADC"), which the
         // server's duplicate check does not match, so check here too.
-        let already = pool.with_untracked(|r| {
-            r.as_ref().and_then(|r| r.as_ref().ok()).is_some_and(|l| {
+        let already = local.with_untracked(|l| {
+            l.as_ref().is_some_and(|l| {
                 l.iter()
                     .any(|e| (e.champion == id || e.champion == name) && same_role(&e.role, role))
             })
@@ -405,19 +478,8 @@ fn RoleLedger(
     // (champion, stored role, name, target tier)
     let grabbed = RwSignal::new(None::<(String, String, String, &'static str)>);
     let drag_over = RwSignal::new(None::<&'static str>);
-    let move_to = Callback::new(
-        move |(champion, stored, name, tier): (String, String, String, &'static str)| {
-            leptos::task::spawn_local(async move {
-                match set_champion_tier(champion, stored, tier.to_string()).await {
-                    Ok(()) => {
-                        pool.refetch();
-                        announce.set(format!("{name} moved to {}.", tier_label(tier)));
-                    }
-                    Err(e) => toast.push.run(Toast::error(format!("Could not move: {e}"))),
-                }
-            });
-        },
-    );
+    // The champion being dragged (dimmed at its source).
+    let dragging = RwSignal::new(None::<String>);
 
     view! {
         <div class="flex flex-col gap-5">
@@ -443,9 +505,18 @@ fn RoleLedger(
                 <span class="inline-flex items-center gap-1"><Keycap keys="Esc" />" cancel"</span>
                 <span>"Or drag with the pointer."</span>
             </p>
-            <Suspense fallback=|| view! { <SkeletonGroup label="Loading tiers"><Skeleton shape=SkeletonShape::Line lines=5 /></SkeletonGroup> }>
+            <Transition fallback=|| view! { <SkeletonGroup label="Loading tiers"><Skeleton shape=SkeletonShape::Line lines=5 /></SkeletonGroup> }>
                 {move || pool.get().map(|r| {
-                    let entries: Vec<ChampionPoolEntry> = r.unwrap_or_default().into_iter().filter(|e| same_role(&e.role, role)).collect();
+                    let list = match (local.get(), r) {
+                        (Some(l), _) => l,
+                        (None, Ok(l)) => l,
+                        (None, Err(_)) => {
+                            return view! {
+                                <LoadFailed what="Your pool" on_retry=Callback::new(move |_| pool.refetch()) />
+                            }.into_any();
+                        }
+                    };
+                    let entries: Vec<ChampionPoolEntry> = list.into_iter().filter(|e| same_role(&e.role, role)).collect();
                     if entries.is_empty() {
                         return view! {
                             <EmptyState
@@ -477,6 +548,7 @@ fn RoleLedger(
                                         on:drop=move |ev: web_sys::DragEvent| {
                                             ev.prevent_default();
                                             drag_over.set(None);
+                                            dragging.set(None);
                                             if let Some(dt) = ev.data_transfer() {
                                                 let champ = dt.get_data("text/x-champion").unwrap_or_default();
                                                 let from = dt.get_data("text/x-source-tier").unwrap_or_default();
@@ -509,6 +581,8 @@ fn RoleLedger(
                                                         let champ_sel = champ.clone();
                                                         let champ_key = champ.clone();
                                                         let champ_drag = champ.clone();
+                                                        let champ_dim = champ.clone();
+                                                        let champ_dim2 = champ.clone();
                                                         let name_key = name.clone();
                                                         let name_drag = name.clone();
                                                         let item_id = format!("pool-{}-{}", role.to_lowercase(), dom_key(&champ));
@@ -530,7 +604,11 @@ fn RoleLedger(
                                                             <li
                                                                 draggable="true"
                                                                 data-champion=name_attr
+                                                                class=move || if dragging.with(|d| d.as_deref() == Some(champ_dim.as_str())) { "cursor-grab opacity-60 active:cursor-grabbing" } else { "cursor-grab active:cursor-grabbing" }
+                                                                data-dragging=move || dragging.with(|d| d.as_deref() == Some(champ_dim2.as_str())).then_some("true")
+                                                                on:dragend=move |_| dragging.set(None)
                                                                 on:dragstart=move |ev: web_sys::DragEvent| {
+                                                                    dragging.set(Some(champ_drag.clone()));
                                                                     if let Some(dt) = ev.data_transfer() {
                                                                         let _ = dt.set_data("text/x-champion", &champ_drag);
                                                                         let _ = dt.set_data("text/x-name", &name_drag);
@@ -607,21 +685,50 @@ fn RoleLedger(
                         </ol>
                     }.into_any()
                 })}
-            </Suspense>
+            </Transition>
         </div>
     }
 }
 
-/// Focus an element after the list re-renders (the moved champion's button).
+/// Set one entry's tier in the page's copy of the pool.
+fn set_local_tier(
+    local: RwSignal<Option<Vec<ChampionPoolEntry>>>,
+    champion: &str,
+    stored: &str,
+    tier: &str,
+) {
+    local.update(|l| {
+        if let Some(l) = l {
+            for e in l.iter_mut() {
+                if e.champion == champion && e.role == stored {
+                    e.tier = tier.to_string();
+                }
+            }
+        }
+    });
+}
+
+/// Focus an element after the list re-renders (the moved champion's button),
+/// without scrolling the page (`preventScroll`).
 fn focus_id_later(id: String) {
     #[cfg(feature = "hydrate")]
     {
         use wasm_bindgen::prelude::*;
-        let cb = Closure::once(move || crate::components::ui::a11y::focus_id(&id));
+        let cb = Closure::once(move || {
+            if let Some(el) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id(&id))
+                .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+            {
+                let opts = web_sys::FocusOptions::new();
+                opts.set_prevent_scroll(true);
+                let _ = el.focus_with_options(&opts);
+            }
+        });
         if let Some(win) = web_sys::window() {
             let _ = win.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.as_ref().unchecked_ref(),
-                400,
+                30,
             );
         }
         cb.forget();
@@ -634,16 +741,21 @@ fn focus_id_later(id: String) {
 #[component]
 fn ChampionDetail(
     pool: Resource<Result<Vec<ChampionPoolEntry>, ServerFnError>>,
+    local: RwSignal<Option<Vec<ChampionPoolEntry>>>,
     champs: StoredValue<Vec<Champion>>,
     selected: RwSignal<Option<(String, String)>>,
+    save: SaveTracker,
+    retry_action: StoredValue<Option<Callback<()>>>,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let entry = Memo::new(move |_| {
         let (c, r) = selected.get()?;
-        pool.get()
-            .and_then(|p| p.ok())
+        local
+            .get()
+            .or_else(|| pool.get().and_then(|p| p.ok()))
             .and_then(|l| l.into_iter().find(|e| e.champion == c && e.role == r))
     });
+    let save_field_store = StoredValue::new(None::<Callback<&'static str>>);
     let tier = RwSignal::new(String::new());
     let comfort = RwSignal::new(String::new());
     let meta = RwSignal::new(String::new());
@@ -659,11 +771,12 @@ fn ChampionDetail(
             general.set(e.notes.clone().unwrap_or_default());
         }
     });
-    let save_field = move |what: &'static str| {
+    let save_field = Callback::new(move |what: &'static str| {
         let Some(e) = entry.get_untracked() else {
             return;
         };
         let (c, r) = (e.champion.clone(), e.role.clone());
+        save.saving();
         leptos::task::spawn_local(async move {
             let res = match what {
                 "tier" => set_champion_tier(c, r, tier.get_untracked()).await,
@@ -682,15 +795,35 @@ fn ChampionDetail(
             };
             match res {
                 Ok(()) => {
+                    save.saved();
+                    retry_action.set_value(None);
+                    // A background refetch: the `Transition` keeps the page.
                     pool.refetch();
                     if what == "notes" {
                         toast.push.run(Toast::success("Notes saved"));
                     }
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => {
+                    save.failed(match what {
+                        "tier" => "the tier",
+                        "comfort" => "the comfort level",
+                        "meta" => "the meta fit",
+                        _ => "the notes",
+                    });
+                    retry_action.set_value(Some(Callback::new(move |_| {
+                        if let Some(cb) = save_field_store.get_value() {
+                            cb.run(what);
+                        }
+                    })));
+                    toast.push.run(Toast::error(format!(
+                        "Could not save: {}",
+                        crate::models::utils::error_text(&e)
+                    )));
+                }
             }
         });
-    };
+    });
+    save_field_store.set_value(Some(save_field));
     let remove = Callback::new(move |_: leptos::ev::MouseEvent| {
         let Some(e) = entry.get_untracked() else {
             return;
@@ -786,7 +919,7 @@ fn ChampionDetail(
                             <TextField value=general rows=3 placeholder="When you pick it, what it needs from the team." />
                         </Field>
                         <div class="flex flex-wrap gap-2">
-                            <Button variant=ButtonVariant::Primary on_click=Callback::new(move |_| { save_field("tier"); save_field("comfort"); save_field("meta"); save_field("notes"); })>
+                            <Button variant=ButtonVariant::Primary on_click=Callback::new(move |_| { save_field.run("tier"); save_field.run("comfort"); save_field.run("meta"); save_field.run("notes"); })>
                                 "Save"
                             </Button>
                             <Button variant=ButtonVariant::Danger on_click=remove>"Remove from pool"</Button>
@@ -936,7 +1069,7 @@ fn ChampionNotes(
             {["matchup", "play", "lesson"].into_iter().map(|kind| view! {
                 <TabPanel group="pool-notes" tab=kind selected=tab>
                     <div class="flex flex-col gap-2">
-                        <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Line lines=2 /> }>
+                        <Transition fallback=|| view! { <Skeleton shape=SkeletonShape::Line lines=2 /> }>
                             {move || notes.get().map(|r| {
                                 let kinds = group(kind);
                                 let list: Vec<ChampionNote> = r.unwrap_or_default().into_iter().filter(|n| kinds.contains(&n.note_type.as_str())).collect();
@@ -973,7 +1106,7 @@ fn ChampionNotes(
                                     </ul>
                                 }.into_any()
                             })}
-                        </Suspense>
+                        </Transition>
                         <div>
                             <Button size=ButtonSize::Sm on_click=Callback::new(move |_| start(match kind { "play" => "power_spike", k => k }, None))>
                                 {match kind { "matchup" => "Add a matchup", "lesson" => "Add a lesson", _ => "Add a play note" }}

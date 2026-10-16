@@ -244,6 +244,15 @@ pub struct FeedbackItem {
     /// Proposals: number of distinct users who voted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voter_count_distinct: Option<u32>,
+    /// Bug reports: the stored screenshot (M141 H2), a path under
+    /// `ATTACHMENTS_DIR`. Untrusted user content, like the body.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment: Option<String>,
+    /// Proposals: `agent` when the Team Companion agent wrote it (imported
+    /// as a draft, M141 H4). Such a proposal is never `reporter_is_admin`,
+    /// although an admin imported it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 fn first_chars(s: &str, n: usize) -> String {
@@ -295,6 +304,11 @@ pub fn feedback_items(
             published: None,
             votes: None,
             voter_count_distinct: None,
+            attachment: crate::server::attachments::dir()
+                .and_then(|d| crate::server::attachments::path_in(d, &b.id.to_sql()))
+                .filter(|p| p.is_file())
+                .map(|p| p.display().to_string()),
+            author: None,
         });
     }
     for p in proposals {
@@ -304,6 +318,10 @@ pub fn feedback_items(
             .or(p.status_changed_at)
             .map(|d| dt_to_string(&d))
             .unwrap_or_else(|| created.clone());
+        let by_agent = p
+            .seed_key
+            .as_deref()
+            .is_some_and(|k| k.starts_with(crate::models::community::AGENT_KEY_PREFIX));
         items.push(FeedbackItem {
             id: p.id.to_sql(),
             category: "proposal".to_string(),
@@ -311,7 +329,8 @@ pub fn feedback_items(
             created,
             updated,
             reporter_user_id: p.created_by.as_ref().map(|u| u.to_sql()),
-            reporter_is_admin: p.created_by.is_some()
+            reporter_is_admin: !by_agent
+                && p.created_by.is_some()
                 && config.is_effective_admin(
                     p.creator_flag.unwrap_or(false),
                     p.creator_promoted.is_some(),
@@ -327,6 +346,8 @@ pub fn feedback_items(
             published: Some(p.published),
             votes: Some(p.votes.max(0) as u32),
             voter_count_distinct: Some(p.voters.max(0) as u32),
+            attachment: None,
+            author: by_agent.then(|| "agent".to_string()),
         });
     }
     items
@@ -682,6 +703,8 @@ mod tests {
             published: None,
             votes: None,
             voter_count_distinct: None,
+            attachment: None,
+            author: None,
         }
     }
 

@@ -8,6 +8,7 @@
 //! Batch 3 (domain): ChampionAvatar/UserAvatar, RoleLabel, SideMarker,
 //! ResultGlyph, StatReadout, LegendBlock, CanvasFrame/ScaleBar,
 //! Annotation, TimelineScrub; ProportionBar (M7).
+//! M141: SaveStatus / SaveTracker / LoadFailed (status.rs).
 //!
 //! Rules for every component here: typed variants (enums, no strings),
 //! class names written out in full (Tailwind only sees literals), identical
@@ -32,6 +33,7 @@ pub mod menu;
 pub mod prep;
 pub mod readout;
 pub mod skeleton;
+pub mod status;
 pub mod table;
 pub mod tabs;
 pub mod text;
@@ -58,7 +60,8 @@ pub use draft::{
 };
 pub use empty::{EmptySize, EmptyState, NoTeamState};
 pub use field::{
-    Combobox, Field, FieldContext, FieldSize, InputKind, Select, SelectOption, TextField,
+    ctrl_enter_submits, enter_submits, Combobox, Field, FieldContext, FieldSize, InputKind, Select,
+    SelectOption, TextField,
 };
 pub use layout::{
     Density, Edge, HeadingLevel, Layer, Pad, PageHeader, PageShell, PageWidth, SectionHeader,
@@ -71,6 +74,7 @@ pub use menu::{Menu, MenuAlign, MenuItem};
 pub use prep::{PrepEmphasis, PrepSequence, PrepState, PrepStep};
 pub use readout::{Delta, ReadoutSize, Sentiment, StatReadout, Trend};
 pub use skeleton::{Skeleton, SkeletonGroup, SkeletonShape};
+pub use status::{use_save_state, LoadFailed, SaveState, SaveStatus, SaveTracker};
 pub use table::{
     sort_rows, Align, RowLink, SortDir, SortState, SortStatus, SortTh, Table, Td, Th, Tr,
 };

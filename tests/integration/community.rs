@@ -1220,3 +1220,74 @@ async fn feedback_export_debounces_and_writes_the_final_state() {
     assert_eq!(std::sync::Arc::strong_count(&db), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// M141 H4: imported agent proposals are drafts nobody but admins sees,
+/// attributed to the agent; a repeated key refuses the whole import.
+#[tokio::test]
+async fn imported_agent_proposals_are_unpublished_drafts() {
+    use lol_team_companion::models::community::parse_proposal_import;
+    let db = common::test_db().await;
+    let admin = user(&db, "admin").await;
+    let member = user(&db, "member").await;
+    let items = parse_proposal_import(
+        r#"{"version":1,"proposals":[
+            {"key":"m141-chips","title":"Suggestion chips","summary":"From the Draft Graph."},
+            {"key":"m141-roles","title":"Role responsibilities"}
+        ]}"#,
+    )
+    .expect("valid import");
+    assert_eq!(
+        store::admin_import_proposals(&db, &admin, &items)
+            .await
+            .unwrap(),
+        2
+    );
+
+    let all = store::admin_list_proposals(&db).await.unwrap();
+    let ours: Vec<_> = all
+        .iter()
+        .filter(|p| p.title == "Suggestion chips" || p.title == "Role responsibilities")
+        .collect();
+    assert_eq!(ours.len(), 2);
+    for p in &ours {
+        assert_eq!(p.status, "draft");
+        assert!(!p.published);
+        assert_eq!(p.votes, 0);
+        let date = p
+            .agent_proposed_on
+            .as_deref()
+            .expect("attributed to the agent");
+        assert_eq!(date.len(), 10, "YYYY-MM-DD: {date}");
+    }
+    // Members see none of them, and cannot vote on them.
+    let board = store::list_proposals(&db, &member).await.unwrap();
+    assert!(board.iter().all(|p| p.agent_proposed_on.is_none()));
+    assert_not_found(
+        store::set_vote(&db, &member, &ours[0].id, true).await,
+        "vote on an unpublished draft",
+    );
+
+    // The same key again: refused, nothing saved (also the new one).
+    let again = parse_proposal_import(
+        r#"{"version":1,"proposals":[{"key":"m141-new","title":"New"},{"key":"m141-chips","title":"Dup"}]}"#,
+    )
+    .unwrap();
+    let err = store::admin_import_proposals(&db, &admin, &again)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, DbError::Invalid(ref m) if m.contains("m141-chips")),
+        "{err:?}"
+    );
+    let all = store::admin_list_proposals(&db).await.unwrap();
+    assert!(!all.iter().any(|p| p.title == "New" || p.title == "Dup"));
+    // Hand-written proposals are not attributed to the agent.
+    let mine = proposal(&db, &admin, "By hand", "proposed", true).await;
+    let all = store::admin_list_proposals(&db).await.unwrap();
+    assert!(all
+        .iter()
+        .find(|p| p.id == mine)
+        .unwrap()
+        .agent_proposed_on
+        .is_none());
+}

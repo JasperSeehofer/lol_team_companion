@@ -313,12 +313,13 @@ Pointer: click a slot to choose it, click a champion to fill the current step, d
 ### 6.6 Page patterns (learned in M3)
 
 - **List and editor.** Strategy pages put the team's records in a narrow list on the left (rows are full-width `Quiet` buttons with `pressed` for the open one, or `RowLink`s in a table) and the editor on the right; on phones the list comes first. The list says what each record holds (counts, result, survey age), not only its name.
-- **Save state in the header.** Editors show "Not saved yet", "Unsaved changes", "Saving…" or "Saved" in the `PageHeader` meta, with the primary save action in the header actions; saving puts the record id in the URL (`?draft_id=`, `?plan_id=`, `?review_id=`) so a reload or a link reopens it.
+- **Save state in the header.** Editors show "Not saved yet", "Unsaved changes", "Saving…" or "Saved" in the `PageHeader` meta, with the primary save action in the header actions; saving puts the record id in the URL (`?draft_id=`, `?plan_id=`, `?review_id=`) so a reload or a link reopens it. `SaveStatus` (`components::ui::status`, M141) draws the line, `SaveTracker` drives it, and pages that save as you go (the champion pool's tier moves) show it too; a section that did not load is a `LoadFailed` callout with "Try again".
 - **Undo before confirmation.** Deletes that can be reversed from what the page holds (a cleared slot, a pool entry, an action item) happen at once with a toast that offers Undo; deletes that cannot (a draft, a plan, a tree, an opponent) go through `ConfirmDialog`.
 - **Keyboard legends.** A page that has its own keys shows them once in a `Keycap` legend next to the thing they act on (the draft board, the pool tiers, the action items), and the same keys appear in the component's `A11y:` line.
 - **Next step links.** Records link forward along the loop: a draft offers "Prep a game plan" and "Review this game", a plan "Start the review" (already linked), a review with action item lines creates the items and links to them.
 - **Honest emptiness.** Every list, panel and sub-section without data shows an `EmptyState` saying what will appear and how; nothing renders invented numbers. A guess is labelled as one.
 - **Focus after a change.** When a row moves (completed, restored, saved), focus follows it to its new place.
+- **Enter submits.** A single-line field with an attached primary button runs that button on Enter (a `<form>` whose submit is the button's action, or `on_keydown`); in a textarea Enter stays a newline and Ctrl+Enter submits.
 
 ### 6.7 Draft Graph, stage A: the ranked list, Why panel and comp profile (M4)
 
@@ -431,13 +432,13 @@ The page exposes the last run as attributes on `[data-graph-canvas]`: `data-sim-
 
 **Legal pages.** Reading width, `PageHeader`, a warning `Callout` only while something is still a placeholder or a draft (which it names); a missing owner's fact appears as `[OWNER: ...]` in mono warning ink (`OwnerPlaceholder`), never invented. The privacy page lists what the app stores by area; a unit test checks the tables it names exist in `schema.surql`.
 
-**Bug-report button.** Docked in the page flow above the footer at every width (an outlined "Report a bug" button), so it covers nothing. Rebuilt in M7, see 6.10.
+**Bug-report button.** Docked in the page flow above the footer at every width (an outlined "Give Feedback" button, 44 px on phones; renamed in M141, the dialog offers Bug, Idea and Praise as labels over the stored `bug` and `wishlist`), so it covers nothing. Rebuilt in M7, see 6.10.
 
 ### 6.10 Community pages (M7)
 
 **Where they live.** Not a hub (chrome recedes): the footer has a "Community" link group (Changelog and Transparency for everyone, What next and Bug board for signed-in users), the command bar lists them with the hint "Community", the phone menu has a Community group, and the account menu has "Your reports" (with "(N updated)") and, for admins, one "Admin" entry.
 
-**Widget.** The trigger starts select mode: a fixed hint bar under the app bar (an Info `Callout` on an opaque `ink-1` ground with the overlay shadow) says "Click the part of the page your report is about." with Skip and the Esc keycap (hidden on phones). The form is a `Dialog` (Md): "About" (the captured label or "The whole page"), a `SegmentedControl` Type (Bug / Wishlist), the text field with a privacy hint, Cancel (quiet) and Send report (primary). Success is a toast with the action "Your reports".
+**Widget.** The trigger starts select mode: a fixed hint bar under the app bar (an Info `Callout` on an opaque `ink-1` ground with the overlay shadow) says "Click the part of the page your report is about." with Skip and the Esc keycap (hidden on phones). The form is a `Dialog` (Md): "About" (the captured label or "The whole page"), a `SegmentedControl` Kind (Bug / Idea / Praise; labels only, praise is stored as `wishlist` with a `[praise] ` body prefix), the text field with a privacy hint (Ctrl+Enter sends), Cancel (quiet) and Send feedback (primary). Success is a toast with the action "Your reports".
 
 **Bug board and Your reports.** `Tabs` (Open, Fixed, Won't fix, Your reports) over plain tables; a legend line explains the statuses in words. Status badges: New, Triaged and Won't fix neutral, Planned info, Fixed success; "Updated" is the accent badge (it marks a change for this viewer). The board shows only admin-written titles and notes.
 

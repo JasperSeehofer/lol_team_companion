@@ -778,7 +778,7 @@ fn Goals(goals: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl In
                                 {progress_line(&g.cs, |v| format!("{v:.1}"))}
                                 <div class="mt-2 flex flex-wrap items-end gap-2">
                                     <Field id="goal-cs" label="Target">
-                                        <TextField value=cs kind=InputKind::Number placeholder="7.5" size=crate::components::ui::FieldSize::Sm />
+                                        <TextField value=cs kind=InputKind::Number placeholder="7.5" size=crate::components::ui::FieldSize::Sm on_keydown=crate::components::ui::enter_submits(Callback::new(move |_| save.run(("cs_per_min", cs.get_untracked())))) />
                                     </Field>
                                     <Button size=ButtonSize::Sm on_click=Callback::new(move |_| save.run(("cs_per_min", cs.get_untracked())))>"Set CS goal"</Button>
                                 </div>
@@ -788,7 +788,7 @@ fn Goals(goals: Resource<Result<GoalProgressPayload, ServerFnError>>) -> impl In
                                 {progress_line(&g.deaths, |v| format!("{v:.1}"))}
                                 <div class="mt-2 flex flex-wrap items-end gap-2">
                                     <Field id="goal-deaths" label="At most">
-                                        <TextField value=deaths kind=InputKind::Number placeholder="4" size=crate::components::ui::FieldSize::Sm />
+                                        <TextField value=deaths kind=InputKind::Number placeholder="4" size=crate::components::ui::FieldSize::Sm on_keydown=crate::components::ui::enter_submits(Callback::new(move |_| save.run(("deaths_per_game", deaths.get_untracked())))) />
                                     </Field>
                                     <Button size=ButtonSize::Sm on_click=Callback::new(move |_| save.run(("deaths_per_game", deaths.get_untracked())))>"Set deaths goal"</Button>
                                 </div>

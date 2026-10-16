@@ -19,7 +19,7 @@ cleanup() {
   rm -rf "$T"
 }
 trap cleanup EXIT
-mkdir -p "$T/bin" "$T/data/db/wal" "$T/data/inbox" "$T/staging" "$T/crypt" "$T/scratch" "$T/sftproot" "$T/hstate"
+mkdir -p "$T/bin" "$T/data/db/wal" "$T/data/inbox" "$T/data/attachments" "$T/staging" "$T/crypt" "$T/scratch" "$T/sftproot" "$T/hstate"
 command -v rclone >/dev/null || { echo "rclone not on PATH"; exit 1; }
 
 cat > "$T/bin/docker" <<FAKE
@@ -51,6 +51,8 @@ esac
 FAKE
 chmod +x "$T/bin/docker"; echo true > "$T/state"
 head -c 200000 /dev/urandom > "$T/data/db/wal/00001.wal"; echo 1 > "$T/data/db/LOCK"; echo "# inbox" > "$T/data/inbox/bug-reports.md"
+# A feedback screenshot (M141): backed up and restored with the database.
+printf 'RIFF\0\0\0\0WEBPVP8L' > "$T/data/attachments/r1.webp"; head -c 3000 /dev/urandom >> "$T/data/attachments/r1.webp"
 
 # Fake sendmail: appends each mail to $T/mail.log.
 printf '#!/bin/sh\n{ cat; echo ---; } >> "%s/mail.log"\n' "$T" > "$T/bin/sendmail"; chmod +x "$T/bin/sendmail"
@@ -84,6 +86,7 @@ check test -z "$(find "$T/staging" -mindepth 1 -maxdepth 1 -type d -name 'failed
 export SCRATCH_ROOT="$T/scratch" DRILL_LOG="$T/drills.log" DRILL_PORT="${DRILL_PORT:-3998}"
 check "$SCRIPTS/restore.sh" fetch latest "$T/fetched" 2>/dev/null
 check cmp "$T/data/db/wal/00001.wal" "$T/fetched/data/db/wal/00001.wal"
+check cmp "$T/data/attachments/r1.webp" "$T/fetched/data/attachments/r1.webp"
 check env DRILL_EMAIL=drill@example.org DRILL_PASSWORD=drill-password-123 "$SCRIPTS/restore.sh" drill latest 2>"$T/d1.log"
 check grep -q PASSED "$T/drills.log"
 check bash -c "! DRILL_EMAIL=drill@example.org DRILL_PASSWORD=wrong '$SCRIPTS/restore.sh' drill latest 2>/dev/null"
@@ -116,6 +119,7 @@ check test -d "$T/sftproot/companion-backups"
 check bash -c "! find '$T/sftproot' | grep -Eq 'companion/|manifest|\.tar'"
 check sftp_env "$SCRIPTS/restore.sh" fetch latest "$T/fetched-sftp" 2>/dev/null
 check cmp "$T/data/db/wal/00001.wal" "$T/fetched-sftp/data/db/wal/00001.wal"
+check cmp "$T/data/attachments/r1.webp" "$T/fetched-sftp/data/attachments/r1.webp"
 
 # --- healthcheck-remote.sh ------------------------------------------------------------
 HP="${HEALTH_PORT:-3996}"
