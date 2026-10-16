@@ -1,0 +1,12 @@
+{
+  "name": "T1 field-sketch ink",
+  "svg": "t1-rift.svg",
+  "label": { "x": 22.8, "y": 84.0 },
+  "marks": [
+    { "name": "baron", "word": "Baron", "x": 30.2, "y": 22.5 },
+    { "name": "dragon", "word": "Dragon", "x": 56.2, "y": 77.5 }
+  ],
+  "ticks": { "cols": "ABCDEFGH", "rows": "12345" },
+  "crops": { "share": "15 40.6 70 18.8" },
+  "shareLabel": { "x": 58, "y": 50.4 }
+}

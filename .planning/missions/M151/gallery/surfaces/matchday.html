@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match Day still</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="surfaces.css">
+<style>
+  /* home.rs MatchDayView + the "Match Day field card" recipe card */
+  .phone-note { margin: calc(var(--spacing) * -3) 0 calc(var(--spacing) * 6); }
+  .field { position: relative; background: var(--color-ink-1); border-top: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule);
+    padding: calc(var(--spacing) * 5) calc(var(--spacing) * 4); max-width: 40rem; }
+  .field::after { content: ""; display: block; clear: both; }
+  .field .inset { float: right; width: calc(var(--spacing) * 22); height: calc(var(--spacing) * 22); margin: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 4); }
+  .field .btn { clear: both; }
+  .lead { margin-top: calc(var(--spacing) * 2); display: flex; align-items: baseline; gap: calc(var(--spacing) * 2); }
+  .lead .fig { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: var(--text-headline);
+    line-height: var(--text-headline--line-height); color: var(--color-primary); letter-spacing: -0.02em; }
+  .field .sentence { margin-top: calc(var(--spacing) * 3); max-width: 34ch; color: var(--color-secondary); }
+  .field .btn { display: flex; width: fit-content; margin-top: calc(var(--spacing) * 5); }
+  .prep { margin-top: calc(var(--spacing) * 10); }
+  .steps li { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto; column-gap: calc(var(--spacing) * 3); align-items: baseline;
+    border-top: 1px solid var(--color-rule); padding: calc(var(--spacing) * 3) 0; }
+  .num { font-family: var(--font-mono); display: inline-grid; place-items: center; width: calc(var(--spacing) * 6); height: calc(var(--spacing) * 6);
+    border-radius: var(--radius-ctl); font-size: var(--text-caption); }
+  .num.done { background: var(--color-ink-3); color: var(--color-secondary); }
+  .num.next { border: 1px solid var(--color-outline); color: var(--color-primary); font-weight: 600; }
+  .num.todo { border: 1px solid var(--color-outline); color: var(--color-muted); }
+  .num.att { border: 1px solid var(--color-warning); color: var(--color-warning); }
+  .st { font-family: var(--font-mono); font-size: var(--text-label); white-space: nowrap; }
+  .st.done { color: var(--color-success); } .st.todo { color: var(--color-muted); } .st.att { color: var(--color-warning); }
+  .st.next { color: var(--color-primary); font-weight: 600; }
+  .tt { font-weight: 500; color: var(--color-primary); } .tt.done { color: var(--color-secondary); }
+  .tt.next { font-family: var(--font-display); font-size: var(--text-heading); line-height: var(--text-heading--line-height); font-weight: 600; }
+  .det { margin-top: calc(var(--spacing) * 0.5); }
+  .menu-btn { height: calc(var(--spacing) * 11); }
+  @media (min-width: 1024px) {
+    .shell { padding-left: calc(var(--spacing) * 8); padding-right: calc(var(--spacing) * 8); }
+    .lead .fig { font-size: var(--text-display); line-height: var(--text-display--line-height); }
+  }
+</style>
+</head>
+<body>
+<header class="nav"><div class="nav-in"><a class="wordmark" href="#">Team Companion</a><button class="btn btn-quiet btn-sm menu-btn" type="button">Menu</button></div></header>
+<main class="shell w-wide">
+  <header class="ph">
+    <p class="eyebrow">Match Day</p>
+    <h1>Northgate Academy</h1>
+  </header>
+  <p class="phone-note text-caption c-muted">Read-only on the phone. Edit the match on a larger screen.</p>
+
+  <section class="field" aria-labelledby="next-h">
+    <figure class="inset" data-art="inset" aria-hidden="true"></figure>
+    <p class="eyebrow" id="next-h">Next match</p>
+    <p class="lead"><time class="fig" datetime="2026-10-17T18:00:00Z">20:00</time><span class="text-label c-muted">Tomorrow</span></p>
+    <p class="sentence text-reading">Scrim vs Riverside Rooks, best of 3. 2 of 5 prep steps done.</p>
+    <a class="btn btn-primary btn-touch" href="#brief">Read the brief <span aria-hidden="true">→</span></a>
+  </section>
+
+  <section class="prep" aria-labelledby="prep-h">
+    <div class="sh"><h2 id="prep-h">Preparation</h2><p class="meta text-label">2 of 5 done</p></div>
+    <ol class="steps" aria-label="Preparation for the next match">
+      <li aria-current="step"><span class="num next" aria-hidden="true">1</span>
+        <div><p class="tt next">Read the brief on Riverside Rooks</p><p class="det text-label c-muted">5 players scouted, not refreshed from Riot yet.</p></div>
+        <span class="st next">Read by 0 of 5</span></li>
+      <li><span class="num done" aria-hidden="true">2</span>
+        <div><p class="tt done">Draft plans</p><p class="det text-label c-muted">vs Riverside Rooks - Game 1, vs Riverside Rooks - Game 2</p></div>
+        <span class="st done">2 drafts</span></li>
+      <li><span class="num done" aria-hidden="true">3</span>
+        <div><p class="tt done">Game plan</p><p class="det text-label c-muted">vs Riverside Rooks - Game 1 plan, vs Riverside Rooks - Game 2 plan</p></div>
+        <span class="st done">2 plans</span></li>
+      <li><span class="num att" aria-hidden="true">4</span>
+        <div><p class="tt">Open action items</p><p class="det text-label c-muted">Lessons from earlier reviews still waiting.</p></div>
+        <span class="st att"><span aria-hidden="true">! </span>3 open</span></li>
+      <li><span class="num todo" aria-hidden="true">5</span>
+        <div><p class="tt">After the game: review</p><p class="det text-label c-muted">Write it right after the match, while it is fresh.</p></div>
+        <span class="st todo">After the game</span></li>
+    </ol>
+  </section>
+</main>
+<script src="surface.js"></script>
+</body>
+</html>

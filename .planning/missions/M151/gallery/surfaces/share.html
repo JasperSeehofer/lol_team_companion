@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared plan still</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="surfaces.css">
+<style>
+  /* share.rs SharePage: PageShell Reading; the T art strip sits above the PageHeader */
+  .strip { width: 100%; height: calc(var(--spacing) * 24); margin-bottom: calc(var(--spacing) * 6); }
+  .stack { display: flex; flex-direction: column; gap: calc(var(--spacing) * 10); }
+  .champs { display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4); }
+  .champs li { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); color: var(--color-primary); }
+  .lines { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); color: var(--color-primary); }
+  .lines li { display: flex; align-items: center; gap: calc(var(--spacing) * 2); }
+  .briefs { border-bottom: 1px solid var(--color-rule); }
+  .briefs li { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: calc(var(--spacing) * 3); border-top: 1px solid var(--color-rule);
+    padding: calc(var(--spacing) * 2.5) 0; align-items: baseline; color: var(--color-primary); }
+  h3.eyebrow { margin-bottom: calc(var(--spacing) * 2); }
+  h3.eyebrow.gap { margin-top: calc(var(--spacing) * 4); }
+  .shared-note { margin: calc(var(--spacing) * 10) 0 calc(var(--spacing) * 8); }
+</style>
+</head>
+<body>
+<header class="nav"><div class="nav-in"><a class="wordmark" href="#">Team Companion</a></div></header>
+<main class="shell w-reading">
+  <figure class="strip" data-art="share" data-label="Riverside Rooks" aria-hidden="true"></figure>
+  <header class="ph">
+    <p class="eyebrow">Game plan</p>
+    <h1>vs Riverside Rooks - Game 1 plan</h1>
+  </header>
+  <div class="stack">
+    <section aria-labelledby="sp-comp">
+      <div class="sh"><h2 id="sp-comp">Champions</h2></div>
+      <h3 class="eyebrow">Ours</h3>
+      <ul class="champs text-body">
+        <li><span class="mono" aria-hidden="true">Da</span>Darius</li><li><span class="mono" aria-hidden="true">Az</span>Azir</li>
+        <li><span class="mono" aria-hidden="true">Ji</span>Jinx</li><li><span class="mono" aria-hidden="true">Th</span>Thresh</li>
+        <li><span class="mono" aria-hidden="true">He</span>Hecarim</li>
+      </ul>
+      <h3 class="eyebrow gap">Theirs</h3>
+      <ul class="champs text-body">
+        <li><span class="mono" aria-hidden="true">Gn</span>Gnar</li><li><span class="mono" aria-hidden="true">Vi</span>Viktor</li>
+        <li><span class="mono" aria-hidden="true">Ez</span>Ezreal</li><li><span class="mono" aria-hidden="true">Br</span>Braum</li>
+        <li><span class="mono" aria-hidden="true">LS</span>Lee Sin</li>
+      </ul>
+    </section>
+    <section aria-labelledby="sp-win">
+      <div class="sh"><h2 id="sp-win">How we win</h2></div>
+      <ul class="lines text-reading"><li>Win the dragon fights at 5 and 11 minutes</li><li>Keep the carry alive in teamfights</li></ul>
+    </section>
+    <section aria-labelledby="sp-obj">
+      <div class="sh"><h2 id="sp-obj">Objectives</h2></div>
+      <ul class="lines text-reading">
+        <li><span class="mark" data-mark="dragon"></span>Dragon</li>
+        <li><span class="mark" data-mark="herald"></span>Rift Herald</li>
+        <li><span class="mark" data-mark="baron"></span>Baron</li>
+      </ul>
+    </section>
+    <section aria-labelledby="sp-tf">
+      <div class="sh"><h2 id="sp-tf">Teamfights</h2></div>
+      <p class="text-reading c-primary">Front to back; engage only with the jungler in range</p>
+    </section>
+    <section aria-labelledby="sp-early">
+      <div class="sh"><h2 id="sp-early">Early game</h2></div>
+      <p class="text-reading c-primary">Ward the enemy raptors by 1:20; first recall on cannon wave.</p>
+    </section>
+    <section aria-labelledby="sp-roles">
+      <div class="sh"><h2 id="sp-roles">Role briefs</h2></div>
+      <ul class="briefs text-reading">
+        <li><span class="role"><span class="mark" data-mark="top"></span><span aria-hidden="true">TOP</span><span class="sr-only">Top</span></span>Hold the wave near our tower until jungle arrives.</li>
+        <li><span class="role"><span class="mark" data-mark="jungle"></span><span aria-hidden="true">JGL</span><span class="sr-only">Jungle</span></span>Full clear, then path toward bot for the dragon.</li>
+        <li><span class="role"><span class="mark" data-mark="mid"></span><span aria-hidden="true">MID</span><span class="sr-only">Mid</span></span>Shove and move to river on enemy jungler sightings.</li>
+        <li><span class="role"><span class="mark" data-mark="bot"></span><span aria-hidden="true">BOT</span><span class="sr-only">Bot</span></span>Play for level 2 and freeze when ahead.</li>
+        <li><span class="role"><span class="mark" data-mark="support"></span><span aria-hidden="true">SUP</span><span class="sr-only">Support</span></span>Roam mid after first back if bot is safe.</li>
+      </ul>
+    </section>
+    <section aria-labelledby="sp-notes">
+      <div class="sh"><h2 id="sp-notes">Notes</h2></div>
+      <p class="text-reading c-primary">Review the first 10 minutes together after the game.</p>
+    </section>
+  </div>
+  <p class="shared-note text-caption c-muted">Read-only. Shared with a link that expires 23 Oct, 20:00.</p>
+</main>
+<script src="surface.js"></script>
+</body>
+</html>
