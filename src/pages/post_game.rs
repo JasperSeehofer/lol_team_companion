@@ -1096,12 +1096,14 @@ fn OutcomeSection(ed: ReviewEd) -> impl IntoView {
     view! {
         <section aria-labelledby="review-outcome-heading" class="flex flex-col gap-4">
             <SectionHeader title="Result" id="review-outcome-heading" />
-            <div class="flex flex-wrap items-end gap-x-10 gap-y-4">
+            // Tops aligned: the segmented control (34px) and the select (36px)
+            // start one label line below the row's top (M141).
+            <div class="flex flex-wrap items-start gap-x-10 gap-y-4">
                 <div class="flex flex-col gap-1.5">
                     <span class="flex items-center gap-2 text-label font-medium text-secondary">
                         "Outcome"
                         {move || ed.auto.get().filter(|a| a.outcome == ed.outcome.get()).map(|_| view! {
-                            <span data-testid="review-outcome-from-match"><Badge>"From match"</Badge></span>
+                            <span class="-my-px" data-testid="review-outcome-from-match"><Badge>"From match"</Badge></span>
                         })}
                     </span>
                     <div>

@@ -221,8 +221,16 @@ pub fn Button(
             >
                 // One grid cell holds the label and any reserved labels, so
                 // the box is the widest of them; the spinner overlays it.
-                <span class="grid place-items-center [&>*]:col-start-1 [&>*]:row-start-1">
-                    <span class=move || if loading.get() { "inline-flex items-center justify-center gap-2 opacity-0" } else { "inline-flex items-center justify-center gap-2" }>
+                // A full-width button's label spans the whole box, so a row
+                // laid out inside it (a list entry) starts at the left edge
+                // whatever its length; plain text stays centred (M141).
+                <span class=if full_width { "grid w-full min-w-0 place-items-center [&>*]:col-start-1 [&>*]:row-start-1" } else { "grid place-items-center [&>*]:col-start-1 [&>*]:row-start-1" }>
+                    <span class=move || match (full_width, loading.get()) {
+                        (true, true) => "inline-flex w-full min-w-0 items-center justify-center gap-2 opacity-0",
+                        (true, false) => "inline-flex w-full min-w-0 items-center justify-center gap-2",
+                        (false, true) => "inline-flex items-center justify-center gap-2 opacity-0",
+                        (false, false) => "inline-flex items-center justify-center gap-2",
+                    }>
                         {icon_view}
                         {children()}
                         {keycap}
