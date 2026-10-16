@@ -99,6 +99,42 @@ pub async fn list_my_bug_reports(db: &Surreal<Db>, user_id: &str) -> DbResult<Ve
         .collect())
 }
 
+/// The caller's report, sent within the attachment window (M141 H2);
+/// `NotFound` for someone else's report, an old one or a missing one.
+pub async fn report_open_for_attachment(
+    db: &Surreal<Db>,
+    user_id: &str,
+    report_id: &str,
+) -> DbResult<()> {
+    let mut r = db
+        .query(
+            "SELECT id FROM bug_report WHERE id = type::record('bug_report', $k) \
+               AND user = type::record('user', $u) \
+               AND created_at > time::now() - duration::from_secs($window)",
+        )
+        .bind(("k", record_key(report_id, "bug_report")))
+        .bind(("u", user_key(user_id)))
+        .bind(("window", crate::server::attachments::ATTACH_WINDOW_SECS))
+        .await?;
+    let rows: Vec<IdRow> = r.take(0)?;
+    if rows.is_empty() {
+        Err(DbError::NotFound)
+    } else {
+        Ok(())
+    }
+}
+
+/// The ids of every report a user sent (their screenshots go with the
+/// account, M141 H2).
+pub async fn user_report_ids(db: &Surreal<Db>, user_id: &str) -> DbResult<Vec<String>> {
+    let mut r = db
+        .query("SELECT id FROM bug_report WHERE user = type::record('user', $u)")
+        .bind(("u", user_key(user_id)))
+        .await?;
+    let rows: Vec<IdRow> = r.take(0)?;
+    Ok(rows.into_iter().map(|r| r.id.to_sql()).collect())
+}
+
 /// Mark every report of the caller as seen ("Your reports" was opened).
 pub async fn mark_my_reports_seen(db: &Surreal<Db>, user_id: &str) -> DbResult<()> {
     db.query("UPDATE bug_report SET reporter_seen_at = time::now() WHERE user = type::record('user', $u)")
@@ -219,6 +255,7 @@ pub async fn admin_list_bug_reports(
             triaged_by: b.triaged_by_name,
             updated_at: opt_dt(b.updated_at),
             proposal_id: b.proposal.map(|p| p.to_sql()),
+            attachment: crate::server::attachments::exists(&b.id.to_sql()),
         })
         .collect())
 }
@@ -1924,6 +1961,8 @@ pub struct FeedbackProposalRow {
     pub status_note: Option<String>,
     pub published: bool,
     pub source: String,
+    /// `agent:<key>` for an imported agent proposal (M141 H4).
+    pub seed_key: Option<String>,
     pub created_at: Datetime,
     pub updated_at: Option<Datetime>,
     pub status_changed_at: Option<Datetime>,
@@ -1948,7 +1987,7 @@ pub async fn export_feedback_rows(
                  description, category, viewport_w, viewport_h, created_at, updated_at, \
                  status, admin_note, public_title, proposal \
              FROM bug_report ORDER BY created_at ASC; \
-             SELECT id, title, summary, status, status_note, published, source, created_at, \
+             SELECT id, title, summary, status, status_note, published, source, seed_key, created_at, \
                  updated_at, status_changed_at, created_by, created_by.email AS creator_email, \
                  created_by.is_admin AS creator_flag, \
                  created_by.admin_promoted_at AS creator_promoted, \

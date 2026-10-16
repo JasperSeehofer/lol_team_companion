@@ -285,6 +285,18 @@ async fn main() {
     // Export the feedback (bug-reports.md and feedback.jsonl beside it)
     // before serving, then after every change (at most once a second).
     // Write failures are logged and swallowed.
+    // Feedback screenshots (M141 H2): created now, so a wrong path or a
+    // missing permission shows at startup, not at the first upload.
+    match lol_team_companion::server::attachments::init(app_config.attachments_dir.clone()) {
+        Ok(()) => tracing::info!(
+            "Feedback screenshots in {}",
+            app_config.attachments_dir.display()
+        ),
+        Err(e) => tracing::error!(
+            "cannot create ATTACHMENTS_DIR {}: {e}; screenshots are off",
+            app_config.attachments_dir.display()
+        ),
+    }
     let inbox_path = app_config.bug_inbox_path.clone();
     match lol_team_companion::server::bug_report_export::export_feedback(&surreal_db, &inbox_path)
         .await
@@ -390,6 +402,19 @@ async fn main() {
     let app = Router::new()
         .route("/healthz", get(health_handler))
         .route("/account/export", get(export_handler))
+        // Feedback screenshots (M141 H2): upload by the reporter, read by admins.
+        .route(
+            "/feedback/attachment/{report}",
+            axum::routing::post(lol_team_companion::server::attachments::upload_handler).layer(
+                axum::extract::DefaultBodyLimit::max(
+                    lol_team_companion::server::attachments::MAX_UPLOAD_BYTES,
+                ),
+            ),
+        )
+        .route(
+            "/admin/attachment/{report}",
+            get(lol_team_companion::server::attachments::serve_handler),
+        )
         // Champion and item images, cached server-side (never a browser CDN call).
         .route("/img/champion/{key}", get(images::champion_portrait))
         .route("/img/champion/{key}/icon", get(images::champion_icon))

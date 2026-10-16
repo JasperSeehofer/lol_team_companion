@@ -63,6 +63,24 @@ pub async fn admin_bug_to_proposal(id: String) -> Result<String, ServerFnError> 
     Ok(p)
 }
 
+/// Delete a report's screenshot (M141 H2): the remedy when a picture shows
+/// someone who did not agree to it. Admins only.
+#[server]
+pub async fn admin_delete_attachment(id: String) -> Result<bool, ServerFnError> {
+    use crate::server::{attachments, authz};
+    let admin = authz::require_admin().await?;
+    let Some(dir) = attachments::dir() else {
+        return Ok(false);
+    };
+    let removed = attachments::remove_in(dir, &id).map_err(|e| {
+        tracing::error!(report = %id, "could not delete screenshot: {e}");
+        ServerFnError::new("The screenshot could not be deleted.")
+    })?;
+    tracing::info!(admin = %admin.id, report = %id, removed, "feedback screenshot deleted");
+    crate::server::bug_report_export::request_export();
+    Ok(removed)
+}
+
 /// Strip the server-fn wrapper from an error message.
 pub fn err_text(e: &ServerFnError) -> String {
     crate::models::utils::error_text(e)
@@ -282,6 +300,36 @@ fn Editor(
                     <p class="whitespace-pre-wrap break-words text-body text-primary" data-testid="reporter-words">{report.description.clone()}</p>
                 </Surface>
             </div>
+            {report.attachment.then(|| {
+                let key = report.id.strip_prefix("bug_report:").unwrap_or(&report.id).to_string();
+                let src = format!("/admin/attachment/{key}");
+                let href = src.clone();
+                let rid = report.id.clone();
+                view! {
+                    <div class="flex flex-col gap-2" data-testid="report-screenshot">
+                        <p class="text-caption text-muted">"Screenshot from the reporter (re-encoded, metadata removed). It may show other people: delete it when it should not be kept."</p>
+                        <a href=href target="_blank" rel="noopener noreferrer" class="self-start">
+                            <img src=src alt="Screenshot attached to the report" class="max-h-80 max-w-full rounded-ctl border border-rule" />
+                        </a>
+                        <div>
+                            <Button size=crate::components::ui::ButtonSize::Sm variant=ButtonVariant::Danger on_click=Callback::new(move |_| {
+                                let rid = rid.clone();
+                                spawn_local(async move {
+                                    match admin_delete_attachment(rid).await {
+                                        Ok(_) => {
+                                            if let Some(t) = toast {
+                                                t.show.run((ToastKind::Success, "Screenshot deleted.".into()));
+                                            }
+                                            on_saved.run(());
+                                        }
+                                        Err(e) => error.set(Some(err_text(&e))),
+                                    }
+                                });
+                            })>"Delete screenshot"</Button>
+                        </div>
+                    </div>
+                }
+            })}
             <Field id="triage-status" label="Status">
                 <Select value=status options=status_options />
             </Field>

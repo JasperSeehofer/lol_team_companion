@@ -121,7 +121,7 @@ jobs:
 
       - name: Playwright smoke, hydration gate, auth, admin, legal, account, guidance and team invites
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts --retries=1
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts --retries=1
 
       # M11: every server-rendered page must finish streaming. leptos
       # 0.8.17 left about one page in 8,000 pending forever under parallel

@@ -57,7 +57,7 @@ pub async fn submit_bug_report(
     category: String,
     viewport_w: Option<i32>,
     viewport_h: Option<i32>,
-) -> Result<(), ServerFnError> {
+) -> Result<String, ServerFnError> {
     use crate::models::community::{clean_text, MAX_BUG_DESCRIPTION};
     use crate::server::authz;
     use crate::server::db;
@@ -94,7 +94,7 @@ pub async fn submit_bug_report(
         )
     })?;
 
-    db::create_bug_report(
+    let id = db::create_bug_report(
         &surreal,
         &user.id,
         page_url,
@@ -107,7 +107,74 @@ pub async fn submit_bug_report(
     .await
     .map_err(authz::server_err)?;
     crate::server::bug_report_export::request_export();
-    Ok(())
+    // The id lets the dialog attach its screenshot (M141 H2).
+    Ok(id)
+}
+
+/// Image types the dialog accepts (the server checks the bytes again).
+pub const ATTACH_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp"];
+/// Largest image the dialog sends (the server's cap too).
+pub const ATTACH_MAX_BYTES: f64 = 5.0 * 1024.0 * 1024.0;
+
+/// Why an attached file is refused in the browser, if it is.
+pub fn attach_problem(mime: &str, bytes: f64) -> Option<&'static str> {
+    if !ATTACH_TYPES.contains(&mime) {
+        Some("Attach a PNG, JPEG or WebP image.")
+    } else if bytes > ATTACH_MAX_BYTES {
+        Some("The image is too large (up to 5 MB).")
+    } else {
+        None
+    }
+}
+
+/// "340 KB", "1.2 MB".
+pub fn size_label(bytes: f64) -> String {
+    if bytes >= 1024.0 * 1024.0 {
+        format!("{:.1} MB", bytes / (1024.0 * 1024.0))
+    } else {
+        format!("{} KB", (bytes / 1024.0).ceil().max(1.0) as i64)
+    }
+}
+
+/// The image attached in the dialog, as shown (the file itself is kept in
+/// the browser until sending).
+#[derive(Clone, Debug, PartialEq)]
+struct AttachedImage {
+    name: String,
+    bytes: f64,
+    preview: String,
+}
+
+/// Send a report's screenshot after the report: `POST /feedback/attachment/{key}`.
+#[cfg(feature = "hydrate")]
+async fn upload_attachment(report_id: String, blob: web_sys::Blob) -> Result<(), String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    let key = report_id
+        .strip_prefix("bug_report:")
+        .unwrap_or(&report_id)
+        .to_string();
+    let init = web_sys::RequestInit::new();
+    init.set_method("POST");
+    init.set_body(&blob);
+    let win = web_sys::window().ok_or_else(|| "No window".to_string())?;
+    let resp =
+        JsFuture::from(win.fetch_with_str_and_init(&format!("/feedback/attachment/{key}"), &init))
+            .await
+            .map_err(|_| "The connection failed.".to_string())?;
+    let resp: web_sys::Response = resp
+        .dyn_into()
+        .map_err(|_| "The connection failed.".to_string())?;
+    if resp.ok() {
+        return Ok(());
+    }
+    let text = match resp.text() {
+        Ok(p) => JsFuture::from(p).await.ok().and_then(|v| v.as_string()),
+        Err(_) => None,
+    };
+    Err(text
+        .filter(|t| !t.trim().is_empty() && t.len() < 200)
+        .unwrap_or_else(|| "The server refused it.".into()))
 }
 
 /// The widget: a docked trigger, the select-mode hint bar and the form.
@@ -147,6 +214,45 @@ fn WidgetInner() -> impl IntoView {
     let label = RwSignal::new(WHOLE_PAGE.to_string());
     let error: RwSignal<Option<String>> = RwSignal::new(None);
     let sending = RwSignal::new(false);
+    // Screenshot (M141 H2): attached by file or paste, sent after the report.
+    let attached = RwSignal::new(None::<AttachedImage>);
+    let attach_error = RwSignal::new(None::<String>);
+    let file_input = NodeRef::<leptos::html::Input>::new();
+    #[cfg(feature = "hydrate")]
+    let attached_blob: StoredValue<Option<web_sys::Blob>, leptos::prelude::LocalStorage> =
+        StoredValue::new_local(None);
+    let clear_attachment = move || {
+        #[cfg(feature = "hydrate")]
+        {
+            if let Some(a) = attached.get_untracked() {
+                let _ = web_sys::Url::revoke_object_url(&a.preview);
+            }
+            attached_blob.set_value(None);
+        }
+        attached.set(None);
+        attach_error.set(None);
+    };
+    #[cfg(feature = "hydrate")]
+    let take_file = move |file: web_sys::File| {
+        let mime = file.type_();
+        let bytes = file.size();
+        if let Some(problem) = attach_problem(&mime, bytes) {
+            attach_error.set(Some(problem.into()));
+            return;
+        }
+        clear_attachment();
+        let blob: web_sys::Blob = file.clone().into();
+        let preview = web_sys::Url::create_object_url_with_blob(&blob).unwrap_or_default();
+        let name = Some(file.name())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "Pasted image".into());
+        attached_blob.set_value(Some(blob));
+        attached.set(Some(AttachedImage {
+            name,
+            bytes,
+            preview,
+        }));
+    };
     let toast = use_context::<ToastContext>();
     let navigate = leptos_router::hooks::use_navigate();
     let navigate = StoredValue::new(navigate);
@@ -365,16 +471,31 @@ fn WidgetInner() -> impl IntoView {
             (cat.to_string(), body)
         };
         sending.set(true);
+        #[cfg(feature = "hydrate")]
+        let blob = attached_blob.get_value();
         spawn_local(async move {
             let result = submit_bug_report(page_url, l, t, k, vw, vh).await;
+            #[allow(unused_mut)]
+            let mut shot_failed: Option<String> = None;
+            #[cfg(feature = "hydrate")]
+            if let (Ok(id), Some(blob)) = (&result, blob) {
+                if let Err(msg) = upload_attachment(id.clone(), blob).await {
+                    shot_failed = Some(msg);
+                }
+            }
             sending.set(false);
             match result {
-                Ok(()) => {
+                Ok(_) => {
                     dialog_open.set(false);
                     state.set(WidgetState::Idle);
                     text.set(String::new());
+                    clear_attachment();
                     focus_trigger();
-                    if let Some(toast) = toast {
+                    if let (Some(toast), Some(msg)) = (toast, shot_failed) {
+                        toast.push.run(Toast::error(format!(
+                            "Your feedback is in, but the screenshot was not saved: {msg}"
+                        )));
+                    } else if let Some(toast) = toast {
                         toast
                             .push
                             .run(Toast::success("Thanks. Your feedback is in.").with_action(
@@ -444,7 +565,27 @@ fn WidgetInner() -> impl IntoView {
                 <Button variant=ButtonVariant::Primary loading=sending on_click=Callback::new(move |_| send.run(()))>"Send feedback"</Button>
             }
         >
-            <div class="flex flex-col gap-5">
+            <div
+                class="flex flex-col gap-5"
+                on:paste=move |ev: web_sys::ClipboardEvent| {
+                    #[cfg(feature = "hydrate")]
+                    {
+                        let Some(items) = ev.clipboard_data().map(|d| d.items()) else { return };
+                        for i in 0..items.length() {
+                            let Some(item) = items.get(i) else { continue };
+                            if item.kind() == "file" && item.type_().starts_with("image/") {
+                                if let Ok(Some(file)) = item.get_as_file() {
+                                    ev.prevent_default();
+                                    take_file(file);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    #[cfg(not(feature = "hydrate"))]
+                    let _ = ev;
+                }
+            >
                 <div>
                     <p class="eyebrow">"About"</p>
                     <p class="mt-1 text-body text-primary" data-testid="report-about">{move || label.get()}</p>
@@ -465,6 +606,57 @@ fn WidgetInner() -> impl IntoView {
                     {move || view! {
                         <TextField value=text rows=5 maxlength=4000 placeholder=placeholder.get() on_keydown=ctrl_enter_submits(send) />
                     }}
+                </Field>
+                <Field
+                    id="bug-report-file"
+                    label="Screenshot (optional)"
+                    hint="PNG, JPEG or WebP, up to 5 MB. We convert it to WebP. It can show other people's names: leave out what you do not want to share."
+                    error=Signal::derive(move || attach_error.get())
+                >
+                    <div class="flex flex-col gap-2" data-testid="report-attachment">
+                        <input
+                            node_ref=file_input
+                            id="bug-report-file"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            class="sr-only"
+                            tabindex="-1"
+                            on:change=move |_ev| {
+                                #[cfg(feature = "hydrate")]
+                                if let Some(input) = file_input.get_untracked() {
+                                    if let Some(file) = input.files().and_then(|l| l.get(0)) {
+                                        take_file(file);
+                                    }
+                                    input.set_value("");
+                                }
+                            }
+                        />
+                        {move || match attached.get() {
+                            None => view! {
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <Button
+                                        variant=ButtonVariant::Secondary
+                                        on_click=Callback::new(move |_| {
+                                            if let Some(input) = file_input.get_untracked() {
+                                                input.click();
+                                            }
+                                        })
+                                    >"Attach an image"</Button>
+                                    <span class="hidden text-caption text-muted md:inline">"or paste an image (Ctrl+V)"</span>
+                                </div>
+                            }.into_any(),
+                            Some(a) => view! {
+                                <div class="flex items-center gap-3 rounded-ctl border border-rule p-2" data-testid="report-attachment-attached">
+                                    <img src=a.preview.clone() alt="Screenshot preview" class="h-10 w-16 shrink-0 rounded-ctl object-cover" />
+                                    <span class="flex min-w-0 flex-1 flex-col">
+                                        <span class="truncate text-label text-primary">{a.name.clone()}</span>
+                                        <span class="figures text-caption text-muted">{size_label(a.bytes)}</span>
+                                    </span>
+                                    <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| clear_attachment())>"Remove"</Button>
+                                </div>
+                            }.into_any(),
+                        }}
+                    </div>
                 </Field>
             </div>
         </Dialog>

@@ -2,6 +2,7 @@
 # send it. Secrets (.env) must never reach an image layer.
 target/
 data/
+attachments/
 .git/
 .env
 deploy/backup.env

@@ -250,6 +250,10 @@ pub struct BugReportAdmin {
     pub triaged_by: Option<String>,
     pub updated_at: Option<String>,
     pub proposal_id: Option<String>,
+    /// A screenshot is stored for it (M141 H2; admins read it at
+    /// `/admin/attachment/{key}`).
+    #[serde(default)]
+    pub attachment: bool,
 }
 
 /// An admin's triage decision, sent as JSON (leptos rule 33).

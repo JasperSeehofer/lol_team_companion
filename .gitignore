@@ -1,5 +1,7 @@
 /target
 /data
+# Feedback screenshots in dev (ATTACHMENTS_DIR, M141)
+/attachments
 .env
 node_modules/
 tailwindcss-linux-x64
