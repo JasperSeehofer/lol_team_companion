@@ -40,8 +40,12 @@ test.describe("post-game: filled from match", () => {
     const outcome = page.locator('[data-segmented="review-outcome"]');
     await expect(outcome.getByRole("radio", { name: "Not set" })).toHaveAttribute("aria-checked", "true");
 
-    await select.selectOption(DEMO);
-    await expect(outcome.getByRole("radio", { name: "Win" })).toHaveAttribute("aria-checked", "true");
+    // A change event before hydration is lost: choose again until it fills.
+    await expect(async () => {
+      await select.selectOption("");
+      await select.selectOption(DEMO);
+      await expect(outcome.getByRole("radio", { name: "Win" })).toHaveAttribute("aria-checked", "true", { timeout: 2000 });
+    }).toPass({ timeout: 15000 });
     await expect(page.getByTestId("review-filled-note")).toContainText("Filled from match: Result");
     await expect(page.getByTestId("review-outcome-from-match")).toBeVisible();
 
@@ -65,7 +69,13 @@ test.describe("post-game: filled from match", () => {
   test("a result someone set is never overwritten", async ({ page }) => {
     await navigateTo(page, "/post-game");
     const outcome = page.locator('[data-segmented="review-outcome"]');
-    await outcome.getByRole("radio", { name: "Loss" }).click();
+    const loss = outcome.getByRole("radio", { name: "Loss" });
+    // A click before the page hydrates is lost: retry until it takes, so
+    // the match below is chosen over a result someone really set.
+    await expect(async () => {
+      await loss.click();
+      await expect(loss).toHaveAttribute("aria-checked", "true", { timeout: 1000 });
+    }).toPass({ timeout: 15000 });
     await page.locator("#review-match").selectOption(DEMO);
     await expect(page.getByTestId("review-match-facts")).toBeVisible();
     await expect(outcome.getByRole("radio", { name: "Loss" })).toHaveAttribute("aria-checked", "true");
