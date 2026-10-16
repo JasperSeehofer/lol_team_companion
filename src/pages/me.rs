@@ -426,8 +426,10 @@ fn RecentGames(matches: Vec<PlayerMatchStats>) -> impl IntoView {
                                 <SortTh label="Result" key="result" sort=sort />
                                 <SortTh label="Champion" key="champion" sort=sort />
                                 <SortTh label="K / D / A" key="kda" sort=sort numeric=true />
-                                <SortTh label="CS" key="cs" sort=sort numeric=true />
-                                <SortTh label="Damage" key="damage" sort=sort numeric=true />
+                                // Phones drop CS and damage so the table fits without a
+                                // hidden right edge (M141); the match page has them.
+                                <SortTh label="CS" key="cs" sort=sort numeric=true class="hidden md:table-cell" />
+                                <SortTh label="Damage" key="damage" sort=sort numeric=true class="hidden md:table-cell" />
                                 <Th>"Game"</Th>
                             </tr>
                         </thead>
@@ -447,8 +449,8 @@ fn RecentGames(matches: Vec<PlayerMatchStats>) -> impl IntoView {
                                                 </span>
                                             </Td>
                                             <Td numeric=true>{crate::pages::match_detail::kda_text(m.kills, m.deaths, m.assists)}</Td>
-                                            <Td numeric=true>{m.cs}</Td>
-                                            <Td numeric=true>{format!("{:.1}k", m.damage as f32 / 1000.0)}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{m.cs}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{format!("{:.1}k", m.damage as f32 / 1000.0)}</Td>
                                             <Td><A href=href attr:class="text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">"Details"</A></Td>
                                         </Tr>
                                     }
@@ -663,9 +665,11 @@ fn ChampionTrends(
                                     <SortTh label="Champion" key="champion" sort=sort />
                                     <SortTh label="Games" key="games" sort=sort numeric=true />
                                     <SortTh label="Win rate" key="winrate" sort=sort numeric=true />
-                                    <SortTh label="KDA" key="kda" sort=sort numeric=true />
-                                    <SortTh label="CS / min" key="cs" sort=sort numeric=true />
-                                    <SortTh label="Damage" key="damage" sort=sort numeric=true />
+                                    // Phones keep champion, games and win rate; KDA returns
+                                    // from `sm`, CS and damage from `md` (M141).
+                                    <SortTh label="KDA" key="kda" sort=sort numeric=true class="hidden sm:table-cell" />
+                                    <SortTh label="CS / min" key="cs" sort=sort numeric=true class="hidden md:table-cell" />
+                                    <SortTh label="Damage" key="damage" sort=sort numeric=true class="hidden md:table-cell" />
                                 </tr>
                             </thead>
                             <tbody>
@@ -684,9 +688,9 @@ fn ChampionTrends(
                                             </Td>
                                             <Td numeric=true>{t.games}</Td>
                                             <Td numeric=true>{rate}</Td>
-                                            <Td numeric=true>{format!("{:.1}", t.avg_kda)}</Td>
-                                            <Td numeric=true>{format!("{:.1}", t.cs_per_min)}</Td>
-                                            <Td numeric=true>{format!("{:.1}k", t.avg_damage as f32 / 1000.0)}</Td>
+                                            <Td numeric=true class="hidden sm:table-cell">{format!("{:.1}", t.avg_kda)}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{format!("{:.1}", t.cs_per_min)}</Td>
+                                            <Td numeric=true class="hidden md:table-cell">{format!("{:.1}k", t.avg_damage as f32 / 1000.0)}</Td>
                                         </Tr>
                                     }}).collect_view()
                                 }}
