@@ -1,208 +1,125 @@
 # CI e2e summary
 
-- run: 38876857165
-- sha: f0bdce1cbca491f96c98ad26f40cb680996b0b47
+- run: 38881767825
+- sha: d969ee0fa9273bba5e8977bdc9bbf302d9838b2f
 
 ## Playwright
 
-expected 123, unexpected 9, flaky 0, skipped 0
+expected 126, unexpected 1, flaky 5, skipped 0
 
-### [unexpected] champion-pool-moves.spec.ts:65 champion-pool moves: drag and drop keeps the scroll
-attempt 1: failed (5899 ms)
+### [flaky] match-detail.spec.ts:78 match detail (seeded demo game) > hovering a row highlights the same role in both teams; a tap pins it
+attempt 1: failed (6668 ms)
 ```
-Error: expect(received).toBeLessThanOrEqual(expected)
+Error: expect(locator).toHaveClass(expected) failed
 
-Expected: <= 2
-Received:    295
-```
-attempt 2: failed (6501 ms)
-```
-Error: expect(received).toBeLessThanOrEqual(expected)
-
-Expected: <= 2
-Received:    295
-```
-
-### [unexpected] enter-submits.spec.ts:10 enter submits: tree drafter adds a branch on Enter
-attempt 1: failed (6195 ms)
-```
-Error: locator.click: Error: strict mode violation: getByRole('treeitem').first().getByRole('button', { name: 'Branch', exact: true }) resolved to 2 elements:
-    1) <button type="button" class="relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary h-7 px-2.5 text-label bg-transparent border-transparent text-secondary hover:bg-ink-3 hover:text-primary data-[force=hover]:bg-ink-3 dat…>…</button> aka getByRole('button', { name: 'Branch' }).nth(1)
-    2) <button type="button" class="relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary h-7 px-2.5 text-label bg-transparent border-transparent text-secondary hover:bg-ink-3 hover:text-primary data-[force=hover]:bg-ink-3 dat…>…</button> aka getByRole('group').getByRole('button', { name: 'Branch' })
+Locator: locator('[data-scoreboard=blue] tbody tr').nth(2)
+Expected pattern: /bg-ink-3/
+Received string:  "relative hover:bg-ink-2/70 transition-colors"
+Timeout: 5000ms
 
 Call log:
-  - waiting for getByRole('treeitem').first().getByRole('button', { name: 'Branch', exact: true })
-```
-attempt 2: failed (6851 ms)
-```
-Error: locator.click: Error: strict mode violation: getByRole('treeitem').first().getByRole('button', { name: 'Branch', exact: true }) resolved to 2 elements:
-    1) <button type="button" class="relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary h-7 px-2.5 text-label bg-transparent border-transparent text-secondary hover:bg-ink-3 hover:text-primary data-[force=hover]:bg-ink-3 dat…>…</button> aka getByRole('button', { name: 'Branch' }).nth(1)
-    2) <button type="button" class="relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl border font-medium transition-colors cursor-pointer select-none no-underline disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress aria-pressed:border-secondary aria-pressed:bg-ink-3 aria-pressed:font-semibold aria-pressed:text-primary h-7 px-2.5 text-label bg-transparent border-transparent text-secondary hover:bg-ink-3 hover:text-primary data-[force=hover]:bg-ink-3 dat…>…</button> aka getByRole('group').getByRole('button', { name: 'Branch' })
-
-Call log:
-  - waiting for getByRole('treeitem').first().getByRole('button', { name: 'Branch', exact: true })
+  - Expect "toHaveClass" with timeout 5000ms
+  - waiting for locator('[data-scoreboard=blue] tbody tr').nth(2)
+    9 × locator resolved to <tr class="relative hover:bg-ink-2/70 transition-colors">…</tr>
+      - unexpected value "relative hover:bg-ink-2/70 transition-colors"
 ```
 
-### [unexpected] feedback-attachment.spec.ts:25 a file attached to feedback reaches the admin as WebP, and only the admin
-attempt 1: failed (3483 ms)
-```
-Error: locator.setInputFiles: Error: strict mode violation: getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file') resolved to 2 elements:
-    1) <textarea rows="5" maxlength="4000" id="bug-report-file" aria-describedby="bug-report-file-hint" placeholder="What did you do, what did you expect, what happened instead?" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger py-2 text-body min-h-20 resize-y leading-relaxed"></textarea> aka getByRole('textbox', { name: 'Screenshot (optional)' })
-    2) <input type="file" tabindex="-1" class="sr-only" id="bug-report-file" accept="image/png,image/jpeg,image/webp"/> aka getByRole('button', { name: 'Choose File' })
-
-Call log:
-  - waiting for getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file')
-```
-attempt 2: failed (3903 ms)
-```
-Error: locator.setInputFiles: Error: strict mode violation: getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file') resolved to 2 elements:
-    1) <textarea rows="5" maxlength="4000" id="bug-report-file" aria-describedby="bug-report-file-hint" placeholder="What did you do, what did you expect, what happened instead?" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger py-2 text-body min-h-20 resize-y leading-relaxed"></textarea> aka getByRole('textbox', { name: 'Screenshot (optional)' })
-    2) <input type="file" tabindex="-1" class="sr-only" id="bug-report-file" accept="image/png,image/jpeg,image/webp"/> aka getByRole('button', { name: 'Choose File' })
-
-Call log:
-  - waiting for getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file')
-```
-
-### [unexpected] feedback-attachment.spec.ts:67 a file that is not an image is refused in the dialog
-attempt 1: failed (3508 ms)
-```
-Error: locator.setInputFiles: Error: strict mode violation: getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file') resolved to 2 elements:
-    1) <textarea rows="5" maxlength="4000" id="bug-report-file" aria-describedby="bug-report-file-hint" placeholder="What did you do, what did you expect, what happened instead?" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger py-2 text-body min-h-20 resize-y leading-relaxed"></textarea> aka getByRole('textbox', { name: 'Screenshot (optional)' })
-    2) <input type="file" tabindex="-1" class="sr-only" id="bug-report-file" accept="image/png,image/jpeg,image/webp"/> aka getByRole('button', { name: 'Choose File' })
-
-Call log:
-  - waiting for getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file')
-```
-attempt 2: failed (3815 ms)
-```
-Error: locator.setInputFiles: Error: strict mode violation: getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file') resolved to 2 elements:
-    1) <textarea rows="5" maxlength="4000" id="bug-report-file" aria-describedby="bug-report-file-hint" placeholder="What did you do, what did you expect, what happened instead?" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger py-2 text-body min-h-20 resize-y leading-relaxed"></textarea> aka getByRole('textbox', { name: 'Screenshot (optional)' })
-    2) <input type="file" tabindex="-1" class="sr-only" id="bug-report-file" accept="image/png,image/jpeg,image/webp"/> aka getByRole('button', { name: 'Choose File' })
-
-Call log:
-  - waiting for getByRole('dialog', { name: 'Give Feedback' }).locator('#bug-report-file')
-```
-
-### [unexpected] post-game-fill.spec.ts:33 post-game: filled from match > choosing a match fills the result, marks it and can be undone
-attempt 1: failed (6662 ms)
+### [flaky] post-game-fill.spec.ts:33 post-game: filled from match > choosing a match fills the result, marks it and can be undone
+attempt 1: failed (6627 ms)
 ```
 Error: expect(locator).toHaveAttribute(expected) failed
 
-Locator: locator('#review-outcome').getByRole('radio', { name: 'Not set' })
+Locator:  locator('[data-segmented="review-outcome"]').getByRole('radio', { name: 'Win' })
 Expected: "true"
-Timeout: 5000ms
-Error: element(s) not found
+Received: "false"
+Timeout:  5000ms
 
 Call log:
   - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('#review-outcome').getByRole('radio', { name: 'Not set' })
-```
-attempt 2: failed (6952 ms)
-```
-Error: expect(locator).toHaveAttribute(expected) failed
-
-Locator: locator('#review-outcome').getByRole('radio', { name: 'Not set' })
-Expected: "true"
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-  - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('#review-outcome').getByRole('radio', { name: 'Not set' })
+  - waiting for locator('[data-segmented="review-outcome"]').getByRole('radio', { name: 'Win' })
+    9 × locator resolved to <button role="radio" type="button" tabindex="-1" data-value="win" aria-checked="false" id="review-outcome-seg-1" class="cursor-pointer whitespace-nowrap rounded-[2px] text-muted transition-colors hover:text-primary data-[force=hover]:text-primary h-7 px-3 text-label">…</button>
+      - unexpected value "false"
 ```
 
 ### [unexpected] post-game-fill.spec.ts:63 post-game: filled from match > a result someone set is never overwritten
-attempt 1: timedOut (60031 ms)
+attempt 1: failed (6628 ms)
 ```
-Test timeout of 60000ms exceeded.
-```
-attempt 2: timedOut (60096 ms)
-```
-Test timeout of 60000ms exceeded.
-```
+Error: expect(locator).toBeVisible() failed
 
-### [unexpected] sortable-tables.spec.ts:31 sortable tables > champion trends sort by any column, by click and keyboard
-attempt 1: failed (6813 ms)
-```
-Error: expect(locator).toHaveAttribute(expected) failed
-
-Locator: locator('[data-champion-trends]').locator('th').filter({ has: locator('[data-champion-trends]').getByRole('button', { name: 'Sort by Win rate' }) })
-Expected: "descending"
+Locator: getByTestId('review-match-facts')
+Expected: visible
 Timeout: 5000ms
 Error: element(s) not found
 
 Call log:
-  - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('[data-champion-trends]').locator('th').filter({ has: locator('[data-champion-trends]').getByRole('button', { name: 'Sort by Win rate' }) })
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for getByTestId('review-match-facts')
 ```
-attempt 2: failed (7234 ms)
-```
-Error: expect(locator).toHaveAttribute(expected) failed
-
-Locator: locator('[data-champion-trends]').locator('th').filter({ has: locator('[data-champion-trends]').getByRole('button', { name: 'Sort by Win rate' }) })
-Expected: "descending"
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-  - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('[data-champion-trends]').locator('th').filter({ has: locator('[data-champion-trends]').getByRole('button', { name: 'Sort by Win rate' }) })
-```
-
-### [unexpected] sortable-tables.spec.ts:48 sortable tables > recent games sort and return to newest first
-attempt 1: failed (6929 ms)
+attempt 2: failed (7249 ms)
 ```
 Error: expect(locator).toHaveAttribute(expected) failed
 
-Locator: locator('[data-my-recent]').locator('th').filter({ has: locator('[data-my-recent]').getByRole('button', { name: 'Sort by CS' }) })
-Expected: "descending"
-Timeout: 5000ms
-Error: element(s) not found
+Locator:  locator('[data-segmented="review-outcome"]').getByRole('radio', { name: 'Loss' })
+Expected: "true"
+Received: "false"
+Timeout:  5000ms
 
 Call log:
   - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('[data-my-recent]').locator('th').filter({ has: locator('[data-my-recent]').getByRole('button', { name: 'Sort by CS' }) })
+  - waiting for locator('[data-segmented="review-outcome"]').getByRole('radio', { name: 'Loss' })
+    9 × locator resolved to <button role="radio" type="button" tabindex="-1" data-value="loss" aria-checked="false" id="review-outcome-seg-2" class="cursor-pointer whitespace-nowrap rounded-[2px] text-muted transition-colors hover:text-primary data-[force=hover]:text-primary h-7 px-3 text-label">…</button>
+      - unexpected value "false"
 ```
-attempt 2: failed (7123 ms)
+
+### [flaky] sortable-tables.spec.ts:31 sortable tables > champion trends sort by any column, by click and keyboard
+attempt 1: failed (6824 ms)
 ```
 Error: expect(locator).toHaveAttribute(expected) failed
 
-Locator: locator('[data-my-recent]').locator('th').filter({ has: locator('[data-my-recent]').getByRole('button', { name: 'Sort by CS' }) })
+Locator:  locator('[data-champion-trends]').locator('th').filter({ has: getByRole('button', { name: 'Sort by Win rate' }) })
 Expected: "descending"
-Timeout: 5000ms
-Error: element(s) not found
+Received: ""
+Timeout:  5000ms
 
 Call log:
   - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('[data-my-recent]').locator('th').filter({ has: locator('[data-my-recent]').getByRole('button', { name: 'Sort by CS' }) })
+  - waiting for locator('[data-champion-trends]').locator('th').filter({ has: getByRole('button', { name: 'Sort by Win rate' }) })
+    9 × locator resolved to <th scope="col" class="eyebrow font-medium whitespace-nowrap border-b border-outline pr-4 last:pr-0 py-2 text-right">…</th>
+      - unexpected value "null"
 ```
 
-### [unexpected] sortable-tables.spec.ts:62 sortable tables > team games by member sort by column
-attempt 1: failed (6867 ms)
+### [flaky] sortable-tables.spec.ts:48 sortable tables > recent games sort and return to newest first
+attempt 1: failed (6582 ms)
 ```
 Error: expect(locator).toHaveAttribute(expected) failed
 
-Locator: locator('[data-member-summary]').locator('th').filter({ has: locator('[data-member-summary]').getByRole('button', { name: 'Sort by KDA' }) })
+Locator:  locator('[data-my-recent]').locator('th').filter({ has: getByRole('button', { name: 'Sort by CS' }) })
 Expected: "descending"
-Timeout: 5000ms
-Error: element(s) not found
+Received: ""
+Timeout:  5000ms
 
 Call log:
   - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('[data-member-summary]').locator('th').filter({ has: locator('[data-member-summary]').getByRole('button', { name: 'Sort by KDA' }) })
+  - waiting for locator('[data-my-recent]').locator('th').filter({ has: getByRole('button', { name: 'Sort by CS' }) })
+    9 × locator resolved to <th scope="col" class="eyebrow font-medium whitespace-nowrap border-b border-outline pr-4 last:pr-0 py-2 text-right">…</th>
+      - unexpected value "null"
 ```
-attempt 2: failed (7077 ms)
+
+### [flaky] sortable-tables.spec.ts:64 sortable tables > team games by member sort by column
+attempt 1: failed (6720 ms)
 ```
 Error: expect(locator).toHaveAttribute(expected) failed
 
-Locator: locator('[data-member-summary]').locator('th').filter({ has: locator('[data-member-summary]').getByRole('button', { name: 'Sort by KDA' }) })
+Locator:  locator('[data-member-summary]').locator('th').filter({ has: getByRole('button', { name: 'Sort by KDA' }) })
 Expected: "descending"
-Timeout: 5000ms
-Error: element(s) not found
+Received: ""
+Timeout:  5000ms
 
 Call log:
   - Expect "toHaveAttribute" with timeout 5000ms
-  - waiting for locator('[data-member-summary]').locator('th').filter({ has: locator('[data-member-summary]').getByRole('button', { name: 'Sort by KDA' }) })
+  - waiting for locator('[data-member-summary]').locator('th').filter({ has: getByRole('button', { name: 'Sort by KDA' }) })
+    9 × locator resolved to <th scope="col" class="eyebrow font-medium whitespace-nowrap border-b border-outline pr-4 last:pr-0 py-2 text-right">…</th>
+      - unexpected value "null"
 ```
 
 ## Server log (slow request, inflight, panicked, ERROR)
