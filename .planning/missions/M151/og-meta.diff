@@ -1,0 +1,44 @@
+--- a/src/app.rs	2026-10-16 23:28:54.782406927 +0200
++++ b/src/app.rs	2026-10-16 23:29:02.501477422 +0200
+@@ -1,5 +1,5 @@
+ use leptos::prelude::*;
+-use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
++use leptos_meta::{provide_meta_context, Meta, MetaTags, Stylesheet, Title};
+ use leptos_router::{
+     components::{Route, Router, Routes},
+     path, SsrMode,
+@@ -56,6 +56,10 @@
+                 <meta charset="utf-8" />
+                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                 <meta name="color-scheme" content="dark" />
++                // Browser chrome in the `page` token, oklch(0.180 0.018 200) = #081415.
++                <meta name="theme-color" content="#081415" /> // lint:allow(hex) a meta tag cannot read CSS tokens
++                // The M151 favicon (T1 sheet: our base, the far base, the diagonal); public/favicon.svg.
++                <link rel="icon" href="/favicon.svg" r#type="image/svg+xml" />
+                 // The two faces every page needs first (UI text, titles).
+                 <link rel="preload" href="/fonts/public-sans/public-sans-latin-wght-normal.woff2" r#as="font" r#type="font/woff2" crossorigin="anonymous" />
+                 <link rel="preload" href="/fonts/familjen-grotesk/familjen-grotesk-latin-wght-normal.woff2" r#as="font" r#type="font/woff2" crossorigin="anonymous" />
+@@ -79,6 +83,23 @@
+     view! {
+         <Stylesheet id="leptos" href="/pkg/lol_team_companion.css" />
+         <Title text="Team Companion" />
++        // Link previews (M151 OG card): one static card for every page, never
++        // per-share data; public/og/default.png, 1200x630, under 1 MB.
++        <Meta property="og:site_name" content="Team Companion" />
++        <Meta property="og:type" content="website" />
++        <Meta property="og:title" content="Team Companion" />
++        <Meta
++            property="og:description"
++            content="Scouting, drafts, game plans and reviews in one loop."
++        />
++        <Meta property="og:image" content="https://app.team-companion.eu/og/default.png" />
++        <Meta property="og:image:width" content="1200" />
++        <Meta property="og:image:height" content="630" />
++        <Meta
++            property="og:image:alt"
++            content="Team Companion: scouting, drafts, game plans and reviews in one loop."
++        />
++        <Meta name="twitter:card" content="summary_large_image" />
+ 
+         <Router>
+             <ToastProvider>
