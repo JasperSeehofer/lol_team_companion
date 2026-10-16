@@ -1,0 +1,70 @@
+{
+  "id": "m141-r1-team-companion-feedback-batch-1",
+  "title": "M141 · Team Companion feedback batch 1, R1 (all 14 reports answered; CI green)",
+  "date": "2026-10-16",
+  "mission": "M141",
+  "status": "open",
+  "summary": "Every one of your 14 reports is answered on mission/M141-team-companion-feedback-batch-1 (gate tip cc8e67e, CI run 38892154457 green on all five jobs: 132/132 e2e, 0 stalled requests). Match detail: equal fixed scoreboards with no scroll, role cross-highlight on hover or tap, a chalk outline instead of '(you)', K/D/A on one line. Fake recalls are gone: Riot's timeline has no recall event, and item-undo was being shown as one. The timeline is three toggleable rails with a shared playhead. Game plan shows champion icons beside the names. Champion pool moves keep your scroll (optimistic, plus the shared save-state helper M137 needed). Enter submits attached buttons app-wide. Admin invites fields line up. Post-game fills the result from the match and shows the rest read-only. My games: LP history says it comes from your syncs; the 12-month purge now covers those snapshots too. Buttons keep their size, and seven tables sort by column. Feedback: 'Give Feedback' with Bug / Idea / Praise, a status timeline on Your reports, screenshot attach/paste (WebP, admin-only, backed up, deleted with the account) and an admin Import proposals (JSON) that creates drafts only. 8 agent proposals are ready to import (docs/agent-proposals/2026-10-batch1.json). Proposal-only: suggestion chips and role responsibilities. Deferred: the screen-region picker, inferred recalls, timeline on a map. Frame strips before/after at 390 and 1280, atelier re-check PASS. Privacy-page wording changed for snapshots and screenshots, worth showing your adviser. Proposed ledger row FBK-2: agent proposals are drafts only, you publish. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M141-team-companion-feedback-batch-1 once the fresh verifier's VERIFY-R1 says PASS? Deploy stays a separate step (82-release.sh behind its own cards).",
+      "kind": "merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS, applies the FBK-2 ledger row, and closes the 14 staged judge pages. Deploy is a separate card."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open; R2 continues on top of it."
+        }
+      ],
+      "recommend": "Yes, merge. CI is green on every job, and these are the fixes the team would hit in its first week."
+    },
+    {
+      "text": "Timeline on the rift map (react): the shipped smallest version is a shared playhead across the three rails, with no map, because Riot timeline events as we store them carry no positions. A map version needs the importer to keep event positions (and purchases, for inferred recalls). Worth an R2?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Yes, R2 importer + map",
+          "consequence": "R2 extends the importer (positions, purchases), draws events on the map at the playhead, and adds inferred recalls drawn dashed and labelled."
+        },
+        {
+          "label": "Playhead is enough",
+          "consequence": "Nothing more; the proposal 'replay-map-signature' stays on hold."
+        }
+      ],
+      "recommend": "Yes, R2 importer + map. The match page is where the atelier sees the product's signature moment, and the importer change also brings back real recalls."
+    },
+    {
+      "text": "Suggestion chips in the game plan (react): assessed as not small (≈1.5–2 days: the Draft Graph ranks the next pick, not a finished matchup, and Dismiss needs a new plan field). It's filed as a proposal. Build it as its own round, or publish the proposal to What next first and let the team vote?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Own round",
+          "consequence": "A mission builds chips from synergy/counter evaluation with Accept/Dismiss on the plan."
+        },
+        {
+          "label": "Vote first",
+          "consequence": "You import and publish the proposal; it is built when it passes the vote threshold."
+        }
+      ],
+      "recommend": "Vote first. It's the first real test of the proposal loop this batch built, and the team's answer tells us whether chips fit how they plan."
+    },
+    {
+      "text": "Screenshot capture (react): the floor shipped (attach a file or paste a screenshot). The 'select an area of the screen' picker (getDisplayMedia, the dialog hides during capture) is desktop-only and can't be tested in headless CI because of the browser's permission prompt. Build it next round anyway?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Build it, desktop only",
+          "consequence": "R2 adds the region picker behind feature detection, tested by hand on your desktop; phones keep attach/paste."
+        },
+        {
+          "label": "Paste is enough",
+          "consequence": "No picker; the OS screenshot tool plus paste stays the way. The dialog gets a one-line hint about it."
+        }
+      ],
+      "recommend": "Paste is enough, for now. Win+Shift+S or Cmd+Shift+4 and paste already selects an area, and it works the same on every browser."
+    }
+  ]
+}

@@ -113,3 +113,21 @@ playhead. Show that first.
 3. me 390 (and admin-invites 390): tables clipped with no scroll cue or column reduction.
 4. match-detail 390: confirm marker tap size in the clustered right end (A1); measure with the harness live.
 5. me 1280: confirm disabled "Sync my games" contrast by pixel script.
+
+## Re-check (run 38892154457)
+
+Capture: CI after frames only (no live browser); strips rebuilt as before/after pairs in strips/ (admin-invites, post-game, me; 1280 and 390). Disabled-Sync contrast computed from rendered pixels of me-1280.png.
+
+| Surface | Verdict | Evidence |
+|---|---|---|
+| admin-invites 1280 | PASS | Table fits the container; Disable buttons whole (x 1024-1091, inside the 1120 edge); Code on one line in mono; Expires on one line; Team, Created-by and Note truncate with an ellipsis. |
+| admin-invites 390 | PASS (note) | Columns reduced to Code, Status, Uses and Disable; no clipped cell. Disable sits flush on the 16 px gutter edge, acceptable. |
+| post-game 1280 | PASS | Review list glyph slot is now fixed width, so all three rows align. Outcome control and "How well did the plan work?" Select share one top (y 551). |
+| post-game 390 | PASS | Stacked cleanly; list, Outcome and Select aligned; full-width Save/New buttons fine. |
+| me 1280 | PASS | All columns present and aligned; no clipping. |
+| me 390 | PASS | Tables drop to Result/Champion/KDA/Game and Champion/Games/Win rate; nothing clipped, no horizontal scroll. |
+| Regression sweep (Button full-width label span) | PASS | Mint code at 390 centred on a full-width button; game-plan, tree-drafter, champion-pool, bugs, feedback-widget, admin-bugs and admin-proposals frames show no stretched or misaligned labels. |
+| Item 2d, match-detail markers at 390 | Agree: not a bug | Clustering comes from seed data; Previous/Next buttons reach every marker. A live tap-size measurement stays an e2e job. |
+| Item 5, disabled "Sync my games" | PASS (note) | Rendered bg rgb(120,126,87), text rgb(20,26,17): 4.15:1. Below 4.5:1 but it is a disabled control (WCAG exempts it), and the page callout states why. Optional polish: nudge the label darker to reach 4.5:1. |
+
+Overall: PASS. All three FIX items from round 1 are closed and no regression was found in the frames.
