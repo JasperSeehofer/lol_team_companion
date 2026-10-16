@@ -3,6 +3,7 @@
 //! `Field` owns the ids and wires them to the control inside it through
 //! context, so a control never needs its own label plumbing.
 
+use leptos::context::Provider;
 use leptos::prelude::*;
 
 use super::button::Force;
@@ -56,12 +57,17 @@ pub fn Field(
     // dialog in a panel that unmounts) may run once more after its Field's
     // signals are gone; that must not panic.
     let invalid = Signal::derive(move || error.try_with(|e| e.is_some()).unwrap_or(false));
-    provide_context(FieldContext {
+    // A `Provider`, not `provide_context`: a component has no owner of its
+    // own, so a second Field on the same parent would overwrite this one's
+    // context, and a control rendered lazily inside this field (in a
+    // `move ||` closure) would take the other field's id (M141: the
+    // feedback text took the screenshot field's id).
+    let field_ctx = FieldContext {
         id: id.clone(),
         described_by,
         invalid,
         required,
-    });
+    };
 
     view! {
         <div class="flex flex-col gap-1.5">
@@ -69,7 +75,7 @@ pub fn Field(
                 {label}
                 {required.then(|| view! { <span class="font-normal text-muted">" (required)"</span> })}
             </label>
-            {children()}
+            <Provider value=field_ctx>{children()}</Provider>
             {hint.map(|h| view! { <p id=hint_id class="text-caption text-muted">{h}</p> })}
             {move || error.get().map(|e| view! {
                 <p id=error_id.clone() role="alert" class="flex items-start gap-1.5 text-caption text-danger">
