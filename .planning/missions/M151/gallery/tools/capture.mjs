@@ -6,6 +6,7 @@
 //   node capture.mjs <page.html|http-url> <out.png> [--width 390|1280] [--height N]
 //        [--full] [--reduced-motion] [--og] [--base http://127.0.0.1:PORT]
 //        [--selector CSS]  (shoot one element, scrolled into view; padding 16px)
+//        [--dpr N]  (device scale factor, default 1)
 //        [--frames 6 --duration 220 [--trigger "<js expr>"] [--settle MS]]
 //
 // A local path is turned into a URL under --base (default http://127.0.0.1:8151,
@@ -30,7 +31,7 @@ catch { ({ chromium } = require("playwright-core")); }
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(`--${n}`);
 const opt = (n, d) => { const i = argv.indexOf(`--${n}`); return i < 0 ? d : argv[i + 1]; };
-const valued = new Set(["width", "height", "frames", "duration", "trigger", "base", "settle", "selector"]);
+const valued = new Set(["width", "height", "frames", "duration", "trigger", "base", "settle", "selector", "dpr"]);
 const pos = argv.filter((a, i) => !a.startsWith("--") && !(i > 0 && argv[i - 1].startsWith("--") && valued.has(argv[i - 1].slice(2))));
 if (pos.length < 2) {
   console.error("usage: node capture.mjs <page.html|url> <out.png> [--width 390|1280] [--height N] [--full] [--reduced-motion] [--og] [--frames N --duration MS --trigger EXPR]");
@@ -46,6 +47,7 @@ const duration = Number(opt("duration", 220));
 const trigger = opt("trigger", null);
 const settle = Number(opt("settle", 300));
 const selector = opt("selector", null);
+const dpr = Number(opt("dpr", 1));
 const base = opt("base", process.env.GALLERY_BASE || "http://127.0.0.1:8151");
 
 const url = /^(https?|file):/.test(target) ? target
@@ -63,7 +65,7 @@ if (!executablePath) { console.error("no Chromium found; set GALLERY_CHROMIUM");
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "--font-render-hinting=none"] });
 try {
   const ctx = await browser.newContext({
-    viewport: { width, height }, deviceScaleFactor: 1,
+    viewport: { width, height }, deviceScaleFactor: dpr,
     reducedMotion: flag("reduced-motion") ? "reduce" : "no-preference",
   });
   const page = await ctx.newPage();

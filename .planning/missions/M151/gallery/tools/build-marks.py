@@ -10,6 +10,7 @@ there compares it with the files.
 
 Geometry follows references.md "Mark grid spec" (16 grid, live area 1 to 15,
 keylines circle d12, square 11, diamond in the 12 circle). Nothing is traced.
+Stroke only, with one documented exception: Baron's solid core (FILLED).
 
 Run from the repo root: python3 .planning/missions/M151/gallery/tools/build-marks.py
 """
@@ -19,6 +20,11 @@ import os
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), *[".."] * 5))
 
 DIAMOND = "M8 2L14 8L8 14L2 8Z"
+# The single documented exception to "stroke only": Baron's inner diamond is
+# filled with currentColor (and stroked), a solid core. An open inner diamond
+# with 1.5 px gaps does not fit at 16 px (atelier critique, 2026-10-16).
+BARON_CORE = "M8 6.25L9.75 8L8 9.75L6.25 8Z"
+FILLED = {BARON_CORE}
 
 # (file name, label, kind, paths). Every coordinate is on a whole or half pixel.
 MARKS = [
@@ -27,9 +33,9 @@ MARKS = [
         "M7.25 10a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",     # station dot
     ]),
     ("jungle", "Jungle", "Role", [
-        "M2 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M4 7v2",         # isolated trees
-        "M10 4a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M12 6v2",
-        "M6.5 10.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M8.5 12.5v2",
+        "M2 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M4 7v1",         # isolated trees
+        "M10 4.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M12 6.5v1",
+        "M6 11a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M8 13v1",
     ]),
     ("mid", "Mid", "Role", [
         "M4 8a4 4 0 1 0 8 0a4 4 0 1 0-8 0",                   # survey station
@@ -38,22 +44,25 @@ MARKS = [
     ("bot", "Bot", "Role", [
         "M3.25 12a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",     # origin
         "M4 3a9 9 0 0 1 9 9",                                 # reach arc
+        "M7.06 4.61L7.83 2.76",                               # graduation ticks at
+        "M9.66 6.34L11.07 4.93",                              # 22.5, 45, 67.5 degrees
+        "M11.39 8.94L13.24 8.17",                             # (a sextant scale)
     ]),
     ("support", "Support", "Role", [
-        "M7.25 8a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",      # held point, inside the cup
-        "M3.5 3.5V8a4.5 4.5 0 0 0 9 0V3.5",                   # open cup (deep U)
+        "M7.25 8.5a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",    # held point, inside the cup
+        "M3 3V8.5a5 5 0 0 0 10 0V3",                          # open cup (deep U, keyline width)
     ]),
     ("dragon", "Dragon", "Objective", [
         DIAMOND,
-        "M4.5 8q1.75-2 3.5 0t3.5 0",                          # one wave
+        "M5 8q1.5-2 3 0t3 0",                                 # one wave, floating inside
     ]),
     ("baron", "Baron", "Objective", [
         DIAMOND,
-        "M8 6L10 8L8 10L6 8Z",                                # inner diamond
+        BARON_CORE,                                           # solid core (the one fill)
     ]),
     ("herald", "Herald", "Objective", [
         DIAMOND,
-        "M5.5 8h0M8 8h0M10.5 8h0",                            # three points (round caps)
+        "M5 8h0M8 8h0M11 8h0",                                # three 1.5 px points (round caps)
     ]),
     ("tower", "Tower", "Objective", [
         "M4 13.5V6.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v7",        # lookout, open at the base
@@ -62,12 +71,17 @@ MARKS = [
     ]),
 ]
 
+def path_el(d):
+    fill = ' fill="currentColor"' if d in FILLED else ""
+    return f'<path{fill} d="{d}"/>'
+
+
 STROKE_16 = "1.5"
 STROKE_24 = "1.33333"  # 2 px at 24 px
 
 
 def svg(name, label, paths, size, stroke):
-    body = "".join(f'<path d="{d}"/>' for d in paths)
+    body = "".join(path_el(d) for d in paths)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
         f'viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="{stroke}" '
@@ -87,7 +101,7 @@ def write_files():
 
 
 def inline(paths, px, stroke):
-    body = "".join(f'<path d="{d}"/>' for d in paths)
+    body = "".join(path_el(d) for d in paths)
     return (
         f'<svg width="{px}" height="{px}" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
         f'stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{body}</svg>'
@@ -102,7 +116,7 @@ def big(paths):
         f'<path d="{DIAMOND}"/>'
         '<path d="M2 13.25L8 2.75L14 13.25Z"/>'
     )
-    body = "".join(f'<path d="{d}"/>' for d in paths)
+    body = "".join(path_el(d) for d in paths)
     return (
         '<svg width="64" height="64" viewBox="0 0 16 16" fill="none" stroke-linecap="round" '
         'stroke-linejoin="round" aria-hidden="true" class="big">'
@@ -134,7 +148,7 @@ def write_sheet():
     panels = "".join(
         panel(g, t, tl)
         for g in ("g-page", "g-ink-2")
-        for t, tl in (("t-ink", "ink (primary 70%)"), ("t-secondary", "secondary"), ("t-chalk", "chalk"))
+        for t, tl in (("t-ink", "ink (primary 70%)"), ("t-secondary", "secondary"), ("t-chalk", "chalk (test only: marks never ship in chalk)"))
     )
     inrow = "".join(
         f'<span class="inrow">{inline(p, 16, STROKE_16)}<span class="text-label">{l}</span></span>'
@@ -164,7 +178,7 @@ def write_sheet():
   .pair span {{ color: var(--color-primary); }}
   .kind {{ color: var(--color-muted); }}
   .t-ink svg {{ color: var(--color-primary); }}
-  .t-ink svg path {{ stroke-opacity: 0.7; }}
+  .t-ink svg path {{ stroke-opacity: 0.7; fill-opacity: 0.7; }}
   .t-secondary svg {{ color: var(--color-secondary); }}
   .t-chalk svg {{ color: var(--color-accent); }}
   .big .grid {{ stroke: var(--color-rule); }}

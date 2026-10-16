@@ -1,14 +1,20 @@
 //! `/design` gallery section for the nine marks (M151): five roles and four
 //! objectives drawn on a 16 px master grid (1.5 px stroke, round joins and
-//! caps, stroke only, `currentColor`). The same path data ships as
-//! `public/marks/<name>.svg` (16 px) and `<name>-24.svg` (24 px, the stroke
-//! held at 2 px); a unit test keeps the two in step. A mark is decoration:
+//! caps, stroke only except Baron's solid core, `currentColor`). The same
+//! path data ships as `public/marks/<name>.svg` (16 px) and
+//! `<name>-24.svg` (24 px, the stroke held at 2 px); a unit test keeps the two in step. A mark is decoration:
 //! it is `aria-hidden` and always stands beside its word. All content is
 //! fixture text.
 
 use leptos::prelude::*;
 
 use crate::pages::design::GallerySection;
+
+/// Baron's inner diamond: the one filled subpath in the set (filled with
+/// `currentColor` and stroked, a solid core). It is the single documented
+/// exception to "stroke only": an open inner diamond with 1.5 px gaps does
+/// not fit at 16 px.
+pub(crate) const BARON_CORE: &str = "M8 6.25L9.75 8L8 9.75L6.25 8Z";
 
 /// Mark table: file name, word, group, path data on the 16-unit grid.
 pub(crate) const MARKS: &[(&str, &str, &str, &[&str])] = &[
@@ -27,11 +33,11 @@ pub(crate) const MARKS: &[(&str, &str, &str, &[&str])] = &[
         "Role",
         &[
             "M2 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-            "M4 7v2",
-            "M10 4a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-            "M12 6v2",
-            "M6.5 10.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-            "M8.5 12.5v2",
+            "M4 7v1",
+            "M10 4.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+            "M12 6.5v1",
+            "M6 11a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+            "M8 13v1",
         ],
     ),
     (
@@ -50,6 +56,9 @@ pub(crate) const MARKS: &[(&str, &str, &str, &[&str])] = &[
         &[
             "M3.25 12a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",
             "M4 3a9 9 0 0 1 9 9",
+            "M7.06 4.61L7.83 2.76",
+            "M9.66 6.34L11.07 4.93",
+            "M11.39 8.94L13.24 8.17",
         ],
     ),
     (
@@ -57,27 +66,27 @@ pub(crate) const MARKS: &[(&str, &str, &str, &[&str])] = &[
         "Support",
         "Role",
         &[
-            "M7.25 8a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",
-            "M3.5 3.5V8a4.5 4.5 0 0 0 9 0V3.5",
+            "M7.25 8.5a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0",
+            "M3 3V8.5a5 5 0 0 0 10 0V3",
         ],
     ),
     (
         "dragon",
         "Dragon",
         "Objective",
-        &["M8 2L14 8L8 14L2 8Z", "M4.5 8q1.75-2 3.5 0t3.5 0"],
+        &["M8 2L14 8L8 14L2 8Z", "M5 8q1.5-2 3 0t3 0"],
     ),
     (
         "baron",
         "Baron",
         "Objective",
-        &["M8 2L14 8L8 14L2 8Z", "M8 6L10 8L8 10L6 8Z"],
+        &["M8 2L14 8L8 14L2 8Z", BARON_CORE],
     ),
     (
         "herald",
         "Herald",
         "Objective",
-        &["M8 2L14 8L8 14L2 8Z", "M5.5 8h0M8 8h0M10.5 8h0"],
+        &["M8 2L14 8L8 14L2 8Z", "M5 8h0M8 8h0M11 8h0"],
     ),
     (
         "tower",
@@ -94,6 +103,12 @@ pub(crate) const MARKS: &[(&str, &str, &str, &[&str])] = &[
 /// The 16-unit grid drawn behind the 64 px specimen.
 const GRID: &str = "M0 0V16M0 0H16M1 0V16M0 1H16M2 0V16M0 2H16M3 0V16M0 3H16M4 0V16M0 4H16M5 0V16M0 5H16M6 0V16M0 6H16M7 0V16M0 7H16M8 0V16M0 8H16M9 0V16M0 9H16M10 0V16M0 10H16M11 0V16M0 11H16M12 0V16M0 12H16M13 0V16M0 13H16M14 0V16M0 14H16M15 0V16M0 15H16M16 0V16M0 16H16";
 
+/// One subpath; only `BARON_CORE` is filled.
+fn mark_path(d: &'static str) -> impl IntoView {
+    let fill = (d == BARON_CORE).then_some("currentColor");
+    view! { <path d=d fill=fill /> }
+}
+
 /// One mark as inline SVG. `stroke` is in grid units: 1.5 at 16 px and at
 /// 64 px (the master scaled), 1.33333 at 24 px (2 px on screen).
 fn mark_svg(
@@ -103,7 +118,7 @@ fn mark_svg(
 ) -> impl IntoView {
     view! {
         <svg class=class viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width=stroke stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            {paths.iter().map(|d| view! { <path d=*d /> }).collect_view()}
+            {paths.iter().copied().map(mark_path).collect_view()}
         </svg>
     }
 }
@@ -118,9 +133,10 @@ fn mark_specimen(paths: &'static [&'static str]) -> impl IntoView {
                 <circle cx="8" cy="8" r="6" />
                 <rect x="2.5" y="2.5" width="11" height="11" />
                 <path d="M8 2L14 8L8 14L2 8Z" />
+                <path d="M2 13.25L8 2.75L14 13.25Z" />
             </g>
             <g stroke="currentColor" stroke-width="1.5">
-                {paths.iter().map(|d| view! { <path d=*d /> }).collect_view()}
+                {paths.iter().copied().map(mark_path).collect_view()}
             </g>
         </svg>
     }
@@ -164,7 +180,7 @@ pub fn MarksSection() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::MARKS;
+    use super::{BARON_CORE, MARKS};
 
     /// `public/marks/*.svg` carry exactly the path data of the table.
     #[test]
@@ -186,6 +202,11 @@ mod tests {
                 assert!(
                     svg.contains(&format!("<title>{label}</title>")),
                     "{file}: title"
+                );
+                assert_eq!(
+                    svg.contains("fill=\"currentColor\""),
+                    paths.contains(&BARON_CORE),
+                    "{file}: only Baron's core is filled"
                 );
                 let count = svg.matches("<path ").count();
                 assert_eq!(count, paths.len(), "{file}: path count");
