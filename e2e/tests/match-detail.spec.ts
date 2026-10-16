@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
+// navigateTo waits for the page to hydrate: a click before it is lost.
+import { navigateTo } from './helpers';
 
 test.describe('match detail page', () => {
     test('renders match detail page without errors', async ({ authedPage }) => {
@@ -41,7 +43,7 @@ test.describe('match detail (seeded demo game)', () => {
     for (const width of [390, 1280, 1536]) {
         test(`both scoreboards have the same box and never scroll at ${width}`, async ({ page }) => {
             await page.setViewportSize({ width, height: 900 });
-            await page.goto(DEMO);
+            await navigateTo(page, DEMO);
             const blue = page.locator('[data-scoreboard=blue] table');
             const red = page.locator('[data-scoreboard=red] table');
             await expect(blue).toBeVisible();
@@ -77,7 +79,7 @@ test.describe('match detail (seeded demo game)', () => {
 
     test('hovering a row highlights the same role in both teams; a tap pins it', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
-        await page.goto(DEMO);
+        await navigateTo(page, DEMO);
         const blueMid = page.locator('[data-scoreboard=blue] tbody tr').nth(2);
         const redMid = page.locator('[data-scoreboard=red] tbody tr').nth(2);
         await blueMid.hover();
@@ -98,7 +100,7 @@ test.describe('match detail (seeded demo game)', () => {
 
     test('the player is marked by an accent, not "(you)"; K/D/A on one line', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.goto(DEMO);
+        await navigateTo(page, DEMO);
         await expect(page.locator('[data-scoreboard=blue] table')).toBeVisible();
         await expect(page.locator('main')).not.toContainText('(you)');
         await expect(page.locator('[data-you-accent]')).toHaveCount(1);
@@ -112,7 +114,7 @@ test.describe('match detail (seeded demo game)', () => {
 
     test('the timeline has three rails with toggles and draws no recall', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
-        await page.goto(DEMO);
+        await navigateTo(page, DEMO);
         await expect(page.locator('[data-rail]')).toHaveCount(3);
         // The demo stores an ITEM_UNDO row: it must not be drawn as a recall.
         await expect(page.locator('[data-event-category=Recall]')).toHaveCount(0);

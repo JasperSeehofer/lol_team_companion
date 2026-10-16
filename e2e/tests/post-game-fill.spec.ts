@@ -8,6 +8,8 @@
  */
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+// navigateTo waits for the page to hydrate: a click before it is lost.
+import { navigateTo } from "./helpers";
 
 const DEMO = "SEED1_1000000001";
 
@@ -32,7 +34,7 @@ test.describe("post-game: filled from match", () => {
 
   test("choosing a match fills the result, marks it and can be undone", async ({ page }) => {
     // The demo game's scoreboard is stored by the seed, so side and picks are known.
-    await page.goto("/post-game");
+    await navigateTo(page, "/post-game");
     const select = page.locator("#review-match");
     await expect(select.locator(`option[value="${DEMO}"]`)).toHaveCount(1);
     const outcome = page.locator('[data-segmented="review-outcome"]');
@@ -61,7 +63,7 @@ test.describe("post-game: filled from match", () => {
   });
 
   test("a result someone set is never overwritten", async ({ page }) => {
-    await page.goto("/post-game");
+    await navigateTo(page, "/post-game");
     const outcome = page.locator('[data-segmented="review-outcome"]');
     await outcome.getByRole("radio", { name: "Loss" }).click();
     await page.locator("#review-match").selectOption(DEMO);

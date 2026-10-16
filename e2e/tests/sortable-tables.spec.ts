@@ -8,6 +8,8 @@
  */
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+// navigateTo waits for the page to hydrate: a click before it is lost.
+import { navigateTo } from "./helpers";
 
 async function signInSeedTop(page: Page): Promise<boolean> {
   await page.goto("/auth/login");
@@ -29,7 +31,7 @@ test.describe("sortable tables", () => {
   });
 
   test("champion trends sort by any column, by click and keyboard", async ({ page }) => {
-    await page.goto("/me");
+    await navigateTo(page, "/me");
     const trends = page.locator("[data-champion-trends]");
     // The trends default to 30 days; the demo game is a day old.
     const games = trends.locator("th", { has: page.getByRole("button", { name: "Sort by Games" }) });
@@ -46,7 +48,7 @@ test.describe("sortable tables", () => {
   });
 
   test("recent games sort and return to newest first", async ({ page }) => {
-    await page.goto("/me");
+    await navigateTo(page, "/me");
     const recent = page.locator("[data-my-recent]");
     await expect(recent.locator("tbody tr").first()).toBeVisible();
     await expect(recent.getByRole("button", { name: "Newest first" })).toHaveCount(0);
@@ -62,7 +64,7 @@ test.describe("sortable tables", () => {
   });
 
   test("team games by member sort by column", async ({ page }) => {
-    await page.goto("/stats");
+    await navigateTo(page, "/stats");
     const members = page.locator("[data-member-summary]");
     if ((await members.count()) === 0) {
       // No team games stored for the seed team on this server: nothing to sort.
