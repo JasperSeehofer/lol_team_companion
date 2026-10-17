@@ -51,6 +51,11 @@ test.describe("M148 frames", () => {
     await settle(page);
     await expect(page.getByTestId("add-next-match")).toBeVisible();
     await frames(page, "match-day-phone");
+    // The 390 viewport-only frame, paired with the before extra of the same name.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+    await page.waitForTimeout(300);
+    if (DIR) await page.screenshot({ path: path.join(DIR, "match-day-phone-390-flow.png"), fullPage: false });
   });
 
   test("admin resets with a minted code", async ({ browser }) => {
@@ -199,5 +204,35 @@ test.describe("M148 frames", () => {
     await settle(page);
     await expect(page.locator("main")).toBeVisible();
     await frames(page, "auth-reset");
+  });
+
+  // M137 auth surfaces with before frames only: the hint under the password
+  // field on the sign-in page, and the Password section on the profile.
+  test("sign-in hint under the password field (login-hint)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/auth/login");
+    await settle(page);
+    const hint = page.getByText("Forgot it?").first();
+    await expect(hint).toBeVisible();
+    await frames(page, "login-hint", async () => {
+      await hint.scrollIntoViewIfNeeded();
+    });
+  });
+
+  test("profile password section (profile-password)", async ({ page }) => {
+    await authenticatePage(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/profile");
+    await settle(page);
+    const section = page.locator("[data-password]").first();
+    await expect(section).toBeVisible();
+    await frames(page, "profile-password", async () => {
+      await section.scrollIntoViewIfNeeded();
+    });
+    // The section in view at 1280 (viewport only).
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await section.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    if (DIR) await page.screenshot({ path: path.join(DIR, "profile-password-1280-section.png"), fullPage: false });
   });
 });
