@@ -14,6 +14,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 - Link previews: a link to Team Companion pasted into a chat app shows a card with the name, a short description and an image. A shared link's card only says that it is a shared, read-only page: never the team, the plan or the player, and it looks the same whether the link still works or not. The browser tab has its own icon, and phone browsers colour their bar to match the app.
 - Role labels now show the lane's position icon beside the letters (TOP, JGL, MID, BOT, SUP), in the label's own colour (never the highlight colour). The icons come from Team Companion itself, never from another site; screen readers still hear the role's name, and a guessed role keeps its dashed underline and "?".
 - The footer, the privacy page and the terms now also carry the notice Riot's "Legal Jibber Jabber" policy asks for (that Team Companion was made under that policy using assets owned by Riot Games, and that Riot Games does not endorse it), word for word, beside Riot's existing disclaimer, which stays.
+- For admins: the design gallery (/design) has a "Drawn Rift" section, the map as Team Companion draws it from measured coordinates (no picture of the game's map is used): a sketch with lanes, river, bases, hatched walls and bush marks, and, zoomed in to 2x or 4x, a survey with exact wall outlines, bushes, towers, inhibitors, pits and camps. How each coordinate was measured is in docs/rift-schematic.md.
 
 ### First patch, round 2 (2026-10-17)
 

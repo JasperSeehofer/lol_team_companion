@@ -29,6 +29,7 @@ use crate::pages::design_interaction::{
     SkeletonSection, StatusSection, ToastSection, TogglesSection, TooltipSection,
 };
 use crate::pages::design_marks::MarksSection;
+use crate::pages::design_rift::RiftSection;
 
 /// Whether the caller may see the gallery: always in dev, else admins only.
 #[server]
@@ -75,6 +76,7 @@ const SECTIONS: &[(&str, &str)] = &[
     ("legend", "Legend block"),
     ("canvas", "Canvas frame"),
     ("timeline", "Timeline scrub"),
+    ("rift", "Drawn Rift"),
 ];
 
 #[component]
@@ -177,6 +179,7 @@ fn Gallery() -> impl IntoView {
             <LegendSection />
             <CanvasSection />
             <TimelineSection />
+            <RiftSection />
         </PageShell>
     }
 }
