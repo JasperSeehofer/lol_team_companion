@@ -182,4 +182,22 @@ test.describe("M148 frames", () => {
     await expect(page.getByTestId("node-save-state")).toHaveAttribute("data-save-state", "failed", { timeout: 8000 });
     await frames(page, "tree-save-failed");
   });
+
+  // M148 item 8 (page titles): the sign-in and reset pages, paired with the
+  // "before" frames of the same names.
+  test("sign-in page (login)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/auth/login");
+    await settle(page);
+    await expect(page).toHaveTitle("Sign in \u00b7 Team Companion");
+    await frames(page, "login");
+  });
+
+  test("password reset page (auth-reset)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/auth/reset");
+    await settle(page);
+    await expect(page.locator("main")).toBeVisible();
+    await frames(page, "auth-reset");
+  });
 });
