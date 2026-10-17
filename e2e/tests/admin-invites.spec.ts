@@ -47,6 +47,7 @@ test("admin can mint a code that registers a new account, then disable it", asyn
   await guest.fill("input[name=username]", `invited_${TIMESTAMP}`);
   await guest.fill("input[name=email]", `invited_${TIMESTAMP}@test.invalid`);
   await guest.fill("input[name=password]", TEST_PASSWORD);
+  await guest.check("#register-terms");
   await guest.click("button[type=submit]");
   await guest.waitForURL((u) => new URL(u).pathname === "/", { timeout: 20000 });
   await ctx.close();
@@ -57,6 +58,7 @@ test("admin can mint a code that registers a new account, then disable it", asyn
   await second.fill("input[name=username]", `invited2_${TIMESTAMP}`);
   await second.fill("input[name=email]", `invited2_${TIMESTAMP}@test.invalid`);
   await second.fill("input[name=password]", TEST_PASSWORD);
+  await second.check("#register-terms");
   await second.click("button[type=submit]");
   await expect(second.locator("text=/Registration failed/i")).toBeVisible({ timeout: 10000 });
   await ctx2.close();

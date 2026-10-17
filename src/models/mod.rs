@@ -8,6 +8,7 @@ pub mod game_plan;
 pub mod graph;
 pub mod guidance;
 pub mod invite;
+pub mod login_next;
 pub mod match_data;
 pub mod match_day;
 pub mod opponent;

@@ -1,6 +1,7 @@
 pub mod bug_report_widget;
 pub mod champion_autocomplete;
 pub mod champion_picker;
+pub mod clipboard;
 pub mod draft_board;
 pub mod footer;
 pub mod graph_canvas;

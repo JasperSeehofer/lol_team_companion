@@ -94,7 +94,7 @@ description: Leptos 0.8, server functions, reactivity, and auth patterns for lol
 
 49. **Logout hard-navigates to `/`** — Both `nav.rs` and `profile.rs` watch `logout_action.value()` and call `window.location().set_href("/")` on success (same pattern as login, rule 8).
 
-50. **Protected pages redirect to `/auth/login`** — All protected page components fetch `get_current_user()` on mount and redirect via `window.location().set_href()` if the user is `None`. The redirect is client-side only (`#[cfg(feature = "hydrate")]`).
+50. **Protected pages redirect to `/auth/login?next=...`** — All protected page components fetch `get_current_user()` on mount and call `crate::pages::navigate::redirect_to_login()` if the user is `None` (a hard navigation to `/auth/login?next=<this page>`; sign-in returns there after `safe_next`). The redirect is client-side only (a no-op on the server).
 
 51. **Registration auto-logs in** — `register_action()` calls `auth.authenticate()` + `auth.login()` after creating the user, redirects on the server (`leptos_axum::redirect("/")`, for a submit before hydration) and returns `/`, where the hydrated page hard-navigates. Sign-in does the same. Home is Match Day for team members and a start page otherwise (there is no stored mode since migration 12).
 

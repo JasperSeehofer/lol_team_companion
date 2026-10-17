@@ -585,9 +585,13 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                     </div>
                 })
             />
-            <p class="-mt-3 mb-6 text-caption text-muted md:hidden" data-testid="phone-read-only">
-                "Read-only on the phone. Edit the match on a larger screen."
-            </p>
+            // Phones may add the first match (the empty state's action) but
+            // editing an existing one stays a larger-screen task (DESIGN 6.9).
+            {has_match.then(|| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted md:hidden" data-testid="phone-read-only">
+                    "Read-only on the phone. Edit the match on a larger screen."
+                </p>
+            })}
             {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=false on_change=on_change /> })}
             // Match Day has its own primary action (the prep sequence's
             // next step or "Add the next match"): the checklist stays quiet.
@@ -602,11 +606,9 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                         level=HeadingLevel::H2
                         message="Add one to start the preparation sequence: the opponent brief, draft plans, the game plan, open action items, and the review after the game."
                         action=move || view! {
-                            <div class="hidden md:block">
-                                <Button variant=ButtonVariant::Primary on_click=Callback::new(move |_| editor_open.set(true)) attr:data-testid="add-next-match">
-                                    "Add the next match"
-                                </Button>
-                            </div>
+                            <Button variant=ButtonVariant::Primary size=ButtonSize::Touch on_click=Callback::new(move |_| editor_open.set(true)) attr:data-testid="add-next-match">
+                                "Add the next match"
+                            </Button>
                         }
                     />
                     {nudge.clone().map(|n| view! { <div class="mt-6"><NudgeLine nudge=n on_change=on_change /></div> })}
@@ -962,8 +964,8 @@ fn MatchEditor(
                         <Button variant=ButtonVariant::Danger size=ButtonSize::Sm on_click=Callback::new(move |_| confirm_remove.set(true))>"Remove match"</Button>
                     </div>
                 })}
-                <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| open.set(false))>"Cancel"</Button>
-                <Button variant=ButtonVariant::Primary loading=saving on_click=save attr:data-testid="save-next-match">"Save match"</Button>
+                <Button variant=ButtonVariant::Quiet size=ButtonSize::Touch on_click=Callback::new(move |_| open.set(false))>"Cancel"</Button>
+                <Button variant=ButtonVariant::Primary size=ButtonSize::Touch loading=saving on_click=save attr:data-testid="save-next-match">"Save match"</Button>
             }
         >
             <div class="flex flex-col gap-4">
@@ -979,6 +981,15 @@ fn MatchEditor(
                 <Field id="match-opponent" label="Opponent" hint=if no_dossiers { "No dossiers yet: add the opponent on the Opponents page first.".to_string() } else { "Their dossier becomes the brief.".to_string() }>
                     <Select value=opponent options=opponent_options.get_value() />
                 </Field>
+                // Without a dossier the hint alone was a dead end: offer the
+                // way there (a match without an opponent can still be saved).
+                {no_dossiers.then(|| view! {
+                    <div>
+                        <Button href="/opponents" variant=ButtonVariant::Secondary size=ButtonSize::Touch attr:data-testid="add-opponent-link">
+                            "Add an opponent"
+                        </Button>
+                    </div>
+                })}
                 <SegmentedControl id="match-format" label="Format" options=FORMATS.iter().map(|(k, l)| Segment::new(*k, *l)).collect() value=format />
                 <Field id="match-notes" label="Notes" hint="Where, who hosts, anything the team should know (500 characters).">
                     <TextField value=notes rows=3 maxlength=500 />

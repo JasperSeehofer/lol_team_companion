@@ -52,10 +52,7 @@ pub fn redirect_signed_out(
 ) {
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
 }

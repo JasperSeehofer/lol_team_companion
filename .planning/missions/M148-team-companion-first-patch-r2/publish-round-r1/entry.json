@@ -1,0 +1,70 @@
+{
+  "id": "m148-r1-team-companion-first-patch-r2",
+  "title": "M148 · Team Companion first patch, R2 (all items shipped; over the token cap)",
+  "date": "2026-10-17",
+  "mission": "M148",
+  "status": "open",
+  "summary": "All of M137's leftovers are on mission/M148-team-companion-first-patch-r2. Coaches can now invite: the server lets a coach create, list and disable invite links, always for their own team, never another team's. Each invite row shows the full link, and Copy only says 'Copied' once the browser has really copied it, with Share on phones. /admin/resets has a 'Copy code' button. Phones can add the next match, and the 'read-only' caption only shows when there is a match. Draft, game plan and tree show 'Could not save: …' with Retry, warn before you leave unsaved work, and show 'did not load' instead of an empty list. Sign-up has your verbatim 16+ and Terms checkbox: the server refuses an unticked box before the invite is used, and the acceptance time is stored with no migration. Every page has its own tab title, and sign-in returns you to the page you came from (same-site paths only; open-redirect cases tested). Before/after frame strips at 390 and 1280 exist for every touched surface, including M137's auth pages. The atelier passed most of them; its three phone-overflow FIXes are applied, and a new width check caught and fixed a fourth (a long email on /profile). CI write-back now works for every mission branch, which also covers M149 item F. CI is green on the tip ba0c92b (run 39007209640: all five jobs, 166/166 e2e). One sentence was added to each of the Terms and Privacy pages. The round went over the token cap (8.45 M). Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M148-team-companion-first-patch-r2 once the fresh verifier's VERIFY-R1 says PASS? Deploy stays a separate step (82-release.sh behind its own cards). Never merge the helper branch mission/M148-team-companion-first-patch-r2-before.",
+      "kind": "merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS, applies the one-line M137 vault fix (item 10), deletes the -before helper branch and marks M149 item F as already landed. Deploy is a separate card."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open, and R3 (atelier re-check, Harden pages) continues on top of it."
+        }
+      ],
+      "recommend": "Yes, merge. The 16+ and terms gate is the legal precondition for inviting outside teams, and every item is covered by tests."
+    },
+    {
+      "text": "Coaches can now mint invite links. Should a coach also be able to place a new player (starting five, substitute, coach), or does placement stay with the leader?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Leader only",
+          "consequence": "Nothing changes. Coaches invite, and the leader places. The copy already says 'until the leader places them'."
+        },
+        {
+          "label": "Coaches too",
+          "consequence": "R3 extends set_member_place to coaches, with the same cross-team tests."
+        }
+      ],
+      "recommend": "Leader only. Placement decides who starts, which is the leader's call, and keeping rights narrow on a live product is the safer default."
+    },
+    {
+      "text": "Because sign-up now records when you accepted, I added one sentence each to Terms ('You must be 16 or older to register; at sign-up you confirm it and accept these terms.') and to the Privacy page's account data list. Keep them?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep, show adviser",
+          "consequence": "They ship as written, and you show both lines to your adviser with the other draft clauses."
+        },
+        {
+          "label": "Remove them",
+          "consequence": "R3 takes the two sentences out. The checkbox and its stored time stay."
+        }
+      ],
+      "recommend": "Keep, show adviser. The privacy page should name data we now store, and the Terms line matches the checkbox."
+    },
+    {
+      "text": "Accounts made before this patch have no recorded terms acceptance. Should existing members confirm once at their next sign-in?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "New accounts only",
+          "consequence": "Nothing more. Existing beta members joined under the closed-beta invite and keep a NONE timestamp."
+        },
+        {
+          "label": "Ask once at sign-in",
+          "consequence": "R3 adds a one-time confirmation after sign-in for accounts without terms_accepted_at."
+        }
+      ],
+      "recommend": "Ask once at sign-in, before the first outside team is invited. It is small, and it makes the record complete."
+    }
+  ]
+}

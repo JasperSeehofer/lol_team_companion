@@ -255,7 +255,10 @@ pub fn Switch(
 /// A11y: a native `<input type="checkbox">` inside its `<label>`, so the
 /// text is the name and Space toggles it; the checked state is the mark and
 /// the fill, and `strike` also crosses the text out (decorative, the state
-/// is read from the box).
+/// is read from the box). In a form, `name` makes it post `name=on` when
+/// ticked and `required` makes the browser refuse the submit while it is
+/// not (before hydration too); `invalid` sets `aria-invalid`. Links in
+/// `label_extra` keep their own tab stop and do not toggle the box.
 #[component]
 pub fn Checkbox(
     #[prop(into)] label: String,
@@ -266,6 +269,21 @@ pub fn Checkbox(
     #[prop(optional, into)] disabled: Signal<bool>,
     #[prop(optional)] on_change: Option<Callback<bool>>,
     #[prop(optional, into)] id: Option<String>,
+    /// The form field name (a native form post sends `name=on`).
+    #[prop(optional)]
+    name: Option<&'static str>,
+    /// The browser refuses to submit the form while it is not ticked.
+    #[prop(optional)]
+    required: bool,
+    /// The whole label is a 44px tap target below `md` (phones).
+    #[prop(optional)]
+    touch: bool,
+    /// Marks the box invalid (`aria-invalid`) after a refused submit.
+    #[prop(optional, into)]
+    invalid: Signal<bool>,
+    /// Content after the label text, inside the label (inline links).
+    #[prop(optional, into)]
+    label_extra: Option<ViewFn>,
 ) -> impl IntoView {
     let text_class = move || {
         if strike && checked.get() {
@@ -274,13 +292,21 @@ pub fn Checkbox(
             "text-body text-primary"
         }
     };
+    let label_class = if touch {
+        "group/cb inline-flex min-h-6 max-md:min-h-11 max-md:items-center cursor-pointer items-start gap-2.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+    } else {
+        "group/cb inline-flex min-h-6 cursor-pointer items-start gap-2.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+    };
     view! {
-        <label class="group/cb inline-flex min-h-6 cursor-pointer items-start gap-2.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+        <label class=label_class>
             <span class="relative mt-0.5 inline-grid size-4 shrink-0 place-items-center">
                 <input
                     id=id
                     type="checkbox"
-                    class="peer size-4 cursor-pointer appearance-none rounded-ctl border border-outline bg-ink-2 transition-colors checked:border-accent checked:bg-accent hover:border-secondary disabled:cursor-not-allowed"
+                    name=name
+                    required=required
+                    aria-invalid=move || invalid.get().then_some("true")
+                    class="peer size-4 cursor-pointer appearance-none rounded-ctl border border-outline bg-ink-2 transition-colors checked:border-accent checked:bg-accent hover:border-secondary aria-invalid:border-danger disabled:cursor-not-allowed"
                     prop:checked=move || checked.get()
                     disabled=move || disabled.get()
                     on:change=move |ev| {
@@ -295,7 +321,7 @@ pub fn Checkbox(
                     <path d="M2.5 6.2l2.3 2.3 4.7-4.9" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
             </span>
-            <span class=text_class>{label}</span>
+            <span class=text_class>{label}{label_extra.map(|v| v.run())}</span>
         </label>
     }
 }

@@ -269,10 +269,7 @@ pub fn ProfilePage() -> impl IntoView {
     );
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
     view! {
@@ -646,7 +643,7 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
     let linked = user.riot_summoner_name.clone();
 
     view! {
-        <PageHeader title=user.username.clone() eyebrow="Profile" meta=move || view! { <span>"Your account and your Riot link. Your games are on My games."</span> } />
+        <PageHeader title=user.username.clone() eyebrow="Profile" document_title="Profile" meta=move || view! { <span>"Your account and your Riot link. Your games are on My games."</span> } />
 
         <section aria-labelledby="account-h" class="flex flex-col gap-5" data-account>
             <SectionHeader title="Account" id="account-h" />
@@ -660,7 +657,7 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
             </div>
             <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-y-1 text-body">
                 <dt class="text-muted">"Email"</dt>
-                <dd class="text-primary" data-testid="profile-email">{user.email.clone()}</dd>
+                <dd class="min-w-0 text-primary [overflow-wrap:anywhere]" data-testid="profile-email">{user.email.clone()}</dd>
             </dl>
             <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-0 flex-1">

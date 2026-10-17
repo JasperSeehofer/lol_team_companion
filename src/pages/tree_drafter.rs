@@ -8,11 +8,14 @@ use crate::components::tree_graph::TreeGraph;
 use crate::components::ui::a11y::{focus_id, focus_id_later};
 use crate::components::ui::enter_submits;
 use crate::components::ui::{
-    slot_dom_id, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, Callout,
-    CalloutTone, ConfirmDialog, ConfirmTone, Density, DraftBoard, EmptySize, EmptyState, Field,
-    HeadingLevel, NoTeamState, PageHeader, PageShell, SectionHeader, Segment, SegmentSize,
-    SegmentedControl, Skeleton, SkeletonGroup, SkeletonShape, Switch, TextField, Toast,
-    ToastContext, TOURNAMENT_ORDER,
+    save_failure_reason, use_save_state, use_unsaved_guard, LoadFailed, SaveState, SaveStatus,
+    SaveTracker, SAVE_FAILED_TOAST,
+};
+use crate::components::ui::{
+    slot_dom_id, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, ConfirmDialog,
+    ConfirmTone, Density, DraftBoard, EmptySize, EmptyState, Field, HeadingLevel, NoTeamState,
+    PageHeader, PageShell, SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton,
+    SkeletonGroup, SkeletonShape, Switch, TextField, Toast, ToastContext, TOURNAMENT_ORDER,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
@@ -257,7 +260,11 @@ struct NodeEd {
     active: RwSignal<Option<usize>>,
     /// Suppress auto-save while a node is being loaded (leptos rule 55).
     loading: RwSignal<bool>,
-    status: RwSignal<&'static str>,
+    /// The node's save state (`ui::status`, DESIGN 6.6).
+    save: SaveTracker,
+    /// Bumped on every edit, so a save that returns after a newer edit
+    /// does not claim "Saved" for it.
+    edits: StoredValue<u64>,
 }
 
 impl NodeEd {
@@ -270,13 +277,14 @@ impl NodeEd {
             slots: RwSignal::new(vec![None; 20]),
             active: RwSignal::new(Some(0)),
             loading: RwSignal::new(false),
-            status: RwSignal::new(""),
+            save: use_save_state(),
+            edits: StoredValue::new(0),
         }
     }
 
     fn load(&self, node: Option<&DraftTreeNode>) {
         self.loading.set(true);
-        self.status.set("");
+        self.save.show(SaveState::Idle);
         match node {
             Some(n) => {
                 let slots = actions_to_slots(&n.actions);
@@ -321,10 +329,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
 
@@ -344,6 +349,8 @@ pub fn TreeDrafterPage() -> impl IntoView {
     );
     let mode = RwSignal::new("edit".to_string());
     let ned = NodeEd::new();
+    // Leaving while the open node's edits are not saved asks first.
+    use_unsaved_guard(Signal::derive(move || ned.save.state.get().guards_leave()));
 
     // New tree.
     let new_name = RwSignal::new(String::new());
@@ -437,7 +444,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         <SectionHeader title="Trees" id="trees-heading" level=HeadingLevel::H2 />
                         <Suspense fallback=|| view! { <SkeletonGroup label="Loading trees"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
                             {move || trees.get().map(|r| match r {
-                                Err(_) => view! { <Callout tone=CalloutTone::Danger>"The trees did not load."</Callout> }.into_any(),
+                                Err(_) => view! { <LoadFailed what="The trees" on_retry=Callback::new(move |_| trees.refetch()) attr:data-testid="trees-load-failed" /> }.into_any(),
                                 Ok(list) if list.is_empty() => {
                                     if matches!(has_team.get(), Some(Ok(false))) {
                                         view! { <NoTeamState /> }.into_any()
@@ -648,7 +655,7 @@ fn TreeEditor(
             </crate::components::guidance::FirstUseHint>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading branches"><Skeleton shape=SkeletonShape::Line lines=4 /></SkeletonGroup> }>
                 {move || nodes.get().map(|r| match r {
-                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The branches did not load."</Callout> }.into_any(),
+                    Err(_) => view! { <LoadFailed what="The branches" on_retry=Callback::new(move |_| nodes.refetch()) attr:data-testid="branches-load-failed" /> }.into_any(),
                     Ok(roots) if roots.is_empty() => view! {
                         <EmptyState size=EmptySize::Compact message="This tree has no nodes yet. Add the root draft and it appears here." />
                         <div>
@@ -842,7 +849,12 @@ fn NodeEditorSection(
         if ned.loading.get_untracked() {
             return;
         }
-        ned.status.set("unsaved");
+        ned.edits.update_value(|e| *e += 1);
+        // While saves fail, "Could not save" stays until one works (the
+        // next autosave below is the retry an edit gives).
+        if !ned.save.is_failing() {
+            ned.save.show(SaveState::Unsaved);
+        }
         #[cfg(feature = "hydrate")]
         {
             use wasm_bindgen::prelude::*;
@@ -853,11 +865,32 @@ fn NodeEditorSection(
             }
             let notes = (!notes.trim().is_empty()).then_some(notes);
             let json = serde_json::to_string(&build_actions_from_slots(&slots)).unwrap_or_default();
+            let gen = ned.edits.get_value();
             let cb = Closure::once(move || {
                 leptos::task::spawn_local(async move {
-                    if save_node(id, label, notes, improvised, json).await.is_ok() {
-                        ned.status.set("saved");
-                        nodes.refetch();
+                    let node_id = id.clone();
+                    let open = move || ned.id.get_untracked().as_deref() == Some(id.as_str());
+                    ned.save.saving();
+                    match save_node(node_id, label, notes, improvised, json).await {
+                        Ok(()) => {
+                            if open() {
+                                ned.save.saved_steady();
+                                if ned.edits.get_value() != gen {
+                                    ned.save.show(SaveState::Unsaved);
+                                }
+                            }
+                            nodes.refetch();
+                        }
+                        Err(e) => {
+                            let reason = save_failure_reason(&e);
+                            if !open() {
+                                toast.push.run(Toast::error(format!(
+                                    "Your last changes to the node you left are not saved: {reason}"
+                                )));
+                            } else if ned.save.failed(reason) {
+                                toast.push.run(Toast::error(SAVE_FAILED_TOAST));
+                            }
+                        }
                     }
                 });
             });
@@ -875,7 +908,8 @@ fn NodeEditorSection(
         let _ = (id, label, notes, improvised, slots);
     });
 
-    let save = Callback::new(move |_: leptos::ev::MouseEvent| {
+    // "Save node" and the header's "Retry" after a failed save.
+    let save_now = Callback::new(move |_: ()| {
         let Some(id) = ned.id.get_untracked() else {
             return;
         };
@@ -885,17 +919,27 @@ fn NodeEditorSection(
             .unwrap_or_default();
         let label = ned.label.get_untracked();
         let improvised = ned.improvised.get_untracked();
+        let gen = ned.edits.get_value();
+        ned.save.saving();
         leptos::task::spawn_local(async move {
             match save_node(id, label, notes, improvised, json).await {
                 Ok(()) => {
-                    ned.status.set("saved");
+                    ned.save.saved_steady();
+                    if ned.edits.get_value() != gen {
+                        ned.save.show(SaveState::Unsaved);
+                    }
                     nodes.refetch();
                     toast.push.run(Toast::success("Node saved"));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => {
+                    if ned.save.failed(save_failure_reason(&e)) {
+                        toast.push.run(Toast::error(SAVE_FAILED_TOAST));
+                    }
+                }
             }
         });
     });
+    let save = Callback::new(move |_: leptos::ev::MouseEvent| save_now.run(()));
 
     let fill = move |slot: usize, name: String, champs: &[Champion]| {
         let id = champs
@@ -952,8 +996,16 @@ fn NodeEditorSection(
         leptos::task::spawn_local(async move {
             match add_branch(tree_id.clone(), parent, label.clone()).await {
                 Ok(id) => {
-                    let _ = save_node(id.clone(), label.clone(), None, false, json).await;
+                    let saved = save_node(id.clone(), label.clone(), None, false, json).await;
+                    // The branch exists either way: list it.
                     nodes.refetch();
+                    if let Err(e) = saved {
+                        toast.push.run(Toast::error(format!(
+                            "Could not save the branch: {}",
+                            save_failure_reason(&e)
+                        )));
+                        return;
+                    }
                     let node = DraftTreeNode {
                         id: Some(id),
                         tree_id,
@@ -970,9 +1022,10 @@ fn NodeEditorSection(
                         .push
                         .run(Toast::success("Branch created from this point"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not branch: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not branch: {}",
+                    save_failure_reason(&e)
+                ))),
             }
         });
     });
@@ -994,10 +1047,8 @@ fn NodeEditorSection(
                         title="Node"
                         id="node-heading"
                         actions=move || view! {
-                            <span class="text-label text-muted" data-testid="node-save-state">
-                                {move || match ned.status.get() { "saved" => "Saved", "unsaved" => "Unsaved changes", _ => "" }}
-                            </span>
-                            <Button variant=ButtonVariant::Primary on_click=save>"Save node"</Button>
+                            <SaveStatus state=ned.save.state on_retry=save_now attr:data-testid="node-save-state" />
+                            <Button variant=ButtonVariant::Primary size=ButtonSize::Touch on_click=save attr:data-testid="node-save">"Save node"</Button>
                         }
                     />
                     <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -1163,11 +1214,15 @@ fn LiveNavigator(
                                         leptos::task::spawn_local(async move {
                                             match add_branch(tree, Some(nid), "Improvised".to_string()).await {
                                                 Ok(id) => {
-                                                    let _ = save_node(id, "Improvised".to_string(), None, true, "[]".to_string()).await;
+                                                    let saved = save_node(id, "Improvised".to_string(), None, true, "[]".to_string()).await;
+                                                    // The branch exists either way: list it.
                                                     nodes.refetch();
-                                                    toast.push.run(Toast::success("Improvised branch added"));
+                                                    match saved {
+                                                        Ok(()) => toast.push.run(Toast::success("Improvised branch added")),
+                                                        Err(e) => toast.push.run(Toast::error(format!("Could not save the branch: {}", save_failure_reason(&e)))),
+                                                    }
                                                 }
-                                                Err(e) => toast.push.run(Toast::error(format!("{e}"))),
+                                                Err(e) => toast.push.run(Toast::error(format!("Could not add the branch: {}", save_failure_reason(&e)))),
                                             }
                                         });
                                     })

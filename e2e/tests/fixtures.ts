@@ -34,7 +34,7 @@ export async function waitForHome(page: Page, timeout = 20000): Promise<void> {
  * Tests that need a team use the `teamPage` fixture, which creates one on
  * `/team/roster`.
  */
-export async function authenticatePage(page: Page): Promise<void> {
+export async function authenticatePage(page: Page): Promise<{ email: string; username: string }> {
   // The worker index keeps parallel workers (same TIMESTAMP) apart.
   const id = `${process.env.TEST_WORKER_INDEX ?? "0"}x${++userCounter}`;
   const email = `pages_${TIMESTAMP}_${id}@test.invalid`;
@@ -44,6 +44,7 @@ export async function authenticatePage(page: Page): Promise<void> {
   await page.fill("input[name=username]", username);
   await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", TEST_PASSWORD);
+  await page.check("#register-terms");
   await page.click("main button[type=submit]");
 
   // Registration fires window.location.set_href("/") from a WASM Effect.
@@ -55,6 +56,7 @@ export async function authenticatePage(page: Page): Promise<void> {
   if (page.url().includes("/auth/")) {
     throw new Error(`Authentication failed — ended at ${page.url()}`);
   }
+  return { email, username };
 }
 
 /**
@@ -112,6 +114,7 @@ export async function signInAsAdmin(page: Page): Promise<void> {
     await page.fill("input[name=username]", `e2eadmin_${Date.now()}`);
     await page.fill("input[name=email]", ADMIN_EMAIL);
     await page.fill("input[name=password]", TEST_PASSWORD);
+    await page.check("#register-terms");
     await page.click("main button[type=submit]");
     await waitForHome(page);
   }

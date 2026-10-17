@@ -213,3 +213,121 @@ async fn joining_a_team_deleted_after_the_use_was_taken_is_refused() {
         .await
         .unwrap();
 }
+
+/// M148 item 2: who may manage a team's invite links. The server functions
+/// (`mint_team_invite`, `list_team_invites`, `disable_team_invite`) take the
+/// team from the session (`db::get_user_team_id`) and allow it only when
+/// `db::is_team_leader_or_coach` holds; disabling stays scoped to that team.
+#[tokio::test]
+async fn the_leader_and_coaches_manage_invites_members_do_not() {
+    let db = common::test_db().await;
+    let user = |name: &str| (name.to_string(), format!("{name}@example.com"));
+    let mut ids = Vec::new();
+    for name in ["lead", "coach", "player", "sub", "lead_b", "coach_b"] {
+        let (u, e) = user(name);
+        ids.push(db::create_user(&db, u, e, "h".into()).await.unwrap());
+    }
+    let [lead, coach, player, sub, lead_b, coach_b]: [String; 6] = ids.try_into().unwrap();
+    let team = db::create_team(&db, &lead, "Northgate".into(), "EUW".into())
+        .await
+        .unwrap();
+    let team_b = db::create_team(&db, &lead_b, "Riverside".into(), "EUW".into())
+        .await
+        .unwrap();
+    for u in [&coach, &player, &sub] {
+        db::join_team(&db, u, &team).await.unwrap();
+    }
+    db::join_team(&db, &coach_b, &team_b).await.unwrap();
+    db::set_member_place(&db, &team, &coach, db::RosterPlace::Coach)
+        .await
+        .unwrap();
+    db::set_member_place(&db, &team, &sub, db::RosterPlace::Substitute)
+        .await
+        .unwrap();
+    db::set_member_place(&db, &team_b, &coach_b, db::RosterPlace::Coach)
+        .await
+        .unwrap();
+
+    // The rights check, as the server functions run it.
+    assert!(db::is_team_leader_or_coach(&db, &lead, &team)
+        .await
+        .unwrap());
+    assert!(db::is_team_leader_or_coach(&db, &coach, &team)
+        .await
+        .unwrap());
+    assert!(!db::is_team_leader_or_coach(&db, &player, &team)
+        .await
+        .unwrap());
+    assert!(!db::is_team_leader_or_coach(&db, &sub, &team).await.unwrap());
+    // Another team's coach or leader has no rights on this team.
+    assert!(!db::is_team_leader_or_coach(&db, &coach_b, &team)
+        .await
+        .unwrap());
+    assert!(!db::is_team_leader_or_coach(&db, &lead_b, &team)
+        .await
+        .unwrap());
+    assert!(db::is_team_coach(&db, &coach, &team).await.unwrap());
+    assert!(!db::is_team_coach(&db, &coach, &team_b).await.unwrap());
+
+    // A coach mints (the team from their own membership), lists and disables.
+    let coach_team = db::get_user_team_id(&db, &coach).await.unwrap().unwrap();
+    assert_eq!(coach_team, team);
+    db::create_team_invite(
+        &db,
+        &coach,
+        &coach_team,
+        "COACH-CODE".into(),
+        3,
+        soon(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let listed = db::list_team_invites(&db, &coach_team).await.unwrap();
+    assert_eq!(listed.len(), 1);
+    let id = listed[0].id.clone();
+    assert_eq!(listed[0].code, "COACH-CODE");
+    assert_eq!(listed[0].team_id.as_deref(), Some(team.as_str()));
+
+    // Team B's coach cannot disable it through their own team (the scope a
+    // server function uses), nor list it.
+    let b_team = db::get_user_team_id(&db, &coach_b).await.unwrap().unwrap();
+    assert!(matches!(
+        db::disable_team_invite(&db, &b_team, &id).await,
+        Err(DbError::NotFound)
+    ));
+    assert!(db::list_team_invites(&db, &b_team)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(db::consume_invite_grant(&db, "COACH-CODE")
+        .await
+        .unwrap()
+        .is_some());
+
+    // The coach disables it; the leader still mints and disables their own.
+    db::disable_team_invite(&db, &coach_team, &id)
+        .await
+        .unwrap();
+    assert!(db::list_team_invites(&db, &team).await.unwrap()[0].disabled);
+    db::create_team_invite(&db, &lead, &team, "LEAD-CODE".into(), 1, soon(), None, None)
+        .await
+        .unwrap();
+    let lead_id = db::list_team_invites(&db, &team)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|i| i.code == "LEAD-CODE")
+        .unwrap()
+        .id;
+    db::disable_team_invite(&db, &team, &lead_id).await.unwrap();
+
+    // A coach moved back to a plain member loses the right at once.
+    db::set_member_place(&db, &team, &coach, db::RosterPlace::Member)
+        .await
+        .unwrap();
+    assert!(!db::is_team_leader_or_coach(&db, &coach, &team)
+        .await
+        .unwrap());
+}

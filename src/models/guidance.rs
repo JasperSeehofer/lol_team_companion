@@ -450,7 +450,7 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
             } else if f.pending_requests > 0 {
                 "A join request is waiting on the team page.".to_string()
             } else {
-                "The team leader sends an invite link from the team page. Teammates who already have an account find your team on the roster page, then ask to join."
+                "The team leader or a coach sends an invite link from the team page. Teammates who already have an account find your team on the roster page, then ask to join."
                     .to_string()
             },
             f.members > 1 || f.pending_requests > 0,

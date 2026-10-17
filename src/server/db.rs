@@ -209,6 +209,32 @@ pub async fn is_team_leader(db: &Surreal<Db>, user_id: &str, team_id: &str) -> D
     Ok(!rows.is_empty())
 }
 
+/// True when the user is a coach of the team (`team_member.roster_type =
+/// 'coach'`): a membership row of that team, so another team's coach is false.
+pub async fn is_team_coach(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<bool> {
+    let mut r = db
+        .query("SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) AND roster_type = 'coach' LIMIT 1")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let row: Option<IdRecord> = r.take(0)?;
+    Ok(row.is_some())
+}
+
+/// Who may create, list and disable the team's invite links (M148): a member
+/// of the team who leads it or is one of its coaches. Placing players,
+/// answering join requests and editing the team stay with the leader.
+pub async fn is_team_leader_or_coach(
+    db: &Surreal<Db>,
+    user_id: &str,
+    team_id: &str,
+) -> DbResult<bool> {
+    if !is_team_member(db, user_id, team_id).await? {
+        return Ok(false);
+    }
+    Ok(is_team_leader(db, user_id, team_id).await? || is_team_coach(db, user_id, team_id).await?)
+}
+
 #[derive(Debug, Deserialize, SurrealValue)]
 struct IdRecord {
     id: RecordId,
@@ -464,6 +490,28 @@ pub async fn create_user(
     email: String,
     password_hash: String,
 ) -> DbResult<String> {
+    insert_user(db, username, email, password_hash, false).await
+}
+
+/// [`create_user`] for the sign-up form: the account also records when its
+/// owner confirmed being 16 or older and accepted the terms
+/// (`user.terms_accepted_at`, M148 item 7), in the same statement.
+pub async fn create_user_accepting_terms(
+    db: &Surreal<Db>,
+    username: String,
+    email: String,
+    password_hash: String,
+) -> DbResult<String> {
+    insert_user(db, username, email, password_hash, true).await
+}
+
+async fn insert_user(
+    db: &Surreal<Db>,
+    username: String,
+    email: String,
+    password_hash: String,
+    accepted_terms: bool,
+) -> DbResult<String> {
     let email = normalize_email(&email);
     let username = username.trim().to_string();
     if username.is_empty() {
@@ -475,8 +523,10 @@ pub async fn create_user(
     let _guard = invariant_lock().await;
     let response = db
         .query(
-            "CREATE user SET username = $username, username_lc = $username_lc, email = $email, password_hash = $password_hash, is_admin = false",
+            "CREATE user SET username = $username, username_lc = $username_lc, email = $email, password_hash = $password_hash, is_admin = false, \
+             terms_accepted_at = IF $terms { time::now() } ELSE { NONE }",
         )
+        .bind(("terms", accepted_terms))
         .bind(("username", username))
         .bind(("username_lc", username_lc))
         .bind(("email", email))

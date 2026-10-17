@@ -39,7 +39,7 @@ Everything to tick before the first outside team gets an invite code (M8 gate). 
 
 - [x] **owner** Admin account registered with the bootstrap invite **before** its email went into `ADMIN_EMAILS` (no email verification exists: listing an unregistered address lets whoever registers it first become admin). *Done 13 Oct 2026 in that order; the log shows `admin_emails=1` and the owner sees the admin pages.*
 - [x] **owner** `BOOTSTRAP_INVITE_CODE` removed from `.env` after the admin registered; the bootstrap code is disabled or used up on `/admin/invites`. *Done 13 Oct 2026: removed (with `_MAX_USES`); its single use went to the admin registration.*
-- [ ] **owner** Invite codes minted on `/admin/invites`, one per team, with a sensible use count (team size plus coach plus one) and an expiry.
+- [ ] **owner** Invite codes minted on `/admin/invites`, one per team, with a sensible use count (team size plus coach plus one) and an expiry. After that the team's leader or a coach invites further players with a team link from the team page ("Invite a player", M148).
 - [ ] **owner** Restore-drill account registered (no team, not admin).
 - [ ] **owner** A second person (or a sealed note) can reach the VM and the password manager if the owner is unavailable.
 

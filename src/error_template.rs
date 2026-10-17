@@ -14,6 +14,7 @@ pub fn NotFound() -> impl IntoView {
     }
 
     view! {
+        <leptos_meta::Title text=crate::components::ui::page_title("Page not found") />
         <PageShell width=PageWidth::Reading class="pt-16">
             <p class="eyebrow">"Error 404"</p>
             <h1 class="mt-3 font-display text-headline font-semibold tracking-[-0.02em] text-primary">"Page not found"</h1>
@@ -54,6 +55,7 @@ pub fn ErrorTemplate(
     };
 
     view! {
+        <leptos_meta::Title text=crate::components::ui::page_title("Something went wrong") />
         <PageShell width=PageWidth::Reading class="pt-16">
             <p class="eyebrow">"Error"</p>
             <h1 class="mt-3 font-display text-headline font-semibold text-primary">"Something went wrong"</h1>

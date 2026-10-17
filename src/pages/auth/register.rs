@@ -9,8 +9,8 @@
 //! redirect Effect (leptos rules 8, 51). Visual layer only.
 
 use crate::components::ui::{
-    Button, ButtonSize, ButtonType, ButtonVariant, Callout, CalloutTone, Field, InputKind,
-    PageHeader, PageShell, PageWidth, TextField,
+    Button, ButtonSize, ButtonType, ButtonVariant, Callout, CalloutTone, Checkbox, Field,
+    InputKind, PageHeader, PageShell, PageWidth, TextField,
 };
 use crate::models::invite::InvitePreview;
 use leptos::prelude::*;
@@ -20,12 +20,34 @@ use leptos_router::hooks::use_query_map;
 /// Minimum password length enforced by `register_action`.
 pub const MIN_PASSWORD_LEN: usize = 10;
 
+/// The refusal when the 16+ and terms box was not ticked (M148 item 7):
+/// the same words as the box's label.
+pub const TERMS_REQUIRED: &str =
+    "Please confirm that you are 16 or older and accept the Terms and have read the Privacy page.";
+
+/// Whether the form's `accept_terms` field says the box was ticked. A
+/// native checkbox posts `on`; script clients may send `true`, `1` or
+/// `yes`. Missing, empty or anything else is "not ticked".
+pub fn terms_accepted(accept_terms: Option<&str>) -> bool {
+    matches!(
+        accept_terms
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("on" | "true" | "1" | "yes")
+    )
+}
+
 #[server]
 pub async fn register_action(
     username: String,
     email: String,
     password: String,
     invite_code: String,
+    /// The 16+ and terms box (`on` when ticked; a native checkbox posts
+    /// nothing when it is not, hence optional). Required: checked before
+    /// the invite is used.
+    #[server(default)]
+    accept_terms: Option<String>,
 ) -> Result<String, ServerFnError> {
     use crate::server::auth::{hash_password_async, AuthSession};
     use crate::server::rate_limit::Bucket;
@@ -53,6 +75,11 @@ pub async fn register_action(
     if password.len() > 1024 {
         return Err(ServerFnError::new("Password is too long."));
     }
+    // 16 or older, Terms accepted, Privacy page read (M148 item 7). Checked
+    // before anything is written, so a refused sign-up uses no invite.
+    if !terms_accepted(accept_terms.as_deref()) {
+        return Err(ServerFnError::new(TERMS_REQUIRED));
+    }
 
     let db = authz::db()?;
 
@@ -79,7 +106,8 @@ pub async fn register_action(
     let grant = used.unwrap_or_default();
 
     let created = match hash_password_async(password).await {
-        Ok(password_hash) => db::create_user(&db, username, email, password_hash)
+        // Records when the box was ticked (`user.terms_accepted_at`).
+        Ok(password_hash) => db::create_user_accepting_terms(&db, username, email, password_hash)
             .await
             .map_err(authz::server_err),
         Err(e) => Err(authz::internal_error("hash password", e)),
@@ -281,6 +309,10 @@ pub fn RegisterPage() -> impl IntoView {
     }
 }
 
+/// The app's inline link style.
+const LINK: &str =
+    "font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent";
+
 /// The sign-up form (signed-out visitors only).
 #[component]
 fn RegisterForm(register: ServerAction<RegisterAction>, invite: Signal<String>) -> impl IntoView {
@@ -293,6 +325,26 @@ fn RegisterForm(register: ServerAction<RegisterAction>, invite: Signal<String>) 
             .and_then(|r| r.err())
             .map(|e| crate::models::utils::error_text(&e))
     };
+
+    let accept = RwSignal::new(false);
+    // The server refused for the box alone: mark it and move focus to it.
+    let terms_refused = Signal::derive(move || error().as_deref() == Some(TERMS_REQUIRED));
+    Effect::new(move || {
+        let refused = terms_refused.get();
+        #[cfg(not(feature = "hydrate"))]
+        let _ = refused;
+        #[cfg(feature = "hydrate")]
+        if refused {
+            use wasm_bindgen::JsCast;
+            if let Some(el) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id("register-terms"))
+                .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+            {
+                let _ = el.focus();
+            }
+        }
+    });
 
     view! {
         <ActionForm action=register>
@@ -314,6 +366,28 @@ fn RegisterForm(register: ServerAction<RegisterAction>, invite: Signal<String>) 
                     <TextField kind=InputKind::Password name="password" required=true minlength=10 autocomplete="new-password" />
                 </Field>
 
+                // 16+ and the terms (M148 item 7): native `required`, so the
+                // browser refuses the submit before hydration too; never
+                // pre-ticked. The links open in a new tab and keep the form.
+                <Checkbox
+                    id="register-terms"
+                    name="accept_terms"
+                    required=true
+                    touch=true
+                    checked=accept
+                    invalid=terms_refused
+                    label="I am 16 or older and accept the "
+                    label_extra=|| view! {
+                        <a href="/legal/terms" target="_blank" rel="noopener" class=LINK>
+                            "Terms"<span class="sr-only">" (opens in a new tab)"</span>
+                        </a>
+                        " and have read the "
+                        <a href="/legal/datenschutz" target="_blank" rel="noopener" class=LINK>
+                            "Privacy page"<span class="sr-only">" (opens in a new tab)"</span>
+                        </a>
+                    }
+                />
+
                 <Button kind=ButtonType::Submit variant=ButtonVariant::Primary size=ButtonSize::Lg full_width=true>
                     "Create account"
                 </Button>
@@ -326,5 +400,26 @@ fn RegisterForm(register: ServerAction<RegisterAction>, invite: Signal<String>) 
                 </p>
             </div>
         </ActionForm>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_ticked_box_counts() {
+        assert!(terms_accepted(Some("on")));
+        assert!(terms_accepted(Some("true")));
+        assert!(!terms_accepted(None));
+        assert!(!terms_accepted(Some("")));
+        assert!(!terms_accepted(Some("off")));
+    }
+
+    #[test]
+    fn the_refusal_uses_the_labels_words() {
+        assert!(TERMS_REQUIRED.contains("16 or older"));
+        assert!(TERMS_REQUIRED.contains("Terms"));
+        assert!(TERMS_REQUIRED.contains("Privacy page"));
     }
 }

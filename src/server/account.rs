@@ -393,7 +393,7 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
     (
         "account",
         "SELECT id, username, email, created_at, riot_summoner_name, riot_puuid, riot_region, \
-         last_solo_sync, is_admin, admin_promoted_at, guidance_enabled, survey_opt_out, share_card_hidden, \
+         last_solo_sync, is_admin, admin_promoted_at, terms_accepted_at, guidance_enabled, survey_opt_out, share_card_hidden, \
          last_seen_at, prev_seen_at FROM ONLY $u",
     ),
     (

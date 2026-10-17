@@ -12,6 +12,10 @@ use crate::components::draft_board::slot_meta;
 use crate::components::ui::a11y::focus_id;
 use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
+    save_failure_reason, use_save_state, use_unsaved_guard, LoadFailed, SaveState, SaveStatus,
+    SaveTracker, SAVE_FAILED_TOAST,
+};
+use crate::components::ui::{
     slot_dom_id, AvatarSize, AvatarState, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ChampionAvatar, ConfirmDialog, ConfirmTone, Density, Dialog, DraftBoard, DraftSide, EmptySize,
     EmptyState, Field, FieldSize, PageHeader, PageShell, Role, RoleLabel, RowLink, SectionHeader,
@@ -1164,17 +1168,6 @@ async fn persist(s: Snapshot) -> Result<String, ServerFnError> {
     }
 }
 
-/// Saved state of the editor, shown in the header.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SaveState {
-    /// Never saved.
-    New,
-    /// Saved, then changed.
-    Dirty,
-    Saving,
-    Saved,
-}
-
 /// Warnings per slot in words ("Not in Kim's pool, no mage coverage").
 fn warning_texts(raw: Vec<Option<(String, String)>>) -> Vec<Option<String>> {
     raw.into_iter()
@@ -1231,7 +1224,8 @@ struct Ctx {
     drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
     series: Resource<Result<Vec<Series>, ServerFnError>>,
     plan_counts: Resource<Result<Vec<(String, usize)>, ServerFnError>>,
-    save_state: RwSignal<SaveState>,
+    /// The header's save state (`ui::status`, DESIGN 6.6).
+    save: SaveTracker,
     last_saved: StoredValue<Option<Snapshot>>,
     url_loaded: StoredValue<Option<String>>,
     fearless_used: RwSignal<Vec<String>>,
@@ -1246,10 +1240,7 @@ pub fn DraftPage() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
 
@@ -1258,12 +1249,16 @@ pub fn DraftPage() -> impl IntoView {
     let teams_resource = Resource::new(|| (), |_| list_user_teams());
     let opponents_list = Resource::new(|| (), |_| crate::pages::opponents::get_opponents());
     let team_pools = Resource::new(|| (), |_| get_team_pools());
+    let save = use_save_state();
+    save.show(SaveState::NotSaved);
+    #[allow(unused_variables)]
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let cx = Ctx {
         ed,
         drafts: Resource::new(|| (), |_| list_drafts()),
         series: Resource::new(|| (), |_| list_series_fn()),
         plan_counts: Resource::new(|| (), |_| get_draft_game_plan_counts()),
-        save_state: RwSignal::new(SaveState::New),
+        save,
         last_saved: StoredValue::new(None),
         url_loaded: StoredValue::new(None),
         fearless_used: RwSignal::new(Vec::new()),
@@ -1331,14 +1326,22 @@ pub fn DraftPage() -> impl IntoView {
     Effect::new(move |_| {
         let snap = ed.snapshot_tracked();
         if snap.loaded_id.is_none() {
-            cx.save_state.set(SaveState::New);
+            // A new draft whose first save failed keeps saying so while it
+            // has content; a blank one starts over.
+            if !cx.save.is_failing() || snap == Editor::blank() {
+                cx.save.show(SaveState::NotSaved);
+            }
             return;
         }
         if cx.last_saved.with_value(|l| l.as_ref() == Some(&snap)) {
-            cx.save_state.set(SaveState::Saved);
+            cx.save.saved_steady();
             return;
         }
-        cx.save_state.set(SaveState::Dirty);
+        // While saves fail, "Could not save" stays until one works (the
+        // next autosave below is the retry an edit gives).
+        if !cx.save.is_failing() {
+            cx.save.show(SaveState::Unsaved);
+        }
         // An unnamed draft is not saved automatically.
         #[cfg(feature = "hydrate")]
         if !snap.name.trim().is_empty() {
@@ -1350,12 +1353,21 @@ pub fn DraftPage() -> impl IntoView {
             }
             let cb = Closure::once(move || {
                 leptos::task::spawn_local(async move {
-                    if persist(snap.clone()).await.is_ok() {
-                        cx.last_saved.set_value(Some(snap.clone()));
-                        if ed.snapshot() == snap {
-                            cx.save_state.set(SaveState::Saved);
+                    cx.save.saving();
+                    match persist(snap.clone()).await {
+                        Ok(_) => {
+                            cx.last_saved.set_value(Some(snap.clone()));
+                            cx.save.saved_steady();
+                            if ed.snapshot() != snap {
+                                cx.save.show(SaveState::Unsaved);
+                            }
+                            cx.drafts.refetch();
                         }
-                        cx.drafts.refetch();
+                        Err(e) => {
+                            if cx.save.failed(save_failure_reason(&e)) {
+                                toast.push.run(Toast::error(SAVE_FAILED_TOAST));
+                            }
+                        }
                     }
                 });
             });
@@ -1371,6 +1383,14 @@ pub fn DraftPage() -> impl IntoView {
         }
     });
 
+    // Leaving with work that is not saved asks first: an edit waiting for
+    // its autosave, a save on its way or failed, or a new draft with picks.
+    use_unsaved_guard(Signal::derive(move || {
+        let state = cx.save.state.get();
+        state.guards_leave()
+            || (state == SaveState::NotSaved && ed.snapshot_tracked() != Editor::blank())
+    }));
+
     view! {
         <PageShell density=Density::Compact attr:data-feedback-label="Draft">
             <Suspense fallback=|| view! {
@@ -1380,22 +1400,40 @@ pub fn DraftPage() -> impl IntoView {
                 </SkeletonGroup>
             }>
                 {move || Suspend::new(async move {
-                    let champs = champions_resource.await.unwrap_or_default();
-                    let opponents = opponents_list.await.unwrap_or_default();
+                    let champs = champions_resource.await;
+                    let opponents = opponents_list.await;
                     let team_name = teams_resource
                         .await
                         .ok()
                         .and_then(|t| t.into_iter().next())
                         .map(|t| t.name);
-                    let pools = team_pools.await.unwrap_or_default();
-                    view! {
-                        <DraftEditor
-                            cx=cx
-                            champs=champs
-                            opponents=opponents
-                            team_name=team_name
-                            pools=pools
-                        />
+                    let pools = team_pools.await;
+                    match (champs, opponents, pools) {
+                        (Ok(champs), Ok(opponents), Ok(pools)) => view! {
+                            <DraftEditor
+                                cx=cx
+                                champs=champs
+                                opponents=opponents
+                                team_name=team_name
+                                pools=pools
+                            />
+                        }
+                        .into_any(),
+                        // A failed load is not an empty board (M148 item 4).
+                        _ => view! {
+                            <PageHeader title="Draft" eyebrow="Draft" />
+                            <LoadFailed
+                                what="The draft board"
+                                on_retry=Callback::new(move |_| {
+                                    champions_resource.refetch();
+                                    opponents_list.refetch();
+                                    team_pools.refetch();
+                                    teams_resource.refetch();
+                                })
+                                attr:data-testid="draft-load-failed"
+                            />
+                        }
+                        .into_any(),
                     }
                 })}
             </Suspense>
@@ -1423,7 +1461,8 @@ fn DraftEditor(
         Memo::new(move |_| opponents.with_value(|o| opponent_name(&ed.opponent.get(), o)));
 
     let name_error = RwSignal::new(None::<String>);
-    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+    // "Save draft" and the header's "Retry" after a failed save.
+    let save_now = Callback::new(move |_: ()| {
         let snap = ed.snapshot();
         if snap.name.trim().is_empty() {
             name_error.set(Some(
@@ -1433,13 +1472,14 @@ fn DraftEditor(
             return;
         }
         name_error.set(None);
-        cx.save_state.set(SaveState::Saving);
+        cx.save.saving();
         leptos::task::spawn_local(async move {
             match persist(snap.clone()).await {
                 Ok(id) => {
                     let mut saved = snap.clone();
                     saved.loaded_id = Some(id.clone());
                     cx.last_saved.set_value(Some(saved));
+                    cx.save.saved_steady();
                     cx.url_loaded.set_value(Some(id.clone()));
                     ed.loaded_id.set(Some(id.clone()));
                     toast.push.run(Toast::success("Draft saved"));
@@ -1447,14 +1487,14 @@ fn DraftEditor(
                     replace_url(nav, &format!("/draft?draft_id={id}"));
                 }
                 Err(e) => {
-                    cx.save_state.set(SaveState::Dirty);
-                    toast
-                        .push
-                        .run(Toast::error(format!("Could not save the draft: {e}")));
+                    if cx.save.failed(save_failure_reason(&e)) {
+                        toast.push.run(Toast::error(SAVE_FAILED_TOAST));
+                    }
                 }
             }
         });
     });
+    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| save_now.run(()));
 
     let new_draft = Callback::new(move |_: leptos::ev::MouseEvent| {
         let before = ed.snapshot();
@@ -1658,7 +1698,7 @@ fn DraftEditor(
             n
         }
     };
-    let save_state = cx.save_state;
+    let save_state = cx.save.state;
     let has_champs = !champ_list.is_empty();
     let champ_list_sv = StoredValue::new(champ_list);
 
@@ -1669,14 +1709,7 @@ fn DraftEditor(
             meta=move || view! {
                 {move || opp_name.get().map(|o| view! { <span>"vs " {o}</span> })}
                 {move || view! { <SideMarker side=our_side.get() text=SideText::Long /> }}
-                <span data-testid="draft-save-state" class="text-muted">
-                    {move || match save_state.get() {
-                        SaveState::New => "Not saved yet",
-                        SaveState::Dirty => "Unsaved changes",
-                        SaveState::Saving => "Saving\u{2026}",
-                        SaveState::Saved => "Saved",
-                    }}
-                </span>
+                <SaveStatus state=save_state on_retry=save_now attr:data-testid="draft-save-state" />
             }
             actions=move || view! {
                 <Button variant=ButtonVariant::Quiet on_click=new_draft>"New draft"</Button>
@@ -1688,6 +1721,7 @@ fn DraftEditor(
                 })}
                 <Button
                     variant=ButtonVariant::Primary
+                    size=ButtonSize::Touch
                     on_click=do_save
                     loading=Signal::derive(move || save_state.get() == SaveState::Saving)
                     attr:data-testid="draft-save"
@@ -2564,7 +2598,7 @@ fn SavedDrafts(cx: Ctx, opponents: StoredValue<Vec<Opponent>>) -> impl IntoView 
             />
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading drafts"><Skeleton shape=SkeletonShape::Line lines=4 /></SkeletonGroup> }>
                 {move || drafts.get().map(|r| match r {
-                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The drafts did not load."</Callout> }.into_any(),
+                    Err(_) => view! { <LoadFailed what="The drafts" on_retry=Callback::new(move |_| drafts.refetch()) attr:data-testid="drafts-load-failed" /> }.into_any(),
                     Ok(list) if list.is_empty() => view! {
                         <EmptyState size=EmptySize::Compact message="Drafts you save appear here, with their picks, rating and game plans." />
                     }.into_any(),

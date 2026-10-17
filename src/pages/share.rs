@@ -249,14 +249,28 @@ pub fn ShareDialog(
             }
         });
     });
-    let copy = Callback::new(move |url: String| {
-        #[cfg(feature = "hydrate")]
-        if let Some(w) = web_sys::window() {
-            let _ = w.navigator().clipboard().write_text(&url);
-            toast.push.run(Toast::success("Link copied"));
-        }
-        #[cfg(not(feature = "hydrate"))]
-        let _ = url;
+    // "Link copied" only once the clipboard promise resolved (M148: the
+    // toast used to come before the copy, even when the browser refused).
+    let copy = Callback::new(move |(url, url_ref): (String, NodeRef<leptos::html::P>)| {
+        leptos::task::spawn_local(async move {
+            match crate::components::clipboard::copy_text(&url).await {
+                Ok(()) => toast.push.run(Toast::success("Link copied")),
+                Err(_e) => {
+                    #[cfg(feature = "hydrate")]
+                    {
+                        leptos::logging::warn!("copy share link: {_e}");
+                        if let Some(el) = url_ref.get_untracked() {
+                            crate::components::clipboard::select_contents(&el);
+                        }
+                    }
+                    #[cfg(not(feature = "hydrate"))]
+                    let _ = url_ref;
+                    toast.push.run(Toast::error(
+                        "Could not copy. Select the link and copy it by hand.",
+                    ));
+                }
+            }
+        });
     });
     let options: Vec<SelectOption> = SHARE_DAYS
         .iter()
@@ -288,17 +302,18 @@ pub fn ShareDialog(
                                     {list.into_iter().map(|l| {
                                         let url = absolute(&share_path(&l.token));
                                         let url_copy = url.clone();
+                                        let url_ref = NodeRef::<leptos::html::P>::new();
                                         let id = l.id.clone();
                                         view! {
                                             <li class="flex flex-col gap-2 border-t border-rule py-3" data-share-link=l.token.clone()>
-                                                <p class="select-all break-all font-mono text-caption text-primary" data-share-url>{url}</p>
+                                                <p node_ref=url_ref class="select-all break-all font-mono text-caption text-primary" data-share-url>{url}</p>
                                                 <div class="flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
                                                     <span>
                                                         {format!("By {} \u{00b7} expires ", l.created_by_name)}
                                                         <LocalTime iso=l.expires_at.clone() />
                                                     </span>
                                                     <span class="flex gap-1">
-                                                        <Button size=ButtonSize::Sm on_click=Callback::new(move |_| copy.run(url_copy.clone()))>"Copy link"</Button>
+                                                        <Button size=ButtonSize::Sm on_click=Callback::new(move |_| copy.run((url_copy.clone(), url_ref)))>"Copy link"</Button>
                                                         <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| revoke.run(id.clone()))>"Revoke"</Button>
                                                     </span>
                                                 </div>
@@ -325,16 +340,19 @@ pub fn SharePage() -> impl IntoView {
         // A shared link is for the people it was sent to: keep it out of
         // search engines.
         <leptos_meta::Meta name="robots" content="noindex, nofollow" />
+        // The tab title names the kind of page, never what is shared (the
+        // plan's name stays off the tab and out of the server's HTML head).
+        <leptos_meta::Title text=crate::components::ui::page_title("Shared link") />
         <PageShell width=PageWidth::Reading attr:data-shared-page>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading the shared page"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || shared.get().map(|r| match r {
                     Ok(Some(s)) => view! { <SharedBody shared=s /> }.into_any(),
                     Ok(None) => view! {
-                        <PageHeader title="This link does not open anything" eyebrow="Shared link" />
+                        <PageHeader title="This link does not open anything" eyebrow="Shared link" document_title="Shared link" />
                         <EmptyState message="It may have expired or been revoked, or it was copied incompletely. Ask the team that sent it for a new link." />
                     }.into_any(),
                     Err(e) => view! {
-                        <PageHeader title="This link could not be opened" eyebrow="Shared link" />
+                        <PageHeader title="This link could not be opened" eyebrow="Shared link" document_title="Shared link" />
                         <Callout tone=CalloutTone::Warning>{crate::models::utils::error_text(&e)}</Callout>
                     }.into_any(),
                 })}
@@ -356,7 +374,7 @@ fn SharedBody(shared: Shared) -> impl IntoView {
     match shared.view {
         SharedView::GamePlan(p) => view! { <SharedPlanView plan=p /> {note()} }.into_any(),
         SharedView::Review(r) => view! { <SharedReviewView review=r /> {note()} }.into_any(),
-        SharedView::Player(c) => view! { <PageHeader title=c.username.clone() eyebrow="Player card" /> <PlayerCardView card=c /> {note()} }.into_any(),
+        SharedView::Player(c) => view! { <PageHeader title=c.username.clone() eyebrow="Player card" document_title="Shared player card" /> <PlayerCardView card=c /> {note()} }.into_any(),
     }
 }
 
@@ -389,7 +407,7 @@ fn line_list(list: Vec<String>) -> AnyView {
 #[component]
 fn SharedPlanView(plan: SharedPlan) -> impl IntoView {
     view! {
-        <PageHeader title=plan.name.clone() eyebrow="Game plan" />
+        <PageHeader title=plan.name.clone() eyebrow="Game plan" document_title="Shared game plan" />
         <div class="flex flex-col gap-10">
             <section aria-labelledby="sp-comp">
                 <SectionHeader title="Champions" id="sp-comp" />
@@ -437,6 +455,7 @@ fn SharedReviewView(review: SharedReview) -> impl IntoView {
         <PageHeader
             title="Game review"
             eyebrow="Review"
+            document_title="Shared game review"
             meta=move || view! {
                 {review.won.map(|w| view! { <ResultGlyph result=GameResult::from_win(w) word=true /> })}
                 {review.rating.map(|r| view! { <span class="figures">{format!("Plan rated {r} of 5")}</span> })}
@@ -573,10 +592,7 @@ pub fn PlayerCardPage() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
     let params = use_params_map();
@@ -585,6 +601,7 @@ pub fn PlayerCardPage() -> impl IntoView {
     let share_open = RwSignal::new(false);
     let target = Signal::derive(move || Some(user_id()).filter(|u| !u.is_empty()));
     view! {
+        <leptos_meta::Title text=crate::components::ui::page_title("Player card") />
         <PageShell width=PageWidth::Reading attr:data-feedback-label="Player card">
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading the player card"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || card.get().map(|r| match r {
