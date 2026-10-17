@@ -92,7 +92,7 @@ def sketch(width, wide, label=True, ticks=False):
 <svg viewBox="0 0 100 100" aria-hidden="true">{tick_lines}<g class="ink">
 <path d="{S['SKETCH_FRAME']}"/><path d="{S['SKETCH_LANES']}"/><path d="{S['SKETCH_BANKS']}"/>
 <path d="{S['SKETCH_BASE_BLUE']}"/><path d="{S['SKETCH_BASE_RED']}"/><path d="{S['SKETCH_MARKS']}"/>
-<path class="hatch" d="{S['SKETCH_HATCH']}"/><path class="dots" d="{S['SKETCH_BUSH_DOTS']}"/></g>{chalk}</svg>
+<path class="dots" d="{S['SKETCH_BUSH_DOTS']}"/></g>{chalk}</svg>
 <span class="eyebrow" style="left:{f(bx + half + .8)}%;top:{f(by)}%;transform:translateY(-50%)">Baron</span>
 <span class="eyebrow" style="right:{f(100 - (dx - half - .8))}%;top:{f(dy)}%;transform:translateY(-50%)">Dragon</span>
 {tick_labels}{lab}</div>"""
@@ -108,7 +108,7 @@ def strip(width, w, h, wide):
 
 def inset(width):
     return f"""<div class="rift" style="width:{width}px" data-rift="inset"><svg viewBox="0 0 100 100" aria-hidden="true"><g class="ink">
-<path d="{S['SKETCH_LANES']}"/><path d="{S['INSET_RIVER']}"/><path d="{S['SKETCH_BASE_BLUE']}"/><path d="{S['SKETCH_BASE_RED']}"/></g></svg></div>"""
+<path d="{S['INSET_LANES']}"/><path d="{S['INSET_RIVER']}"/><path d="{S['SKETCH_BASE_BLUE']}"/><path d="{S['SKETCH_BASE_RED']}"/></g></svg></div>"""
 
 
 def survey(stop):
