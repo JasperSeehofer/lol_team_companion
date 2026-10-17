@@ -2,7 +2,6 @@
   "name": "T1 field-sketch ink",
   "svg": "t1-rift.svg",
   "svgs": { "inset": "t1-inset.svg" },
-  "facing": true,
   "label": { "x": 22.8, "y": 84.0 },
   "marks": [
     { "name": "baron", "word": "Baron", "x": 29.57, "y": 27 },

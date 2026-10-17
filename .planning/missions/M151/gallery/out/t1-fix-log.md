@@ -17,3 +17,12 @@ Paths relative to `.planning/missions/M151/gallery/`. Line numbers as committed.
 Shared-skeleton change (surface.js, surfaces.css, matchday.html, share.html), so T2 and T3 stills were re-captured under the same filenames; their art is unchanged (they keep `shareLabel` and the floated inset), only the Match Day header/sentence and the en dash differ.
 
 Open: the critique expected hatch lit pixels to roughly halve (~6.4 % -> ~3 %). With its exact parameters the hatch length falls 39 %; lit pixels in the 1280 sketch box go 5.75 % -> 5.13 % because the curved banks are longer than the old straight pair. Not tuned beyond the spec; the fresh critique decides.
+
+## Re-critique fixes (critique-r0b-t1.md)
+
+| Item | Change | Where |
+|---|---|---|
+| MD-1 No facing row | `"facing": true` deleted; the inset falls back to `.inset.float` (88 px, floated top right, as T2/T3); no team names beside it | `surfaces/art/t1.json` |
+| MD-2 Bridge gap in the inset river | `--inset` draws the river as polylines sampled from `CUBICS` (48 per cubic), dropping samples with `mid_dist < 4`: two runs, gap (46.58,47.5)-(53.42,52.5), about 8.5 units; mid continuous; `t1-inset.svg` rebuilt | `tools/build-t1-rift.py` (`river_runs()`); `surfaces/art/t1-inset.svg` |
+| R1-c Even hatch tone at 1x | `[data-art] .hatch { shape-rendering: crispEdges; }` | `surfaces/surfaces.css:65` |
+| MD-3 Re-capture | `t1-matchday-390`, `-full` (DPR 1), `t1-matchday-390-dpr2` (DPR 2); for R1-c also `t1-landing-390/1280` (+ `-full`), `t1-share-390` (+ `-full`), `og-t1`, `og-t1-share`. Sentence wraps beside the floated inset; chalk in the card is only the button; inset reads as rift (river broken at mid), not box-plus-X. Gallery lint OK | `out/` |
