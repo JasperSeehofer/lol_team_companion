@@ -127,6 +127,9 @@ jobs:
         run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts match-detail.spec.ts sortable-tables.spec.ts post-game-fill.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts --retries=1 --reporter=list,json,github
         env:
           M141_SHOTS_DIR: ${{ runner.temp }}/m141-frames
+          # Any mission's frame specs: PNGs at the top level or in after/ are
+          # committed as frames/after, PNGs in before/ as frames/before.
+          MISSION_FRAMES_DIR: ${{ runner.temp }}/mission-frames
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-results.json
 
       # M11: every server-rendered page must finish streaming. leptos
@@ -156,33 +159,49 @@ jobs:
         if: always()
         run: tail -n 200 "$RUNNER_TEMP/server.log" || true
 
-      - name: Upload M141 frames
+      - name: Upload mission frames
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: m141-frames
-          path: ${{ runner.temp }}/m141-frames/
+          name: mission-frames
+          path: |
+            ${{ runner.temp }}/m141-frames/
+            ${{ runner.temp }}/mission-frames/
           if-no-files-found: ignore
           retention-days: 14
 
       # Mission branches: no one can read the job logs from the mission
       # host, so the failures, the server's error lines and the frames are
-      # committed to the branch. A push by GITHUB_TOKEN starts no new run.
+      # committed to the branch (mission/<name> -> .planning/missions/<name>).
+      # Only on a push to that branch; a push by GITHUB_TOKEN starts no new run.
       - name: Commit the e2e summary and frames (mission branches)
-        if: always() && startsWith(github.ref_name, 'mission/M141')
+        if: always() && github.event_name == 'push' && startsWith(github.ref_name, 'mission/')
         env:
-          BRANCH: mission/M141-team-companion-feedback-batch-1
-          MISSION_DIR: .planning/missions/M141-team-companion-feedback-batch-1
+          BRANCH: ${{ github.ref_name }}
         run: |
+          MISSION_DIR=".planning/missions/${BRANCH#mission/}"
+          case "${BRANCH#mission/}" in
+            ''|*/*|.*) echo "::error::unexpected mission branch name: $BRANCH"; exit 1 ;;
+          esac
           python3 scripts/ci_e2e_summary.py "$RUNNER_TEMP/playwright-results.json" \
             "$RUNNER_TEMP/server.log" "${{ github.run_id }}" "${{ github.sha }}" > "$RUNNER_TEMP/ci-e2e-summary.md"
           git fetch --depth=1 origin "$BRANCH"
           git checkout -f -B ci-summary FETCH_HEAD
-          mkdir -p "$MISSION_DIR/publish-round-r1/frames/after"
+          FRAMES="$MISSION_DIR/publish-round-r1/frames"
+          mkdir -p "$MISSION_DIR"
           cp "$RUNNER_TEMP/ci-e2e-summary.md" "$MISSION_DIR/ci-e2e-summary.md"
-          if ls "$RUNNER_TEMP"/m141-frames/*.png >/dev/null 2>&1; then
-            cp "$RUNNER_TEMP"/m141-frames/*.png "$MISSION_DIR/publish-round-r1/frames/after/"
-          fi
+          # $M141_SHOTS_DIR (old) and $MISSION_FRAMES_DIR top level and after/
+          # go to frames/after; $MISSION_FRAMES_DIR/before to frames/before.
+          copy_pngs() {
+            if ls "$1"/*.png >/dev/null 2>&1; then
+              mkdir -p "$2"
+              cp "$1"/*.png "$2/"
+            fi
+          }
+          copy_pngs "$RUNNER_TEMP/m141-frames" "$FRAMES/after"
+          copy_pngs "$RUNNER_TEMP/mission-frames" "$FRAMES/after"
+          copy_pngs "$RUNNER_TEMP/mission-frames/after" "$FRAMES/after"
+          copy_pngs "$RUNNER_TEMP/mission-frames/before" "$FRAMES/before"
           git add "$MISSION_DIR"
           if git diff --cached --quiet; then
             echo "nothing to commit"
