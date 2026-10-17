@@ -190,15 +190,19 @@ jobs:
           FRAMES="$MISSION_DIR/publish-round-r1/frames"
           mkdir -p "$MISSION_DIR"
           cp "$RUNNER_TEMP/ci-e2e-summary.md" "$MISSION_DIR/ci-e2e-summary.md"
-          # $M141_SHOTS_DIR (old) and $MISSION_FRAMES_DIR top level and after/
-          # go to frames/after; $MISSION_FRAMES_DIR/before to frames/before.
+          # $MISSION_FRAMES_DIR top level and after/ go to frames/after,
+          # $MISSION_FRAMES_DIR/before to frames/before. $M141_SHOTS_DIR
+          # (frames-m141.spec.ts, kept as a smoke test) only on mission/M141*
+          # branches: its surface names collide with other missions' frames.
           copy_pngs() {
             if ls "$1"/*.png >/dev/null 2>&1; then
               mkdir -p "$2"
               cp "$1"/*.png "$2/"
             fi
           }
-          copy_pngs "$RUNNER_TEMP/m141-frames" "$FRAMES/after"
+          case "$BRANCH" in
+            mission/M141*) copy_pngs "$RUNNER_TEMP/m141-frames" "$FRAMES/after" ;;
+          esac
           copy_pngs "$RUNNER_TEMP/mission-frames" "$FRAMES/after"
           copy_pngs "$RUNNER_TEMP/mission-frames/after" "$FRAMES/after"
           copy_pngs "$RUNNER_TEMP/mission-frames/before" "$FRAMES/before"
