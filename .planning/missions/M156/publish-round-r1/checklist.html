@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout run checklist</title>
+<style>
+:root{--bg:#f7f8f6;--fg:#1d2420;--muted:#55605a;--card:#ffffff;--rule:#d8ddd9;--code:#eef1ee;--accent:#2f6f4f;--warn:#8a4b12}
+@media (prefers-color-scheme: dark){:root{--bg:#141a17;--fg:#e4e9e5;--muted:#a3ada7;--card:#1c2420;--rule:#2f3934;--code:#25302a;--accent:#7cc79f;--warn:#e0a46a}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);overflow-x:hidden}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px;max-width:760px;margin:0 auto}
+h1{font-size:22px;line-height:1.25;margin:4px 0 12px}
+.intro{color:var(--muted);font-size:15px}
+ol{list-style:none;padding:0;margin:16px 0}
+li{display:flex;gap:10px;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px;margin:0 0 10px;min-width:0}
+.n{flex:0 0 28px;height:28px;border-radius:14px;background:var(--accent);color:var(--bg);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+.b{min-width:0;flex:1}
+.b p{margin:0 0 6px;overflow-wrap:anywhere}
+.b p:last-child{margin-bottom:0}
+.tag{font-weight:700;margin-right:4px}
+.out .tag{color:var(--accent)}
+.fail{color:var(--muted);font-size:15px}
+.fail .tag{color:var(--warn)}
+code{font:13.5px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;background:var(--code);border-radius:4px;padding:1px 4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+footer{color:var(--muted);font-size:14px;border-top:1px solid var(--rule);padding-top:10px}
+</style></head><body>
+<h1>Scout run checklist (Windows, PowerShell, about 2 h)</h1>
+<p class="intro">Run everything from the repository root in PowerShell. Every command appends to <code>$RUN\run.log</code>.</p><p class="intro">If a step fails and the "If it fails" line does not help, note it in <code>$RUN\run.log</code></p><p class="intro">(<code>Add-Content $RUN\run.log "step N: what happened"</code>), skip the step and go on.</p>
+<ol>
+<li><span class="n">1</span><div class="b"><p><strong>Get the branch.</strong> <code>git fetch origin; git switch mission/M156-scout-replay-spike; git pull</code></p>
+<p class="out"><span class="tag">Output</span> <code>tools\scout\</code> on disk.</p>
+<p class="fail"><span class="tag">If it fails</span> <code>git status</code>, stash or commit local changes first.</p></div></li>
+<li><span class="n">2</span><div class="b"><p><strong>Python 3.12 and the venv.</strong> <code>winget install Python.Python.3.12</code>, then <code>py -3.12 -m venv tools\scout\.venv; tools\scout\.venv\Scripts\pip install -e "tools/scout[yolo]"</code> and <code>Set-Alias spy "$PWD\tools\scout\.venv\Scripts\python.exe"</code> (repeat in each new shell).</p>
+<p class="out"><span class="tag">Output</span> <code>tools\scout\.venv\</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> <code>py -0</code> must list 3.12; rerun pip with <code>-v</code>.</p></div></li>
+<li><span class="n">3</span><div class="b"><p><strong>Weights.</strong> Download <code>yolov12.pt</code> (227 MB) from the Google Drive link in <code>tools\scout\vendor\pyLoL\README.md</code> to <code>tools\scout\models\yolov12.pt</code> (git-ignored).</p>
+<p class="out"><span class="tag">Output</span> that file.</p>
+<p class="fail"><span class="tag">If it fails</span> skip it; step 7 then uses the template detector (drop <code>--weights</code>).</p></div></li>
+<li><span class="n">4</span><div class="b"><p><strong>Enable the Replay API.</strong> In <code>C:\Riot Games\League of Legends\Config\game.cfg</code> under <code>[General]</code> add the line <code>EnableReplayApi=1</code>, save, restart the League client.</p>
+<p class="out"><span class="tag">Output</span> <code>game.cfg</code> with that line.</p>
+<p class="fail"><span class="tag">If it fails</span> the file may be read-only; untick read-only in Properties.</p></div></li>
+<li><span class="n">5</span><div class="b"><p><strong>Pick the replay.</strong> One recent game of your own on the current patch. Note its match id (<code>EUW1_</code> + the game id in the match history). Open the replay, set the window to borderless full screen on the main monitor, let it load. Then: <code>$MATCH = "EUW1_..."; $RUN = "tools\scout\runs\$(Get-Date -Format yyyy-MM-dd)-$MATCH"; mkdir $RUN</code></p>
+<p class="out"><span class="tag">Output</span> the run directory.</p>
+<p class="fail"><span class="tag">If it fails</span> replays of an older patch will not open; pick a newer game.</p></div></li>
+<li><span class="n">6</span><div class="b"><p><strong>Probe (about 3 min; do not touch mouse or keyboard).</strong> <code>spy -m scout.probe --out $RUN</code></p>
+<p class="out"><span class="tag">Output</span> <code>probe.json</code>, <code>openapi.json</code> (if the client serves a spec), <code>probe_*.png</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> open <code>https://127.0.0.1:2999/replay/game</code> in a browser (accept the certificate warning); no answer means the replay is not open or step 4 did not take. <code>--dry</code> lists the steps.</p></div></li>
+<li><span class="n">7</span><div class="b"><p><strong>Minimap track (game length / 8; hands off; it rewinds the replay itself).</strong> <code>spy -m scout.track_minimap --out $RUN --weights tools\scout\models\yolov12.pt --speed 8</code></p>
+<p class="out"><span class="tag">Output</span> <code>track_minimap.json</code>, <code>frames_minimap\t*.png</code> (24 frames).</p>
+<p class="fail"><span class="tag">If it fails</span> open the first PNG in <code>frames_minimap</code>; if it is not exactly the minimap, read the minimap's left, top, width, height in <code>probe_minimap_only.png</code> with Paint and add <code>--minimap-box L,T,W,H</code>. If champions are not found, do step 9 first and add <code>--match $RUN\match.json</code>.</p></div></li>
+<li><span class="n">8</span><div class="b"><p><strong>Top-down track (about 8 min).</strong> The probe's test recordings used this session's one recording, so <strong>sign out of Windows and back in</strong>, reopen the replay (step 5 window settings), recreate <code>$MATCH</code>, <code>$RUN</code> and the alias, then <code>spy -m scout.track_topdown --out $RUN</code></p>
+<p class="out"><span class="tag">Output</span> <code>track_topdown.json</code>, <code>frames_topdown\t*.png</code> (6), <code>anchors_template.json</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> if <code>probe_camera_*.png</code> never shows the whole map, add <code>--keystroke-unlock</code> (press Ctrl+Shift+Y and zoom out when asked). If nothing was recorded, sign out and in again, run once.</p></div></li>
+<li><span class="n">9</span><div class="b"><p><strong>Timeline.</strong> <code>$env:RIOT_API_KEY = "RGAPI-..."; spy -m scout.fetch_timeline --match-id $MATCH --out $RUN; Remove-Item Env:RIOT_API_KEY</code></p>
+<p class="out"><span class="tag">Output</span> <code>timeline.json</code>, <code>match.json</code>. The key is never written to disk.</p>
+<p class="fail"><span class="tag">If it fails</span> HTTP 403 = expired development key (regenerate it); 404 = wrong match id or region.</p></div></li>
+<li><span class="n">10</span><div class="b"><p><strong>Score.</strong> <code>spy -m scout.score run --track $RUN\track_minimap.json --timeline $RUN\timeline.json --match $RUN\match.json --wards-track $RUN\track_topdown.json --out $RUN</code> then <code>spy -m scout.score plots --score $RUN\score.json --minimap (Get-ChildItem $RUN\frames_minimap)[0].FullName --out $RUN\plots</code></p>
+<p class="out"><span class="tag">Output</span> <code>score.json</code>, <code>handcheck.csv</code>, <code>plots\*.png</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> go on; the agent rescoring in half C needs only the files from steps 6 to 9.</p></div></li>
+<li><span class="n">11</span><div class="b"><p><strong>Hand check.</strong> Open <code>handcheck.csv</code> (Notepad or Excel). For each row jump the replay to <code>game_time_mmss</code>, look at the champion and place, and write <code>yes</code> or <code>no</code> in <code>jasper_says</code> (did a ward go down / did that champion recall there and then?); <code>note</code> is optional. Save as CSV.</p>
+<p class="out"><span class="tag">Output</span> <code>handcheck.csv</code> filled in.</p>
+<p class="fail"><span class="tag">If it fails</span> fewer than 10 rows is fine; mark what is there.</p></div></li>
+<li><span class="n">12</span><div class="b"><p><strong>Size and content check.</strong> <code>(Get-ChildItem $RUN -Recurse | Measure-Object Length -Sum).Sum / 1MB</code> must be at most 50; <code>Get-ChildItem $RUN -Recurse -Include *.webm,*.mp4,*.avi</code> and <code>Select-String -Path "$RUN\*" -Pattern "RGAPI"</code> must both print nothing.</p>
+<p class="out"><span class="tag">Output</span> the size noted in <code>run.log</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> delete the largest PNGs in <code>frames_topdown</code> until under 50 MB.</p></div></li>
+<li><span class="n">13</span><div class="b"><p><strong>Commit and push.</strong> <code>git add $RUN; git commit -m "data(m156): scout run $MATCH"; git push</code></p>
+<p class="out"><span class="tag">Output</span> the run directory on <code>mission/M156-scout-replay-spike</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> <code>git pull --rebase</code>, push again.</p></div></li>
+</ol>
+<footer><p>Recordings and captured frames stay in <code>%TEMP%\scout-rec</code> and <code>%TEMP%\scout-frames</code>; delete them when done.</p><p>Source: <code>tools/scout/CHECKLIST.md</code> on branch <code>mission/M156-scout-replay-spike</code>. Mission M156, round r1.</p></footer>
+</body></html>
