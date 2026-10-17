@@ -8,6 +8,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### First patch, round 2 (2026-10-17)
+
+#### Changed
+- Match Day on a phone: with no match scheduled, "Add the next match" now shows on phones too (a full-size button), so a team can put its first match in from a phone. The "Read-only on the phone" line only appears once there is a match; editing an existing match stays a larger-screen task. In the match editor, Cancel and Save match are easier to tap on a phone, and without any opponent dossier the opponent field offers "Add an opponent" instead of only saying to go to the Opponents page.
+
 ### Feedback batch 1 (2026-10-16)
 
 #### Fixed
