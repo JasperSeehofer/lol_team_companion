@@ -76,3 +76,20 @@ V7: no gradient, blur, glow, emoji, parchment, sepia, brush, compass rose, Inter
 - STALE: `critique-r0-t1.md` T1-3 "Expected: lit pixels from ~6.4 % to ~3 %": wrong arithmetic (it left out the longer curved banks). Superseded by the density ruling above.
 - STALE: `references.md` T1 card still describes a straight two-line river, 45-degree hatch and a crossing share crop, and the field card says the inset sits "at the card's top right". Bring the card in line with R0's T1-1…T1-5, keeping the top-right float (MD-1).
 - CONTRADICTION (open, carried from R0): `docs/DESIGN.md` line 202 ("chalk ... not for decoration") vs the T1 chalk team label.
+
+## R0b iteration 2
+
+Atelier, fresh context, 2026-10-17. Checked MD-1, MD-2 and R1-c (`shape-rendering: crispEdges` on `.hatch`) against `gallery/out/t1-fix-log.md` ("Re-critique fixes"). Opened `t1-matchday-390`, `-dpr2`, `-full`, `t1-landing-1280`, `t1-landing-390`, `t1-share-390` and `og-t1`. I also looked at a 4x nearest-neighbour crop of the 1x inset (`/tmp/m151r0b2/inset4x.png`, not committed). I wrote neither the fixes nor the R0b list they answer, so there is no self-approval conflict.
+
+| Still | V5 | V7 | V8 | A2 | Chalk | Verdict |
+|---|---|---|---|---|---|---|
+| matchday 390 (1x, 2x, full) | PASS: the time is the lead figure | PASS, just: the river is now a curve with a gap at mid, and the lanes stop short of the bases. It no longer reads as the straight two-diagonal placeholder glyph. At 1x the gap is only about 2 px on each side of mid | PASS: no facing row, the inset is floated top right like T2/T3, the sentence wraps beside it, and no side is invented | PASS | 1 (Read the brief) | **PASS** |
+| landing 1280 | PASS | PASS | PASS | PASS | 2 (unchanged) | **PASS**: R1-c makes the hatch tone even, with no jaggies |
+| landing 390 | PASS | PASS | PASS | PASS | 2 (unchanged) | **PASS**: the hatch smear at 1x is gone |
+| share 390 | n/a | PASS | PASS | PASS | 1 | **PASS** (R1-b still open: the hatch stubs) |
+| og-t1 | n/a | PASS | PASS | PASS | 1 | **PASS** |
+
+Nothing blocks showing T1 to the owner. Carried to R1, in priority order:
+- **R1-a first.** The curvature change (`M14,14 C24,32 34,44 50,50 C66,56 76,68 86,86`) also applies to the `--inset` build. At 88 px it is what finally separates the river from the mid diagonal at 1x.
+- **Optional, only if the owner picks T1:** widen the inset's gap to `mid_dist < 5`.
+- R1-b and R1-d stand as written.

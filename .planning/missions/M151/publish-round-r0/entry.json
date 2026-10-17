@@ -1,29 +1,33 @@
 {
   "id": "m151-r0-team-companion-identity",
-  "title": "M151 · Team Companion identity, R0 (three treatments drawn; not finished, CI red)",
+  "title": "M151 · Team Companion identity, R0 (three treatments drawn; T1 fixed and atelier PASS)",
   "date": "2026-10-17",
   "mission": "M151",
   "status": "open",
-  "summary": "R0 drew three candidate identities for Team Companion and put each on the landing page (1280 and 390), a shared plan (390) and Match Day (390): T1 a ruled field sketch of the map, T2 an engraved contour sheet, T3 a schematic. Also built: nine original marks for the five roles and objectives (atelier PASS after fixes, in the /design gallery), a reMarkable template if you want to draw them yourself, the lock-in motion for a draft pick (fixed at 390 after critique), a static win/loss stamp, three Open Graph link cards plus a favicon candidate, and a 'paper' light still of the share page. All of it is gallery and planning files; nothing reached the app's real pages or production. NOT done: the atelier's fixes for T1 are written but not applied (the T1 stills you see are BEFORE those fixes; the critique said it reads as 'a square with an X'); T2, T3, the OG cards and the paper still have no atelier critique yet; the lock-in 1280 strip predates the fix; CI is red (Clippy on the SSR build has failed since the marks gallery section). The round stopped at its 5.0 M budget cap. One legal question for your adviser: may a fan tool draw its own role/objective marks that resemble in-game icons? Ours are original geometry, deliberately distant. Report: REPORT-R0.md.",
+  "summary": "R0 drew three candidate identities for Team Companion and put each on the landing page (1280 and 390), a shared plan (390) and Match Day (390): T1 a ruled field sketch of the map, T2 an engraved contour sheet, T3 a schematic. T1 now has the atelier's fixes applied (straight lanes, one curved river with a bridge gap, perpendicular hatch, a real Match Day inset) and an atelier PASS on all four stills and its OG card (critique-r0b-t1.md). T2, T3, their OG cards and the 'paper' light still (C) are NOT atelier-critiqued; the T1 share OG variant is FIX for R1. The Match Day 'both sides' marks facing' field card was dropped on the atelier's ruling: in a best of 3 neither team owns a side (MD-1); the inset now floats top right as in T2 and T3. Also built: nine original marks for the five roles and objectives (atelier PASS, in the /design gallery), a reMarkable template if you want to draw them yourself, the lock-in motion for a draft pick (fixed at 390; the 1280 strip is stale), a static win/loss stamp. All of it is gallery and planning files; nothing reached the app's real pages or production. CI: <filled by orchestrator>. One legal question for your adviser: may a fan tool draw its own role/objective marks that resemble in-game icons? Ours are original geometry, deliberately distant. Report: REPORT-R0.md.",
   "questions": [
     {
-      "text": "Which treatment should carry the identity (react)? Note: the T1 stills are pre-fix; the atelier wrote a fix list (straight lanes, one curved river, lighter hatch, a proper Match Day inset) that R0b would apply.",
+      "text": "Which treatment should carry the identity (react)? The T1 stills are after the atelier's fixes, with an atelier PASS (critique-r0b-t1.md); T2 and T3 are not critiqued. Also the result stamp: the brief said 'drawn once', the atelier ruled 'static at first paint' (critique-r0-t1.md). Pick the fourth chip to choose T1 with the stamp drawn once.",
       "kind": "ruling",
       "chips": [
         {
           "label": "T1 field sketch",
-          "consequence": "R0b applies the atelier's T1 fixes, re-renders and gets a fresh critique; T2 and T3 are dropped."
+          "consequence": "R1 takes T1 forward with the R1 refinements (R1-a to R1-d); T2 and T3 are dropped. The stamp stays static at first paint (the atelier's ruling)."
         },
         {
           "label": "T2 contour",
-          "consequence": "R0b takes the engraved contour sheet forward: first atelier critique, then fixes; T1 and T3 dropped."
+          "consequence": "R1 takes the engraved contour sheet forward: first atelier critique, then fixes; T1 and T3 dropped. Stamp static at first paint."
         },
         {
           "label": "T3 schematic",
-          "consequence": "R0b takes the schematic forward: first atelier critique, then fixes; T1 and T2 dropped."
+          "consequence": "R1 takes the schematic forward: first atelier critique, then fixes; T1 and T2 dropped. Stamp static at first paint."
+        },
+        {
+          "label": "T1, but stamp drawn once",
+          "consequence": "As 'T1 field sketch', and the stamp gets a one-time entrance (never replayed), overriding the atelier. With any other pick the stamp is static at first paint (critique-r0-t1.md)."
         }
       ],
-      "recommend": "T1 field sketch, with the atelier's fixes. It is the only one that says 'League team' without words once the lanes are straight and the river curves, and it is the only one already critiqued."
+      "recommend": "T1 field sketch, stamp static. T1 is the only treatment critiqued and passed; it says 'League team' without words. Static keeps the server-rendered first frame complete and lock-in the only signature motion."
     },
     {
       "text": "Role and objective marks (react): draw them yourself on the reMarkable template, or take the nine marks the atelier passed?",
@@ -77,51 +81,55 @@
       "href": "/app/previews/m151-r0-team-companion-identity/report.html"
     },
     {
-      "label": "T1 field sketch (pre-fix), landing 1280 (react)",
+      "label": "T1 field sketch (after atelier fixes, PASS), landing 1280 (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t1-landing-1280.png"
     },
     {
-      "label": "T1 field sketch (pre-fix), landing 390 (react)",
+      "label": "T1 field sketch (after atelier fixes, PASS), landing 390 (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t1-landing-390.png"
     },
     {
-      "label": "T1 field sketch (pre-fix), share 390 (react)",
+      "label": "T1 field sketch (after atelier fixes, PASS), share 390 (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t1-share-390.png"
     },
     {
-      "label": "T1 field sketch (pre-fix), Match Day 390 (react)",
+      "label": "T1 field sketch (after atelier fixes, PASS), Match Day 390 (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t1-matchday-390.png"
     },
     {
-      "label": "T2 contour, landing 1280 (react)",
+      "label": "T1 field sketch (after atelier fixes, PASS), Match Day 390 at DPR 2 (react)",
+      "href": "/app/previews/m151-r0-team-companion-identity/strips/t1-matchday-390-dpr2.png"
+    },
+    {
+      "label": "T2 contour, landing 1280 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t2-landing-1280.png"
     },
     {
-      "label": "T2 contour, landing 390 (react)",
+      "label": "T2 contour, landing 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t2-landing-390.png"
     },
     {
-      "label": "T2 contour, share 390 (react)",
+      "label": "T2 contour, share 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t2-share-390.png"
     },
     {
-      "label": "T2 contour, Match Day 390 (react)",
+      "label": "T2 contour, Match Day 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t2-matchday-390.png"
     },
     {
-      "label": "T3 schematic, landing 1280 (react)",
+      "label": "T3 schematic, landing 1280 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t3-landing-1280.png"
     },
     {
-      "label": "T3 schematic, landing 390 (react)",
+      "label": "T3 schematic, landing 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t3-landing-390.png"
     },
     {
-      "label": "T3 schematic, share 390 (react)",
+      "label": "T3 schematic, share 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t3-share-390.png"
     },
     {
-      "label": "T3 schematic, Match Day 390 (react)",
+      "label": "T3 schematic, Match Day 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/t3-matchday-390.png"
     },
     {
@@ -133,7 +141,7 @@
       "href": "/app/previews/m151-r0-team-companion-identity/strips/lockin-strip-390.png"
     },
     {
-      "label": "Lock-in strip 1280 (before the 390 fix) (react)",
+      "label": "Lock-in strip 1280 (stale: before the 390 fix, not re-judged) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/lockin-strip-1280.png"
     },
     {
@@ -153,23 +161,27 @@
       "href": "/app/previews/m151-r0-team-companion-identity/strips/stamp-1280.png"
     },
     {
-      "label": "OG card T1 (react)",
+      "label": "OG card T1 (atelier PASS) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/og-t1.png"
     },
     {
-      "label": "OG card T2 (react)",
+      "label": "OG card T1 share variant (FIX, R1-d) (react)",
+      "href": "/app/previews/m151-r0-team-companion-identity/strips/og-t1-share.png"
+    },
+    {
+      "label": "OG card T2 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/og-t2.png"
     },
     {
-      "label": "OG card T3 (react)",
+      "label": "OG card T3 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/og-t3.png"
     },
     {
-      "label": "C paper vs dark, share 390 (react)",
+      "label": "C paper vs dark, share 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/c-share-compare-390.png"
     },
     {
-      "label": "C paper still, share 390 (react)",
+      "label": "C paper still, share 390 (not atelier-critiqued) (react)",
       "href": "/app/previews/m151-r0-team-companion-identity/strips/c-share-paper-390.png"
     },
     {
@@ -191,6 +203,10 @@
     {
       "label": "Atelier critique: T1, lock-in, stamp (context)",
       "href": "/app/previews/m151-r0-team-companion-identity/critique-r0-t1.md"
+    },
+    {
+      "label": "Atelier critique R0b: T1 after fixes, PASS (context)",
+      "href": "/app/previews/m151-r0-team-companion-identity/critique-r0b-t1.md"
     }
   ]
 }
