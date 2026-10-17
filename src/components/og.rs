@@ -70,10 +70,12 @@ impl OgSurface {
 
     pub const fn image_alt(self) -> &'static str {
         match self {
-            OgSurface::Landing | OgSurface::Default => {
+            // The card's own words (scripts/og/build.py writes the PNGs).
+            OgSurface::Landing => {
                 "Team Companion: scouting, drafts, game plans and reviews in one loop."
             }
-            OgSurface::Share => "Team Companion: a shared, read-only page.",
+            OgSurface::Default => "Team Companion: the coaching workspace for one team.",
+            OgSurface::Share => "Team Companion: a read-only page shared by a team.",
         }
     }
 }
