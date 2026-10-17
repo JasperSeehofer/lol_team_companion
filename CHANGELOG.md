@@ -8,6 +8,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Identity, round 1 (2026-10-17)
+
+#### Added
+- Link previews: a link to Team Companion pasted into a chat app shows a card with the name, a short description and an image. A shared link's card only says that it is a shared, read-only page: never the team, the plan or the player, and it looks the same whether the link still works or not. The browser tab has its own icon, and phone browsers colour their bar to match the app.
+
 ### First patch, round 2 (2026-10-17)
 
 #### Changed
