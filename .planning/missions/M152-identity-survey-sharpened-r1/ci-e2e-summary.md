@@ -1,14 +1,14 @@
 # CI e2e summary
 
-- run: 39073124625
-- sha: 18695d10b90c3843d75d9d42006a564cf700051b
+- run: 39075603464
+- sha: a83d96e7c13c81bf7d159a7fdc00c8d397dfff9d
 
 ## Playwright
 
-expected 181, unexpected 0, flaky 5, skipped 0
+expected 183, unexpected 0, flaky 3, skipped 0
 
-### [flaky] bug-report.spec.ts:97 bug-report widget > Give Feedback offers Bug, Idea and Praise; praise is sent (M141, report y1abg605)
-attempt 1: failed (20618 ms)
+### [flaky] account.spec.ts:55 deleting the account needs the username and password, then signs out
+attempt 1: failed (20574 ms)
 ```
 TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
 =========================== logs ===========================
@@ -17,7 +17,7 @@ waiting for navigation until "load"
 ```
 
 ### [flaky] hero-matchup.spec.ts:144 shared game plan: five champions per team never wrap at 320, 390 and 1280
-attempt 1: failed (12927 ms)
+attempt 1: failed (12888 ms)
 ```
 Error: expect(locator).toHaveValue(expected) failed
 
@@ -29,30 +29,12 @@ Timeout: 10000ms
 Call log:
   - Expect "toHaveValue" with timeout 10000ms
   - waiting for locator('#plan-name')
-    14 × locator resolved to <input type="text" required="" id="plan-name" maxlength="120" placeholder="Front-to-back vs Riverside" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger h-9 text-body"/>
+    13 × locator resolved to <input type="text" required="" id="plan-name" maxlength="120" placeholder="Front-to-back vs Riverside" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger h-9 text-body"/>
        - unexpected value ""
 ```
 
-### [flaky] hydration-no-panic.spec.ts:150 segmented control observable on /me
-attempt 1: failed (20573 ms)
-```
-TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
-=========================== logs ===========================
-waiting for navigation until "load"
-============================================================
-```
-
-### [flaky] match-detail.spec.ts:7 match detail page > renders match detail page without errors
-attempt 1: failed (20564 ms)
-```
-TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
-=========================== logs ===========================
-waiting for navigation until "load"
-============================================================
-```
-
-### [flaky] team-invites.spec.ts:177 a coach invites players; a plain member sees no invite panel
-attempt 1: failed (28307 ms)
+### [flaky] login-next.spec.ts:55 Return to the page after sign-in > next pointing back at an auth page lands on Home
+attempt 1: failed (20704 ms)
 ```
 TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
 =========================== logs ===========================
