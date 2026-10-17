@@ -143,3 +143,7 @@ worst (R1-a's curve was 3.8 off). Source counts: 46 walls, 1 river, 3 lanes, 2 p
 
 The merge question, plus three react rulings: Rift fidelity, the chalk-count amendment, and the removal of the Match Day
 facing names. The Riot portal ask was dropped: the owner filed the ticket on 2026-10-17 (overseer's note).
+
+## Final tip CI status
+
+The bounded wait (30 min) ran out on `a83d96e`, run 39075603464. Check, style guardrails, ops scripts and **Container image were green**: the image job passed, so the earlier failure was the cache error. **e2e was still running** when the wait ended. Its summary is committed by CI to `.planning/missions/M152-identity-survey-sharpened-r1/ci-e2e-summary.md`; check it before landing. This commit changes only `.planning/`.
