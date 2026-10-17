@@ -1,0 +1,60 @@
+{
+ "pairs": [
+  {
+   "name": "blue_top_outer",
+   "pixel": [
+    380.92,
+    218.26
+   ]
+  },
+  {
+   "name": "blue_mid_outer",
+   "pixel": [
+    588.85,
+    413.51
+   ]
+  },
+  {
+   "name": "blue_bot_outer",
+   "pixel": [
+    786.09,
+    672.64
+   ]
+  },
+  {
+   "name": "blue_nexus",
+   "pixel": [
+    377.04,
+    625.23
+   ]
+  },
+  {
+   "name": "red_top_outer",
+   "pixel": [
+    542.83,
+    68.95
+   ]
+  },
+  {
+   "name": "red_mid_outer",
+   "pixel": [
+    736.57,
+    322.34
+   ]
+  },
+  {
+   "name": "red_bot_outer",
+   "pixel": [
+    949.44,
+    517.01
+   ]
+  },
+  {
+   "name": "red_nexus",
+   "pixel": [
+    941.02,
+    126.27
+   ]
+  }
+ ]
+}

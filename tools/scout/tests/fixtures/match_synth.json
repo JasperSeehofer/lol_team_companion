@@ -1,0 +1,71 @@
+{
+ "metadata": {
+  "dataVersion": "2",
+  "matchId": "EUW1_7100000099"
+ },
+ "info": {
+  "gameDuration": 360,
+  "participants": [
+   {
+    "participantId": 1,
+    "championName": "Aatrox",
+    "teamId": 100,
+    "puuid": "synth-puuid-01"
+   },
+   {
+    "participantId": 2,
+    "championName": "LeeSin",
+    "teamId": 100,
+    "puuid": "synth-puuid-02"
+   },
+   {
+    "participantId": 3,
+    "championName": "Ahri",
+    "teamId": 100,
+    "puuid": "synth-puuid-03"
+   },
+   {
+    "participantId": 4,
+    "championName": "Jinx",
+    "teamId": 100,
+    "puuid": "synth-puuid-04"
+   },
+   {
+    "participantId": 5,
+    "championName": "Thresh",
+    "teamId": 100,
+    "puuid": "synth-puuid-05"
+   },
+   {
+    "participantId": 6,
+    "championName": "Garen",
+    "teamId": 200,
+    "puuid": "synth-puuid-06"
+   },
+   {
+    "participantId": 7,
+    "championName": "Vi",
+    "teamId": 200,
+    "puuid": "synth-puuid-07"
+   },
+   {
+    "participantId": 8,
+    "championName": "Lux",
+    "teamId": 200,
+    "puuid": "synth-puuid-08"
+   },
+   {
+    "participantId": 9,
+    "championName": "Caitlyn",
+    "teamId": 200,
+    "puuid": "synth-puuid-09"
+   },
+   {
+    "participantId": 10,
+    "championName": "Leona",
+    "teamId": 200,
+    "puuid": "synth-puuid-10"
+   }
+  ]
+ }
+}

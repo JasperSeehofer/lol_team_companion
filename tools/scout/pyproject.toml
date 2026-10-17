@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scout"
+version = "0.1.0"
+description = "Scout spike: champion positions, wards and recalls from one's own League replay via the local Replay API"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "scipy",
+    "requests",
+    "mss",          # screen capture, imported only in live mode
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+# ultralytics is AGPL-3.0 (8.4.180 metadata checked 2026-10-17); YOLOv12 needs a recent release
+yolo = ["ultralytics>=8.3"]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["scout"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"
