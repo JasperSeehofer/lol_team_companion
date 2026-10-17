@@ -16,6 +16,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 - Match Day on a phone: with no match scheduled, "Add the next match" now shows on phones too (a full-size button), so a team can put its first match in from a phone. The "Read-only on the phone" line only appears once there is a match; editing an existing match stays a larger-screen task. In the match editor, Cancel and Save match are easier to tap on a phone, and without any opponent dossier the opponent field offers "Add an opponent" instead of only saying to go to the Opponents page.
 
 #### Added
+- Sign-up asks you to confirm "I am 16 or older and accept the Terms and have read the Privacy page", with both pages linked (they open in a new tab, so the form keeps what you typed). The account cannot be created without the tick, and an invite link is not used up by a sign-up that was refused. Your account records when you ticked it; it is part of Download my data, and the Terms and the Privacy page say so.
 - For admins: a "Copy code" button under a new password reset code on Password resets. It says "Copied" only once the browser has really copied the code; if the browser refuses, it says so and selects the code so you can copy it by hand.
 
 ### Feedback batch 1 (2026-10-16)

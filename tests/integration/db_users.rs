@@ -79,3 +79,77 @@ async fn the_promote_command_promotes_lists_and_revokes() {
         other => panic!("expected NotFound, got {other:?}"),
     }
 }
+
+/// Whether the user row has `terms_accepted_at` set.
+async fn has_accepted_terms(
+    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
+    user: &str,
+) -> bool {
+    let mut r = db
+        .query("SELECT VALUE terms_accepted_at != NONE FROM ONLY type::record('user', $k)")
+        .bind(("k", db::record_key(user, "user")))
+        .await
+        .unwrap();
+    let v: Option<bool> = r.take(0).unwrap();
+    v.unwrap_or(false)
+}
+
+/// M148 item 7: the sign-up refuses an unticked 16+/terms box before the
+/// invite is touched (register_action checks `terms_accepted` ahead of
+/// `consume_invite_grant`), and an account made through the form records
+/// when the box was ticked.
+#[tokio::test]
+async fn sign_up_without_the_terms_box_leaves_the_invite_unused() {
+    use lol_team_companion::pages::auth::register::terms_accepted;
+
+    let db = common::test_db().await;
+    db::create_invite(&db, None, "ONE-USE".into(), 1, None, None)
+        .await
+        .unwrap();
+
+    // What a form without the box (or an unticked box) sends.
+    for refused in [None, Some(""), Some("off"), Some("no"), Some("false")] {
+        assert!(!terms_accepted(refused), "{refused:?}");
+    }
+    for ticked in [
+        Some("on"),
+        Some("ON"),
+        Some(" true "),
+        Some("1"),
+        Some("yes"),
+    ] {
+        assert!(terms_accepted(ticked), "{ticked:?}");
+    }
+
+    // The refusal happened before the invite: its one use is still there.
+    let grant = db::consume_invite_grant(&db, "one-use").await.unwrap();
+    assert!(
+        grant.is_some(),
+        "the refused sign-up must not use the invite"
+    );
+    assert!(
+        db::consume_invite_grant(&db, "one-use")
+            .await
+            .unwrap()
+            .is_none(),
+        "the code had exactly one use"
+    );
+
+    let via_form = db::create_user_accepting_terms(
+        &db,
+        "terms".into(),
+        "terms@example.com".into(),
+        "h".into(),
+    )
+    .await
+    .unwrap();
+    assert!(has_accepted_terms(&db, &via_form).await);
+
+    let other = db::create_user(&db, "plain".into(), "plain@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    assert!(
+        !has_accepted_terms(&db, &other).await,
+        "only the form records it"
+    );
+}

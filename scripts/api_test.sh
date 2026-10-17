@@ -85,7 +85,7 @@ echo "[ Auth ]"
 status=$(curl -s -o /tmp/lol_resp_body -w "%{http_code}" \
     -X POST "${BASE_URL}${URL_REGISTER}" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "username=${USERNAME}&email=${EMAIL}&password=${PASSWORD}&invite_code=${INVITE_CODE}" \
+    -d "username=${USERNAME}&email=${EMAIL}&password=${PASSWORD}&invite_code=${INVITE_CODE}&accept_terms=on" \
     -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
     -L --max-redirs 0 2>/dev/null || true)
 body=$(cat /tmp/lol_resp_body 2>/dev/null || true)

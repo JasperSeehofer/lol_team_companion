@@ -59,7 +59,7 @@ if [[ "${SKIP_REGISTER:-0}" != 1 ]]; then
   action="$(form_action "$html" register_action)"
   [[ -n "$action" ]] || die "registration form action not found"
   status="$(post_form "$action" "$WORK/jar-register" \
-    "username=smoke-$RAND" "email=$EMAIL" "password=$PASSWORD" "invite_code=$INVITE_CODE")"
+    "username=smoke-$RAND" "email=$EMAIL" "password=$PASSWORD" "invite_code=$INVITE_CODE" "accept_terms=on")"
   has_session_cookie || die "registration: no session cookie (HTTP $status, $(head -c 200 "$WORK/body"))"
   log "registered $EMAIL (HTTP $status -> $(location))"
 fi

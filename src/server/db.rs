@@ -464,6 +464,28 @@ pub async fn create_user(
     email: String,
     password_hash: String,
 ) -> DbResult<String> {
+    insert_user(db, username, email, password_hash, false).await
+}
+
+/// [`create_user`] for the sign-up form: the account also records when its
+/// owner confirmed being 16 or older and accepted the terms
+/// (`user.terms_accepted_at`, M148 item 7), in the same statement.
+pub async fn create_user_accepting_terms(
+    db: &Surreal<Db>,
+    username: String,
+    email: String,
+    password_hash: String,
+) -> DbResult<String> {
+    insert_user(db, username, email, password_hash, true).await
+}
+
+async fn insert_user(
+    db: &Surreal<Db>,
+    username: String,
+    email: String,
+    password_hash: String,
+    accepted_terms: bool,
+) -> DbResult<String> {
     let email = normalize_email(&email);
     let username = username.trim().to_string();
     if username.is_empty() {
@@ -475,8 +497,10 @@ pub async fn create_user(
     let _guard = invariant_lock().await;
     let response = db
         .query(
-            "CREATE user SET username = $username, username_lc = $username_lc, email = $email, password_hash = $password_hash, is_admin = false",
+            "CREATE user SET username = $username, username_lc = $username_lc, email = $email, password_hash = $password_hash, is_admin = false, \
+             terms_accepted_at = IF $terms { time::now() } ELSE { NONE }",
         )
+        .bind(("terms", accepted_terms))
         .bind(("username", username))
         .bind(("username_lc", username_lc))
         .bind(("email", email))

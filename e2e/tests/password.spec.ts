@@ -26,6 +26,7 @@ async function register(page: Page, tag: string): Promise<string> {
   await page.fill("input[name=username]", `pw_${tag}_${STAMP}`);
   await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", TEST_PASSWORD);
+  await page.check("#register-terms");
   await page.click("main button[type=submit]");
   await waitForHome(page);
   await page.waitForLoadState("load");

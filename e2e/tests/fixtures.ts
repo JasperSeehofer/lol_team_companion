@@ -44,6 +44,7 @@ export async function authenticatePage(page: Page): Promise<{ email: string; use
   await page.fill("input[name=username]", username);
   await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", TEST_PASSWORD);
+  await page.check("#register-terms");
   await page.click("main button[type=submit]");
 
   // Registration fires window.location.set_href("/") from a WASM Effect.
@@ -113,6 +114,7 @@ export async function signInAsAdmin(page: Page): Promise<void> {
     await page.fill("input[name=username]", `e2eadmin_${Date.now()}`);
     await page.fill("input[name=email]", ADMIN_EMAIL);
     await page.fill("input[name=password]", TEST_PASSWORD);
+    await page.check("#register-terms");
     await page.click("main button[type=submit]");
     await waitForHome(page);
   }

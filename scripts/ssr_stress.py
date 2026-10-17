@@ -46,6 +46,7 @@ def register():
     form = urllib.parse.urlencode({
         "username": f"stress-{tag}", "email": f"stress-{tag}@test.invalid",
         "password": "stress-password-123", "invite_code": INVITE,
+        "accept_terms": "on",
     }).encode()
     opener.open(urllib.request.Request(BASE + action, data=form, headers={
         "Content-Type": "application/x-www-form-urlencoded",

@@ -45,6 +45,10 @@ DEFINE FIELD IF NOT EXISTS admin_promoted_at ON user TYPE option<datetime>;
 -- email_unique is case-insensitive in practice.
 DEFINE FIELD IF NOT EXISTS username_lc ON user TYPE option<string>;
 DEFINE INDEX IF NOT EXISTS user_riot_puuid ON user FIELDS riot_puuid;
+-- M148: when the account's owner ticked "I am 16 or older and accept the
+-- Terms and have read the Privacy page" at sign-up. NONE for accounts
+-- created before the box existed (and by the seed tool and tests).
+DEFINE FIELD IF NOT EXISTS terms_accepted_at ON user TYPE option<datetime>;
 
 -- Teams
 DEFINE TABLE IF NOT EXISTS team SCHEMAFULL;

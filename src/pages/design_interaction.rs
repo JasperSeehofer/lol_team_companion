@@ -388,6 +388,7 @@ pub fn TogglesSection() -> impl IntoView {
     let item_a = RwSignal::new(true);
     let item_b = RwSignal::new(false);
     let item_off = RwSignal::new(false);
+    let consent = RwSignal::new(false);
     view! {
         <GallerySection id="toggles" title="Segmented control, switch and checkbox" lede="Segmented: one of two to five short options that switch a view at once (radio semantics, arrow keys, one Tab stop; manual activation when switching has a side effect). Switch: on or off, effective immediately, label always visible; round, because it is a toggle. Checkbox: a checklist item or a yes/no in a form; square.">
             <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
@@ -435,6 +436,23 @@ pub fn TogglesSection() -> impl IntoView {
                             <Checkbox label="Read the opponent brief" checked=item_a strike=true />
                             <Checkbox label="Agree on the level 1 plan" checked=item_b strike=true />
                             <Checkbox label="Disabled item" checked=item_off disabled=true />
+                        </div>
+                    </Sample>
+                    <Sample label="Checkbox in a form: required, links in the label, 44px tap target on phones">
+                        <div data-testid="checkbox-form-demo">
+                            <Checkbox
+                                id="gal-consent"
+                                name="gal_consent"
+                                required=true
+                                touch=true
+                                checked=consent
+                                label="I have read the "
+                                label_extra=|| view! {
+                                    <a href="/changelog" target="_blank" rel="noopener" class="font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                                        "changelog"<span class="sr-only">" (opens in a new tab)"</span>
+                                    </a>
+                                }
+                            />
                         </div>
                     </Sample>
                 </div>

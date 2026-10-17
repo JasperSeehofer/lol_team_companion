@@ -61,6 +61,7 @@ test.describe("M148 frames", () => {
     await player.fill("input[name=username]", `frames_reset_${stamp}`);
     await player.fill("input[name=email]", email);
     await player.fill("input[name=password]", TEST_PASSWORD);
+    await player.check("#register-terms");
     await player.click("main button[type=submit]");
     await player.waitForURL((u) => new URL(u).pathname === "/", { timeout: 20000 });
 
@@ -85,5 +86,18 @@ test.describe("M148 frames", () => {
     await settle(page);
     await expect(page).toHaveTitle("Sign in \u00b7 Team Companion");
     await frames(page, "login-next");
+  });
+
+  test("register with the 16+ and terms box", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/auth/register?invite=${INVITE_CODE}`);
+    await settle(page);
+    await expect(page.locator("#register-terms")).toBeVisible();
+    await frames(page, "register", async () => {
+      // A1: the whole label is a 44px tap target on phones.
+      const vw = page.viewportSize()?.width ?? 1280;
+      const h = await page.locator("label", { has: page.locator("#register-terms") }).evaluate((el) => el.getBoundingClientRect().height);
+      if (vw < 768) expect(h).toBeGreaterThanOrEqual(44);
+    });
   });
 });

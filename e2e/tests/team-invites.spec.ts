@@ -51,6 +51,7 @@ test("a new player registers into the team with the leader's link", async ({ bro
   await player.fill("input[name=username]", `invited_${STAMP}`);
   await player.fill("input[name=email]", `invited_${STAMP}@test.invalid`);
   await player.fill("input[name=password]", TEST_PASSWORD);
+  await player.check("#register-terms");
   await player.click("main button[type=submit]");
   await waitForHome(player);
   await player.waitForLoadState("networkidle");

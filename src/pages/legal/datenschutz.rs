@@ -22,6 +22,7 @@ pub const STORED: &[(&str, &[&str])] = &[
             "Username and email address (the email in lowercase).",
             "Your password, only as an Argon2 hash; the password itself is never stored.",
             "Your region, and once you link it, your Riot ID and the Riot account id (PUUID) Riot returns for it.",
+            "When you confirmed at sign-up that you are 16 or older and accepted the terms.",
             "Whether you are an admin (and whether that was set with the promote command), when the account was created, and when you were last here and the time before (to the hour), so Match Day can tell when you come back after a break.",
             "Your settings: whether you get survey questions, whether guidance (the welcome, checklist, hints and nudges) is on, and whether teammates may share your player card by link.",
             "Guidance you have seen or turned off: which item (for example \u{201c}hint.draft_keys\u{201d}) and when, so it is not shown again.",

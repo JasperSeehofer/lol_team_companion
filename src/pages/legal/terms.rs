@@ -26,6 +26,7 @@ pub const SECTIONS: &[(&str, &str, &[&str])] = &[
         "account-h",
         "Your account",
         &[
+            "You must be 16 or older to register; at sign-up you confirm it and accept these terms.",
             "One account per person. Keep your password to yourself; you are responsible for what happens with your account. Tell the operator at once if you think someone else used it.",
             "Invite codes are meant for the people they were given to. Do not publish them.",
             "You can download your data or delete your account at any time on your profile.",
