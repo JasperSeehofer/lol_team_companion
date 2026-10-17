@@ -14,11 +14,12 @@ use crate::components::local_time::{
 };
 use crate::components::ui::PrepEmphasis;
 use crate::components::ui::{
-    Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone, Dialog,
-    EmptySize, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, InputKind, PageHeader,
-    PageShell, PageWidth, PrepSequence, PrepState, PrepStep, ResultGlyph, Role, RoleLabel,
-    SectionHeader, Segment, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup,
-    SkeletonShape, TextField, Toast, ToastContext,
+    Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone, Dialog, Edge,
+    EmptySize, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, InputKind, Layer, Pad,
+    PageHeader, PageShell, PageWidth, PrepSequence, PrepState, PrepStep, ResultGlyph, RiftCrop,
+    RiftGround, RiftSketch, Role, RoleLabel, SectionHeader, Segment, SegmentedControl, Select,
+    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Surface, SurfaceTag, TextField, Toast,
+    ToastContext,
 };
 use crate::models::guidance::HomeGuide;
 use crate::models::match_day::{
@@ -544,16 +545,10 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
     });
 
     let meta = {
-        let next = next.clone();
         let patch = patch.clone();
         move || {
-            let when = next.clone().map(|m| {
-                view! {
-                    <LocalTime iso=m.starts_at.clone() class="figures text-primary" />
-                    <span aria-hidden="true" class="text-muted">"/"</span>
-                    <span>{format_label(&m.format)}</span>
-                }
-            });
+            // The start time and format moved into the field card (M152);
+            // without a match the meta is the team and the patch.
             let patch = patch.clone().map(|p| {
                 view! {
                     <span aria-hidden="true" class="text-muted">"/"</span>
@@ -565,7 +560,6 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             });
             view! {
                 <span>{team_name.clone()}</span>
-                {when.map(|w| view! { <span aria-hidden="true" class="text-muted">"/"</span> {w} })}
                 {patch}
             }
         }
@@ -591,6 +585,15 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                 <p class="-mt-3 mb-6 text-caption text-muted md:hidden" data-testid="phone-read-only">
                     "Read-only on the phone. Edit the match on a larger screen."
                 </p>
+            })}
+            {next.clone().map(|m| view! {
+                <FieldCard
+                    team_name=md.team_name.clone()
+                    starts_at=m.starts_at.clone()
+                    format=m.format.clone()
+                    opponent=m.opponent_name.clone()
+                    steps=steps.clone()
+                />
             })}
             {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=false on_change=on_change /> })}
             // Match Day has its own primary action (the prep sequence's
@@ -623,7 +626,9 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                         <div class="flex min-w-0 flex-col gap-10">
                             <section aria-labelledby="prep-h" data-prep>
                                 <SectionHeader title="Preparation" id="prep-h" meta=format!("{} of 5 done", steps.iter().filter(|s| s.state == PrepState::Done).count()) />
-                                <PrepSequence label="Preparation for the next match" steps=steps.clone() />
+                                // The field card holds the next step as the page's one
+                                // primary action: the sequence stays quiet (M152).
+                                <PrepSequence label="Preparation for the next match" steps=steps.clone() emphasis=PrepEmphasis::Quiet />
                                 {m.notes.clone().map(|n| view! {
                                     <p class="mt-4 max-w-prose text-body text-secondary"><span class="eyebrow mr-2">"Notes"</span>{n}</p>
                                 })}
@@ -641,6 +646,72 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             }}
             <MatchEditor open=editor_open existing=editor_match.get_value() opponents=opponents.get_value() on_saved=on_change />
         </PageShell>
+    }
+}
+
+/// "Best of 3, with 2 of 5 prep steps done." (R0 T1-7: the title already
+/// names the opponent.)
+pub fn field_sentence(format: &str, steps: &[PrepStep]) -> String {
+    let done = steps.iter().filter(|s| s.state == PrepState::Done).count();
+    format!(
+        "{}, with {done} of {} prep steps done.",
+        format_label(format),
+        steps.len()
+    )
+}
+
+/// Match Day's field card (M152, M151 references.md field card, R0 fixes
+/// T1-4 and T1-7): eyebrow, one figure (the start time), one sentence (the
+/// format and the prep count, from the team's records), one action (the
+/// prep sequence's next step, the page's only primary button) and the 88 px
+/// Rift inset, ink only.
+///
+/// Facing (mission scope 4, built for critique; recipe card E would drop
+/// it): the two team names sit at the two ends of the inset's river, ours
+/// above its upper end, theirs below its lower end, so each is as near to
+/// one base as to the other. That faces the teams along the river without
+/// pinning either to a side: no side colour, no side shape, no chalk.
+///
+/// A11y: one `<h2>` ("Next match"); the figure is a `<time>`; the inset
+/// and the facing names are `aria-hidden` (the page title already says who
+/// plays); the action is a real link.
+#[component]
+fn FieldCard(
+    team_name: String,
+    starts_at: String,
+    format: String,
+    opponent: Option<String>,
+    steps: Vec<PrepStep>,
+) -> impl IntoView {
+    let sentence = field_sentence(&format, &steps);
+    let action = steps
+        .iter()
+        .find(|s| s.state == PrepState::Next)
+        .and_then(|s| Some((s.href.clone()?, s.action.clone()?)));
+    let facing = opponent.map(|o| (team_name, o));
+    view! {
+        <Surface layer=Layer::Ink1 edge=Edge::RuleY pad=Pad::Md tag=SurfaceTag::Section labelled_by="field-h" class="mb-10 max-w-[40rem] flow-root" attr:data-field-card="">
+            <div class="float-right ml-4 w-[88px]" aria-hidden="true" data-field-inset>
+                {facing.clone().map(|(ours, _)| view! {
+                    <p class="mb-1 break-words text-caption text-primary" data-facing="ours">{ours}</p>
+                })}
+                <RiftSketch crop=RiftCrop::Inset ground=RiftGround::Ink1 class="w-[88px]" />
+                {facing.map(|(_, theirs)| view! {
+                    <p class="mt-1 break-words text-right text-caption text-secondary" data-facing="theirs">{theirs}</p>
+                })}
+            </div>
+            <h2 id="field-h" class="eyebrow">"Next match"</h2>
+            <p class="mt-2 flex flex-wrap items-baseline gap-x-3">
+                <LocalTime iso=starts_at.clone() style=TimeStyle::Clock class="figures font-medium text-headline text-primary lg:text-display" attr:data-field-figure="" />
+                <LocalTime iso=starts_at style=TimeStyle::Day class="text-label text-muted" />
+            </p>
+            <p class="mt-3 max-w-[60ch] text-reading text-secondary" data-field-sentence>{sentence}</p>
+            {action.map(|(href, label)| view! {
+                <div class="clear-both mt-5 grid sm:block">
+                    <Button href=href variant=ButtonVariant::Primary size=ButtonSize::Touch attr:data-testid="field-next-step">{label}</Button>
+                </div>
+            })}
+        </Surface>
     }
 }
 
@@ -1054,6 +1125,25 @@ mod tests {
 
     fn states(steps: &[PrepStep]) -> Vec<PrepState> {
         steps.iter().map(|s| s.state).collect()
+    }
+
+    #[test]
+    fn the_field_sentence_counts_done_steps_from_the_records() {
+        let mut m = md(5);
+        // Format bo3, only "Open action items" done.
+        assert_eq!(
+            field_sentence("bo3", &prep_steps(&m)),
+            "Best of 3, with 1 of 5 prep steps done."
+        );
+        m.next
+            .as_mut()
+            .unwrap()
+            .brief_read_by
+            .push("user:me".into());
+        assert_eq!(
+            field_sentence("bo3", &prep_steps(&m)),
+            "Best of 3, with 2 of 5 prep steps done."
+        );
     }
 
     #[test]

@@ -18,6 +18,11 @@ pub enum TimeStyle {
     LongDate,
     /// "11 Oct".
     DayMonth,
+    /// "19:00": the clock alone (Match Day's lead figure, M152).
+    Clock,
+    /// "Today", "Tomorrow", "Sat 11 Oct": the day alone, said beside a
+    /// `Clock` figure.
+    Day,
 }
 
 /// Parse an RFC 3339 time.
@@ -52,6 +57,22 @@ where
         TimeStyle::Short => t.format("%a %H:%M").to_string(),
         TimeStyle::LongDate => t.format("%A %-d %B %Y").to_string(),
         TimeStyle::DayMonth => t.format("%-d %b").to_string(),
+        TimeStyle::Clock => t.format("%H:%M").to_string(),
+        TimeStyle::Day => {
+            let day = t.date_naive();
+            let today = now.date_naive();
+            if day == today {
+                "Today".to_string()
+            } else if Some(day) == today.succ_opt() {
+                "Tomorrow".to_string()
+            } else if Some(day) == today.pred_opt() {
+                "Yesterday".to_string()
+            } else if day.year() == today.year() {
+                t.format("%a %-d %b").to_string()
+            } else {
+                t.format("%a %-d %b %Y").to_string()
+            }
+        }
     }
 }
 
@@ -96,6 +117,8 @@ pub fn LocalTime(
     let text = move || match parsed {
         None => String::new(),
         Some(t) if hydrated.get() => format_time(&t.with_timezone(&Local), &Local::now(), style),
+        // A day word carries no clock to mark as UTC.
+        Some(t) if style == TimeStyle::Day => format_time(&t, &Utc::now(), style),
         Some(t) => format!("{} UTC", format_time(&t, &Utc::now(), style)),
     };
     view! { <time datetime=iso class=class>{text}</time> }
@@ -118,6 +141,10 @@ mod tests {
         assert_eq!(format_time(&t, &now, TimeStyle::When), "Sat 17 Oct, 18:30");
         assert_eq!(format_time(&t, &now, TimeStyle::Short), "Sat 18:30");
         assert_eq!(format_time(&t, &now, TimeStyle::DayMonth), "17 Oct");
+        assert_eq!(format_time(&t, &now, TimeStyle::Clock), "18:30");
+        assert_eq!(format_time(&t, &now, TimeStyle::Day), "Sat 17 Oct");
+        let t = tz.with_ymd_and_hms(2026, 10, 12, 19, 0, 0).unwrap();
+        assert_eq!(format_time(&t, &now, TimeStyle::Day), "Tomorrow");
         let t = tz.with_ymd_and_hms(2027, 1, 2, 18, 0, 0).unwrap();
         assert_eq!(
             format_time(&t, &now, TimeStyle::When),
