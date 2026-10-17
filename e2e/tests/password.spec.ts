@@ -160,17 +160,17 @@ test("an admin copies the reset code to the clipboard", async ({ browser }) => {
   const code = await mintFor(admin, email);
 
   const copy = admin.getByTestId("copy-reset-code");
-  await expect(copy).toHaveText("Copy code");
+  await expect(copy).toHaveAccessibleName("Copy code");
   expect(await copy.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await expect(admin.getByTestId("reset-copy-status")).toHaveCount(0);
   await copy.click();
-  await expect(copy).toHaveText("Copied", { timeout: 5000 });
+  await expect(copy).toHaveAccessibleName("Copied", { timeout: 5000 });
   await expect(admin.getByTestId("reset-copy-status")).toHaveText("Code copied");
   await expect(admin.getByTestId("reset-copy-error")).toHaveCount(0);
   const clip = await admin.evaluate(() => navigator.clipboard.readText());
   expect(clip).toBe(code);
   // The label goes back after a moment; the code stays on the page.
-  await expect(copy).toHaveText("Copy code", { timeout: 5000 });
+  await expect(copy).toHaveAccessibleName("Copy code", { timeout: 5000 });
   await expect(admin.getByTestId("reset-code")).toHaveText(code);
   await ctx.close();
 });
@@ -196,7 +196,7 @@ test("a refused copy says so and never claims success", async ({ browser }) => {
   await expect(admin.getByTestId("reset-copy-error")).toHaveText(
     "Could not copy. Select the code and copy it by hand."
   );
-  await expect(copy).toHaveText("Copy code");
+  await expect(copy).toHaveAccessibleName("Copy code");
   await expect(admin.getByTestId("reset-copy-status")).toHaveCount(0);
   // The code is selected, ready to copy by hand.
   const selected = await admin.evaluate(() => window.getSelection()?.toString().trim() ?? "");

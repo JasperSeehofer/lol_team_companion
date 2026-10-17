@@ -130,16 +130,16 @@ test("after a reload an open link shows in full and Copy copies it", async ({ br
   // The absolute link (the server renders the path; the page adds its origin).
   await expect(url).toHaveText(link, { timeout: 10000 });
   const copy = row.getByTestId("copy-invite-link");
-  await expect(copy).toHaveText("Copy link");
+  await expect(copy).toHaveAccessibleName("Copy link");
   await expect(row.getByTestId("invite-copy-status")).toHaveText("");
   await leader.setViewportSize({ width: 390, height: 844 });
   expect(await copy.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await copy.click();
-  await expect(copy).toHaveText("Copied", { timeout: 5000 });
+  await expect(copy).toHaveAccessibleName("Copied", { timeout: 5000 });
   await expect(row.getByTestId("invite-copy-status")).toHaveText("Link copied");
   await expect(row.getByTestId("invite-copy-error")).toHaveCount(0);
   expect(await leader.evaluate(() => navigator.clipboard.readText())).toBe(link);
-  await expect(copy).toHaveText("Copy link", { timeout: 5000 });
+  await expect(copy).toHaveAccessibleName("Copy link", { timeout: 5000 });
   // Disable stays beside it.
   await expect(row.getByRole("button", { name: "Disable" })).toBeVisible();
   await ctx.close();
@@ -166,7 +166,7 @@ test("a refused copy says so and never claims success", async ({ browser }) => {
     "Could not copy. Select the link and copy it by hand.",
     { timeout: 5000 },
   );
-  await expect(copy).toHaveText("Copy link");
+  await expect(copy).toHaveAccessibleName("Copy link");
   await expect(row.getByTestId("invite-copy-status")).toHaveText("");
   // The link is selected for copying by hand.
   const selected = await leader.evaluate(() => window.getSelection()?.toString() ?? "");
