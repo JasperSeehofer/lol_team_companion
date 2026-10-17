@@ -201,6 +201,7 @@ src/
 └── components/          # ui/ (design-system primitives, see below), nav (hubs, sub-nav, phone menu,
                          # command bar, account menu; one PAGES table drives them all), footer,
                          # local_time (LocalTime: times in the viewer's zone after hydration), icon,
+                         # clipboard (M148: copy_text / share_url, success only after the browser's promise resolves),
                          # draft_board (slot metadata only; the board is ui::DraftBoard),
                          # champion_picker/autocomplete, tree_graph, graph_canvas (Draft Graph canvas)
                          # + graph_layout (its force simulation, pure Rust), bug_report_widget,

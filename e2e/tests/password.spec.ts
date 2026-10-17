@@ -7,6 +7,8 @@
  * - An admin creates a one-time code on /admin/resets; the player sets a new
  *   password on /auth/reset, lands on sign-in, signs in with it; the code
  *   does not work a second time.
+ * - M148: "Copy code" copies the code (success only after the clipboard
+ *   resolved) and says plainly when the browser refuses.
  *
  * Needs the e2e server env (CLAUDE.md "Testing"): the bootstrap invite and
  * `ADMIN_EMAILS=e2e-admin@test.invalid`.
@@ -132,6 +134,73 @@ test("an admin reset code sets a new password once", async ({ browser }) => {
   await expect(
     again.getByText("That code did not work. It may have expired or been used. Ask the admin for a new one.")
   ).toBeVisible({ timeout: 15000 });
+});
+
+// M148 item 2b (atelier card C9): "Copy code" says Copied only after the
+// clipboard promise resolved, and says so plainly when the copy is refused.
+async function mintFor(admin: Page, email: string): Promise<string> {
+  await admin.goto("/admin/resets", { waitUntil: "networkidle" });
+  await admin.getByLabel("Email of the account").fill(email);
+  await admin.getByRole("button", { name: "Create reset code" }).click();
+  const codeEl = admin.getByTestId("reset-code");
+  await expect(codeEl).toBeVisible({ timeout: 15000 });
+  return (await codeEl.textContent())?.trim() ?? "";
+}
+
+test("an admin copies the reset code to the clipboard", async ({ browser }) => {
+  const player = await (await browser.newContext()).newPage();
+  const email = await register(player, "copy");
+
+  const ctx = await browser.newContext();
+  await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const admin = await ctx.newPage();
+  await signInAsAdmin(admin);
+  await admin.setViewportSize({ width: 390, height: 844 });
+  const code = await mintFor(admin, email);
+
+  const copy = admin.getByTestId("copy-reset-code");
+  await expect(copy).toHaveText("Copy code");
+  expect(await copy.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await expect(admin.getByTestId("reset-copy-status")).toHaveCount(0);
+  await copy.click();
+  await expect(copy).toHaveText("Copied", { timeout: 5000 });
+  await expect(admin.getByTestId("reset-copy-status")).toHaveText("Code copied");
+  await expect(admin.getByTestId("reset-copy-error")).toHaveCount(0);
+  const clip = await admin.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toBe(code);
+  // The label goes back after a moment; the code stays on the page.
+  await expect(copy).toHaveText("Copy code", { timeout: 5000 });
+  await expect(admin.getByTestId("reset-code")).toHaveText(code);
+  await ctx.close();
+});
+
+test("a refused copy says so and never claims success", async ({ browser }) => {
+  const player = await (await browser.newContext()).newPage();
+  const email = await register(player, "nocopy");
+
+  const ctx = await browser.newContext();
+  // The browser refuses every clipboard write (as on plain HTTP or with a
+  // denied permission).
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new DOMException("Denied", "NotAllowedError")) },
+    });
+  });
+  const admin = await ctx.newPage();
+  await signInAsAdmin(admin);
+  await mintFor(admin, email);
+  const copy = admin.getByTestId("copy-reset-code");
+  await copy.click();
+  await expect(admin.getByTestId("reset-copy-error")).toHaveText(
+    "Could not copy. Select the code and copy it by hand."
+  );
+  await expect(copy).toHaveText("Copy code");
+  await expect(admin.getByTestId("reset-copy-status")).toHaveCount(0);
+  // The code is selected, ready to copy by hand.
+  const selected = await admin.evaluate(() => window.getSelection()?.toString().trim() ?? "");
+  expect(selected).toBe((await admin.getByTestId("reset-code").textContent())?.trim());
+  await ctx.close();
 });
 
 test("/admin/resets is a 404 for a signed-in non-admin", async ({ authedPage }) => {
