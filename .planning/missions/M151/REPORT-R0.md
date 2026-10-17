@@ -4,7 +4,7 @@ Branch `mission/M151-identity-survey-sharpened-r0` (pushed, branch only; `origin
 deployed or touched on the VM. Everything below is gallery and planning files plus one `/design` gallery section
 and `public/marks/`; no product page changed. Card: `publish-round-r0/` (id `m151-r0-team-companion-identity`).
 
-CI: <filled by orchestrator>
+CI: run 38986274881 on da342bc (the clippy fix): "Check, lint, unit tests" GREEN (fmt, cargo check ssr + wasm32, clippy ssr + wasm32 -D warnings, lib tests, integration tests), Style guardrails (lint_design) GREEN, Ops scripts GREEN, Container image GREEN; e2e smoke still running when this round stopped (one bounded 10-minute wait, no summary committed). Run 38986863434 on 7cb2759: check job GREEN, e2e running. Later commits change only .planning/ files. Earlier runs on 253dad9..20614db failed at Clippy (SSR) (explicit_auto_deref, fixed in da342bc).
 
 Clippy `explicit_auto_deref` (src/pages/design_marks.rs, three errors; log `ci-check-log.md:20-27`) is fixed in
 da342bc (`fix(design): drop explicit derefs in marks gallery (clippy)`); the "Check, lint, unit tests" job is green
