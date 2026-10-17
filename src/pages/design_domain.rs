@@ -48,7 +48,7 @@ pub fn AvatarSection() -> impl IntoView {
 #[component]
 pub fn MarkersSection() -> impl IntoView {
     view! {
-        <GallerySection id="markers" title="Role, side and result marks" lede="Roles are typographic (TOP JGL MID BOT SUP), read out as words. Sides are a blue circle and a red square in matched colours. Results are a filled teal W and a hollow L, never the side colours.">
+        <GallerySection id="markers" title="Role, side and result marks" lede="Roles are a position icon beside the letters (TOP JGL MID BOT SUP), read out as words; the icon comes from the app itself, takes the label's ink and never the accent. Sides are a blue circle and a red square in matched colours. Results are a filled teal W and a hollow L, never the side colours.">
             <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
                 <div class="flex flex-col gap-4">
                     <p class="eyebrow">"RoleLabel"</p>
@@ -61,6 +61,10 @@ pub fn MarkersSection() -> impl IntoView {
                     <div class="flex items-center gap-2 text-label text-secondary">
                         <RoleLabel role=Role::Support style=RoleLabelStyle::Active />
                         "Selecting for blue support"
+                    </div>
+                    <div class="flex items-center gap-2 text-label text-secondary">
+                        <RoleLabel role=Role::Jungle guessed=true />
+                        "Guessed from the games played"
                     </div>
                 </div>
                 <div class="flex flex-col gap-4">
