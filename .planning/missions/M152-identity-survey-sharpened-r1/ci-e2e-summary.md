@@ -1,14 +1,14 @@
 # CI e2e summary
 
-- run: 39075603464
-- sha: a83d96e7c13c81bf7d159a7fdc00c8d397dfff9d
+- run: 39077606005
+- sha: 8cfbd31aeb46c85914da49b23e65e0bddb124f44
 
 ## Playwright
 
-expected 183, unexpected 0, flaky 3, skipped 0
+expected 184, unexpected 0, flaky 2, skipped 0
 
-### [flaky] account.spec.ts:55 deleting the account needs the username and password, then signs out
-attempt 1: failed (20574 ms)
+### [flaky] champion-pool-moves.spec.ts:32 champion-pool moves: keyboard move keeps the scroll and shows the save state
+attempt 1: failed (20572 ms)
 ```
 TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
 =========================== logs ===========================
@@ -17,7 +17,7 @@ waiting for navigation until "load"
 ```
 
 ### [flaky] hero-matchup.spec.ts:144 shared game plan: five champions per team never wrap at 320, 390 and 1280
-attempt 1: failed (12888 ms)
+attempt 1: failed (12503 ms)
 ```
 Error: expect(locator).toHaveValue(expected) failed
 
@@ -29,17 +29,8 @@ Timeout: 10000ms
 Call log:
   - Expect "toHaveValue" with timeout 10000ms
   - waiting for locator('#plan-name')
-    13 × locator resolved to <input type="text" required="" id="plan-name" maxlength="120" placeholder="Front-to-back vs Riverside" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger h-9 text-body"/>
+    14 × locator resolved to <input type="text" required="" id="plan-name" maxlength="120" placeholder="Front-to-back vs Riverside" class="w-full rounded-ctl border border-outline bg-ink-2 px-3 text-primary placeholder:text-muted transition-colors hover:border-secondary data-[force=hover]:border-secondary disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger h-9 text-body"/>
        - unexpected value ""
-```
-
-### [flaky] login-next.spec.ts:55 Return to the page after sign-in > next pointing back at an auth page lands on Home
-attempt 1: failed (20704 ms)
-```
-TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
-=========================== logs ===========================
-waiting for navigation until "load"
-============================================================
 ```
 
 ## Server log (slow request, inflight, panicked, ERROR)
