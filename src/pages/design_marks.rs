@@ -152,7 +152,7 @@ pub fn MarksSection() -> impl IntoView {
                         .iter()
                         .map(|(key, label, _, paths)| view! {
                             <span class="inline-flex items-center gap-1.5 text-secondary" data-mark=*key>
-                                {mark_svg(*paths, "size-4 shrink-0", "1.5")}
+                                {mark_svg(paths, "size-4 shrink-0", "1.5")}
                                 <span class="text-label text-primary">{*label}</span>
                             </span>
                         })
@@ -164,10 +164,10 @@ pub fn MarksSection() -> impl IntoView {
                         .map(|(key, label, group, paths)| view! {
                             <div class="flex flex-col items-start gap-3 text-secondary" data-mark-card=*key>
                                 <span class="inline-flex items-center gap-2">
-                                    {mark_svg(*paths, "size-6 shrink-0", "1.33333")}
+                                    {mark_svg(paths, "size-6 shrink-0", "1.33333")}
                                     <span class="text-reading text-primary">{*label}</span>
                                 </span>
-                                {mark_specimen(*paths)}
+                                {mark_specimen(paths)}
                                 <span class="text-caption text-muted">{*group}</span>
                             </div>
                         })
