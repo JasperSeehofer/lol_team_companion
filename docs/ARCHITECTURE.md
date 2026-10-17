@@ -42,7 +42,7 @@ Each route component lives in `src/pages/` (one file per page, sub-folders for `
 
 Team-scoped lists return `Ok(Vec::new())` when the user has no team so the page can show an empty state instead of an error banner. Some server functions are imported across pages (for example `pages::profile::get_current_user`); moving them into a dedicated API layer is planned.
 
-Client code calls server functions through `Resource`s (inside `<Suspense>`), `Action`s, or `spawn_local` from event handlers. Login and registration finish with a hard navigation (`window.location().set_href`) so every resource refetches with the new session. Protected pages redirect to `/auth/login` client-side when `get_current_user()` returns `None`.
+Client code calls server functions through `Resource`s (inside `<Suspense>`), `Action`s, or `spawn_local` from event handlers. Login and registration finish with a hard navigation (`window.location().set_href`) so every resource refetches with the new session. Protected pages redirect to `/auth/login?next=<this page>` client-side when `get_current_user()` returns `None` (`pages::navigate::redirect_to_login`, M148); `login_action` takes an optional `next` (a hidden field) and redirects there only when `models::login_next::safe_next` accepts it as a same-origin path, otherwise to `/`. Tab titles: `PageHeader` sets `<Title>` to `ui::page_title(title)` ("{title} · Team Companion", or its `document_title`); pages without a header set one themselves (404, closed beta, the share page).
 
 ## Data layer
 

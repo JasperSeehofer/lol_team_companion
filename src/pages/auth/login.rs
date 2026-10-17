@@ -20,8 +20,16 @@ use leptos_router::hooks::use_query_map;
 /// admin and what to ask for. Change the wording here.
 pub const FORGOT_PASSWORD_HINT: &str = "Forgot it? Ask the Team Companion admin for a reset code.";
 
+/// `next`: the page to return to (`/auth/login?next=...`, carried in a
+/// hidden field). Optional, so a form or script that does not send it
+/// still signs in; the server checks it with `safe_next` and goes to Home
+/// for anything that is not a path on this site (M148 item 8).
 #[server]
-pub async fn login_action(email: String, password: String) -> Result<String, ServerFnError> {
+pub async fn login_action(
+    email: String,
+    password: String,
+    #[server(default)] next: Option<String>,
+) -> Result<String, ServerFnError> {
     use crate::server::auth::{AuthSession, Credentials};
     use crate::server::rate_limit::{slow_down_message, Bucket, Limiter};
     use crate::server::{authz, db};
@@ -61,9 +69,10 @@ pub async fn login_action(email: String, password: String) -> Result<String, Ser
     authz::sync_admin_flag(&db, &user).await;
     auth.login(&user).await.map_err(authz::server_err)?;
 
-    // Everyone lands on Home: Match Day for team members, the start page
-    // (create or join a team, personal pages) for everyone else.
-    let dest = "/".to_string();
+    // Back to the page that sent the visitor here (`?next=`), checked on
+    // the server: only a path on this site, never `/auth/...`. Otherwise
+    // Home: Match Day for team members, the start page for everyone else.
+    let dest = crate::models::login_next::next_or_home(next.as_deref());
     // A form submitted before hydration posts here directly; without the
     // redirect it would land back on the sign-in page (signed in, but
     // stuck). A hydrated submit still navigates in the Effect below.
@@ -90,6 +99,9 @@ pub fn LoginPage() -> impl IntoView {
     // `?reset=1`: just came from `/auth/reset`.
     let query = use_query_map();
     let after_reset = move || query.read().get("reset").as_deref() == Some("1");
+    // `?next=`: the page to return to. Sent as a hidden field (an attribute,
+    // so a submit before hydration carries it too); the server checks it.
+    let next = move || query.read().get("next").unwrap_or_default();
 
     let error = move || {
         login
@@ -106,6 +118,7 @@ pub fn LoginPage() -> impl IntoView {
             // ActionForm has no `class` prop (leptos rule 7).
             <ActionForm action=login>
                 <div class="flex flex-col gap-5">
+                    <input type="hidden" name="next" value=next />
                     {move || (after_reset() && error().is_none()).then(|| view! {
                         <div role="status"><Callout tone=CalloutTone::Success>"Password changed. Sign in with the new one."</Callout></div>
                     })}

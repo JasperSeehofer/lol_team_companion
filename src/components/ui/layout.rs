@@ -8,6 +8,22 @@ use leptos::prelude::*;
 
 use super::text::join;
 
+/// The product name, the end of every browser-tab title.
+pub const PRODUCT_NAME: &str = "Team Companion";
+
+/// The browser-tab title for a page: "{page} \u{00b7} Team Companion", or
+/// just the product name when the page has no title of its own (M148
+/// item 8). Every route sets one through [`PageHeader`] or a
+/// `leptos_meta::Title`; `app.rs` keeps the product name as the fallback.
+pub fn page_title(page: &str) -> String {
+    let page = page.trim();
+    if page.is_empty() || page == PRODUCT_NAME {
+        PRODUCT_NAME.to_string()
+    } else {
+        format!("{page} \u{00b7} {PRODUCT_NAME}")
+    }
+}
+
 /// Maximum content width of a page.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PageWidth {
@@ -78,8 +94,11 @@ pub fn PageShell(
 }
 
 /// The page title block: eyebrow, `<h1>`, meta line, actions, hairline.
+/// It also sets the browser-tab title ([`page_title`] of `title`, or of
+/// `document_title` when given).
 ///
-/// A11y: renders the page's only `<h1>`. The eyebrow is plain text before
+/// A11y: renders the page's only `<h1>`; the tab title names the page
+/// first, so tabs and screen-reader page announcements tell pages apart. The eyebrow is plain text before
 /// the heading (not part of its accessible name); actions follow the
 /// heading in reading and tab order.
 #[component]
@@ -92,8 +111,23 @@ pub fn PageHeader(
     #[prop(optional, into)]
     meta: Option<ViewFn>,
     #[prop(optional, into)] actions: Option<ViewFn>,
+    /// The tab title when it must differ from the heading (a public share
+    /// page names the kind of page, never the plan's name).
+    #[prop(optional, into)]
+    document_title: Option<String>,
 ) -> impl IntoView {
+    let tab_title = {
+        let title = title.clone();
+        move || {
+            page_title(
+                &document_title
+                    .clone()
+                    .unwrap_or_else(|| title.get().to_string()),
+            )
+        }
+    };
     view! {
+        <leptos_meta::Title text=tab_title />
         <header class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pb-4 mb-6 border-b border-rule">
             <div class="min-w-0">
                 {eyebrow.map(|e| view! { <p class="eyebrow">{e}</p> })}
@@ -278,5 +312,18 @@ pub fn Surface(
             <aside class=class aria-label=label aria-labelledby=labelled_by>{children()}</aside>
         }
         .into_any(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_title;
+
+    #[test]
+    fn tab_titles_name_the_page_then_the_product() {
+        assert_eq!(page_title("Draft"), "Draft \u{00b7} Team Companion");
+        assert_eq!(page_title("  Sign in "), "Sign in \u{00b7} Team Companion");
+        assert_eq!(page_title(""), "Team Companion");
+        assert_eq!(page_title("Team Companion"), "Team Companion");
     }
 }

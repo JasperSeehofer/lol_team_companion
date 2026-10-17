@@ -11,6 +11,8 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 ### First patch, round 2 (2026-10-17)
 
 #### Changed
+- Signing in takes you back: when a page you opened while signed out sends you to sign in (a link to a draft, a review or a match), signing in now returns you to that page, with its draft, plan or review still selected, instead of Home. Only pages of Team Companion are returned to; anything else lands on Home.
+- Every page has its own browser-tab title ("Draft · Team Companion", "Sign in · Team Companion", ...), so open tabs, bookmarks and the browser history tell pages apart. A shared link's tab names the kind of page ("Shared game plan"), never what is shared.
 - Match Day on a phone: with no match scheduled, "Add the next match" now shows on phones too (a full-size button), so a team can put its first match in from a phone. The "Read-only on the phone" line only appears once there is a match; editing an existing match stays a larger-screen task. In the match editor, Cancel and Save match are easier to tap on a phone, and without any opponent dossier the opponent field offers "Add an opponent" instead of only saying to go to the Opponents page.
 
 #### Added

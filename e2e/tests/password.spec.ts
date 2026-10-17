@@ -78,7 +78,7 @@ test("changing the password keeps this session and ends the other one", async ({
 
   // The other browser is signed out (protected pages send it to sign in).
   await other.goto("/profile");
-  await other.waitForURL("**/auth/login", { timeout: 15000 });
+  await other.waitForURL((u) => new URL(u).pathname === "/auth/login", { timeout: 15000 });
 
   // The old password no longer works; the new one does.
   await other.fill("input[name=email]", email);
@@ -120,7 +120,7 @@ test("an admin reset code sets a new password once", async ({ browser }) => {
 
   // The player's old session ended with the reset.
   await player.goto("/profile");
-  await player.waitForURL("**/auth/login", { timeout: 15000 });
+  await player.waitForURL((u) => new URL(u).pathname === "/auth/login", { timeout: 15000 });
 
   // The code works once: a second try gets the one generic message.
   const again = await (await browser.newContext()).newPage();

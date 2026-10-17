@@ -76,4 +76,14 @@ test.describe("M148 frames", () => {
     // The minted code lives in the page's state: resize, never reload.
     await frames(admin, "admin-resets");
   });
+
+  test("sign-in reached from /draft (login-next)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/draft");
+    await page.waitForURL((u) => new URL(u).pathname === "/auth/login", { timeout: 20000 });
+    expect(new URL(page.url()).search).toBe("?next=%2Fdraft");
+    await settle(page);
+    await expect(page).toHaveTitle("Sign in \u00b7 Team Companion");
+    await frames(page, "login-next");
+  });
 });

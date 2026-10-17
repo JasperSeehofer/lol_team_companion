@@ -20,7 +20,10 @@ pub fn ClosedBetaPage() -> impl IntoView {
             }
         }
     });
-    view! { <Landing /> }
+    view! {
+        <leptos_meta::Title text=crate::components::ui::page_title("Closed beta") />
+        <Landing />
+    }
 }
 
 /// What Team Companion is, the closed-beta note and the way in.

@@ -269,10 +269,7 @@ pub fn ProfilePage() -> impl IntoView {
     );
     Effect::new(move || {
         if let Some(Ok(None)) = user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
     view! {
@@ -646,7 +643,7 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
     let linked = user.riot_summoner_name.clone();
 
     view! {
-        <PageHeader title=user.username.clone() eyebrow="Profile" meta=move || view! { <span>"Your account and your Riot link. Your games are on My games."</span> } />
+        <PageHeader title=user.username.clone() eyebrow="Profile" document_title="Profile" meta=move || view! { <span>"Your account and your Riot link. Your games are on My games."</span> } />
 
         <section aria-labelledby="account-h" class="flex flex-col gap-5" data-account>
             <SectionHeader title="Account" id="account-h" />

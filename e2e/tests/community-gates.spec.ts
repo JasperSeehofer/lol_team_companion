@@ -7,7 +7,9 @@ import { test, expect } from "./fixtures";
 for (const path of ["/bugs", "/what-next"]) {
   test(`${path} sends signed-out visitors to sign in`, async ({ page }) => {
     await page.goto(path);
-    await page.waitForURL("**/auth/login", { timeout: 10000 });
+    await page.waitForURL((u) => new URL(u).pathname === "/auth/login", { timeout: 10000 });
+    // M148: sign-in returns to the page.
+    expect(new URL(page.url()).searchParams.get("next")).toBe(path);
   });
 }
 

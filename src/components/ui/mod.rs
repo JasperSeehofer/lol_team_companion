@@ -64,8 +64,8 @@ pub use field::{
     SelectOption, TextField,
 };
 pub use layout::{
-    Density, Edge, HeadingLevel, Layer, Pad, PageHeader, PageShell, PageWidth, SectionHeader,
-    Surface, SurfaceTag,
+    page_title, Density, Edge, HeadingLevel, Layer, Pad, PageHeader, PageShell, PageWidth,
+    SectionHeader, Surface, SurfaceTag,
 };
 pub use markers::{
     GameResult, GlyphSize, ResultGlyph, Role, RoleLabel, RoleLabelStyle, SideMarker, SideText,

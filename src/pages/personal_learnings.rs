@@ -227,10 +227,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
     let learnings = Resource::new(|| (), |_| list_learnings());
@@ -410,10 +407,7 @@ pub fn NewLearningPage() -> impl IntoView {
     let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
     Effect::new(move || {
         if let Some(Ok(None)) = auth_user.get() {
-            #[cfg(feature = "hydrate")]
-            if let Some(window) = web_sys::window() {
-                let _ = window.location().set_href("/auth/login");
-            }
+            crate::pages::navigate::redirect_to_login();
         }
     });
     let query = use_query_map();

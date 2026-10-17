@@ -58,3 +58,28 @@ pub fn replace_url(nav: Nav, path: &str) {
     #[cfg(not(feature = "hydrate"))]
     let _ = (nav, path);
 }
+
+/// The sign-in link for the page the browser is on now:
+/// `/auth/login?next=<this page>` so sign-in returns here (M148 item 8).
+/// On the server (and for Home or the auth pages) plain `/auth/login`.
+pub fn login_href() -> String {
+    #[cfg(feature = "hydrate")]
+    {
+        if let Some(loc) = web_sys::window().map(|w| w.location()) {
+            let path = loc.pathname().unwrap_or_default();
+            let search = loc.search().unwrap_or_default();
+            return crate::models::login_next::login_href_for(&format!("{path}{search}"));
+        }
+    }
+    crate::models::login_next::LOGIN_PATH.to_string()
+}
+
+/// Send a signed-out visitor to sign in, remembering this page. Every
+/// protected page calls it when `get_current_user()` answers `None` (a
+/// hard navigation, leptos rule 8). Does nothing on the server.
+pub fn redirect_to_login() {
+    #[cfg(feature = "hydrate")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(&login_href());
+    }
+}
