@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "source": "wiki/meta/manyfold-ux-rubric.md",
+  "updated": "2026-09-14",
+  "checks": [
+    {
+      "id": "I1",
+      "group": "interaction",
+      "statement": "**Manual path survives failure.** Every experimental or agent-driven feature leaves an always-reachable manual route to Settings and to each top-level destination, with the feature forced off",
+      "measure": "a boot-disable path exists *and* a visible control reaches Settings with the feature on",
+      "threshold": "any state where the feature failing removes navigation",
+      "run_by": "harness",
+      "source": "S8·S1G8/G17·S2P6"
+    },
+    {
+      "id": "I2",
+      "group": "interaction",
+      "statement": "**Progress past 10 s.** Any agent action >10 s renders determinate per-stage progress, not an indeterminate spinner",
+      "measure": "stage list with completed/current state, or a %/count",
+      "threshold": "spinner alone, or no feedback",
+      "run_by": "harness",
+      "source": "S39"
+    },
+    {
+      "id": "I3",
+      "group": "interaction",
+      "statement": "**Disclosure depth ≤3.** Front face → detail → opt-in generated narrative. No fourth required rung",
+      "measure": "task completable at level 1",
+      "threshold": "any level-1 task needing ≥2 opens",
+      "run_by": "atelier",
+      "source": "S11"
+    },
+    {
+      "id": "I4",
+      "group": "interaction",
+      "statement": "**Correction path.** Every agent-authored artifact can be *amended*, not only accepted or rejected",
+      "measure": "an edit/steer verb reaching the same artifact",
+      "threshold": "approve/reject only",
+      "run_by": "human",
+      "source": "S1G9·S4"
+    },
+    {
+      "id": "I5",
+      "group": "interaction",
+      "statement": "**Confirms stay rare.** Second confirmation only for irreversible or R2/R3 actions, and it names the blast radius",
+      "measure": "≤1 confirm per decision path; blast radius named",
+      "threshold": "a generic \"Are you sure?\", or a confirm on a reversible action",
+      "run_by": "atelier",
+      "source": "S16·S17"
+    },
+    {
+      "id": "I6",
+      "group": "interaction",
+      "statement": "**Interruption budget.** Every notifier passes one policy object (urgency tier, quiet hours, daily cap, batch window); nothing sends direct",
+      "measure": "all send paths route through the policy",
+      "threshold": "any direct send",
+      "run_by": "harness",
+      "source": "S9·S10·S1G3·S2P3"
+    },
+    {
+      "id": "I7",
+      "group": "interaction",
+      "statement": "**Primary content readable with secondary controls collapsed.** Answer forms, asks, and other secondary UI default to collapsed and never cover the content being read; list/card views never render inputs",
+      "measure": "viewer content height ≥70% of viewport by default; expansion only on explicit tap; no inputs rendered in list views",
+      "threshold": "secondary UI open by default, covering the content, or any input rendered in a list/card view",
+      "run_by": "harness",
+      "source": "S11 (added from the M34 r2 hotfix, 2026-09-14)"
+    },
+    {
+      "id": "I8",
+      "group": "interaction",
+      "statement": "**Undo or consent for agent-initiated action.**",
+      "measure": "Every agent-initiated action at risk tier ≥R1 exposes either a reachable undo affordance after the action, or an explicit pre-action consent gate before it — never neither.",
+      "threshold": "an R1+ agent action with no undo control and no prior consent gate (today: the auto-ship deploy step has neither).",
+      "run_by": "harness",
+      "source": "S16·S17"
+    },
+    {
+      "id": "V1",
+      "group": "visual",
+      "statement": "**Closed token vocabulary.** No raw colour/spacing literal outside the generated token file",
+      "measure": "0 raw hex / `rgb()` / off-scale spacing in component CSS",
+      "threshold": "≥1 (today: 35 in parallax)",
+      "run_by": "harness",
+      "source": "S45·S53·G-11"
+    },
+    {
+      "id": "V2",
+      "group": "visual",
+      "statement": "**Spacing on the 4/8 scale**; type sizes and line-heights from tokens",
+      "measure": "every value in {4,8,16,24,32,40,48,56,64} or a token",
+      "threshold": "any off-scale literal",
+      "run_by": "harness",
+      "source": "S38"
+    },
+    {
+      "id": "V3",
+      "group": "visual",
+      "statement": "**Measure 45–75 CPL** for any body prose (card bullets, briefs, transcripts) at 393 px",
+      "measure": "rendered line length 45–75 characters",
+      "threshold": "<45 or >75",
+      "run_by": "harness",
+      "source": "S37"
+    },
+    {
+      "id": "V4",
+      "group": "visual",
+      "statement": "**Motion inside the band.** Feedback transitions 150–500 ms (vault tokens); environmental motion ≤12 % luminance, ≤0.02 px/frame",
+      "measure": "all durations from tokens; ambient within the R2 grant",
+      "threshold": "<100 ms, >500 ms for feedback, or ambient over budget",
+      "run_by": "harness",
+      "source": "S40"
+    },
+    {
+      "id": "V5",
+      "group": "visual",
+      "statement": "**First-frame legibility.** The 50 ms frame (first paint, pre-settle) is judged, not only the settled state",
+      "measure": "first-paint capture reads as the intended surface",
+      "threshold": "harness only captures settled states",
+      "run_by": "atelier",
+      "source": "S34·S35"
+    },
+    {
+      "id": "V6",
+      "group": "visual",
+      "statement": "**Complexity default.** Any high-density surface (graph, terrain) ships a ruled low-complexity default state",
+      "measure": "named default with a stated element budget",
+      "threshold": "opens at full density",
+      "run_by": "human",
+      "source": "S35·S36"
+    },
+    {
+      "id": "V7",
+      "group": "visual",
+      "statement": "**Anti-slop.** None of: Inter/system-sans as the display face, purple→blue gradient, uniform rounded-card kit, fade-up-on-scroll everywhere, a nameable silhouette standing in for atmosphere",
+      "measure": "zero tells",
+      "threshold": "≥1 tell",
+      "run_by": "atelier",
+      "source": "S53·playbook §4"
+    },
+    {
+      "id": "V8",
+      "group": "visual",
+      "statement": "**Render matches reference, pairwise.** Side by side at equal visual size against the ratified reference row; colour and position are the known-weak axes",
+      "measure": "shape language, edge, contrast, speed, layering, tint, typography all match the recipe's parameters",
+      "threshold": "any axis outside the recipe card's stated numbers",
+      "run_by": "atelier",
+      "source": "S47·S50"
+    },
+    {
+      "id": "Vo1",
+      "group": "voice",
+      "statement": "**Confirmation tiered by stakes × confidence.** No routing without a human-visible final text above the stakes threshold (`ingest-source` is the only exception)",
+      "measure": "tier declared per pipeline and enforced",
+      "threshold": "any high-stakes route with no visible final text",
+      "run_by": "harness",
+      "source": "S20·vision §11.4"
+    },
+    {
+      "id": "Vo2",
+      "group": "voice",
+      "statement": "**Lossless means lossless.** `clean`/`condense` add no claim; anything that rephrases is a diff the human accepts",
+      "measure": "diff shown; no sentence present in output absent from input",
+      "threshold": "an unaccepted rewrite, or an added claim",
+      "run_by": "harness",
+      "source": "S21"
+    },
+    {
+      "id": "Vo3",
+      "group": "voice",
+      "statement": "**Keyboard twin.** Every voice path has a first-class typed equivalent, and the app never nudges toward the mic",
+      "measure": "typed path equally reachable",
+      "threshold": "voice-only entry anywhere",
+      "run_by": "harness",
+      "source": "S22·vision §11.2"
+    },
+    {
+      "id": "Vo4",
+      "group": "voice",
+      "statement": "**Stated latency budget.** Each pipeline declares an envelope; the surface shows per-node progress rather than implying conversational turn-taking",
+      "measure": "envelope declared and rendered",
+      "threshold": "undeclared, or a bare spinner past 2 s",
+      "run_by": "harness",
+      "source": "S23·S39"
+    },
+    {
+      "id": "T1",
+      "group": "trust",
+      "statement": "**Confidence beside consequence.** Every agent-authored artifact renders a certainty signal alongside its risk tier",
+      "measure": "both fields present and distinguishable",
+      "threshold": "risk only (today: all decision cards)",
+      "run_by": "harness",
+      "source": "S12·S1G2"
+    },
+    {
+      "id": "T2",
+      "group": "trust",
+      "statement": "**No naked explanation.** A generated explanation (\"brief me\", advisor output) never renders without a confidence and at least one disconfirming cue",
+      "measure": "both present",
+      "threshold": "explanation alone",
+      "run_by": "atelier",
+      "source": "S14"
+    },
+    {
+      "id": "T3",
+      "group": "trust",
+      "statement": "**Capability + limits stated.** One reachable surface states what the system can do and how often it is wrong, in plain language",
+      "measure": "present and current",
+      "threshold": "absent",
+      "run_by": "human",
+      "source": "S1G1/G2·S3"
+    },
+    {
+      "id": "T4",
+      "group": "trust",
+      "statement": "**Change notice.** Any behaviour change the human did not request — a promoted pipeline default, an auto-shipped diff, a deployed build — is announced with what changed and a revert path",
+      "measure": "notice + revert",
+      "threshold": "silent change (today: the 10-min sync timer)",
+      "run_by": "harness",
+      "source": "S1G18·S15·S5"
+    },
+    {
+      "id": "A1",
+      "group": "accessibility",
+      "statement": "target size",
+      "measure": "every interactive element ≥44×44 px with ≥8 px between adjacent small targets (vault standard, above WCAG 2.5.8's 24×24 AA floor)",
+      "threshold": "FIX below 44",
+      "run_by": "harness",
+      "source": "S26·S29"
+    },
+    {
+      "id": "A2",
+      "group": "accessibility",
+      "statement": "contrast from pixels",
+      "measure": "body text ≥4.5:1, large text and every meaningful non-text graphic ≥3:1, recomputed from the rendered composite in each state combination the component can enter, including aria-current/selected/disabled overlays",
+      "threshold": "FIX below thresholds",
+      "run_by": "harness",
+      "source": "S27"
+    },
+    {
+      "id": "A3",
+      "group": "accessibility",
+      "statement": "reduced motion",
+      "measure": "under prefers-reduced-motion: reduce the surface is DOM- or pixel-identical across a 10 s idle window, and no state change is communicated by motion alone",
+      "threshold": "FIX if motion persists or state communicated by motion alone",
+      "run_by": "harness",
+      "source": "S28"
+    },
+    {
+      "id": "A4",
+      "group": "accessibility",
+      "statement": "single-pointer + screen-reader",
+      "measure": "every drag/swipe has a tap equivalent that is reachable in focus order with a screen reader running, no state is signalled by hue alone, and no internal code (R2, H-DECIDE, a gate id) renders unglossed",
+      "threshold": "FIX if any drag without tap equivalent, hue-only state, or unglossed internal code",
+      "run_by": "human",
+      "source": "S26 SC 2.5.7"
+    }
+  ]
+}

@@ -155,6 +155,48 @@ jobs:
             exit 1
           fi
 
+      # M148 item 9: the garden's UX rubric (scripts/ux-rubric/, a read-only
+      # copy of wiki/assets/ux-rubric) against the public surfaces the
+      # mission touched. It reports and never blocks; the table is committed
+      # with the frames on mission branches. Signed-in pages are not checked:
+      # the harness has no sign-in step.
+      - uses: actions/setup-node@v4
+        if: always()
+        continue-on-error: true
+        with:
+          node-version: 24
+
+      - name: UX rubric check (public touched surfaces, report only)
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/mission-frames"
+          OUT="$RUNNER_TEMP/mission-frames/rubric-check.md"
+          TRELLIS_CHROMIUM="$(cd e2e && node -e "process.stdout.write(require('playwright-core').chromium.executablePath())")"
+          export TRELLIS_CHROMIUM
+          {
+            echo "# UX rubric check"
+            echo
+            echo "- run: ${{ github.run_id }}"
+            echo "- sha: ${{ github.sha }}"
+            echo "- harness: scripts/ux-rubric/rubric-check.mjs ($(node --version))"
+            echo "- limitation: only public pages; signed-in surfaces need a sign-in step the harness does not have"
+            echo
+          } > "$OUT"
+          set +e
+          node scripts/ux-rubric/rubric-check.mjs --app-dir e2e --settle 2000 \
+            "$BASE_URL/auth/login" \
+            "$BASE_URL/auth/login?next=%2Fdraft" \
+            "$BASE_URL/auth/register?invite=$E2E_INVITE_CODE" \
+            "$BASE_URL/auth/reset" >> "$OUT" 2> "$RUNNER_TEMP/rubric-check.err"
+          code=$?
+          set -e
+          { echo; echo "exit code: $code"; } >> "$OUT"
+          if [ -s "$RUNNER_TEMP/rubric-check.err" ]; then
+            { echo; echo '```'; cat "$RUNNER_TEMP/rubric-check.err"; echo '```'; } >> "$OUT"
+          fi
+          cat "$OUT"
+
       - name: Server log
         if: always()
         run: tail -n 200 "$RUNNER_TEMP/server.log" || true
@@ -206,6 +248,10 @@ jobs:
           copy_pngs "$RUNNER_TEMP/mission-frames" "$FRAMES/after"
           copy_pngs "$RUNNER_TEMP/mission-frames/after" "$FRAMES/after"
           copy_pngs "$RUNNER_TEMP/mission-frames/before" "$FRAMES/before"
+          if [ -f "$RUNNER_TEMP/mission-frames/rubric-check.md" ]; then
+            mkdir -p "$MISSION_DIR/publish-round-r1"
+            cp "$RUNNER_TEMP/mission-frames/rubric-check.md" "$MISSION_DIR/publish-round-r1/rubric-check.md"
+          fi
           git add "$MISSION_DIR"
           if git diff --cached --quiet; then
             echo "nothing to commit"
