@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test, expect, authenticatePage, createTeam, signInAsAdmin, INVITE_CODE, TEST_PASSWORD } from "./fixtures";
 import type { Page } from "@playwright/test";
+import { createDraft, saveGamePlan } from "./helpers";
 
 const DIR = process.env.MISSION_FRAMES_DIR;
 const SIZES = [
@@ -121,5 +122,64 @@ test.describe("M148 frames", () => {
       const h = await section.getByTestId("copy-invite-link").first().evaluate((el) => el.getBoundingClientRect().height);
       if (vw < 768) expect(h).toBeGreaterThanOrEqual(44);
     });
+  });
+  // M148 item 4: the editors' save state, saved and failed (a 503 on the
+  // save server function; the route stays on while the frames are taken).
+  async function failSaves(page: Page, fn: string) {
+    await page.route(`**/api/${fn}*`, (route) => route.fulfill({ status: 503, body: "" }));
+  }
+
+  test("draft saved and failed (draft, draft-save-failed)", async ({ page }) => {
+    await authenticatePage(page);
+    await createTeam(page, `FramesDraft_${Date.now()}`);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await createDraft(page, `Frames draft ${Date.now()}`);
+    await settle(page);
+    await frames(page, "draft");
+    await failSaves(page, "update_draft");
+    await page.locator("#draft-name").fill(`Frames draft edited ${Date.now()}`);
+    await expect(page.getByTestId("draft-save-state")).toHaveAttribute("data-save-state", "failed", { timeout: 8000 });
+    await frames(page, "draft-save-failed");
+  });
+
+  test("game plan saved and failed (game-plan, game-plan-save-failed)", async ({ page }) => {
+    await authenticatePage(page);
+    await createTeam(page, `FramesPlan_${Date.now()}`);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/game-plan", { waitUntil: "networkidle" });
+    await saveGamePlan(page, `Frames plan ${Date.now()}`);
+    await settle(page);
+    await frames(page, "game-plan");
+    await failSaves(page, "update_plan");
+    await page.locator("#plan-name").fill(`Frames plan edited ${Date.now()}`);
+    await expect(page.getByTestId("plan-save-state")).toHaveAttribute("data-save-state", "failed", { timeout: 8000 });
+    await frames(page, "game-plan-save-failed");
+  });
+
+  test("tree drafter saved and failed (tree-drafter, tree-save-failed)", async ({ page }) => {
+    await authenticatePage(page);
+    await createTeam(page, `FramesTree_${Date.now()}`);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const name = `Frames tree ${Date.now()}`;
+    await page.goto("/tree-drafter", { waitUntil: "networkidle" });
+    await page.locator("#tree-name").fill(name);
+    await page.getByRole("button", { name: "Create tree" }).click();
+    await expect(page.getByTestId("tree-list").getByRole("button", { name })).toHaveAttribute("aria-pressed", "true", { timeout: 5000 });
+    const label = `Frames branch ${Date.now()}`;
+    await page.getByRole("treeitem").first().getByRole("button", { name: "Branch", exact: true }).click();
+    await page.locator("#branch-label").fill(label);
+    await page.getByRole("button", { name: "Add branch" }).click();
+    const row = page.getByRole("treeitem").filter({ hasText: label }).last();
+    await expect(row).toBeVisible({ timeout: 5000 });
+    await row.getByRole("button", { name: label }).click();
+    await expect(page.locator("#node-label")).toHaveValue(label);
+    await page.getByRole("button", { name: "Save node" }).click();
+    await expect(page.getByTestId("node-save-state")).toHaveText("Saved", { timeout: 5000 });
+    await settle(page);
+    await frames(page, "tree-drafter");
+    await failSaves(page, "save_node");
+    await page.locator("#node-label").fill(`${label} edited`);
+    await expect(page.getByTestId("node-save-state")).toHaveAttribute("data-save-state", "failed", { timeout: 8000 });
+    await frames(page, "tree-save-failed");
   });
 });

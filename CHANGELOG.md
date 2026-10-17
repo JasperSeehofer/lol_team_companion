@@ -19,9 +19,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 #### Added
 - Sign-up asks you to confirm "I am 16 or older and accept the Terms and have read the Privacy page", with both pages linked (they open in a new tab, so the form keeps what you typed). The account cannot be created without the tick, and an invite link is not used up by a sign-up that was refused. Your account records when you ticked it; it is part of Download my data, and the Terms and the Privacy page say so.
 - Invite links on the team page show the whole link for every open code, also after a reload, with "Copy link" and, on phones and other browsers that offer it, "Share" to send it through another app. "Copied" appears only once the browser has really copied the link; if it refuses, the page says so and selects the link so you can copy it by hand.
+- Leaving a draft, game plan or tree node with work that is not saved yet (a change waiting to be saved, a save that failed, or a new draft or plan you have written in but not saved) asks first: the browser's own "Leave site?" question appears when you close the tab, reload or go to another site.
 - For admins: a "Copy code" button under a new password reset code on Password resets. It says "Copied" only once the browser has really copied the code; if the browser refuses, it says so and selects the code so you can copy it by hand.
 
 #### Fixed
+- Draft, game plan and tree drafter: a change that could not be saved was silent; the header kept saying "Unsaved changes" (or "Saved") and nothing told you the work was at risk. Now the header says "Could not save" and why ("the server did not answer"), with Retry; one message says your changes are not saved, and the next edit tries again. A success message only appears when the save worked: creating a branch or an improvised branch whose draft could not be saved now says so instead of "Branch created". If the draft board, the saved drafts, the plans, the trees or a tree's branches do not load, the page says so and offers "Try again" instead of showing an empty list.
 - Share links: "Copy link" said "Link copied" before the browser had copied anything, even when it refused. It now says so only after the copy worked, and otherwise tells you to copy the link by hand, with the link selected.
 
 ### Feedback batch 1 (2026-10-16)

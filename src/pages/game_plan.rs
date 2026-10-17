@@ -6,11 +6,15 @@ use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::draft_board::slot_meta;
 use crate::components::ui::a11y::focus_id;
 use crate::components::ui::{
-    AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar, Checkbox,
-    ConfirmDialog, ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell,
-    PrepEmphasis, PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment,
-    SegmentSize, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
-    TextField, Toast, ToastContext,
+    save_failure_reason, use_save_state, use_unsaved_guard, LoadFailed, SaveState, SaveStatus,
+    SAVE_FAILED_TOAST,
+};
+use crate::components::ui::{
+    AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, Checkbox, ConfirmDialog,
+    ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell, PrepEmphasis,
+    PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment, SegmentSize,
+    SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField,
+    Toast, ToastContext,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
@@ -662,7 +666,11 @@ pub fn GamePlanPage() -> impl IntoView {
     let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
     let win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
     let ed = PlanEd::new();
-    let save_state = RwSignal::new("");
+    // The header's save state (`ui::status`, DESIGN 6.6).
+    let save = use_save_state();
+    save.show(SaveState::NotSaved);
+    // An empty editor, to tell a new plan with content from a blank one.
+    let blank_plan = StoredValue::new(ed.build(false));
 
     // `?draft_id=` prefills a new plan from that draft, once.
     let prefill = Resource::new(
@@ -724,7 +732,7 @@ pub fn GamePlanPage() -> impl IntoView {
             {
                 ed.load(&p);
                 loaded_snapshot.set_value(Some(ed.build(false)));
-                save_state.set("saved");
+                save.saved_steady();
                 edit_gen.update_value(|g| *g += 1);
                 opened.set_value(true);
             }
@@ -742,7 +750,11 @@ pub fn GamePlanPage() -> impl IntoView {
         if loaded_snapshot.with_value(|l| l.as_ref() == Some(&plan)) {
             return;
         }
-        save_state.set("unsaved");
+        // While saves fail, "Could not save" stays until one works (the
+        // next autosave below is the retry an edit gives).
+        if !save.is_failing() {
+            save.show(SaveState::Unsaved);
+        }
         #[cfg(feature = "hydrate")]
         {
             use wasm_bindgen::prelude::*;
@@ -755,15 +767,37 @@ pub fn GamePlanPage() -> impl IntoView {
             let gen = edit_gen.get_value();
             let cb = Closure::once(move || {
                 leptos::task::spawn_local(async move {
-                    if update_plan(json).await.is_ok() {
-                        // Only the plan still open takes the new snapshot.
-                        if edit_gen.get_value() == gen {
-                            let unchanged = ed.build(false) == plan;
-                            loaded_snapshot.set_value(Some(plan));
-                            save_state.set(if unchanged { "saved" } else { "unsaved" });
+                    let current = edit_gen.get_value() == gen;
+                    if current {
+                        save.saving();
+                    }
+                    match update_plan(json).await {
+                        Ok(_) => {
+                            // Only the plan still open takes the new snapshot.
+                            if edit_gen.get_value() == gen {
+                                let unchanged = ed.build(false) == plan;
+                                loaded_snapshot.set_value(Some(plan));
+                                save.saved_steady();
+                                if !unchanged {
+                                    save.show(SaveState::Unsaved);
+                                }
+                            }
+                            plans.refetch();
+                            win_rates.refetch();
                         }
-                        plans.refetch();
-                        win_rates.refetch();
+                        Err(e) => {
+                            let reason = save_failure_reason(&e);
+                            if edit_gen.get_value() == gen {
+                                if save.failed(reason) {
+                                    toast.push.run(Toast::error(SAVE_FAILED_TOAST));
+                                }
+                            } else {
+                                // The editor moved on: say so once, in words.
+                                toast.push.run(Toast::error(format!(
+                                    "Your last changes to the plan you left are not saved: {reason}"
+                                )));
+                            }
+                        }
                     }
                 });
             });
@@ -783,7 +817,7 @@ pub fn GamePlanPage() -> impl IntoView {
     let open_plan = Callback::new(move |p: GamePlan| {
         ed.load(&p);
         loaded_snapshot.set_value(Some(ed.build(false)));
-        save_state.set("saved");
+        save.saved_steady();
         edit_gen.update_value(|g| *g += 1);
         opened.set_value(true);
         if let Some(id) = p.id.as_deref() {
@@ -792,7 +826,8 @@ pub fn GamePlanPage() -> impl IntoView {
     });
 
     let name_error = RwSignal::new(None::<String>);
-    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
+    // "Save plan" and the header's "Retry" after a failed save.
+    let save_now = Callback::new(move |_: ()| {
         if saving.get_untracked() || prefill_pending.get_untracked() {
             return;
         }
@@ -807,6 +842,7 @@ pub fn GamePlanPage() -> impl IntoView {
         let is_update = plan.id.is_some();
         let gen = edit_gen.get_value();
         saving.set(true);
+        save.saving();
         leptos::task::spawn_local(async move {
             let res = if is_update {
                 update_plan(json).await.map(|_| String::new())
@@ -833,21 +869,39 @@ pub fn GamePlanPage() -> impl IntoView {
                     }
                     let unchanged = ed.build(false) == sent;
                     loaded_snapshot.set_value(Some(sent));
-                    save_state.set(if unchanged { "saved" } else { "unsaved" });
+                    save.saved_steady();
+                    if !unchanged {
+                        save.show(SaveState::Unsaved);
+                    }
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not save the plan: {e}"))),
+                Err(e) => {
+                    let reason = save_failure_reason(&e);
+                    if edit_gen.get_value() != gen {
+                        toast.push.run(Toast::error(format!(
+                            "Your last changes to the plan you left are not saved: {reason}"
+                        )));
+                    } else if save.failed(reason) {
+                        toast.push.run(Toast::error(SAVE_FAILED_TOAST));
+                    }
+                }
             }
         });
     });
+    let do_save = Callback::new(move |_: leptos::ev::MouseEvent| save_now.run(()));
+    // Leaving with work that is not saved asks first: an edit waiting for
+    // its autosave, a save on its way or failed, or a new plan with content.
+    use_unsaved_guard(Signal::derive(move || {
+        let state = save.state.get();
+        state.guards_leave()
+            || (state == SaveState::NotSaved && blank_plan.with_value(|b| ed.build(true) != *b))
+    }));
     let new_plan = Callback::new(move |_: leptos::ev::MouseEvent| {
         opened.set_value(true);
         replace_url(nav, "/game-plan");
         ed.clear();
         edit_gen.update_value(|g| *g += 1);
         loaded_snapshot.set_value(None);
-        save_state.set("");
+        save.show(SaveState::NotSaved);
         name_error.set(None);
     });
     let confirm_delete = RwSignal::new(false);
@@ -863,7 +917,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     ed.clear();
                     edit_gen.update_value(|g| *g += 1);
                     loaded_snapshot.set_value(None);
-                    save_state.set("");
+                    save.show(SaveState::NotSaved);
                     plans.refetch();
                     toast.push.run(Toast::success("Game plan deleted"));
                 }
@@ -889,13 +943,7 @@ pub fn GamePlanPage() -> impl IntoView {
                 title=title
                 eyebrow="Game plan"
                 meta=move || view! {
-                    <span data-testid="plan-save-state" class="text-muted">
-                        {move || match (ed.id.get().is_some(), save_state.get()) {
-                            (false, _) => "Not saved yet",
-                            (true, "unsaved") => "Unsaved changes",
-                            (true, _) => "Saved",
-                        }}
-                    </span>
+                    <SaveStatus state=save.state on_retry=save_now attr:data-testid="plan-save-state" />
                 }
                 actions=move || view! {
                     <Button variant=ButtonVariant::Quiet on_click=new_plan>"New plan"</Button>
@@ -903,7 +951,7 @@ pub fn GamePlanPage() -> impl IntoView {
                         <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| share_open.set(true)) attr:data-testid="plan-share">"Share"</Button>
                         <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_delete.set(true))>"Delete"</Button>
                     })}
-                    <Button variant=ButtonVariant::Primary on_click=do_save loading=Signal::derive(move || saving.get() || prefill_pending.get()) attr:data-testid="plan-save">"Save plan"</Button>
+                    <Button variant=ButtonVariant::Primary size=ButtonSize::Touch on_click=do_save loading=Signal::derive(move || saving.get() || prefill_pending.get()) attr:data-testid="plan-save">"Save plan"</Button>
                 }
             />
             <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::GamePlan target=Signal::derive(move || ed.id.get()) />
@@ -926,7 +974,7 @@ pub fn GamePlanPage() -> impl IntoView {
                     <SectionHeader title="Plans" id="plans-heading" />
                     <Suspense fallback=|| view! { <SkeletonGroup label="Loading plans"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
                         {move || plans.get().map(|r| match r {
-                            Err(_) => view! { <Callout tone=CalloutTone::Danger>"The plans did not load."</Callout> }.into_any(),
+                            Err(_) => view! { <LoadFailed what="The plans" on_retry=Callback::new(move |_| plans.refetch()) attr:data-testid="plans-load-failed" /> }.into_any(),
                             Ok(list) if list.is_empty() => view! {
                                 <EmptyState size=EmptySize::Compact message="Plans your team saves are listed here. Write one on the right, or start one from a draft with Prep a game plan." />
                             }.into_any(),

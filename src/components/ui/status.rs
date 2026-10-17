@@ -43,6 +43,16 @@ impl SaveState {
         }
     }
 
+    /// Whether leaving the page now would lose work: an edit not saved yet,
+    /// a save on its way, or a save that failed. (`NotSaved` guards only
+    /// when the new document has content: the page decides that.)
+    pub fn guards_leave(&self) -> bool {
+        matches!(
+            self,
+            SaveState::Unsaved | SaveState::Saving | SaveState::Failed(_)
+        )
+    }
+
     fn class(&self) -> &'static str {
         match self {
             SaveState::Saved => "inline-flex items-center gap-2 text-label text-secondary",
@@ -63,6 +73,9 @@ pub struct SaveTracker {
     pub state: RwSignal<SaveState>,
     #[allow(dead_code)]
     timer: RwSignal<Option<i32>>,
+    /// A failure since the last successful save: retries and further edits
+    /// stay in the same failure, so its toast is shown once.
+    failing: RwSignal<bool>,
 }
 
 impl SaveTracker {
@@ -71,8 +84,29 @@ impl SaveTracker {
         self.state.set(SaveState::Saving);
     }
 
+    /// The change reached the server; "Saved" stays (an editor's document
+    /// state, DESIGN 6.6), unlike [`SaveTracker::saved`], which fades.
+    pub fn saved_steady(&self) {
+        self.cancel_fade();
+        self.failing.set(false);
+        self.state.set(SaveState::Saved);
+    }
+
+    /// Show a state that is neither a save nor a failure ("Not saved yet",
+    /// "Unsaved changes", nothing). Ends a failure only when `state` says
+    /// the document has no unsaved work left to lose (`Idle`, `NotSaved`
+    /// for a document just opened or started).
+    pub fn show(&self, state: SaveState) {
+        self.cancel_fade();
+        if matches!(state, SaveState::Idle | SaveState::NotSaved) {
+            self.failing.set(false);
+        }
+        self.state.set(state);
+    }
+
     pub fn saved(&self) {
         self.cancel_fade();
+        self.failing.set(false);
         self.state.set(SaveState::Saved);
         #[cfg(feature = "hydrate")]
         {
@@ -97,9 +131,20 @@ impl SaveTracker {
         }
     }
 
-    pub fn failed(&self, what: impl Into<String>) {
+    /// The last save failed. Returns `true` only for the first failure since
+    /// the last successful save (the page shows its one error toast then,
+    /// never per retry or per autosave attempt).
+    pub fn failed(&self, what: impl Into<String>) -> bool {
         self.cancel_fade();
+        let entered = !self.failing.get_untracked();
+        self.failing.set(true);
         self.state.set(SaveState::Failed(what.into()));
+        entered
+    }
+
+    /// Whether the last save failed and nothing has succeeded since.
+    pub fn is_failing(&self) -> bool {
+        self.failing.get_untracked()
     }
 
     fn cancel_fade(&self) {
@@ -113,12 +158,83 @@ impl SaveTracker {
     }
 }
 
+/// The toast shown once when an editor's save starts failing (DESIGN 6.6).
+pub const SAVE_FAILED_TOAST: &str = "Your changes are not saved. Keep this tab open and use Retry.";
+
+/// What did not work, for "Could not save: {reason}": a message the server
+/// sent is shown as written (without the Leptos wrapper); anything else (no
+/// answer, a gateway error, a body that is not ours) is "the server did not
+/// answer". Never the raw error text.
+pub fn save_failure_reason(e: &ServerFnError) -> String {
+    match e {
+        ServerFnError::ServerError(msg) if !msg.trim().is_empty() => {
+            crate::models::utils::error_text(msg)
+        }
+        _ => "the server did not answer".into(),
+    }
+}
+
+/// Asks the browser to confirm leaving the page (a reload, closing the tab,
+/// a link out of the app) while `dirty` is true: a `beforeunload` listener
+/// is added when it turns true and removed when it turns false or the
+/// calling component goes away. Browser only; nothing on the server.
+///
+/// A11y: the browser's own confirmation, which every assistive technology
+/// already knows; the page adds no dialog of its own.
+pub fn use_unsaved_guard(dirty: Signal<bool>) {
+    #[cfg(feature = "hydrate")]
+    {
+        use wasm_bindgen::prelude::*;
+        type Listener = Closure<dyn FnMut(web_sys::BeforeUnloadEvent)>;
+        let listener = StoredValue::new_local(None::<Listener>);
+        let remove = move || {
+            if let Some(Some(cb)) = listener.try_update_value(|l| l.take()) {
+                if let Some(win) = web_sys::window() {
+                    let _ = win.remove_event_listener_with_callback(
+                        "beforeunload",
+                        cb.as_ref().unchecked_ref(),
+                    );
+                }
+            }
+        };
+        Effect::new(move |_| {
+            if dirty.get() {
+                if listener.with_value(|l| l.is_some()) {
+                    return;
+                }
+                let cb: Listener = Closure::new(move |ev: web_sys::BeforeUnloadEvent| {
+                    ev.prevent_default();
+                    // Older Chromium and Safari still need a return value.
+                    ev.set_return_value("unsaved");
+                });
+                if let Some(win) = web_sys::window() {
+                    if win
+                        .add_event_listener_with_callback(
+                            "beforeunload",
+                            cb.as_ref().unchecked_ref(),
+                        )
+                        .is_ok()
+                    {
+                        listener.set_value(Some(cb));
+                    }
+                }
+            } else {
+                remove();
+            }
+        });
+        on_cleanup(remove);
+    }
+    #[cfg(not(feature = "hydrate"))]
+    let _ = dirty;
+}
+
 /// A [`SaveTracker`] owned by the calling component (its fade timer is
 /// cleared when the component goes away).
 pub fn use_save_state() -> SaveTracker {
     let tracker = SaveTracker {
         state: RwSignal::new(SaveState::Idle),
         timer: RwSignal::new(None),
+        failing: RwSignal::new(false),
     };
     on_cleanup(move || tracker.cancel_fade());
     tracker
@@ -149,7 +265,7 @@ pub fn SaveStatus(
                 let failed = state.with(|s| matches!(s, SaveState::Failed(_)));
                 (failed && on_retry.is_some()).then(|| view! {
                     <Button
-                        size=ButtonSize::Sm
+                        size=ButtonSize::Touch
                         variant=ButtonVariant::Quiet
                         on_click=Callback::new(move |_| {
                             if let Some(cb) = on_retry {
@@ -182,7 +298,7 @@ pub fn LoadFailed(
             tone=CalloutTone::Danger
             title=format!("{what} did not load")
             action=move || view! {
-                <Button size=ButtonSize::Sm on_click=Callback::new(move |_| on_retry.run(()))>"Try again"</Button>
+                <Button size=ButtonSize::Touch on_click=Callback::new(move |_| on_retry.run(()))>"Try again"</Button>
             }
         >
             "The server did not answer. Nothing you saved is lost."
@@ -206,6 +322,68 @@ mod tests {
             SaveState::Failed("Ahri's tier".into()).label(),
             "Could not save: Ahri's tier"
         );
+    }
+
+    #[test]
+    fn leaving_is_guarded_only_with_work_at_risk() {
+        assert!(!SaveState::Idle.guards_leave());
+        assert!(!SaveState::NotSaved.guards_leave());
+        assert!(!SaveState::Saved.guards_leave());
+        assert!(SaveState::Unsaved.guards_leave());
+        assert!(SaveState::Saving.guards_leave());
+        assert!(SaveState::Failed("x".into()).guards_leave());
+    }
+
+    #[test]
+    fn failure_reason_shows_server_words_and_hides_the_rest() {
+        assert_eq!(
+            save_failure_reason(&ServerFnError::ServerError(
+                "Create or join your team first".into()
+            )),
+            "Create or join your team first"
+        );
+        assert_eq!(
+            save_failure_reason(&ServerFnError::Deserialization(
+                "Invalid format: missing delimiter in \"\"".into()
+            )),
+            "the server did not answer"
+        );
+        assert_eq!(
+            save_failure_reason(&ServerFnError::Request("NetworkError".into())),
+            "the server did not answer"
+        );
+        assert_eq!(
+            save_failure_reason(&ServerFnError::ServerError("  ".into())),
+            "the server did not answer"
+        );
+    }
+
+    #[test]
+    fn failed_reports_only_the_first_failure_until_a_save_works() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let t = SaveTracker {
+                state: RwSignal::new(SaveState::Unsaved),
+                timer: RwSignal::new(None),
+                failing: RwSignal::new(false),
+            };
+            assert!(t.failed("a"));
+            // A retry and an edit stay in the same failure.
+            t.saving();
+            assert!(!t.failed("b"));
+            t.show(SaveState::Unsaved);
+            assert!(!t.failed("c"));
+            assert!(t.is_failing());
+            assert_eq!(t.state.get_untracked(), SaveState::Failed("c".into()));
+            // A save that works ends it.
+            t.saved_steady();
+            assert!(!t.is_failing());
+            assert_eq!(t.state.get_untracked(), SaveState::Saved);
+            assert!(t.failed("d"));
+            // Opening another document ends it too.
+            t.show(SaveState::NotSaved);
+            assert!(t.failed("e"));
+        });
     }
 
     #[test]
