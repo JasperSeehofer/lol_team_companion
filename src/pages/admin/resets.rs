@@ -143,7 +143,7 @@ pub fn AdminResetsPage() -> impl IntoView {
                             <div class="mt-4" role="status" data-testid="reset-result">
                                 {move || minted().map(|m| view! {
                                     <Callout tone=CalloutTone::Info title=format!("Reset code for {}", m.email)>
-                                        <code node_ref=code_ref class="block select-all font-mono text-title figures text-primary" data-testid="reset-code">{m.code.clone()}</code>
+                                        <code node_ref=code_ref class="block select-all break-all font-mono text-title figures text-primary" data-testid="reset-code">{m.code.clone()}</code>
                                         <p class="mt-2">
                                             "Valid for 15 minutes, until "
                                             <LocalTime iso=m.expires_at.clone() style=TimeStyle::When />

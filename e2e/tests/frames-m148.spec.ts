@@ -23,13 +23,30 @@ async function settle(page: Page) {
   await page.waitForTimeout(1200);
 }
 
+/** Close the toasts left by setup steps, so the flow frame shows the page as opened. */
+async function dismissToasts(page: Page) {
+  const buttons = page.locator("[data-toast] button[aria-label=Dismiss]");
+  for (let i = 0; i < 6 && (await buttons.count()) > 0; i++) {
+    await buttons.first().click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(150);
+  }
+}
+
 async function frames(page: Page, name: string, prep?: () => Promise<void>) {
   for (const s of SIZES) {
     await page.setViewportSize({ width: s.w, height: s.h });
     if (prep) await prep();
     await page.waitForTimeout(400);
+    if (s.w === 390) {
+      // No sideways scroll on a phone: the page is never wider than the viewport.
+      const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(sw, `${name} at 390 is ${sw}px wide`).toBeLessThanOrEqual(s.w);
+    }
     if (!DIR) continue;
     fs.mkdirSync(DIR, { recursive: true });
+    // Full-page shots from the top, so the sticky header is painted in place.
+    await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+    await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(DIR, `${name}-${s.w}.png`), fullPage: true });
     if (s.w === 1280) {
       await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
@@ -181,6 +198,9 @@ test.describe("M148 frames", () => {
     await page.getByRole("button", { name: "Save node" }).click();
     await expect(page.getByTestId("node-save-state")).toHaveText("Saved", { timeout: 5000 });
     await settle(page);
+    // The setup steps leave three toasts; the frames show the page without them.
+    await dismissToasts(page);
+    await expect(page.locator("[data-toast]")).toHaveCount(0, { timeout: 8000 });
     await frames(page, "tree-drafter");
     await failSaves(page, "save_node");
     await page.locator("#node-label").fill(`${label} edited`);

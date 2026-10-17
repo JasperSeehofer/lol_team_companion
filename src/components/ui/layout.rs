@@ -131,7 +131,7 @@ pub fn PageHeader(
         <header class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pb-4 mb-6 border-b border-rule">
             <div class="min-w-0">
                 {eyebrow.map(|e| view! { <p class="eyebrow">{e}</p> })}
-                <h1 class="mt-2 font-display text-headline font-semibold tracking-[-0.02em] text-primary text-balance">
+                <h1 class="mt-2 font-display text-headline font-semibold tracking-[-0.02em] text-primary text-balance [overflow-wrap:anywhere]">
                     {move || title.get().to_string()}
                 </h1>
                 {meta.map(|m| view! {
@@ -184,7 +184,7 @@ pub fn SectionHeader(
                 {heading}
                 {meta.map(|m| view! { <p class="text-label text-muted">{m}</p> })}
             </div>
-            {actions.map(|a| view! { <div class="flex items-center gap-2 shrink-0">{a.run()}</div> })}
+            {actions.map(|a| view! { <div class="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1">{a.run()}</div> })}
         </div>
     }
 }

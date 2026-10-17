@@ -123,7 +123,7 @@ pub fn Callout(
             {glyph_for(tone)}
             <div class="flex min-w-0 flex-1 flex-col gap-1">
                 {title.map(|t| view! {
-                    <p class=format!("text-body font-semibold {ink}")>
+                    <p class=format!("text-body font-semibold [overflow-wrap:anywhere] {ink}")>
                         <span class="sr-only">{format!("{}: ", tone.word())}</span>
                         {t}
                     </p>

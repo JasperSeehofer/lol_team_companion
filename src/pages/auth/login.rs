@@ -131,7 +131,7 @@ pub fn LoginPage() -> impl IntoView {
                         <Field id="login-password" label="Password" hint=FORGOT_PASSWORD_HINT>
                             <TextField kind=InputKind::Password name="password" required=true autocomplete="current-password" />
                         </Field>
-                        <A href="/auth/reset" attr:class="inline-block self-start py-2.5 text-label font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                        <A href="/auth/reset" attr:class="inline-block self-start py-3 text-label font-medium text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
                             "Have a reset code? Set a new password."
                         </A>
                     </div>

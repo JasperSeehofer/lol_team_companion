@@ -56,7 +56,9 @@ impl SaveState {
     fn class(&self) -> &'static str {
         match self {
             SaveState::Saved => "inline-flex items-center gap-2 text-label text-secondary",
-            SaveState::Failed(_) => "inline-flex items-center gap-2 text-label text-danger",
+            SaveState::Failed(_) => {
+                "inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-label text-danger [overflow-wrap:anywhere]"
+            }
             _ => "inline-flex items-center gap-2 text-label text-muted",
         }
     }
