@@ -95,6 +95,23 @@ for (const size of [
   });
 }
 
+/**
+ * Sign-in navigates twice (the server's redirect, then the hydrated page's
+ * hard navigation to the same address), so a goto right after it can be
+ * "interrupted by another navigation". Settle first, and retry the goto
+ * when the late navigation still lands on it.
+ */
+async function gotoSettled(page: Page, url: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await page.goto(url);
+    } catch (e) {
+      if (attempt >= 2 || !/interrupted by another navigation/.test(String(e))) throw e;
+      await page.waitForLoadState("load").catch(() => {});
+    }
+  }
+}
+
 async function signInSeeded(page: Page): Promise<boolean> {
   await page.goto("/auth/login");
   await page.fill("input[name=email]", SEEDED_LEADER);
@@ -102,13 +119,16 @@ async function signInSeeded(page: Page): Promise<boolean> {
   await page.click("main button[type=submit]");
   return page
     .waitForURL((u) => new URL(u).pathname === "/", { timeout: 15000 })
-    .then(() => true)
+    .then(async () => {
+      await page.waitForLoadState("networkidle").catch(() => {});
+      return true;
+    })
     .catch(() => false);
 }
 
 /** Share the seeded "Game 1" plan; returns the link. */
 async function shareSeededPlan(page: Page): Promise<string> {
-  await page.goto("/game-plan");
+  await gotoSettled(page, "/game-plan");
   const item = page.getByTestId("plan-list").getByRole("button", { name: /Game 1 plan/ });
   await expect(item).toBeVisible({ timeout: 15000 });
   await item.click();
@@ -191,7 +211,7 @@ test("Match Day at 390: the field card's button is the page's chalk (at most 2 a
   const ok = await signInSeeded(page);
   if (process.env.CI) expect(ok, "CI must seed the database (seed tool) before starting the server").toBe(true);
   test.skip(!ok, "needs the seed data: stop the server, run the seed tool, start it again");
-  await page.goto("/");
+  await gotoSettled(page, "/");
   const card = page.locator("[data-field-card]");
   await expect(card).toBeVisible({ timeout: 15000 });
   await page.waitForLoadState("load").catch(() => {});

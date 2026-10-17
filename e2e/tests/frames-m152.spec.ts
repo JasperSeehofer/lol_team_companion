@@ -42,10 +42,27 @@ async function shot(page: Page, name: string, fullPage: boolean) {
 async function pair(page: Page, url: string, name: string, ready: (p: Page) => Promise<void>) {
   for (const size of [PHONE, DESK]) {
     await page.setViewportSize(size);
-    await page.goto(url);
+    await gotoSettled(page, url);
     await settle(page);
     await ready(page);
     await shot(page, `${name}-${size.width}`, false);
+  }
+}
+
+/**
+ * Sign-in navigates twice (the server's redirect, then the hydrated page's
+ * hard navigation to the same address), so a goto right after it can be
+ * "interrupted by another navigation". Settle first, and retry the goto
+ * when the late navigation still lands on it.
+ */
+async function gotoSettled(page: Page, url: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await page.goto(url);
+    } catch (e) {
+      if (attempt >= 2 || !/interrupted by another navigation/.test(String(e))) throw e;
+      await page.waitForLoadState("load").catch(() => {});
+    }
   }
 }
 
@@ -56,7 +73,10 @@ async function signInSeeded(page: Page): Promise<boolean> {
   await page.click("main button[type=submit]");
   const ok = await page
     .waitForURL((u) => new URL(u).pathname === "/", { timeout: 15000 })
-    .then(() => true)
+    .then(async () => {
+      await page.waitForLoadState("networkidle").catch(() => {});
+      return true;
+    })
     .catch(() => false);
   if (process.env.CI) expect(ok, "CI must seed the database (seed tool) before starting the server").toBe(true);
   test.skip(!ok, "needs the seed data: stop the server, run the seed tool, start it again");
@@ -97,20 +117,20 @@ test.describe("M152 frames", () => {
       await expect(p.locator("[data-field-card]")).toBeVisible({ timeout: 15000 });
     });
     await page.setViewportSize(PHONE);
-    await page.goto("/");
+    await gotoSettled(page, "/");
     await settle(page);
     await shot(page, "match-day-390-full", true);
 
     // RoleLabel in context: the roster at 390.
     await page.setViewportSize(PHONE);
-    await page.goto("/team/dashboard");
+    await gotoSettled(page, "/team/dashboard");
     await settle(page);
     await expect(page.locator("[data-roster-row]").first()).toBeVisible({ timeout: 15000 });
     await shot(page, "rolelabel-roster-390", false);
 
     // Share the seeded Game 1 plan and open it as a guest.
     await page.setViewportSize(DESK);
-    await page.goto("/game-plan");
+    await gotoSettled(page, "/game-plan");
     const item = page.getByTestId("plan-list").getByRole("button", { name: /Game 1 plan/ });
     await expect(item).toBeVisible({ timeout: 15000 });
     await item.click();
@@ -137,7 +157,7 @@ test.describe("M152 frames", () => {
   test("/design Drawn Rift section", async ({ page }) => {
     await signInAsAdmin(page);
     await page.setViewportSize(DESK);
-    await page.goto("/design#rift");
+    await gotoSettled(page, "/design#rift");
     await settle(page);
     const section = page.locator('section[data-gallery="rift"]');
     await expect(section).toBeVisible({ timeout: 15000 });
