@@ -146,4 +146,4 @@ facing names. The Riot portal ask was dropped: the owner filed the ticket on 202
 
 ## Final tip CI status
 
-The bounded wait (30 min) ran out on `a83d96e`, run 39075603464. Check, style guardrails, ops scripts and **Container image were green**: the image job passed, so the earlier failure was the cache error. **e2e was still running** when the wait ended. Its summary is committed by CI to `.planning/missions/M152-identity-survey-sharpened-r1/ci-e2e-summary.md`; check it before landing. This commit changes only `.planning/`.
+`a83d96e` (run 39075603464): **all five jobs green**. Check, style guardrails, ops scripts and Container image passed (the earlier image failure was GitHub's cache error), and e2e passed with 183 expected, 0 unexpected and 3 flaky (`.planning/missions/M152-identity-survey-sharpened-r1/ci-e2e-summary.md`). Later commits change only `.planning/`.
