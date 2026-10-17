@@ -4,7 +4,7 @@ Branch `mission/M151-identity-survey-sharpened-r0` (pushed, branch only; `origin
 deployed or touched on the VM. Everything below is gallery and planning files plus one `/design` gallery section
 and `public/marks/`; no product page changed. Card: `publish-round-r0/` (id `m151-r0-team-companion-identity`).
 
-CI on <sha>: <result>
+CI on 09a766d (run 38985876361): FAILED, "Check, lint, unit tests" at Clippy (SSR): three `clippy::explicit_auto_deref` errors at src/pages/design_marks.rs:155, :167, :170 (log: .planning/missions/M151/ci-check-log.md). Tip 24715b5 (run 38986142851) carries no code change and will fail the same way; e2e is skipped behind it. The fix for R0b is to drop the three explicit derefs.
 
 ## Least-confident decisions (read these first)
 
