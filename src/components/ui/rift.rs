@@ -93,8 +93,10 @@ pub enum RiftCrop {
     Full,
     /// Match Day's 88 px inset: lanes, river (gap at mid), bases only.
     Inset,
-    /// Share strip centred on the river-mid bridge: 40 x 10.7 units below
-    /// `md`, 50 x 9.4 from `md`; no hatch, no bushes (R1-b).
+    /// Share strip centred on the river-mid bridge (50, 50): the card's 40 x 10.7
+    /// units below `md` and 50 x 9.4 from `md`, each widened by 3 units so
+    /// strokes run cleanly to the edge (critique fix 9): 43 x 11.53 below
+    /// `md`, 53 x 9.96 from `md`; no hatch, no bushes (R1-b).
     ShareStrip,
     /// Share strip centred on one base, for an artefact that carries a side.
     ShareStripAt(RiftAnchor),
@@ -323,8 +325,8 @@ pub fn RiftSketch(
             };
             view! {
                 <div class=format!("relative {class}") aria-hidden="true" data-rift="share">
-                    {strip(40.0, 10.7, "md:hidden")}
-                    {strip(50.0, 9.4, "hidden md:block")}
+                    {strip(43.0, 11.53, "md:hidden")}
+                    {strip(53.0, 9.96, "hidden md:block")}
                 </div>
             }
             .into_any()

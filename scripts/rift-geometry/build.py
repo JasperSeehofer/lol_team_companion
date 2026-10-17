@@ -30,21 +30,16 @@ OUT_RS = ROOT / "src" / "components" / "ui" / "rift_geometry.rs"
 
 SOURCE_KINDS = ("fixture:", "measured:", "reported", "approximate")
 
-# ---- Recipe constants (recipes-r1.md card A) -------------------------------
-# Measured walls are 4 to 7 units wide and cover about 17 % of the sheet, so
-# the card's mask numbers (epsilon 2, inset 1.5, pitch 5 to 7, runs >= 3)
-# leave three hatch lines on the whole map. The values below keep the card's
-# method (simplified survey rings, scanline hatch, inset, merged runs, seeded
-# inner-end jitter) at a scale the real walls can carry; the deviation is
-# recorded in docs/rift-schematic.md for the atelier.
-DP_EPSILON = 0.5          # sketch mask simplification, drawing units (card: 2.0)
-MIN_AREA = 3.0            # rings smaller than this drop out of the mask (card: 8)
-MIN_WIDTH = 0.8           # 2A/P (about the width of a strip); narrower drops
+# ---- Recipe constants (recipes-r1.md card A; critique-r1-rift.md fixes 1-6) --
+DP_EPSILON = 2.0          # sketch mask simplification, drawing units
+MIN_AREA = 20.0           # merged mask rings smaller than this drop out
+MIN_WIDTH = 6.0           # 2A/P (about the width of a strip); narrower drops
+MAX_TOTAL = 60            # vertices in the whole mask
 MAX_RING = 14             # vertices per sketch ring
 MERGE_GAP = 2.0           # scanline runs closer than this merge
-HATCH_PITCH = 1.1         # about 6 px at the 560 px sheet (card: 6 units)
-HATCH_INSET = 0.4         # (card: 1.5)
-RUN_MIN, RUN_MAX = 1.0, 16.0
+HATCH_PITCH = 5.0         # tune between 5 and 7 only
+HATCH_INSET = 1.5
+RUN_MIN, RUN_MAX = 6.0, 16.0
 JITTER = 0.6
 SEED = 151
 BANK = 1.5                # sketch river banks either side of the centreline
@@ -171,6 +166,72 @@ def simplify_ring(ring, eps):
         eps *= 1.25
         out = douglas_peucker(a, eps)[:-1] + douglas_peucker(b, eps)[:-1]
     return out
+
+
+def convex_hull(pts):
+    pts = sorted(set(pts))
+    if len(pts) < 3:
+        return pts
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower, upper = [], []
+    for p in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    for p in reversed(pts):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    return lower[:-1] + upper[:-1]
+
+
+def ring_gap(a, b):
+    return min(min(poly_dist(p, b + b[:1]) for p in a), min(poly_dist(p, a + a[:1]) for p in b))
+
+
+def build_mask(src):
+    rings = [([d(*p) for p in f["ring"]], f["id"]) for f in src["walls"]]
+    n = len(rings)
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if ring_gap(rings[i][0], rings[j][0]) < MERGE_GAP:
+                parent[find(i)] = find(j)
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    cand, dropped = [], []
+    for members in sorted(groups.values()):
+        ids = [rings[i][1] for i in members]
+        if len(members) == 1:
+            ring = rings[members[0]][0]
+        else:
+            ring = convex_hull([p for i in members for p in rings[i][0]])
+        ring = simplify_ring(ring, DP_EPSILON)
+        a = abs(area(ring)) if len(ring) >= 3 else 0.0
+        width = 2 * a / perimeter(ring) if a else 0.0
+        if a < MIN_AREA or width < MIN_WIDTH:
+            dropped += ids
+            continue
+        cand.append((a, ids, ring))
+    cand.sort(key=lambda c: (-c[0], c[1]))
+    mask, total = [], 0
+    for a, ids, ring in cand:
+        if total + len(ring) > MAX_TOTAL:
+            dropped += ids
+            continue
+        mask.append(ring)
+        total += len(ring)
+    return mask, sorted(dropped)
 
 
 def bez(c, t):
@@ -525,16 +586,11 @@ def build_sketch(src):
     lr1 = (lr0[0] + ur[0] * LEADER, lr0[1] + ur[1] * LEADER)
     label_box = (lb1[0], lb1[1] - 2.6, lb1[0] + 24.0, lb1[1] + 2.6)  # "YOUR TEAM", 13 px at 358 px
 
-    # Hatch mask: survey wall rings, simplified and filtered (card A).
-    mask, dropped = [], []
-    for f in src["walls"]:
-        ring = [d(*p) for p in f["ring"]]
-        a = abs(area(ring))
-        width = 2 * a / perimeter(ring)
-        if a < MIN_AREA or width < MIN_WIDTH:
-            dropped.append(f["id"])
-            continue
-        mask.append(simplify_ring(ring, DP_EPSILON))
+    # Hatch mask (card A, critique fix 4): survey wall rings closer than
+    # MERGE_GAP are merged (each group becomes its convex hull), simplified
+    # (Douglas-Peucker, <= 14 vertices), filtered by area and width, and the
+    # smallest rings go until the mask has at most MAX_TOTAL vertices.
+    mask, dropped = build_mask(src)
     mask_vertices = sum(len(r) for r in mask)
 
     def blocked(p):

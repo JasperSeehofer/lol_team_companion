@@ -72,20 +72,29 @@ is what is used.
 
 ## Deviations from the recipe card (for the atelier)
 
-- **Sketch hatch scale (card A).** Measured walls are 4 to 7 drawing units wide and cover about 17 % of the
-  sheet. With the card's numbers (Douglas-Peucker epsilon 2.0, inset 1.5, pitch 5 to 7, runs of at least 3) the
-  whole map gets three hatch lines. The generator keeps the card's method (survey rings simplified into a mask,
-  axis-aligned scanline hatch by quadrant, inset, runs within 2 units merged, run length capped at 16, seed 151,
-  inner-end jitter of up to 0.6) at a scale the real walls carry: epsilon 0.5, inset 0.4, pitch 1.1 units (about
-  6 px on the 560 px sheet), runs of at least 1 unit. Result: 263 hatch lines; lit pixels in the 560 px sheet at
-  1280 measure 5.8 % (the card's band is 4.5 to 6.0 %); the 358 px sheet at 390 measures 9.7 %, since the same
-  lines sit in a smaller box.
-- **River centreline (card A).** The R1-a cubics deviate up to 3.8 units from the measured centreline (the middle
-  of the two banks, pits left out). The generator refits the same two cubics (smooth join at the mid crossing,
-  then a deterministic search on the handles); the best two cubics stay up to 2.2 units off (about 330 game
-  units, a third of the river's width), mostly at the top mouth, where the river bends towards the top lane. The
-  card allows no third cubic, so the residual stays and is written into the geometry JSON's checks.
-- **Sketch budget.** The sketch's path data is about 7 KB (the card estimated 4 KB); 4 KB of it is the hatch.
+- **Sketch hatch (card A, critique-r1-rift.md fixes 1 to 6, applied as written).** Wall rings closer than 2
+  units are merged (each group becomes its convex hull), simplified (Douglas-Peucker 2.0, at most 14 vertices),
+  rings under 20 square units or narrower than 6 units (2A/P) dropped, at most 60 vertices in all; hatch pitch
+  5.0, inset 1.5, runs 6 to 16 units, inner-end jitter up to 0.6 (seed 151). Measured walls are 4 to 7 units
+  wide, so only 6 merged masses (31 vertices) pass and the sheet carries 13 hatch lines. Lit pixels in the
+  sheet: **4.47 % at 1280 (560 px) and 6.41 % at 390 (358 px)**. No pitch in 5 to 7 puts both in the 4.5 to
+  6.0 % band (5.5: 4.25 / 6.20; 6.0: 4.21 / 6.09; 6.5: 4.21 / 6.07; 7.0: 4.24 / 6.22): with this few hatch
+  lines the figure is set by the frame, lanes, banks, labels and ticks, not by the pitch. Pitch 5.0 is closest.
+  Most of the impassable terrain therefore carries no hatch at the sketch level (it is drawn at the survey
+  level).
+- **River centreline (card A, critique fix 7).** The rule is applied: the R1-a cubics are kept unless the
+  measured centreline (the middle of the two banks, pits left out) deviates more than 1.5 units. It deviates up
+  to 3.8 units, so the generator refits the same two cubics (smooth join at the mid crossing, then a
+  deterministic search on the handles). The best two cubics stay up to 2.2 units off (about 330 game units, a
+  third of the river's width), mostly at the top mouth, where the river bends towards the top lane. The card
+  allows no third cubic, so this residual stays; it is recorded here and in the geometry JSON's checks
+  (`river_dev_r1a`, `river_dev_fit`).
+- **Sketch budget.** The sketch's path data is 3.1 KB, within the card's 4 KB estimate.
+- **Match Day inset (critique fix 8).** The inset draws no frame path: what reads as an octagon is the top and
+  bottom lanes, whose measured outer corners are chamfered. Lanes, the river with its gap (mid distance under 5)
+  and the bases are all it draws.
+- **Share strip (critique fix 9).** Centred on (50, 50); the card's 40 x 10.7 (below `md`) and 50 x 9.4 (from
+  `md`) are each widened by 3 units, to 43 x 11.53 and 53 x 9.96, so the strokes run to the edge.
 - **Lanes.** The measured top and bottom lanes cut their outer corner on a diagonal (the playable ground is
   chamfered there), so the sketch's lanes are chamfered too rather than right-angled.
 

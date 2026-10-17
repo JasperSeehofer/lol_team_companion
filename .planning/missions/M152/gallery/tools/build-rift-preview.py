@@ -161,8 +161,8 @@ OUT = {
         f'<div style="width:1200px;height:740px;overflow:hidden;position:relative">'
         f'<div style="position:absolute;left:-560px;top:-380px">{survey(4)}</div></div>',
         "16px 40px"),
-    "rift-share-390.html": page("Rift share strip 390", strip(358, 40, 10.7, False), "16px"),
-    "rift-share-1280.html": page("Rift share strip 1280", strip(640, 50, 9.4, True), "16px"),
+    "rift-share-390.html": page("Rift share strip 390", strip(358, 43, 11.53, False), "16px"),
+    "rift-share-1280.html": page("Rift share strip 1280", strip(640, 53, 9.96, True), "16px"),
     "rift-inset-390.html": page("Rift inset 88", f'<div style="background:var(--color-ink-1);display:inline-block;padding:12px">{inset(88)}</div>', "16px"),
 }
 
