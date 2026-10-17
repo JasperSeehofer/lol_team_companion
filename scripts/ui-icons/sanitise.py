@@ -3,6 +3,9 @@
 
 Usage: python3 -I scripts/ui-icons/sanitise.py IN.svg OUT.svg
 
+OUT is the committed copy, assets/ui/position/NAME.svg (never under
+public/, which is served as plain static files without the route's CSP).
+
 Keeps only the elements svg, g, path, circle and rect, and only the
 attributes fill, fill-rule, opacity, stroke, d, cx, cy, r, x, y, width,
 height, viewBox and transform. Everything else is dropped: processing

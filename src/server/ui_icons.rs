@@ -7,14 +7,14 @@
 //! are both taken from the matching entry, never built from the URL.
 //!
 //! - **Position icons (SVG)** are always the committed, sanitised copy in
-//!   `public/ui/position/` (made with `scripts/ui-icons/sanitise.py`: only
+//!   `assets/ui/position/` (made with `scripts/ui-icons/sanitise.py`: only
 //!   `svg/g/path/circle/rect`, every fill `currentColor`). They are never
 //!   proxied, so no upstream markup reaches a browser. They carry
 //!   `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`.
 //! - **Objective and structure icons (PNG)** are fetched once per process
 //!   from CommunityDragon's pinned patch directory ([`CDRAGON_PATCH`]) and
 //!   kept in memory. When the fetch fails or times out, the committed copy
-//!   under `public/ui/` is served instead, and upstream is tried again after
+//!   under `assets/ui/` is served instead, and upstream is tried again after
 //!   [`RETRY_AFTER`]. An upstream body must look like a PNG and stay under
 //!   [`MAX_BYTES`], or the committed copy is used.
 //!
@@ -60,7 +60,7 @@ pub struct UiIcon {
     /// File in CommunityDragon's pinned patch directory; `None` = served
     /// only from the committed copy (the sanitised SVGs).
     upstream: Option<&'static str>,
-    /// The committed copy under `public/ui/`.
+    /// The committed copy under `assets/ui/`.
     fallback: &'static [u8],
     content_type: &'static str,
 }
@@ -71,7 +71,7 @@ macro_rules! svg {
             kind: "position",
             name: $name,
             upstream: None,
-            fallback: include_bytes!(concat!("../../public/ui/position/", $name, ".svg")),
+            fallback: include_bytes!(concat!("../../assets/ui/position/", $name, ".svg")),
             content_type: "image/svg+xml",
         }
     };
@@ -83,7 +83,7 @@ macro_rules! png {
             kind: $kind,
             name: $name,
             upstream: Some($file),
-            fallback: include_bytes!(concat!("../../public/ui/", $kind, "/", $name, ".png")),
+            fallback: include_bytes!(concat!("../../assets/ui/", $kind, "/", $name, ".png")),
             content_type: "image/png",
         }
     };
@@ -358,6 +358,27 @@ mod tests {
                 );
                 assert!(!u.contains("latest"));
             }
+        }
+    }
+
+    /// `public/` is the static site root, served without the icon route's
+    /// sandbox CSP and `nosniff`. The committed copies must stay outside it,
+    /// so `/ui/...` is a 404 and `/img/ui/...` is the only way to them.
+    #[test]
+    fn committed_copies_are_not_in_the_static_site_root() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(
+            !root.join("public/ui").exists(),
+            "public/ui/ would be served as plain static files; keep the icons in assets/ui/"
+        );
+        for i in ICONS {
+            let ext = if i.content_type == "image/svg+xml" {
+                "svg"
+            } else {
+                "png"
+            };
+            let path = root.join(format!("assets/ui/{}/{}.{ext}", i.kind, i.name));
+            assert!(path.is_file(), "{} missing", path.display());
         }
     }
 

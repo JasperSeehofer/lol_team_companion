@@ -35,8 +35,13 @@ requests a third party: client code only names the app's own route.
     upstream is asked again after 15 minutes.
   - Both: an `ETag` from the bytes, `If-None-Match` answers 304,
     `Cache-Control: public, max-age=604800`.
-  - The same files are also present as static files under `/ui/...` because
-    `public/` is the site's asset directory; nothing in the app links there.
+  - The committed copies live in `assets/ui/{kind}/`, outside `public/` (the
+    static site root), and are compiled into the binary with `include_bytes!`,
+    so the image needs nothing extra. The M152 mission page put them under
+    `assets/ui/`; they were moved because every file there is also served as a
+    plain static file at `/ui/...`, without the sandbox CSP. `/ui/...` is now
+    a 404 (unit test `committed_copies_are_not_in_the_static_site_root`, e2e
+    `ui-icons.spec.ts`).
 - **Sanitiser:** `scripts/ui-icons/sanitise.py` (Python standard library):
   `python3 -I scripts/ui-icons/sanitise.py IN.svg OUT.svg`. It keeps only the
   elements `svg`, `g`, `path`, `circle` and `rect` and only the attributes
@@ -56,27 +61,27 @@ requests a third party: client code only names the app's own route.
 
 | Committed file | Upstream (pinned) | sha256 upstream | sha256 committed |
 |---|---|---|---|
-| `public/ui/position/top.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-top.svg` | `9cdaec5ffc26e530bb4a7a1cc9192a7610b25be0f8fd366c3605c1afd360f916` | `de07afbad109e7cc4bd6f14402a049f94fa2f53bedfcfe706edb5dcd155d032b` |
-| `public/ui/position/jungle.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-jungle.svg` | `b5fc0cc5ce9225a85a621216df3e284942bfc49380da4fdf4bf1f4bff428ddda` | `a96794d395cd52713241c54f54dc801863a603c630eae3d257e814d743b33b11` |
-| `public/ui/position/middle.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-middle.svg` | `df95d266bc4cafd94e25ba7cb49cc3b85f7c31f8a95f9d5e496affffa783c953` | `46c86354a9af13dbe92fc5ec43deb6aba47fabc30ee2cb00d92a860a8cd0bdc4` |
-| `public/ui/position/bottom.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-bottom.svg` | `2ee0de0500e2336ac44227b8040f47f7321f3e5f72cbad740c225633985855b2` | `30aa06746d9b6846da37959f93506116a949fd8d7bef207e4b919ff93cdc2123` |
-| `public/ui/position/utility.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-utility.svg` | `fdbb740a56418806862ad70a49754141e06ab919ffc3a6ba97a0a3b987875e10` | `ff790dbbc56bdc50f1680e0049bd5d1f699114fa9615d526605330e110aa7521` |
-| `public/ui/objective/baron.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/baron.png` | `e1d208f19982f9c1bd6ac380879e4438f55ada15326663e142c38c607d861564` | same |
-| `public/ui/objective/riftherald.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/riftherald.png` | `12ffad9928a29f17ee45e085db039ba2e4e066d960c54d998f2683af598fd5f8` | same |
-| `public/ui/objective/grub.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/grub.png` | `fc227d339710e3f4cc7b829f76b373de3248d8fd6568e2d6b06bc2789b4dadbf` | same |
-| `public/ui/objective/dragon.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon.png` | `c6b67012bba9f5cb59eec4845e2672251acfa60114e7f6ca87e721850593db22` | same |
-| `public/ui/objective/dragon_cloud.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_cloud.png` | `04d51eefcdec3906475e71eb7f7a6f69bbfde64fd6fe69a8f462837bd714b096` | same |
-| `public/ui/objective/dragon_infernal.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_infernal.png` | `1cbdc179f139465b06480780bb739049f5e653a83f70655e718eb6a3fde0b0ad` | same |
-| `public/ui/objective/dragon_mountain.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_mountain.png` | `0b154f13184920bb03a92f38e812b386962aa7deb46af2f82d143ad130431352` | same |
-| `public/ui/objective/dragon_ocean.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_ocean.png` | `edeef83cc787d503d4039347e01728f9746de03b322c58d2be641568e004311e` | same |
-| `public/ui/objective/dragon_hextech.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_hextech.png` | `bc555144cb6337254c229180aecde8a760f7a94114d4e23a1d0c14f4e2eee96e` | same |
-| `public/ui/objective/dragon_chemtech.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_chemtech.png` | `c67ce233349c75714d4fee9cf6b108fee0756b14a9057e591739cf96a76e2127` | same |
-| `public/ui/objective/dragon_elder.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_elder.png` | `1d33e64840ecef20947c513059498a963fdce910e30c8a3ba1875b28428ef5f8` | same |
-| `public/ui/objective/atakhan_r.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/atakhan_r.png` | `16e3712addde86e9a1c490e9e8912558b2df29272dc452056ea7603b919268f8` | same |
-| `public/ui/objective/atakhan_v.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/atakhan_v.png` | `14e1f83836afd390490418bc894df267d7aba06a0584ec600de01bd1fc9e97da` | same |
-| `public/ui/structure/tower.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/icon_ui_tower_minimap.png` | `ea2bfd61e2db0f30ed17bf595f4cdebff6980a12a284e9c770d0c436a7e16aa2` | same |
-| `public/ui/structure/inhibitor.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/icon_ui_inhibitor_minimap_v2.png` | `d03a5155c27137f5812f0b927ab3c413dccffd17dad1fbc81d5d524dff708db6` | same |
-| `public/ui/structure/nexus.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/icon_ui_nexus_minimap_v2.png` | `07f20edbf6a5a477f2fc2edcb49fb4d8dd40052e13d1c180a2ba8d241cccad58` | same |
+| `assets/ui/position/top.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-top.svg` | `9cdaec5ffc26e530bb4a7a1cc9192a7610b25be0f8fd366c3605c1afd360f916` | `de07afbad109e7cc4bd6f14402a049f94fa2f53bedfcfe706edb5dcd155d032b` |
+| `assets/ui/position/jungle.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-jungle.svg` | `b5fc0cc5ce9225a85a621216df3e284942bfc49380da4fdf4bf1f4bff428ddda` | `a96794d395cd52713241c54f54dc801863a603c630eae3d257e814d743b33b11` |
+| `assets/ui/position/middle.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-middle.svg` | `df95d266bc4cafd94e25ba7cb49cc3b85f7c31f8a95f9d5e496affffa783c953` | `46c86354a9af13dbe92fc5ec43deb6aba47fabc30ee2cb00d92a860a8cd0bdc4` |
+| `assets/ui/position/bottom.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-bottom.svg` | `2ee0de0500e2336ac44227b8040f47f7321f3e5f72cbad740c225633985855b2` | `30aa06746d9b6846da37959f93506116a949fd8d7bef207e4b919ff93cdc2123` |
+| `assets/ui/position/utility.svg` | `https://raw.communitydragon.org/16.20/plugins/rcp-fe-lol-static-assets/global/default/svg/position-utility.svg` | `fdbb740a56418806862ad70a49754141e06ab919ffc3a6ba97a0a3b987875e10` | `ff790dbbc56bdc50f1680e0049bd5d1f699114fa9615d526605330e110aa7521` |
+| `assets/ui/objective/baron.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/baron.png` | `e1d208f19982f9c1bd6ac380879e4438f55ada15326663e142c38c607d861564` | same |
+| `assets/ui/objective/riftherald.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/riftherald.png` | `12ffad9928a29f17ee45e085db039ba2e4e066d960c54d998f2683af598fd5f8` | same |
+| `assets/ui/objective/grub.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/grub.png` | `fc227d339710e3f4cc7b829f76b373de3248d8fd6568e2d6b06bc2789b4dadbf` | same |
+| `assets/ui/objective/dragon.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon.png` | `c6b67012bba9f5cb59eec4845e2672251acfa60114e7f6ca87e721850593db22` | same |
+| `assets/ui/objective/dragon_cloud.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_cloud.png` | `04d51eefcdec3906475e71eb7f7a6f69bbfde64fd6fe69a8f462837bd714b096` | same |
+| `assets/ui/objective/dragon_infernal.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_infernal.png` | `1cbdc179f139465b06480780bb739049f5e653a83f70655e718eb6a3fde0b0ad` | same |
+| `assets/ui/objective/dragon_mountain.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_mountain.png` | `0b154f13184920bb03a92f38e812b386962aa7deb46af2f82d143ad130431352` | same |
+| `assets/ui/objective/dragon_ocean.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_ocean.png` | `edeef83cc787d503d4039347e01728f9746de03b322c58d2be641568e004311e` | same |
+| `assets/ui/objective/dragon_hextech.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_hextech.png` | `bc555144cb6337254c229180aecde8a760f7a94114d4e23a1d0c14f4e2eee96e` | same |
+| `assets/ui/objective/dragon_chemtech.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_chemtech.png` | `c67ce233349c75714d4fee9cf6b108fee0756b14a9057e591739cf96a76e2127` | same |
+| `assets/ui/objective/dragon_elder.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/dragon_elder.png` | `1d33e64840ecef20947c513059498a963fdce910e30c8a3ba1875b28428ef5f8` | same |
+| `assets/ui/objective/atakhan_r.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/atakhan_r.png` | `16e3712addde86e9a1c490e9e8912558b2df29272dc452056ea7603b919268f8` | same |
+| `assets/ui/objective/atakhan_v.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/atakhan_v.png` | `14e1f83836afd390490418bc894df267d7aba06a0584ec600de01bd1fc9e97da` | same |
+| `assets/ui/structure/tower.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/icon_ui_tower_minimap.png` | `ea2bfd61e2db0f30ed17bf595f4cdebff6980a12a284e9c770d0c436a7e16aa2` | same |
+| `assets/ui/structure/inhibitor.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/icon_ui_inhibitor_minimap_v2.png` | `d03a5155c27137f5812f0b927ab3c413dccffd17dad1fbc81d5d524dff708db6` | same |
+| `assets/ui/structure/nexus.png` | `https://raw.communitydragon.org/16.20/game/assets/ux/minimap/icons/icon_ui_nexus_minimap_v2.png` | `07f20edbf6a5a477f2fc2edcb49fb4d8dd40052e13d1c180a2ba8d241cccad58` | same |
 
 ## Footing
 
@@ -92,6 +97,6 @@ requests a third party: client code only names the app's own route.
   are unconfirmed. Data Dragon has no position or objective icons.
 - **Open:** the owner's question to Riot through the Developer Portal about
   using these CommunityDragon icons for product 834192 is pending. If Riot
-  says no, delete `public/ui/`, the `/img/ui/` route and the icon in
+  says no, delete `assets/ui/`, the `/img/ui/` route and the icon in
   `RoleLabel`; the role letters stand on their own.
 - No Riot logo is used anywhere.

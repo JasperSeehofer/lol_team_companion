@@ -71,6 +71,19 @@ test("anything off the allow-list is 404", async ({ request }) => {
   }
 });
 
+test("the committed copies are not static files outside the icon route", async ({ request }) => {
+  // They live in assets/ui/ (compiled in), not under public/, the static
+  // site root, which would serve them without the sandbox CSP.
+  for (const path of [
+    "/ui/position/top.svg",
+    "/ui/objective/baron.png",
+    "/assets/ui/position/top.svg",
+  ]) {
+    const r = await request.get(path, { maxRedirects: 0 });
+    expect(r.status(), path).toBe(404);
+  }
+});
+
 test("role icons on the gallery load from /img/ui/ and nothing reaches a third party", async ({
   adminPage,
 }) => {
