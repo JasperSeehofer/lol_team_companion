@@ -1,4 +1,4 @@
-# CI check log, run 38985876361 (09a766dab0904861461a1b62a3415de37e78d930)
+# CI check log, run 38986142851 (24715b5082668f095cbfba6a057d0f5bfc6edb65)
 
 Last 300 lines of the Check, lint, unit tests job.
 
@@ -7,12 +7,12 @@ Last 300 lines of the Check, lint, unit tests job.
 === Check SSR target ===
     Updating crates.io index
     Checking lol_team_companion v0.1.0 (/home/runner/work/lol_team_companion/lol_team_companion)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 37.18s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 40.22s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
 === Check WASM/hydrate target ===
     Checking lol_team_companion v0.1.0 (/home/runner/work/lol_team_companion/lol_team_companion)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 25.18s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 26.56s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
 === Clippy (SSR) ===
