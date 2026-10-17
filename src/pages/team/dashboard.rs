@@ -3,14 +3,15 @@
 //! team notes every member can edit with Undo, recent games and pool gaps.
 //! Real data only; every empty part says how it fills.
 
+use crate::components::clipboard::{self, CopyState};
 use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
-    Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind, Menu, MenuAlign,
-    MenuItem, NoTeamState, PageHeader, PageShell, ResultGlyph, Role, RoleLabel, SectionHeader,
-    Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
-    UserAvatar,
+    Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind, LoadFailed, Menu,
+    MenuAlign, MenuItem, NoTeamState, PageHeader, PageShell, ResultGlyph, Role, RoleLabel,
+    SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast,
+    ToastContext, UserAvatar,
 };
 use crate::models::game_plan::PoolGapWarning;
 use crate::models::invite::Invite;
@@ -60,8 +61,8 @@ pub async fn update_team_info(name: String, region: String) -> Result<(), Server
 }
 
 /// The team's invite codes and the server's time (RFC 3339, for the
-/// expired state). Leader only: everyone else gets an empty list, so the
-/// page can create the resource for every member.
+/// expired state). The leader and the team's coaches see them; everyone else
+/// gets an empty list, so the page can create the resource for every member.
 #[server]
 pub async fn list_team_invites() -> Result<(String, Vec<Invite>), ServerFnError> {
     use crate::server::{authz, db};
@@ -71,7 +72,7 @@ pub async fn list_team_invites() -> Result<(String, Vec<Invite>), ServerFnError>
     let Some(team_id) = ctx.team().await? else {
         return Ok((now, Vec::new()));
     };
-    if !db::is_team_leader(&ctx.db, &ctx.user.id, &team_id)
+    if !db::is_team_leader_or_coach(&ctx.db, &ctx.user.id, &team_id)
         .await
         .map_err(authz::server_err)?
     {
@@ -83,8 +84,8 @@ pub async fn list_team_invites() -> Result<(String, Vec<Invite>), ServerFnError>
     Ok((now, invites))
 }
 
-/// Mint a code that signs a new player straight into the leader's team
-/// (leader only; the team is the leader's own, never one from the client).
+/// Mint a code that signs a new player straight into the team (the leader or
+/// a coach, M148; the team is the caller's own, never one from the client).
 /// `position` is empty or a position key. Returns the code.
 #[server]
 pub async fn mint_team_invite(
@@ -96,7 +97,7 @@ pub async fn mint_team_invite(
     use crate::server::{authz, db};
 
     let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
     authz::rate_limit_user(Bucket::TeamInvite, &ctx.user)?;
     if !(1..=TEAM_INVITE_MAX_USES).contains(&max_uses) {
         return Err(ServerFnError::new(format!(
@@ -134,24 +135,24 @@ pub async fn mint_team_invite(
     Ok(code)
 }
 
-/// Disable one of the team's codes (leader only; another team's code is
-/// "not found").
+/// Disable one of the team's codes (the leader or a coach; another team's
+/// code is "not found").
 #[server]
 pub async fn disable_team_invite(id: String) -> Result<(), ServerFnError> {
     use crate::server::rate_limit::Bucket;
     use crate::server::{authz, db};
 
     let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
     authz::rate_limit_user(Bucket::TeamInvite, &ctx.user)?;
     db::disable_team_invite(&ctx.db, &team_id, &id)
         .await
         .map_err(authz::server_err)
 }
 
-/// Most uses a leader's code may have.
+/// Most uses a team code may have.
 pub const TEAM_INVITE_MAX_USES: i64 = 20;
-/// Longest a leader's code may stay valid, in days.
+/// Longest a team code may stay valid, in days.
 pub const TEAM_INVITE_MAX_DAYS: i64 = 30;
 
 /// Place a member (leader only): `top` ... `support` starts them in that
@@ -579,6 +580,12 @@ fn TeamView(
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let is_leader = team.created_by == me;
+    // The leader and the team's coaches manage invite links (M148); the
+    // server checks the same (`require_leader_or_coach`).
+    let can_invite = is_leader
+        || members
+            .iter()
+            .any(|m| m.user_id == me && m.roster_type == "coach");
     let leader_name = members
         .iter()
         .find(|m| m.user_id == team.created_by)
@@ -792,7 +799,7 @@ fn TeamView(
                 <PoolGaps gaps=res.gaps />
             </div>
             <div class="flex min-w-0 flex-col gap-12">
-                {is_leader.then(|| view! { <InvitePlayers team_name=team.name.clone() invites=res.invites /> })}
+                {can_invite.then(|| view! { <InvitePlayers team_name=team.name.clone() is_leader=is_leader invites=res.invites /> })}
                 {is_leader.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
                 <TeamNotes notes=res.notes />
             </div>
@@ -877,11 +884,14 @@ fn EditTeam(
     }
 }
 
-/// The leader's "Invite a player": mint a link that signs a new player
-/// straight into the team, and the team's codes with their state.
+/// "Invite a player" (the leader and the team's coaches, M148): mint a link
+/// that signs a new player straight into the team, and the team's codes
+/// with their state, each open one with its full link, Copy and Share.
 #[component]
 fn InvitePlayers(
     team_name: String,
+    /// The viewer leads the team (a coach does not place the new player).
+    is_leader: bool,
     invites: Resource<Result<(String, Vec<Invite>), ServerFnError>>,
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
@@ -891,6 +901,17 @@ fn InvitePlayers(
     let error = RwSignal::new(None::<String>);
     let minting = RwSignal::new(false);
     let minted = RwSignal::new(None::<String>);
+    // The page's origin, filled in after hydration: the server renders the
+    // path, the browser the same path first (no hydration mismatch) and then
+    // the absolute link to copy into a chat.
+    let origin = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        #[cfg(feature = "hydrate")]
+        if let Some(o) = web_sys::window().and_then(|w| w.location().origin().ok()) {
+            origin.set(o);
+        }
+    });
+    let share_title = StoredValue::new(format!("Join {team_name} on Team Companion"));
     let mint = Callback::new(move |_: ()| {
         let (Ok(u), Ok(d)) = (
             uses.get_untracked().trim().parse::<i64>(),
@@ -904,7 +925,7 @@ fn InvitePlayers(
         leptos::task::spawn_local(async move {
             match mint_team_invite(u, d, position.get_untracked()).await {
                 Ok(code) => {
-                    minted.set(Some(invite_link(&code)));
+                    minted.set(Some(code));
                     toast.push.run(Toast::success("Invite link ready"));
                     invites.refetch();
                 }
@@ -932,10 +953,20 @@ fn InvitePlayers(
             .iter()
             .map(|r| SelectOption::new(r.key(), r.label())),
     );
+    let placed_by = if is_leader {
+        "until you place them"
+    } else {
+        "until the leader places them"
+    };
+    let position_hint = if is_leader {
+        "Shown on the roster; you still place the player."
+    } else {
+        "Shown on the roster; the leader still places the player."
+    };
     view! {
         <section aria-labelledby="invite-h" data-team-invites>
             <SectionHeader title="Invite a player" id="invite-h" />
-            <p class="mb-4 text-body text-secondary">{format!("A link that signs a new player up straight into {team_name}. They start as \u{201c}not placed yet\u{201d} until you place them.")}</p>
+            <p class="mb-4 text-body text-secondary">{format!("A link that signs a new player up straight into {team_name}. They start as \u{201c}not placed yet\u{201d} {placed_by}.")}</p>
             <div class="grid grid-cols-2 gap-4">
                 <Field id="team-invite-uses" label="Uses" hint=format!("Up to {TEAM_INVITE_MAX_USES}")>
                     <TextField kind=InputKind::Number value=uses on_keydown=enter_submits(mint) />
@@ -945,22 +976,37 @@ fn InvitePlayers(
                 </Field>
             </div>
             <div class="mt-4">
-                <Field id="team-invite-position" label="Position (optional)" hint="Shown on the roster; you still place the player." error=Signal::derive(move || error.get())>
+                <Field id="team-invite-position" label="Position (optional)" hint=position_hint error=Signal::derive(move || error.get())>
                     <Select value=position options=position_options />
                 </Field>
             </div>
             <div class="mt-4">
                 <Button on_click=Callback::new(move |_| mint.run(())) loading=minting attr:data-testid="mint-team-invite">"Create invite link"</Button>
             </div>
-            {move || minted.get().map(|link| view! {
-                <p class="mt-4 text-body text-secondary" data-testid="team-invite-link">
-                    "Send this link to the player: "
-                    <code class="break-all font-mono text-primary">{link}</code>
-                </p>
+            {move || minted.get().map(|code| {
+                let link_ref = NodeRef::<leptos::html::Code>::new();
+                let path = invite_link(&code);
+                let url = Signal::derive(move || format!("{}{path}", origin.get()));
+                view! {
+                    <div class="mt-4 flex flex-col gap-3">
+                        <p class="text-body text-secondary" role="status" data-testid="team-invite-link">
+                            "Send this link to the player: "
+                            <code node_ref=link_ref class="break-all select-all font-mono text-primary">{move || url.get()}</code>
+                        </p>
+                        <InviteLinkActions url=url title=share_title.get_value() link_ref=link_ref />
+                    </div>
+                }
             })}
             <Suspense fallback=|| ()>
                 {move || invites.get().map(|r| {
-                    let (now, list) = r.unwrap_or_default();
+                    let (now, list) = match r {
+                        Ok(v) => v,
+                        Err(_) => return view! {
+                            <div class="mt-6">
+                                <LoadFailed what="The invite links" on_retry=Callback::new(move |_| invites.refetch()) />
+                            </div>
+                        }.into_any(),
+                    };
                     if list.is_empty() {
                         return view! { <p class="mt-6 text-body text-muted">"No invite links yet. Links you create appear here with their uses and expiry."</p> }.into_any();
                     }
@@ -972,17 +1018,26 @@ fn InvitePlayers(
                                 let id = inv.id.clone();
                                 let position = inv.position.as_deref().and_then(Role::parse);
                                 let expires = inv.expires_at.as_deref().map(|e| e.get(..10).unwrap_or(e).to_string()).unwrap_or_else(|| "never".into());
+                                let link_ref = NodeRef::<leptos::html::Code>::new();
+                                let path = invite_link(&inv.code);
+                                let url = Signal::derive(move || format!("{}{path}", origin.get()));
                                 view! {
-                                    <li class="flex flex-wrap items-center justify-between gap-3 border-t border-rule py-2.5" data-team-invite=inv.code.clone()>
-                                        <span class="min-w-0">
-                                            <code class="block font-mono text-label text-primary">{inv.code.clone()}</code>
+                                    <li class="flex flex-col gap-3 border-t border-rule py-3 md:flex-row md:items-start md:justify-between" data-team-invite=inv.code.clone()>
+                                        <span class="flex min-w-0 flex-col gap-1">
+                                            {if open {
+                                                view! { <code node_ref=link_ref class="block break-all select-all font-mono text-label text-secondary" data-testid="team-invite-url">{move || url.get()}</code> }.into_any()
+                                            } else {
+                                                view! { <code class="block font-mono text-label text-primary">{inv.code.clone()}</code> }.into_any()
+                                            }}
                                             <span class="figures block text-caption text-muted">
                                                 {format!("{status} \u{00b7} {} of {} used \u{00b7} expires {expires}", inv.uses, inv.max_uses)}
                                                 {position.map(|r| format!(" \u{00b7} {}", r.label()))}
                                             </span>
                                         </span>
                                         {open.then(|| view! {
-                                            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| disable.run(id.clone()))>"Disable"</Button>
+                                            <InviteLinkActions url=url title=share_title.get_value() link_ref=link_ref>
+                                                <Button size=ButtonSize::Touch variant=ButtonVariant::Quiet on_click=Callback::new(move |_| disable.run(id.clone()))>"Disable"</Button>
+                                            </InviteLinkActions>
                                         })}
                                     </li>
                                 }
@@ -995,15 +1050,81 @@ fn InvitePlayers(
     }
 }
 
-/// The full invite link for a code: absolute in the browser (the leader
-/// copies it into a chat), the path on the server.
-fn invite_link(code: &str) -> String {
-    let path = format!("/auth/register?invite={code}");
-    #[cfg(feature = "hydrate")]
-    if let Some(origin) = web_sys::window().and_then(|w| w.location().origin().ok()) {
-        return format!("{origin}{path}");
+/// Copy and Share for one invite link (M148, atelier card C1), plus any
+/// further actions (Disable) as children, in that tab order.
+///
+/// "Copied" (and "Link copied" in the row's live region) only after the
+/// clipboard promise resolved; a refusal says so and selects the link.
+/// Share shows only where the browser has a share sheet (after hydration);
+/// closing the sheet says nothing, a failed share falls back to the copy
+/// failure message.
+#[component]
+fn InviteLinkActions(
+    #[prop(into)] url: Signal<String>,
+    title: String,
+    /// The `<code>` showing the link: selected when copying fails.
+    link_ref: NodeRef<leptos::html::Code>,
+    #[prop(optional)] children: Option<Children>,
+) -> impl IntoView {
+    let state = RwSignal::new(CopyState::Idle);
+    let share_ok = RwSignal::new(false);
+    Effect::new(move |_| share_ok.set(clipboard::can_share()));
+    let select_link = move || {
+        #[cfg(feature = "hydrate")]
+        if let Some(el) = link_ref.get_untracked() {
+            clipboard::select_contents(&el);
+        }
+        #[cfg(not(feature = "hydrate"))]
+        let _ = link_ref;
+    };
+    let copy = Callback::new(move |_| {
+        clipboard::copy_with_state(url.get_untracked(), state, select_link);
+    });
+    let title = StoredValue::new(title);
+    let share = Callback::new(move |_| {
+        let link = url.get_untracked();
+        let title = title.get_value();
+        leptos::task::spawn_local(async move {
+            match clipboard::share_url(&title, &link).await {
+                // Shared, or the sheet was closed: nothing to say.
+                Ok(_) => {}
+                Err(_e) => {
+                    #[cfg(feature = "hydrate")]
+                    leptos::logging::warn!("share invite link: {_e}");
+                    state.set(CopyState::Failed);
+                    select_link();
+                }
+            }
+        });
+    });
+    view! {
+        <div class="flex flex-col gap-2 md:items-end">
+            <div class="flex flex-wrap gap-2">
+                <Button variant=ButtonVariant::Secondary size=ButtonSize::Touch reserve=&["Copy link", "Copied"] on_click=copy attr:data-testid="copy-invite-link">
+                    {move || if state.get() == CopyState::Copied { "Copied" } else { "Copy link" }}
+                </Button>
+                {move || share_ok.get().then(|| view! {
+                    <Button variant=ButtonVariant::Secondary size=ButtonSize::Touch on_click=share attr:data-testid="share-invite-link">"Share"</Button>
+                })}
+                {children.map(|c| c())}
+            </div>
+            // Always mounted, so the text is announced when it appears.
+            <span class="sr-only" role="status" data-testid="invite-copy-status">
+                {move || (state.get() == CopyState::Copied).then_some("Link copied")}
+            </span>
+            {move || (state.get() == CopyState::Failed).then(|| view! {
+                <p role="alert" class="text-label text-danger" data-testid="invite-copy-error">
+                    "Could not copy. Select the link and copy it by hand."
+                </p>
+            })}
+        </div>
     }
-    path
+}
+
+/// The path of the invite link for a code; the page puts its origin in
+/// front once hydrated (see `InvitePlayers`).
+fn invite_link(code: &str) -> String {
+    format!("/auth/register?invite={code}")
 }
 
 #[component]

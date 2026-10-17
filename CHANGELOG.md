@@ -13,11 +13,16 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 #### Changed
 - Signing in takes you back: when a page you opened while signed out sends you to sign in (a link to a draft, a review or a match), signing in now returns you to that page, with its draft, plan or review still selected, instead of Home. Only pages of Team Companion are returned to; anything else lands on Home.
 - Every page has its own browser-tab title ("Draft · Team Companion", "Sign in · Team Companion", ...), so open tabs, bookmarks and the browser history tell pages apart. A shared link's tab names the kind of page ("Shared game plan"), never what is shared.
+- Coaches can invite players: a team's coaches now see "Invite a player" on the team page and can create, copy and disable the team's invite links, like the leader. Placing the new player in the starting five, on the bench or with the coaches stays with the leader.
 - Match Day on a phone: with no match scheduled, "Add the next match" now shows on phones too (a full-size button), so a team can put its first match in from a phone. The "Read-only on the phone" line only appears once there is a match; editing an existing match stays a larger-screen task. In the match editor, Cancel and Save match are easier to tap on a phone, and without any opponent dossier the opponent field offers "Add an opponent" instead of only saying to go to the Opponents page.
 
 #### Added
 - Sign-up asks you to confirm "I am 16 or older and accept the Terms and have read the Privacy page", with both pages linked (they open in a new tab, so the form keeps what you typed). The account cannot be created without the tick, and an invite link is not used up by a sign-up that was refused. Your account records when you ticked it; it is part of Download my data, and the Terms and the Privacy page say so.
+- Invite links on the team page show the whole link for every open code, also after a reload, with "Copy link" and, on phones and other browsers that offer it, "Share" to send it through another app. "Copied" appears only once the browser has really copied the link; if it refuses, the page says so and selects the link so you can copy it by hand.
 - For admins: a "Copy code" button under a new password reset code on Password resets. It says "Copied" only once the browser has really copied the code; if the browser refuses, it says so and selects the code so you can copy it by hand.
+
+#### Fixed
+- Share links: "Copy link" said "Link copied" before the browser had copied anything, even when it refused. It now says so only after the copy worked, and otherwise tells you to copy the link by hand, with the link selected.
 
 ### Feedback batch 1 (2026-10-16)
 

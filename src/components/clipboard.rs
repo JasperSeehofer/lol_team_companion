@@ -114,6 +114,55 @@ pub async fn share_url(title: &str, url: &str) -> Result<bool, String> {
     }
 }
 
+/// Where a "Copy" button stands: `Copied` only after the clipboard promise
+/// resolved (for two seconds), `Failed` after a refusal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CopyState {
+    Idle,
+    Copied,
+    Failed,
+}
+
+/// Copy `text` and drive `state` by the browser's answer: `Copied` once the
+/// promise resolved (back to `Idle` after two seconds), `Failed` on a
+/// refusal, after which `on_fail` runs (select the text for copying by hand).
+pub fn copy_with_state(
+    text: String,
+    state: leptos::prelude::RwSignal<CopyState>,
+    on_fail: impl FnOnce() + 'static,
+) {
+    use leptos::prelude::*;
+    leptos::task::spawn_local(async move {
+        match copy_text(&text).await {
+            Ok(()) => {
+                state.set(CopyState::Copied);
+                #[cfg(feature = "hydrate")]
+                {
+                    use wasm_bindgen::prelude::*;
+                    let cb = Closure::once(move || {
+                        if state.try_get_untracked() == Some(CopyState::Copied) {
+                            state.set(CopyState::Idle);
+                        }
+                    });
+                    if let Some(w) = web_sys::window() {
+                        let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(
+                            cb.as_ref().unchecked_ref(),
+                            2000,
+                        );
+                    }
+                    cb.forget();
+                }
+            }
+            Err(_e) => {
+                state.set(CopyState::Failed);
+                #[cfg(feature = "hydrate")]
+                leptos::logging::warn!("copy: {_e}");
+                on_fail();
+            }
+        }
+    });
+}
+
 /// Select everything inside `node` (the fallback after a refused copy: the
 /// text is ready for the person to copy by hand). Browser-only.
 #[cfg(feature = "hydrate")]

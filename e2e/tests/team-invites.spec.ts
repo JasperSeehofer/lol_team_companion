@@ -104,3 +104,116 @@ test("a signed-in player joins with the link; one already in a team cannot", asy
   await expect(loner.getByRole("heading", { name: "Roster" })).toBeVisible();
   await expect(loner.locator("main")).toContainText(teamName);
 });
+
+// ---------------------------------------------------------------------------
+// M148 item 2 (atelier card C1): full links, Copy, coach invites
+// ---------------------------------------------------------------------------
+
+/** The newest invite row on the team page after a reload. */
+async function reloadedRow(leader: Page) {
+  await leader.reload();
+  await leader.waitForLoadState("networkidle");
+  return leader.locator("[data-team-invites] [data-team-invite]").first();
+}
+
+test("after a reload an open link shows in full and Copy copies it", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const leader = await ctx.newPage();
+  await authenticatePage(leader);
+  await createTeam(leader, `Copy_${STAMP}`);
+  const link = await mintLink(leader, "");
+  expect(link).toMatch(/^https?:\/\/[^/]+\/auth\/register\?invite=/);
+
+  const row = await reloadedRow(leader);
+  const url = row.getByTestId("team-invite-url");
+  // The absolute link (the server renders the path; the page adds its origin).
+  await expect(url).toHaveText(link, { timeout: 10000 });
+  const copy = row.getByTestId("copy-invite-link");
+  await expect(copy).toHaveText("Copy link");
+  await expect(row.getByTestId("invite-copy-status")).toHaveText("");
+  await leader.setViewportSize({ width: 390, height: 844 });
+  expect(await copy.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await copy.click();
+  await expect(copy).toHaveText("Copied", { timeout: 5000 });
+  await expect(row.getByTestId("invite-copy-status")).toHaveText("Link copied");
+  await expect(row.getByTestId("invite-copy-error")).toHaveCount(0);
+  expect(await leader.evaluate(() => navigator.clipboard.readText())).toBe(link);
+  await expect(copy).toHaveText("Copy link", { timeout: 5000 });
+  // Disable stays beside it.
+  await expect(row.getByRole("button", { name: "Disable" })).toBeVisible();
+  await ctx.close();
+});
+
+test("a refused copy says so and never claims success", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  // The browser refuses every clipboard write (plain HTTP, a denied permission).
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new DOMException("Denied", "NotAllowedError")) },
+    });
+  });
+  const leader = await ctx.newPage();
+  await authenticatePage(leader);
+  await createTeam(leader, `NoCopy_${STAMP}`);
+  await mintLink(leader, "");
+  const row = await reloadedRow(leader);
+  await expect(row.getByTestId("team-invite-url")).toContainText("/auth/register?invite=");
+  const copy = row.getByTestId("copy-invite-link");
+  await copy.click();
+  await expect(row.getByTestId("invite-copy-error")).toHaveText(
+    "Could not copy. Select the link and copy it by hand.",
+    { timeout: 5000 },
+  );
+  await expect(copy).toHaveText("Copy link");
+  await expect(row.getByTestId("invite-copy-status")).toHaveText("");
+  // The link is selected for copying by hand.
+  const selected = await leader.evaluate(() => window.getSelection()?.toString() ?? "");
+  expect(selected).toContain("/auth/register?invite=");
+  await ctx.close();
+});
+
+test("a coach invites players; a plain member sees no invite panel", async ({ browser }) => {
+  const leader = await (await browser.newContext()).newPage();
+  await authenticatePage(leader);
+  const teamName = `Coach_${STAMP}`;
+  await createTeam(leader, teamName);
+  const link = await mintLink(leader, "");
+
+  // Two players join with the leader's link (2 uses).
+  const join = async () => {
+    const page = await (await browser.newContext()).newPage();
+    const who = await authenticatePage(page);
+    await page.goto(link);
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("invite-join-existing").getByTestId("invite-join-button").click();
+    await waitForHome(page);
+    return { page, username: who.username };
+  };
+  const coach = await join();
+  const member = await join();
+
+  // The leader makes the first one a coach.
+  await leader.goto("/team/dashboard");
+  await leader.waitForLoadState("networkidle");
+  const coachRow = leader.locator("[data-roster-row]", { hasText: coach.username }).first();
+  await coachRow.getByRole("button", { name: /Roster actions for/ }).click();
+  await leader.getByRole("menuitem", { name: "Make coach" }).click();
+  await expect(leader.locator('[data-roster-group="coaches"]')).toContainText(coach.username, { timeout: 10000 });
+
+  // The coach sees "Invite a player" and mints a link of their own.
+  const coachLink = await mintLink(coach.page, "");
+  expect(coachLink).not.toBe(link);
+  await expect(coach.page.locator("[data-team-invites]")).toContainText("until the leader places them");
+  // Both links of the team are listed for the coach.
+  await expect(coach.page.locator("[data-team-invites] [data-team-invite]")).toHaveCount(2);
+  // No join requests panel for the coach: answering them stays with the leader.
+  await expect(coach.page.locator("[data-join-requests]")).toHaveCount(0);
+
+  // A plain member gets no invite panel.
+  await member.page.goto("/team/dashboard");
+  await member.page.waitForLoadState("networkidle");
+  await expect(member.page.getByRole("heading", { level: 2, name: "Roster" })).toBeVisible();
+  await expect(member.page.locator("[data-team-invites]")).toHaveCount(0);
+});

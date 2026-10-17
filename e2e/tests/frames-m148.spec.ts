@@ -100,4 +100,26 @@ test.describe("M148 frames", () => {
       if (vw < 768) expect(h).toBeGreaterThanOrEqual(44);
     });
   });
+
+  test("team page invite links after a reload (dashboard-invites)", async ({ page }) => {
+    await authenticatePage(page);
+    await createTeam(page, `FramesInv_${Date.now()}`);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/team/dashboard");
+    await page.waitForLoadState("networkidle");
+    const section = page.locator("[data-team-invites]");
+    await section.getByTestId("mint-team-invite").click();
+    await expect(section.getByTestId("team-invite-link")).toContainText("/auth/register?invite=");
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(section.getByTestId("team-invite-url").first()).toHaveText(/^https?:\/\//, { timeout: 10000 });
+    await settle(page);
+    await section.scrollIntoViewIfNeeded();
+    await frames(page, "dashboard-invites", async () => {
+      // A1: invite actions are 44px tall on phones.
+      const vw = page.viewportSize()?.width ?? 1280;
+      const h = await section.getByTestId("copy-invite-link").first().evaluate((el) => el.getBoundingClientRect().height);
+      if (vw < 768) expect(h).toBeGreaterThanOrEqual(44);
+    });
+  });
 });

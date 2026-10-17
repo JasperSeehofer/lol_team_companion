@@ -249,14 +249,28 @@ pub fn ShareDialog(
             }
         });
     });
-    let copy = Callback::new(move |url: String| {
-        #[cfg(feature = "hydrate")]
-        if let Some(w) = web_sys::window() {
-            let _ = w.navigator().clipboard().write_text(&url);
-            toast.push.run(Toast::success("Link copied"));
-        }
-        #[cfg(not(feature = "hydrate"))]
-        let _ = url;
+    // "Link copied" only once the clipboard promise resolved (M148: the
+    // toast used to come before the copy, even when the browser refused).
+    let copy = Callback::new(move |(url, url_ref): (String, NodeRef<leptos::html::P>)| {
+        leptos::task::spawn_local(async move {
+            match crate::components::clipboard::copy_text(&url).await {
+                Ok(()) => toast.push.run(Toast::success("Link copied")),
+                Err(_e) => {
+                    #[cfg(feature = "hydrate")]
+                    {
+                        leptos::logging::warn!("copy share link: {_e}");
+                        if let Some(el) = url_ref.get_untracked() {
+                            crate::components::clipboard::select_contents(&el);
+                        }
+                    }
+                    #[cfg(not(feature = "hydrate"))]
+                    let _ = url_ref;
+                    toast.push.run(Toast::error(
+                        "Could not copy. Select the link and copy it by hand.",
+                    ));
+                }
+            }
+        });
     });
     let options: Vec<SelectOption> = SHARE_DAYS
         .iter()
@@ -288,17 +302,18 @@ pub fn ShareDialog(
                                     {list.into_iter().map(|l| {
                                         let url = absolute(&share_path(&l.token));
                                         let url_copy = url.clone();
+                                        let url_ref = NodeRef::<leptos::html::P>::new();
                                         let id = l.id.clone();
                                         view! {
                                             <li class="flex flex-col gap-2 border-t border-rule py-3" data-share-link=l.token.clone()>
-                                                <p class="select-all break-all font-mono text-caption text-primary" data-share-url>{url}</p>
+                                                <p node_ref=url_ref class="select-all break-all font-mono text-caption text-primary" data-share-url>{url}</p>
                                                 <div class="flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
                                                     <span>
                                                         {format!("By {} \u{00b7} expires ", l.created_by_name)}
                                                         <LocalTime iso=l.expires_at.clone() />
                                                     </span>
                                                     <span class="flex gap-1">
-                                                        <Button size=ButtonSize::Sm on_click=Callback::new(move |_| copy.run(url_copy.clone()))>"Copy link"</Button>
+                                                        <Button size=ButtonSize::Sm on_click=Callback::new(move |_| copy.run((url_copy.clone(), url_ref)))>"Copy link"</Button>
                                                         <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| revoke.run(id.clone()))>"Revoke"</Button>
                                                     </span>
                                                 </div>

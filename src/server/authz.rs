@@ -364,6 +364,25 @@ pub async fn require_team_leader(
     }
 }
 
+/// The user must lead `team_id` or be one of its coaches (M148: who may
+/// manage the team's invite links). Anyone else on the team gets the same
+/// refusal as [`require_team_leader`]; another team's member gets "Not found".
+pub async fn require_team_leader_or_coach(
+    db: &Surreal<Db>,
+    user: &AppUser,
+    team_id: &str,
+) -> Result<(), ServerFnError> {
+    require_team_member(db, user, team_id).await?;
+    if db::is_team_leader_or_coach(db, &user.id, team_id)
+        .await
+        .map_err(server_err)?
+    {
+        Ok(())
+    } else {
+        Err(ServerFnError::new(LEADER_ONLY))
+    }
+}
+
 /// Make the stored admin flag match `ADMIN_EMAILS`: promote listed users,
 /// demote users whose address was removed (unless the promote command made
 /// them admin). Called at login and registration; failures are logged, never
@@ -405,6 +424,14 @@ impl Ctx {
     pub async fn require_leader(&self) -> Result<String, ServerFnError> {
         let team_id = self.require_team().await?;
         require_team_leader(&self.db, &self.user, &team_id).await?;
+        Ok(team_id)
+    }
+
+    /// The user's own team when they lead it or coach it (invite links only),
+    /// or an error. The team always comes from the session.
+    pub async fn require_leader_or_coach(&self) -> Result<String, ServerFnError> {
+        let team_id = self.require_team().await?;
+        require_team_leader_or_coach(&self.db, &self.user, &team_id).await?;
         Ok(team_id)
     }
 }

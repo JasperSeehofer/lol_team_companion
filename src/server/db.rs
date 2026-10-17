@@ -209,6 +209,32 @@ pub async fn is_team_leader(db: &Surreal<Db>, user_id: &str, team_id: &str) -> D
     Ok(!rows.is_empty())
 }
 
+/// True when the user is a coach of the team (`team_member.roster_type =
+/// 'coach'`): a membership row of that team, so another team's coach is false.
+pub async fn is_team_coach(db: &Surreal<Db>, user_id: &str, team_id: &str) -> DbResult<bool> {
+    let mut r = db
+        .query("SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) AND roster_type = 'coach' LIMIT 1")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
+        .await?;
+    let row: Option<IdRecord> = r.take(0)?;
+    Ok(row.is_some())
+}
+
+/// Who may create, list and disable the team's invite links (M148): a member
+/// of the team who leads it or is one of its coaches. Placing players,
+/// answering join requests and editing the team stay with the leader.
+pub async fn is_team_leader_or_coach(
+    db: &Surreal<Db>,
+    user_id: &str,
+    team_id: &str,
+) -> DbResult<bool> {
+    if !is_team_member(db, user_id, team_id).await? {
+        return Ok(false);
+    }
+    Ok(is_team_leader(db, user_id, team_id).await? || is_team_coach(db, user_id, team_id).await?)
+}
+
 #[derive(Debug, Deserialize, SurrealValue)]
 struct IdRecord {
     id: RecordId,

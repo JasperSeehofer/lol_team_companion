@@ -8,7 +8,7 @@
 
 use leptos::prelude::*;
 
-use crate::components::clipboard;
+use crate::components::clipboard::{self, CopyState};
 use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{
     Button, ButtonSize, ButtonType, ButtonVariant, Callout, CalloutTone, EmptySize, EmptyState,
@@ -63,15 +63,6 @@ pub async fn mint_password_reset(email: String) -> Result<MintedCode, ServerFnEr
     })
 }
 
-/// Where the "Copy code" button stands (success only after the clipboard
-/// promise resolved).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CopyState {
-    Idle,
-    Copied,
-    Failed,
-}
-
 fn status_class(status: &str) -> &'static str {
     match status {
         "open" => "text-success",
@@ -118,37 +109,10 @@ pub fn AdminResetsPage() -> impl IntoView {
         else {
             return;
         };
-        leptos::task::spawn_local(async move {
-            match clipboard::copy_text(&code).await {
-                Ok(()) => {
-                    copy_state.set(CopyState::Copied);
-                    #[cfg(feature = "hydrate")]
-                    {
-                        use wasm_bindgen::prelude::*;
-                        let cb = Closure::once(move || {
-                            if copy_state.get_untracked() == CopyState::Copied {
-                                copy_state.set(CopyState::Idle);
-                            }
-                        });
-                        if let Some(w) = web_sys::window() {
-                            let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(
-                                cb.as_ref().unchecked_ref(),
-                                2000,
-                            );
-                        }
-                        cb.forget();
-                    }
-                }
-                Err(_e) => {
-                    copy_state.set(CopyState::Failed);
-                    #[cfg(feature = "hydrate")]
-                    {
-                        leptos::logging::warn!("copy reset code: {_e}");
-                        if let Some(el) = code_ref.get_untracked() {
-                            clipboard::select_contents(&el);
-                        }
-                    }
-                }
+        clipboard::copy_with_state(code, copy_state, move || {
+            #[cfg(feature = "hydrate")]
+            if let Some(el) = code_ref.get_untracked() {
+                clipboard::select_contents(&el);
             }
         });
     });
