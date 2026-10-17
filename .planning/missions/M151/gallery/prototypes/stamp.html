@@ -28,15 +28,6 @@
   .stamp[data-result="Loss"] { background: transparent; color: var(--color-loss); }
   @media (min-width: 768px) { .stamp { width: 80px; height: 80px; font-size: 48px; } }
 
-  /* Candidate motion (see NOTES.md: the card says "Motion: none"). Drawn once, 160 ms, no scale, no rotation. */
-  .stamp[data-stamped="anim"] { animation: stamp-in var(--dur-2) var(--ease-out) both; }
-  .stamp[data-stamped="anim"] > span { animation: stamp-letter var(--dur-2) var(--ease-out) both; }
-  @keyframes stamp-in { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes stamp-letter { from { transform: translateY(2px); } to { transform: none; } }
-  @media (prefers-reduced-motion: reduce) {
-    .stamp[data-stamped], .stamp[data-stamped] > span { animation: none; }
-  }
-
   .actions { margin-top: calc(var(--spacing) * 5); }
   button { font: inherit; height: calc(var(--spacing) * 8); padding: 0 calc(var(--spacing) * 3); border-radius: var(--radius-ctl);
            border: 1px solid var(--color-accent); background: var(--color-accent); color: var(--color-accent-ink); cursor: pointer; }
@@ -61,13 +52,5 @@
   </div>
   <div class="actions"><button type="button">Write the review</button></div>
 </main>
-<script>
-  // Present at first paint (the card). stamp() replays the candidate "drawn once" entrance.
-  window.stamp = function () {
-    document.querySelectorAll(".stamp").forEach((el) => {
-      delete el.dataset.stamped; void el.offsetWidth; el.dataset.stamped = "anim";
-    });
-  };
-</script>
 </body>
 </html>

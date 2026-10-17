@@ -45,7 +45,13 @@
             border: 1px solid var(--color-outline); border-radius: var(--radius-ctl); background: var(--color-ink-2);
             color: var(--color-secondary); }
   .gap8 { width: calc(var(--spacing) * 8); height: calc(var(--spacing) * 8); flex: none; }
-  .text { display: flex; flex: 1; flex-direction: column; min-width: 0; line-height: 1.25; }
+  /* Below sm (640 px) the name and the role stack; from sm up they share one line. */
+  .text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; line-height: 1.25; }
+  .slot[data-filled="true"] .title { max-width: 100%; }
+  @media (min-width: 640px) {
+    .slot[data-filled="true"] .text { flex-direction: row; align-items: center; gap: calc(var(--spacing) * 2); }
+    .slot[data-filled="true"] .role { margin-left: auto; }
+  }
   .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .title.sel { color: var(--color-accent); }
   .cap { color: var(--color-muted); }
@@ -86,7 +92,7 @@
 <main>
   <p class="eyebrow">M151 prototype, not wired into the board</p>
   <h1 class="text-headline">Lock-in</h1>
-  <p class="lede text-reading">A pick fills its slot: a chalk stroke draws along the bottom edge in 220 ms and the role mark settles. The stroke holds 400 ms, then hands to the outline colour. A second lock-in within one second is instant.</p>
+  <p class="lede text-reading">A pick fills its slot: a chalk stroke draws along the bottom edge in 220 ms and the role mark settles. The stroke holds 400 ms, then hands to the outline colour. A second lock-in within one second is instant (<code>bulkDemo()</code>).</p>
 
   <div id="board" class="board" role="grid" aria-label="Draft board, picks">
     <div class="col blue" role="row">
@@ -122,7 +128,7 @@
   // Draft order of these four pick slots, with the champion each takes.
   const ORDER = [
     { slot: 6, name: "Orianna", mono: "Or", role: "MID", label: "Blue pick 1" },
-    { slot: 7, name: "Vi", mono: "Vi", role: "JGL", label: "Red pick 1" },
+    { slot: 7, name: "Aurelion Sol", mono: "AS", role: "MID", label: "Red pick 1" },
     { slot: 8, name: "Ornn", mono: "Or", role: "TOP", label: "Red pick 2" },
     { slot: 9, name: "Jarvan IV", mono: "JI", role: "JGL", label: "Blue pick 2" },
   ];
@@ -144,9 +150,9 @@
   }
   function fill(el, o) {
     el.innerHTML = `<span class="avatar text-caption" aria-hidden="true">${o.mono}</span>` +
-      `<span class="text"><span class="title text-label">${o.name}</span></span>` +
+      `<span class="text"><span class="title text-label">${o.name}</span>` +
       `<span class="role text-caption"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MARKS[o.role]}</svg>` +
-      `<span aria-hidden="true">${o.role}</span></span><span class="lockbar" aria-hidden="true"></span>`;
+      `<span aria-hidden="true">${o.role}</span></span></span><span class="lockbar" aria-hidden="true"></span>`;
     el.setAttribute("aria-label", `${o.label}, ${o.name}, ${WORD[o.role]}`);
   }
   // The one moment: a pick fills its slot. Bulk entry (< 1 s since the last) is instant.
@@ -159,6 +165,9 @@
     document.getElementById("status").textContent =
       step < ORDER.length ? `${o.name} locked in. ${ORDER[step].label} of 10` : `${o.name} locked in.`;
   };
+  // Verification hook: keyboard bulk entry, two lock-ins within 1 s. The first animates,
+  // the second lands instantly (full-width outline bar, mark in place).
+  window.bulkDemo = function () { resetBoard(); lockIn(); lockIn(); };
   window.resetBoard = function () { step = 0; lastLock = -Infinity; render();
     document.getElementById("status").textContent = "Blue pick 1 of 10"; };
   render();
