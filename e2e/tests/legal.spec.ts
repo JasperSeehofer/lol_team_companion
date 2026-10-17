@@ -10,10 +10,14 @@ import { test, expect } from "@playwright/test";
 
 const SHOTS = process.env.LEGAL_SHOTS_DIR ?? process.env.M8_SHOTS_DIR;
 
-for (const { path, heading, placeholders } of [
-  { path: "/legal/impressum", heading: "Impressum", placeholders: 0 },
-  { path: "/legal/datenschutz", heading: "Privacy", placeholders: 0 },
-  { path: "/legal/terms", heading: "Terms of use", placeholders: 0 },
+/** Section 6 of Riot's "Legal Jibber Jabber", word for word (M152). */
+const LJJ_NOTICE =
+  "Team Companion was created under Riot Games' \"Legal Jibber Jabber\" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.";
+
+for (const { path, heading, placeholders, notice } of [
+  { path: "/legal/impressum", heading: "Impressum", placeholders: 0, notice: false },
+  { path: "/legal/datenschutz", heading: "Privacy", placeholders: 0, notice: true },
+  { path: "/legal/terms", heading: "Terms of use", placeholders: 0, notice: true },
 ]) {
   test(`${path} renders for visitors`, async ({ page }) => {
     const res = await page.goto(path);
@@ -23,6 +27,12 @@ for (const { path, heading, placeholders } of [
     // is a visible placeholder, everything else is filled in.
     await expect(page.locator("[data-owner-placeholder]")).toHaveCount(placeholders);
     await expect(page.getByTestId("riot-disclaimer")).toContainText("Team Companion isn't endorsed by Riot Games");
+    // The Legal Jibber Jabber notice sits beside the disclaimer in the
+    // footer, and in the page text of the privacy page and the terms.
+    await expect(page.getByTestId("riot-notice")).toHaveText(LJJ_NOTICE);
+    if (notice) {
+      await expect(page.getByTestId("legal-riot-notice")).toHaveText(LJJ_NOTICE);
+    }
     // The footer links all three pages.
     const legal = page.getByRole("navigation", { name: "Legal" });
     for (const label of ["Impressum", "Datenschutz", "Terms"]) {
