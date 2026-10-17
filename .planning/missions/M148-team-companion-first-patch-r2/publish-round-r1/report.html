@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M148 Round 1</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d2320; --muted:#5b6560; --rule:#d9dcd6; --ok:#1f7a4a; --warn:#9a5b00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; } }
+:root[data-theme="dark"] { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; margin:0; padding:24px 16px; }
+main { max-width:68ch; margin:0 auto; }
+h1 { font-size:1.6rem; margin:0 0 .25rem; } h2 { font-size:1.15rem; margin:2rem 0 .5rem; }
+p.meta { color:var(--muted); margin:0 0 1.5rem; }
+table { width:100%; border-collapse:collapse; font-size:.95rem; } td, th { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+.ok { color:var(--ok); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+code { font-size:.9em; overflow-wrap:anywhere; }
+</style>
+</head>
+<body>
+<main>
+<h1>Team Companion first patch, R2</h1>
+<p class="meta">Mission M148 · branch <code>mission/M148-team-companion-first-patch-r2</code> · 2026-10-17 · full report: REPORT-R1.md</p>
+
+<h2>What shipped</h2>
+<table>
+<tr><th>Item</th><th>Change</th><th>State</th></tr>
+<tr><td>3</td><td>Add the next match from a phone; the read-only caption shows only when a match exists</td><td class="ok">shipped</td></tr>
+<tr><td>2b</td><td>"Copy code" for the one-time reset code, plus the shared clipboard helper (success only after the browser confirms)</td><td class="ok">shipped</td></tr>
+<tr><td>8</td><td>A tab title per page; sign-in returns to the page you came from (same-site paths only)</td><td class="ok">shipped</td></tr>
+<tr><td>7</td><td>16+ and Terms checkbox with your wording; checked on the server before the invite is used</td><td class="ok">shipped</td></tr>
+<tr><td>2</td><td>Coaches may invite; full link per row with Copy and Share; share-link copy fixed</td><td class="ok">shipped</td></tr>
+<tr><td>4</td><td>Visible "Could not save" with Retry, leave-page warning, "did not load" instead of empty lists</td><td class="ok">shipped</td></tr>
+<tr><td>9</td><td>Before/after frame strips at 390 and 1280, atelier critique, rubric harness in CI</td><td class="ok">shipped</td></tr>
+<tr><td>11</td><td>CI write-back for every mission branch (also covers M149 item F)</td><td class="ok">shipped</td></tr>
+<tr><td>10</td><td>One-line fix to the M137 vault page (T1–T4 are trust checks)</td><td>for the overseer</td></tr>
+</table>
+
+<h2>Gates</h2>
+<p class="ok">CI green on the tip ba0c92b: run 39007209640, all five jobs, 166/166 e2e, 0 flaky.</p>
+
+<h2>Worth knowing</h2>
+<ul>
+<li>The round went <span class="warn">over the token cap</span> (8.45 M metered against an 8.0 M cap) and was stopped at wrap-up.</li>
+<li>One sentence was added to each of the Terms and Privacy pages, about the recorded 16+ and terms acceptance.</li>
+<li>Placing new players stays with the leader. Coaches only invite.</li>
+<li>The atelier has not re-checked its three applied FIXes on new captures yet.</li>
+</ul>
+</main>
+</body>
+</html>
