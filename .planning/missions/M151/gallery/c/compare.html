@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Share dark and paper</title>
+<!-- Side by side at 390: the dark T1 share still | the C paper still. Capture at --width 828 --height 900. -->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; background: var(--color-page); }
+  .pair { display: flex; gap: calc(var(--spacing) * 4); padding: calc(var(--spacing) * 4); }
+  figure { margin: 0; display: flex; flex-direction: column; gap: calc(var(--spacing) * 2); }
+  figcaption { color: var(--color-muted); }
+  iframe { width: 390px; height: 844px; border: 1px solid var(--color-rule); display: block; }
+</style>
+</head>
+<body>
+<div class="pair">
+  <figure><figcaption class="eyebrow">Dark, T1 (shipped tokens)</figcaption><iframe src="../surfaces/share.html?t=t1" title="Dark share still"></iframe></figure>
+  <figure><figcaption class="eyebrow">Paper, T1 (proposed tokens)</figcaption><iframe src="share-paper.html?t=t1" title="Paper share still"></iframe></figure>
+</div>
+</body>
+</html>

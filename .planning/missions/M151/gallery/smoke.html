@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gallery smoke</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  main { max-width: 72rem; margin: 0 auto; padding: calc(var(--spacing) * 8) calc(var(--spacing) * 4); }
+  section { border-top: 1px solid var(--color-rule); padding-top: calc(var(--spacing) * 4); margin-top: calc(var(--spacing) * 8); }
+  .row { display: flex; align-items: baseline; gap: calc(var(--spacing) * 4); }
+  .row .eyebrow { flex: 0 0 7rem; }
+  .faces p { margin: calc(var(--spacing) * 2) 0; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: calc(var(--spacing) * 2); }
+  .sw { background: var(--color-ink-1); }
+  .sw i { display: block; height: calc(var(--spacing) * 12); border-bottom: 1px solid var(--color-rule); }
+  .sw span { display: block; padding: calc(var(--spacing) * 2); }
+  .mover { width: calc(var(--spacing) * 12); height: calc(var(--spacing) * 12); background: var(--color-accent); border-radius: var(--radius-ctl);
+           transition: transform var(--dur-3) var(--ease-out); }
+  .mover.go { transform: translateX(calc(var(--spacing) * 40)); }
+  .tick { border: 1px solid var(--color-outline); border-radius: var(--radius-ctl); padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">M151 gallery, smoke page</p>
+  <h1 class="font-display text-headline" style="font-weight:600;margin:calc(var(--spacing) * 2) 0">Team Companion tokens</h1>
+  <p class="text-reading" style="color:var(--color-secondary);max-width:65ch;margin:0">Every value on this page comes from tokens.css, which is generated from input.css. If these headings look like a system sans, the fonts failed to load.</p>
+
+  <section class="faces">
+    <p class="eyebrow">Faces</p>
+    <p class="font-display text-title" style="font-weight:600">Familjen Grotesk 600: Prep for Riverside Rooks</p>
+    <p class="text-reading">Public Sans 400: Ward the river brush before the second dragon.</p>
+    <p class="figures text-reading">JetBrains Mono: 14:32 · 2.4k · 61.8%</p>
+    <p class="note text-reading">Source Serif 4 italic: they always invade at 1:30, punish it.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Type scale</p>
+    <div class="row"><span class="eyebrow">caption 12</span><span class="text-caption">Synced 4 minutes ago</span></div>
+    <div class="row"><span class="eyebrow">label 13</span><span class="text-label">Starting five</span></div>
+    <div class="row"><span class="eyebrow">body 14</span><span class="text-body">Two drafts linked to this plan</span></div>
+    <div class="row"><span class="eyebrow">reading 16</span><span class="text-reading">Review notes from the scrim</span></div>
+    <div class="row"><span class="eyebrow">heading 20</span><span class="font-display text-heading" style="font-weight:600">Next step</span></div>
+    <div class="row"><span class="eyebrow">title 24</span><span class="font-display text-title" style="font-weight:600">Match Day</span></div>
+    <div class="row"><span class="eyebrow">headline 32</span><span class="font-display text-headline" style="font-weight:600">Scouting</span></div>
+    <div class="row"><span class="eyebrow">display 44</span><span class="font-display text-display" style="font-weight:600">Survey</span></div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Colour tokens</p>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Motion (frames test: --dur-3, ease-out)</p>
+    <div id="track" style="width:calc(var(--spacing) * 60)"><div class="mover" id="mover"></div></div>
+  </section>
+</main>
+<script>
+  const names = ["page","ink-1","ink-2","ink-3","canvas","rule","outline","primary","secondary","muted","accent","accent-hover","accent-ink",
+    "side-blue","side-red","side-blue-deep","side-red-deep","win","win-ink","loss","success","warning","danger","danger-deep","info",
+    "terrain-jungle","terrain-river","terrain-lane","terrain-texture"];
+  const box = document.getElementById("swatches");
+  for (const n of names) {
+    const d = document.createElement("div");
+    d.className = "sw";
+    d.innerHTML = `<i style="background:var(--color-${n})"></i><span class="text-caption figures">${n}</span>`;
+    box.append(d);
+  }
+</script>
+</body>
+</html>

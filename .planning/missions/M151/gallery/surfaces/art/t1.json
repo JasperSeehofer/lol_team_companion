@@ -1,0 +1,16 @@
+{
+  "name": "T1 field-sketch ink",
+  "svg": "t1-rift.svg",
+  "svgs": { "inset": "t1-inset.svg" },
+  "label": { "x": 22.8, "y": 84.0 },
+  "marks": [
+    { "name": "baron", "word": "Baron", "x": 29.57, "y": 27 },
+    { "name": "dragon", "word": "Dragon", "x": 70.43, "y": 73, "wordSide": "left" }
+  ],
+  "ticks": { "cols": "ABCDEFGH", "rows": "12345" },
+  "crops": { "share": "15 40.6 70 18.8" },
+  "shareSides": {
+    "red":  { "crop": "54 4.6 40 10.73", "label": { "x": 82, "y": 7.6, "align": "end" }, "leader": "M82.5,7.6 L85,9" },
+    "blue": { "crop": "6 84.67 40 10.73", "label": { "x": 17, "y": 92.6 }, "leader": "M16.5,92.4 L14.1,90.1" }
+  }
+}

@@ -7,6 +7,7 @@ pub mod community;
 pub mod design;
 pub mod design_domain;
 pub mod design_interaction;
+pub mod design_marks;
 pub mod draft;
 pub mod draft_graph;
 pub mod game_plan;

@@ -1,0 +1,73 @@
+{
+  "name": "T2 engraved contour",
+  "svg": "t2-contour.svg",
+  "css": "t2.css",
+  "label": {
+    "x": 7.0,
+    "y": 79.0
+  },
+  "marks": [
+    {
+      "name": "baron",
+      "word": "Baron",
+      "x": 33.0,
+      "y": 33.0
+    },
+    {
+      "name": "herald",
+      "word": "Herald",
+      "x": 24.0,
+      "y": 44.0
+    },
+    {
+      "name": "dragon",
+      "word": "Dragon",
+      "x": 67.0,
+      "y": 67.0
+    },
+    {
+      "name": "mid",
+      "word": "Mid",
+      "x": 50.0,
+      "y": 50.0
+    },
+    {
+      "name": "top",
+      "word": "Top",
+      "x": 6.0,
+      "y": 9.0
+    },
+    {
+      "name": "jungle",
+      "word": "Jungle",
+      "x": 26.0,
+      "y": 64.0
+    },
+    {
+      "name": "tower",
+      "word": "Tower",
+      "x": 70.0,
+      "y": 22.0
+    },
+    {
+      "name": "bot",
+      "word": "Bot",
+      "x": 80.0,
+      "y": 93.0
+    },
+    {
+      "name": "support",
+      "word": "Support",
+      "x": 70.0,
+      "y": 85.0
+    }
+  ],
+  "crops": {
+    "share": "18 12 63.93 17.14",
+    "inset": "26 26 48 48"
+  },
+  "shareLabel": {
+    "x": 57.0,
+    "y": 25.0
+  }
+}
