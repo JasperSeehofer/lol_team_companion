@@ -25,7 +25,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 #### Fixed
 - Draft, game plan and tree drafter: a change that could not be saved was silent; the header kept saying "Unsaved changes" (or "Saved") and nothing told you the work was at risk. Now the header says "Could not save" and why ("the server did not answer"), with Retry; one message says your changes are not saved, and the next edit tries again. A success message only appears when the save worked: creating a branch or an improvised branch whose draft could not be saved now says so instead of "Branch created". If the draft board, the saved drafts, the plans, the trees or a tree's branches do not load, the page says so and offers "Try again" instead of showing an empty list.
 - Share links: "Copy link" said "Link copied" before the browser had copied anything, even when it refused. It now says so only after the copy worked, and otherwise tells you to copy the link by hand, with the link selected.
-- Narrow phones no longer scroll sideways on the tree editor's failed save, on team pages with a long team name, or under a long invite link or password reset code: the line wraps instead. The "Have a reset code?" link on the sign-in page is easier to tap.
+- Narrow phones no longer scroll sideways on the tree editor's failed save, on pages titled with a long team or user name, on the profile with a long email address, or under a long invite link or password reset code: the line wraps instead. The "Have a reset code?" link on the sign-in page is easier to tap.
 
 ### Feedback batch 1 (2026-10-16)
 

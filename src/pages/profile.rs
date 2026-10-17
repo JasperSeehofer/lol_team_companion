@@ -657,7 +657,7 @@ fn ProfileBody(user: PublicUser, on_change: Callback<()>) -> impl IntoView {
             </div>
             <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-y-1 text-body">
                 <dt class="text-muted">"Email"</dt>
-                <dd class="text-primary" data-testid="profile-email">{user.email.clone()}</dd>
+                <dd class="min-w-0 text-primary [overflow-wrap:anywhere]" data-testid="profile-email">{user.email.clone()}</dd>
             </dl>
             <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-0 flex-1">
