@@ -1,15 +1,23 @@
 # CI e2e summary
 
-- run: 39007209640
-- sha: ba0c92b6590c138d703635e172c4236a775d2b6c
+- run: 39008897600
+- sha: e6648843110827d4e0d2eb634b1a00747d8c0a25
 
 ## Playwright
 
-expected 166, unexpected 0, flaky 0, skipped 0
+expected 165, unexpected 0, flaky 1, skipped 0
+
+### [flaky] login-next.spec.ts:55 Return to the page after sign-in > next pointing back at an auth page lands on Home
+attempt 1: failed (20630 ms)
+```
+TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+=========================== logs ===========================
+waiting for navigation until "load"
+============================================================
+```
 
 ## Server log (slow request, inflight, panicked, ERROR)
 
-1 matching lines
+0 matching lines
 ```
-thread 'tokio-rt-worker' (3231) panicked at /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_router-0.8.12/src/link.rs:161:16:
 ```
