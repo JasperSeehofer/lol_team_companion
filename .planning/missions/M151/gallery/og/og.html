@@ -27,6 +27,8 @@
   [data-art="og"] .chalk path { stroke-width: 2px; }
   [data-art="og"] .art-label { font-family: var(--font-mono); font-size: 32px; line-height: 1; font-weight: 500;
     letter-spacing: 0.06em; text-transform: uppercase; }
+  /* Share variant: the label names the team ("NORTHGATE ACADEMY", 17 caps); 26 px keeps it inside the centre 1100 px. */
+  html[data-v="share"] [data-art="og"] .art-label { font-size: 26px; letter-spacing: 0.04em; }
 </style>
 </head>
 <body>
@@ -44,6 +46,7 @@
   const share = q.get("v") === "share";
   const team = q.get("team") || "Northgate Academy";
   document.documentElement.dataset.t = t;
+  if (share) document.documentElement.dataset.v = "share";
   if (share) {
     // Share-link variant: the product name stays, the team leads, one sentence.
     const w = document.getElementById("words");
@@ -60,7 +63,7 @@
   if (cfg.crops?.og) { svg.setAttribute("viewBox", cfg.crops.og); svg.setAttribute("preserveAspectRatio", "xMidYMid slice"); }
   const vb = svg.getAttribute("viewBox").split(/\s+/).map(Number);
   if (cfg.label) {
-    const n = Object.assign(document.createElement("span"), { className: "art-label", textContent: "Your team" });
+    const n = Object.assign(document.createElement("span"), { className: "art-label", textContent: share ? team : "Your team" });
     n.style.left = `${((cfg.label.x - vb[0]) / vb[2]) * 100}%`;
     n.style.top = `${((cfg.label.y - vb[1]) / vb[3]) * 100}%`;
     box.append(n);

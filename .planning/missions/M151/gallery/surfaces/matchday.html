@@ -12,8 +12,17 @@
   .field { position: relative; background: var(--color-ink-1); border-top: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule);
     padding: calc(var(--spacing) * 5) calc(var(--spacing) * 4); max-width: 40rem; }
   .field::after { content: ""; display: block; clear: both; }
-  .field .inset { float: right; width: calc(var(--spacing) * 22); height: calc(var(--spacing) * 22); margin: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 4); }
+  .field .inset.float { float: right; width: calc(var(--spacing) * 22); height: calc(var(--spacing) * 22); margin: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 4); }
   .field .btn { clear: both; }
+  /* facing row: name | 88 px inset | name; blue's name level with its base (bottom left), red's with its (top right) */
+  .facing { display: none; grid-template-columns: minmax(0, 1fr) calc(var(--spacing) * 22) minmax(0, 1fr); column-gap: calc(var(--spacing) * 3);
+    margin-top: calc(var(--spacing) * 5); max-width: calc(var(--spacing) * 90); }
+  .facing .inset { width: calc(var(--spacing) * 22); height: calc(var(--spacing) * 22); }
+  .side-name { color: var(--color-secondary); font-weight: 500; }
+  .side-name.blue { align-self: end; text-align: right; }
+  .side-name.red { align-self: start; }
+  html[data-facing] .facing { display: grid; }
+  html[data-facing] .inset.float { display: none; }
   .lead { margin-top: calc(var(--spacing) * 2); display: flex; align-items: baseline; gap: calc(var(--spacing) * 2); }
   .lead .fig { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: var(--text-headline);
     line-height: var(--text-headline--line-height); color: var(--color-primary); letter-spacing: -0.02em; }
@@ -46,15 +55,22 @@
 <main class="shell w-wide">
   <header class="ph">
     <p class="eyebrow">Match Day</p>
-    <h1>Northgate Academy</h1>
+    <h1>Scrim vs Riverside Rooks</h1>
+    <p class="meta text-label"><span>Northgate Academy</span><span aria-hidden="true">·</span><span>Patch 16.20 since 11 Oct</span></p>
   </header>
   <p class="phone-note text-caption c-muted">Read-only on the phone. Edit the match on a larger screen.</p>
 
   <section class="field" aria-labelledby="next-h">
-    <figure class="inset" data-art="inset" aria-hidden="true"></figure>
+    <figure class="inset float" data-art="inset" aria-hidden="true"></figure>
     <p class="eyebrow" id="next-h">Next match</p>
     <p class="lead"><time class="fig" datetime="2026-10-17T18:00:00Z">20:00</time><span class="text-label c-muted">Tomorrow</span></p>
-    <p class="sentence text-reading">Scrim vs Riverside Rooks, best of 3. 2 of 5 prep steps done.</p>
+    <p class="sentence text-reading">Best of 3, with 2 of 5 prep steps done.</p>
+    <!-- Treatments with "facing" (T1, critique T1-4): the two sides' base shapes facing across the river, each name beside its base. -->
+    <div class="facing" aria-hidden="true">
+      <span class="side-name blue text-label">Northgate Academy</span>
+      <figure class="inset" data-art="inset"></figure>
+      <span class="side-name red text-label">Riverside Rooks</span>
+    </div>
     <a class="btn btn-primary btn-touch" href="#brief">Read the brief <span aria-hidden="true">→</span></a>
   </section>
 
@@ -65,10 +81,10 @@
         <div><p class="tt next">Read the brief on Riverside Rooks</p><p class="det text-label c-muted">5 players scouted, not refreshed from Riot yet.</p></div>
         <span class="st next">Read by 0 of 5</span></li>
       <li><span class="num done" aria-hidden="true">2</span>
-        <div><p class="tt done">Draft plans</p><p class="det text-label c-muted">vs Riverside Rooks - Game 1, vs Riverside Rooks - Game 2</p></div>
+        <div><p class="tt done">Draft plans</p><p class="det text-label c-muted">vs Riverside Rooks&nbsp;– Game 1, vs Riverside Rooks&nbsp;– Game 2</p></div>
         <span class="st done">2 drafts</span></li>
       <li><span class="num done" aria-hidden="true">3</span>
-        <div><p class="tt done">Game plan</p><p class="det text-label c-muted">vs Riverside Rooks - Game 1 plan, vs Riverside Rooks - Game 2 plan</p></div>
+        <div><p class="tt done">Game plan</p><p class="det text-label c-muted">vs Riverside Rooks&nbsp;– Game 1 plan, vs Riverside Rooks&nbsp;– Game 2 plan</p></div>
         <span class="st done">2 plans</span></li>
       <li><span class="num att" aria-hidden="true">4</span>
         <div><p class="tt">Open action items</p><p class="det text-label c-muted">Lessons from earlier reviews still waiting.</p></div>

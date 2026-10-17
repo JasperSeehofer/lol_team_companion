@@ -7,7 +7,9 @@
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="surfaces.css">
 <style>
-  /* share.rs SharePage: PageShell Reading; the T art strip sits above the PageHeader */
+  /* share.rs SharePage: PageShell Reading; the T art strip sits above the PageHeader.
+     data-our-side = the plan's draft.our_side (seed still: blue); ?side=red|blue|none overrides it.
+     Title: the seed separator " - " is shown as no-break space + en dash so it never wraps before the dash. */
   .strip { width: 100%; height: calc(var(--spacing) * 24); margin-bottom: calc(var(--spacing) * 6); }
   .stack { display: flex; flex-direction: column; gap: calc(var(--spacing) * 10); }
   .champs { display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4); }
@@ -25,10 +27,10 @@
 <body>
 <header class="nav"><div class="nav-in"><a class="wordmark" href="#">Team Companion</a></div></header>
 <main class="shell w-reading">
-  <figure class="strip" data-art="share" data-label="Riverside Rooks" aria-hidden="true"></figure>
+  <figure class="strip" data-art="share" data-our-side="blue" data-label="Riverside Rooks" aria-hidden="true"></figure>
   <header class="ph">
     <p class="eyebrow">Game plan</p>
-    <h1>vs Riverside Rooks - Game 1 plan</h1>
+    <h1>vs Riverside Rooks&nbsp;– Game 1 plan</h1>
   </header>
   <div class="stack">
     <section aria-labelledby="sp-comp">
