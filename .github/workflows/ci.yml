@@ -9,6 +9,12 @@ jobs:
   check:
     name: Check, lint, unit tests
     runs-on: ubuntu-latest
+    # The failure step below commits the check log to M151 branches.
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -21,25 +27,73 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Format check
-        run: cargo fmt --check
+        run: |
+          set -o pipefail
+          echo "=== Format check ===" >> "$RUNNER_TEMP/check.log"
+          cargo fmt --check 2>&1 | tee -a "$RUNNER_TEMP/check.log"
 
       - name: Check SSR target
-        run: cargo check --features ssr
+        run: |
+          set -o pipefail
+          echo "=== Check SSR target ===" >> "$RUNNER_TEMP/check.log"
+          cargo check --features ssr 2>&1 | tee -a "$RUNNER_TEMP/check.log"
 
       - name: Check WASM/hydrate target
-        run: cargo check --features hydrate --target wasm32-unknown-unknown
+        run: |
+          set -o pipefail
+          echo "=== Check WASM/hydrate target ===" >> "$RUNNER_TEMP/check.log"
+          cargo check --features hydrate --target wasm32-unknown-unknown 2>&1 | tee -a "$RUNNER_TEMP/check.log"
 
       - name: Clippy (SSR)
-        run: cargo clippy --features ssr -- -D warnings
+        run: |
+          set -o pipefail
+          echo "=== Clippy (SSR) ===" >> "$RUNNER_TEMP/check.log"
+          cargo clippy --features ssr -- -D warnings 2>&1 | tee -a "$RUNNER_TEMP/check.log"
 
       - name: Clippy (WASM/hydrate)
-        run: cargo clippy --features hydrate --target wasm32-unknown-unknown -- -D warnings
+        run: |
+          set -o pipefail
+          echo "=== Clippy (WASM/hydrate) ===" >> "$RUNNER_TEMP/check.log"
+          cargo clippy --features hydrate --target wasm32-unknown-unknown -- -D warnings 2>&1 | tee -a "$RUNNER_TEMP/check.log"
 
       - name: Unit tests
-        run: cargo test --features ssr --lib
+        run: |
+          set -o pipefail
+          echo "=== Unit tests ===" >> "$RUNNER_TEMP/check.log"
+          cargo test --features ssr --lib 2>&1 | tee -a "$RUNNER_TEMP/check.log"
 
       - name: DB integration tests
-        run: cargo test --features ssr --test integration
+        run: |
+          set -o pipefail
+          echo "=== DB integration tests ===" >> "$RUNNER_TEMP/check.log"
+          cargo test --features ssr --test integration 2>&1 | tee -a "$RUNNER_TEMP/check.log"
+
+      - name: Commit the check log (M151)
+        if: failure() && startsWith(github.ref_name, 'mission/M151')
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          LOG_MD=.planning/missions/M151/ci-check-log.md
+          {
+            echo "# CI check log, run ${{ github.run_id }} (${{ github.sha }})"
+            echo
+            echo "Last 300 lines of the Check, lint, unit tests job."
+            echo
+            echo '```'
+            tail -n 300 "$RUNNER_TEMP/check.log" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'
+            echo '```'
+          } > "$RUNNER_TEMP/ci-check-log.md"
+          git fetch --depth=1 origin "$BRANCH"
+          git checkout -f -B ci-check-log FETCH_HEAD
+          mkdir -p "$(dirname "$LOG_MD")"
+          cp "$RUNNER_TEMP/ci-check-log.md" "$LOG_MD"
+          git add "$LOG_MD"
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git -c user.name=ci -c user.email=ci@local commit -q -m "chore(ci): check log for run ${{ github.run_id }} (${{ github.sha }})"
+          git push origin "HEAD:$BRANCH"
 
   e2e:
     name: e2e smoke (Playwright)
