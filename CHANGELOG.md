@@ -16,6 +16,12 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 - The footer, the privacy page and the terms now also carry the notice Riot's "Legal Jibber Jabber" policy asks for (that Team Companion was made under that policy using assets owned by Riot Games, and that Riot Games does not endorse it), word for word, beside Riot's existing disclaimer, which stays.
 - For admins: the design gallery (/design) has a "Drawn Rift" section, the map as Team Companion draws it from measured coordinates (no picture of the game's map is used): a sketch with lanes, river, bases, hatched walls and bush marks, and, zoomed in to 2x or 4x, a survey with exact wall outlines, bushes, towers, inhibitors, pits and camps. How each coordinate was measured is in docs/rift-schematic.md.
 
+#### Changed
+- The landing and the closed-beta page open on the drawn Rift, with "Your team" marked at a base, beside one headline, one sentence and one way in (Sign in). On a phone the drawing comes after the button, still on the first screen.
+- A shared game plan, review or player card opens under a strip of the drawn Rift. For a game plan whose draft says which side the team drafted on, the strip looks at that side's base; otherwise it shows the bridge at mid. It never names the team or anything from the link.
+- A shared game plan shows each team's five champions in one row that never breaks onto a second line on any screen size (the icons get smaller first), with their names written underneath.
+- Match Day opens with the next match as a card: the start time large, the day beside it, one sentence with the format and how many of the five prep steps are done ("Best of 3, with 2 of 5 prep steps done."), and the next prep step as the page's one main button, beside a small drawing of the Rift with both team names at the two ends of its river (no side is given to either team). The preparation list below keeps every step, with the next one outlined. The start time and format moved from the line under the title into the card.
+
 ### First patch, round 2 (2026-10-17)
 
 #### Changed

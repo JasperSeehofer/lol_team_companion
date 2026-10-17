@@ -181,7 +181,7 @@ jobs:
 
       - name: Playwright smoke, hydration gate, auth, admin, legal, account, guidance and team invites
         working-directory: e2e
-        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts match-detail.spec.ts sortable-tables.spec.ts post-game-fill.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts match-day-phone.spec.ts frames-m148.spec.ts login-next.spec.ts save-failure.spec.ts ui-icons.spec.ts og-meta.spec.ts --retries=1 --reporter=list,json,github
+        run: npx playwright test smoke.spec.ts hydration-no-panic.spec.ts auth.spec.ts admin-invites.spec.ts cross-tenant.spec.ts gallery.spec.ts community-public.spec.ts community-gates.spec.ts bug-triage.spec.ts legal.spec.ts account.spec.ts guidance.spec.ts team-invites.spec.ts password.spec.ts frames-m141.spec.ts match-detail.spec.ts sortable-tables.spec.ts post-game-fill.spec.ts champion-pool-moves.spec.ts enter-submits.spec.ts bug-report.spec.ts feedback-attachment.spec.ts match-day-phone.spec.ts frames-m148.spec.ts login-next.spec.ts save-failure.spec.ts ui-icons.spec.ts og-meta.spec.ts hero-matchup.spec.ts frames-m152.spec.ts --retries=1 --reporter=list,json,github
         env:
           M141_SHOTS_DIR: ${{ runner.temp }}/m141-frames
           # Any mission's frame specs: PNGs at the top level or in after/ are
