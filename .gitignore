@@ -31,3 +31,13 @@ deploy/backup-ssh/
 .previous-tag
 restore-drills.log
 restore-*/
+
+# Scout spike (M156): venv, detector weights and icon cache, recordings, caches.
+# Run dirs under tools/scout/runs/ are committed (<= 50 MB, PNG frames only).
+tools/scout/.venv/
+tools/scout/models/
+tools/scout/*.egg-info/
+tools/scout/**/__pycache__/
+tools/scout/**/.pytest_cache/
+tools/scout/runs/**/rec/
+tools/scout/**/*.webm
