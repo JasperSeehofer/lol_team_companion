@@ -1,7 +1,7 @@
 # UX rubric check
 
-- run: 39077606005
-- sha: 8cfbd31aeb46c85914da49b23e65e0bddb124f44
+- run: 39077594160
+- sha: 085924575cadab07a5a2c4fe8b9bd1727bc80ea4
 - harness: scripts/ux-rubric/rubric-check.mjs (v24.21.0)
 - limitation: only public pages; signed-in surfaces need a sign-in step the harness does not have
 
