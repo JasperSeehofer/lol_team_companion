@@ -5,8 +5,9 @@
 //!
 //! - **Sketch** (zoomed out, the hero surfaces): frame, three lanes, the
 //!   river as two banks on a two-cubic centreline, the two bases as their
-//!   side shapes, impassable terrain as axis-aligned hatch (no outlines),
-//!   Baron and Dragon diamonds with their words, ten bush clusters.
+//!   side shapes, Baron and Dragon diamonds with their words, ten bush
+//!   clusters. No wall hatch: walls are never outlined at this level, and
+//!   hatch without an outline reads as stray bars (critique r1 surfaces).
 //! - **Survey** (zoomed in, `/design` only this round): exact wall outlines
 //!   with 45-degree hatch held at a 6 px screen pitch, bushes as outlined
 //!   stipple, river and ground outlines, and the structures and camps as ink
@@ -23,7 +24,7 @@ use super::rift_geometry as g;
 /// Level of detail.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RiftLevel {
-    /// Smoothed, hatch-only terrain: heroes, Match Day, share strip.
+    /// Smoothed, no terrain: heroes, Match Day, share strip.
     #[default]
     Sketch,
     /// Exact outlines, hatched walls, stippled bushes, structure glyphs.
@@ -91,14 +92,17 @@ pub enum RiftCrop {
     /// The whole square sheet.
     #[default]
     Full,
-    /// Match Day's 88 px inset: lanes, river (gap at mid), bases only.
+    /// Match Day's 88 px inset: lanes with open corners (no closed outline
+    /// that could read as a frame), river (gap at mid), bases only.
     Inset,
     /// Share strip centred on the river-mid bridge (50, 50): the card's 40 x 10.7
     /// units below `md` and 50 x 9.4 from `md`, each widened by 3 units so
     /// strokes run cleanly to the edge (critique fix 9): 43 x 11.53 below
     /// `md`, 53 x 9.96 from `md`; no hatch, no bushes (R1-b).
     ShareStrip,
-    /// Share strip centred on one base, for an artefact that carries a side.
+    /// Share strip at one base, for an artefact that carries a side. The
+    /// window sits just clear of the lane ends next to the base (the side
+    /// lane's end and the mid lane's start) so no stub is cut at its edge.
     ShareStripAt(RiftAnchor),
 }
 
@@ -216,6 +220,23 @@ pub fn survey_glyphs(zoom: RiftZoom) -> (String, String) {
     (fill, stroke)
 }
 
+/// How far the base-strip window stops from the nexus, towards the sheet's
+/// middle: just short of the lane ends beside the base (the mid lane starts
+/// 4.26 units above the blue nexus; the side lanes end further out), so the
+/// window clears them instead of cutting a stub (critique r1 surfaces, fix 4).
+const BASE_STRIP_CLEAR: f32 = 4.0;
+
+/// Top of a base-strip window of height `h`: the blue base sits low in the
+/// sheet, so the window starts just below the lane ends above it; the red
+/// base sits high, so the window ends just above the lane ends below it.
+fn base_strip_top(anchor: RiftAnchor, h: f32) -> f32 {
+    let (_, ny) = anchor.nexus();
+    match anchor {
+        RiftAnchor::BlueBase => ny - BASE_STRIP_CLEAR,
+        RiftAnchor::RedBase => ny + BASE_STRIP_CLEAR - h,
+    }
+}
+
 /// A position on the sheet as CSS percentages of a view box.
 fn pct(v: f32, origin: f32, size: f32) -> String {
     format!("{}%", f((v - origin) / size * 100.0))
@@ -279,7 +300,7 @@ pub fn RiftSketch(
             <div class=format!("relative {class}") aria-hidden="true" data-rift="inset">
                 <svg viewBox="0 0 100 100" class="block h-auto w-full" focusable="false">
                     <g class=INK_THIN>
-                        <path d=g::SKETCH_LANES />
+                        <path d=g::INSET_LANES />
                         <path d=g::INSET_RIVER />
                         <path d=g::SKETCH_BASE_BLUE />
                         <path d=g::SKETCH_BASE_RED />
@@ -297,9 +318,18 @@ pub fn RiftSketch(
                 RiftCrop::ShareStripAt(_) => label,
                 _ => None,
             };
+            let at = match crop {
+                RiftCrop::ShareStripAt(RiftAnchor::BlueBase) => Some("blue"),
+                RiftCrop::ShareStripAt(RiftAnchor::RedBase) => Some("red"),
+                _ => None,
+            };
             let strip = move |w: f32, h: f32, shown: &'static str| {
                 let x = (centre.0 - w / 2.0).clamp(0.0, 100.0 - w);
-                let y = (centre.1 - h / 2.0).clamp(0.0, 100.0 - h);
+                let y = match crop {
+                    RiftCrop::ShareStripAt(a) => base_strip_top(a, h),
+                    _ => centre.1 - h / 2.0,
+                }
+                .clamp(0.0, 100.0 - h);
                 let vb = format!("{} {} {} {}", f(x), f(y), f(w), f(h));
                 let (lead, text) = match &label {
                     Some(l) => {
@@ -324,7 +354,7 @@ pub fn RiftSketch(
                 }
             };
             view! {
-                <div class=format!("relative {class}") aria-hidden="true" data-rift="share">
+                <div class=format!("relative {class}") aria-hidden="true" data-rift="share" data-rift-at=at>
                     {strip(43.0, 11.53, "md:hidden")}
                     {strip(53.0, 9.96, "hidden md:block")}
                 </div>
@@ -381,7 +411,6 @@ pub fn RiftSketch(
                                 <path d=g::SKETCH_BASE_BLUE />
                                 <path d=g::SKETCH_BASE_RED />
                                 <path d=g::SKETCH_MARKS />
-                                <path d=g::SKETCH_HATCH class="[shape-rendering:crispEdges]" data-rift-layer="hatch" />
                                 <path d=g::SKETCH_BUSH_DOTS class="stroke-2" data-rift-layer="bush" />
                             </g>
                             {lead}
@@ -536,7 +565,6 @@ mod tests {
             g::SKETCH_BANKS,
             g::SKETCH_BASE_BLUE,
             g::SKETCH_BASE_RED,
-            g::SKETCH_HATCH,
             g::SKETCH_BUSH_DOTS,
             g::SKETCH_MARKS,
         ];
@@ -545,6 +573,67 @@ mod tests {
         for (x, y) in g::TOWERS.iter().chain(g::INHIBITORS.iter()) {
             assert!((0.0..=100.0).contains(x) && (0.0..=100.0).contains(y));
         }
+    }
+
+    /// Lane subpaths of a generated path ("M x,y x,y ... M ...").
+    fn subpaths(d: &str) -> Vec<Vec<(f32, f32)>> {
+        d.split('M')
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                s.split_whitespace()
+                    .map(|p| {
+                        let (x, y) = p.split_once(',').expect("x,y");
+                        (x.parse().expect("x"), y.parse().expect("y"))
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn base_strips_cut_no_lane_stub_at_their_inner_edge() {
+        // Both strip sizes (below and from `md`); the edge towards the
+        // sheet's middle is the top for the blue base, the bottom for red.
+        for (w, h) in [(43.0f32, 11.53f32), (53.0, 9.96)] {
+            for anchor in [RiftAnchor::BlueBase, RiftAnchor::RedBase] {
+                let (nx, _) = anchor.nexus();
+                let x0 = (nx - w / 2.0).clamp(0.0, 100.0 - w);
+                let y0 = base_strip_top(anchor, h).clamp(0.0, 100.0 - h);
+                let edge = match anchor {
+                    RiftAnchor::BlueBase => y0,
+                    RiftAnchor::RedBase => y0 + h,
+                };
+                assert!(y0 + h <= 100.0 && y0 >= 0.0);
+                for lane in subpaths(g::SKETCH_LANES) {
+                    for seg in lane.windows(2) {
+                        let ((ax, ay), (bx, by)) = (seg[0], seg[1]);
+                        if (ay - edge) * (by - edge) >= 0.0 {
+                            continue;
+                        }
+                        let t = (edge - ay) / (by - ay);
+                        let x = ax + t * (bx - ax);
+                        assert!(
+                            x < x0 || x > x0 + w,
+                            "{anchor:?} {w}x{h}: a lane crosses the inner edge at x {x}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_inset_has_no_closed_outline() {
+        // Open corners: no inset lane bends on a diagonal (the chamfers that
+        // closed the outer lanes into an octagon are left out), except mid.
+        for lane in subpaths(g::INSET_LANES) {
+            let diagonal = lane
+                .windows(2)
+                .filter(|s| (s[0].0 - s[1].0).abs() > 0.01 && (s[0].1 - s[1].1).abs() > 0.01)
+                .count();
+            assert!(lane.len() == 2 || diagonal == 0, "{lane:?}");
+        }
+        assert!(subpaths(g::INSET_LANES).len() >= 5);
     }
 
     #[test]

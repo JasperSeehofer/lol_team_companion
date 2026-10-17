@@ -24,8 +24,8 @@ const SEED_PASSWORD = "seedpass123";
  * accent, or whose drawn border is the accent. The leader inside the
  * drawing belongs to its label (card D), so SVG is not counted.
  */
-async function chalkInViewport(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+async function chalkInViewport(page: Page, wholePage = false): Promise<string[]> {
+  return page.evaluate((wholePage) => {
     const probe = document.createElement("div");
     probe.style.color = "var(--color-accent)";
     document.body.appendChild(probe);
@@ -38,7 +38,7 @@ async function chalkInViewport(page: Page): Promise<string[]> {
       if (el instanceof SVGElement) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
-      if (r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) continue;
+      if (!wholePage && (r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw)) continue;
       const cs = getComputedStyle(el);
       if (cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0") continue;
       const ownText = Array.from(el.childNodes).some(
@@ -54,7 +54,7 @@ async function chalkInViewport(page: Page): Promise<string[]> {
       }
     }
     return hits.map((h) => `${h.tagName.toLowerCase()}${h.getAttribute("data-chalk") ? `[data-chalk=${h.getAttribute("data-chalk")}]` : ""}${h.getAttribute("data-rift-chalk") ? `[data-rift-chalk=${h.getAttribute("data-rift-chalk")}]` : ""}: ${(h.textContent ?? "").trim().slice(0, 40)}`);
-  });
+  }, wholePage);
 }
 
 for (const size of [
@@ -135,12 +135,21 @@ test("shared game plan: five champions per team never wrap at 320, 390 and 1280"
   await guest.goto(url, { waitUntil: "domcontentloaded" });
   await expect(guest.locator("[data-matchup]")).toBeVisible({ timeout: 15000 });
 
-  // The strip: no hatch, no chalk label (the share page prints no team name),
-  // centred on the base of the side the plan's draft was drafted on.
+  // The strip: no hatch. Centred on the base of the side the plan's draft
+  // was drafted on, it carries the chalk "Ours" (the word the page prints
+  // over our champions) with its leader; without a side, the bridge and no
+  // label (critique r1 surfaces fix 5).
   const strip = guest.locator("[data-share-strip]");
   await expect(strip.locator('[data-rift="share"]')).toHaveCount(1);
-  await expect(strip.locator("[data-rift-chalk]")).toHaveCount(0);
   await expect(strip.locator('[data-rift-layer="hatch"]')).toHaveCount(0);
+  const at = await strip.locator('[data-rift="share"]').getAttribute("data-rift-at");
+  if (at) {
+    await expect(strip.locator('[data-rift-chalk="label"]:visible')).toHaveCount(1);
+    await expect(strip.locator('[data-rift-chalk="label"]:visible')).toHaveText(/^ours$/i);
+    await expect(strip.locator('[data-rift-chalk="leader"]:visible')).toHaveCount(1);
+  } else {
+    await expect(strip.locator("[data-rift-chalk]")).toHaveCount(0);
+  }
 
   for (const w of [320, 390, 1280]) {
     await guest.setViewportSize({ width: w, height: 900 });
@@ -166,4 +175,43 @@ test("shared game plan: five champions per team never wrap at 320, 390 and 1280"
     expect(sw, `share page at ${w} is ${sw}px wide`).toBeLessThanOrEqual(w);
   }
   await ctx.close();
+});
+
+test("share strip: an unknown link gets the bridge and no chalk label", async ({ page }) => {
+  await page.goto("/s/" + "a".repeat(32));
+  const strip = page.locator("[data-share-strip]");
+  await expect(strip).toBeVisible({ timeout: 15000 });
+  await expect(strip.locator('[data-rift="share"]')).not.toHaveAttribute("data-rift-at", /.+/);
+  await expect(strip.locator("[data-rift-chalk]")).toHaveCount(0);
+});
+
+test("Match Day at 390: the field card's button is the page's chalk (at most 2 accent items)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const ok = await signInSeeded(page);
+  if (process.env.CI) expect(ok, "CI must seed the database (seed tool) before starting the server").toBe(true);
+  test.skip(!ok, "needs the seed data: stop the server, run the seed tool, start it again");
+  await page.goto("/");
+  const card = page.locator("[data-field-card]");
+  await expect(card).toBeVisible({ timeout: 15000 });
+  await page.waitForLoadState("load").catch(() => {});
+  await page.waitForTimeout(500);
+  // No team names beside the inset (card E): the title already faces them.
+  await expect(card.locator("[data-field-inset]")).toHaveText("");
+  // The quiet prep sequence carries no chalk; the whole page at most two
+  // accent items (the field card's button, plus at most one more).
+  const chalk = await chalkInViewport(page, true);
+  expect(chalk.length, `chalk on Match Day at 390: ${chalk.join(" | ")}`).toBeLessThanOrEqual(2);
+  const prepChalk = await page.locator("[data-prep] ol").evaluate((ol) => {
+    const probe = document.createElement("div");
+    probe.style.color = "var(--color-accent)";
+    document.body.appendChild(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    return Array.from(ol.querySelectorAll("*")).filter((el) => {
+      const cs = getComputedStyle(el);
+      return cs.color === accent || cs.backgroundColor === accent || cs.borderTopColor === accent;
+    }).length;
+  });
+  expect(prepChalk, "the quiet prep sequence uses no accent").toBe(0);
 });

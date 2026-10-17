@@ -11,7 +11,7 @@ use crate::components::ui::{
 };
 use crate::pages::design::{GallerySection, Sample};
 
-const CAPTION_SKETCH: &str = "Sketch: lanes, the river with a bridge gap at mid, the two bases, impassable terrain as hatch, Baron and Dragon, ten bush clusters, and a surveyed label in chalk.";
+const CAPTION_SKETCH: &str = "Sketch: lanes, the river with a bridge gap at mid, the two bases, Baron and Dragon, ten bush clusters, and a surveyed label in chalk.";
 const CAPTION_X2: &str = "Survey at 2x: exact wall outlines with 45-degree hatch, bushes as outlined stipple, towers, inhibitors, nexuses, pits and camps at their positions. Scroll the frame to move around.";
 const CAPTION_X4: &str = "Survey at 4x: the same drawing with the hatch held at a 6 px pitch and the marks at their screen size. Scroll the frame to move around.";
 
@@ -61,8 +61,8 @@ pub fn RiftSection() -> impl IntoView {
                     <Sample label="Share strip at the bridge (no hatch, no label)">
                         <RiftSketch crop=RiftCrop::ShareStrip class="w-[358px] max-w-full md:w-[640px]" />
                     </Sample>
-                    <Sample label="Share strip at a base the artefact names">
-                        <RiftSketch crop=RiftCrop::ShareStripAt(RiftAnchor::BlueBase) label=RiftLabel::new("Riverside Rooks", RiftAnchor::BlueBase) class="w-[358px] max-w-full md:w-[640px]" />
+                    <Sample label="Share strip at the side the plan was drafted on">
+                        <RiftSketch crop=RiftCrop::ShareStripAt(RiftAnchor::BlueBase) label=RiftLabel::new("Ours", RiftAnchor::BlueBase) class="w-[358px] max-w-full md:w-[640px]" />
                     </Sample>
                 </div>
             </div>

@@ -20,7 +20,6 @@ x_d = x / 150, y_d = 100 - y / 150 (game y points north).
 import json
 import math
 import pathlib
-import random
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -31,23 +30,15 @@ OUT_RS = ROOT / "src" / "components" / "ui" / "rift_geometry.rs"
 SOURCE_KINDS = ("fixture:", "measured:", "reported", "approximate")
 
 # ---- Recipe constants (recipes-r1.md card A; critique-r1-rift.md fixes 1-6) --
-DP_EPSILON = 2.0          # sketch mask simplification, drawing units
-MIN_AREA = 20.0           # merged mask rings smaller than this drop out
-MIN_WIDTH = 6.0           # 2A/P (about the width of a strip); narrower drops
-MAX_TOTAL = 60            # vertices in the whole mask
-MAX_RING = 14             # vertices per sketch ring
-MERGE_GAP = 2.0           # scanline runs closer than this merge
-HATCH_PITCH = 5.0         # tune between 5 and 7 only
-HATCH_INSET = 1.5
-RUN_MIN, RUN_MAX = 6.0, 16.0
-JITTER = 0.6
-SEED = 151
+# The sketch level draws no wall hatch (critique-r1-surfaces.md ruling 4): with
+# no wall outline at this level the hatch fragments had no visible mass and read
+# as arbitrary bars. Hatch is survey-only (rift.rs draws it from SURVEY_WALLS).
 BANK = 1.5                # sketch river banks either side of the centreline
 BRIDGE = 2.0              # banks break this close to mid
 INSET_BRIDGE = 5.0        # Match Day inset: centreline breaks this close to mid
 BASE_R = 3.0              # blue base circle radius
 BASE_SQ = 6.0             # red base square side
-BASE_GAP = 2.5            # lanes and hatch stop this far from a base shape
+BASE_GAP = 2.5            # lanes stop this far from a base shape
 MID_GAP = 3.0             # mid stops this far from a base shape
 LANE_SNAP = 1.5           # lanes snap to an axis within this deviation
 MARK = 2.9                # Baron/Dragon diamond size (sketch)
@@ -65,11 +56,6 @@ def fmt(v):
     return "0" if s in ("-0", "") else s
 
 
-def fmt1(v):
-    s = f"{v:.1f}".rstrip("0").rstrip(".")
-    return "0" if s in ("-0", "") else s
-
-
 def path_poly(pts, closed=False, f=fmt):
     s = "M" + " ".join(f"{f(x)},{f(y)}" for x, y in pts)
     return s + ("Z" if closed else "")
@@ -81,10 +67,6 @@ def area(ring):
     for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
         a += x0 * y1 - x1 * y0
     return a / 2.0
-
-
-def perimeter(ring):
-    return sum(math.dist(p, q) for p, q in zip(ring, ring[1:] + ring[:1]))
 
 
 def centroid(ring):
@@ -139,101 +121,6 @@ def rings_overlap(r1, r2):
     return False
 
 
-def douglas_peucker(pts, eps):
-    if len(pts) < 3:
-        return pts[:]
-    a, b = pts[0], pts[-1]
-    idx, dmax = 0, -1.0
-    for i in range(1, len(pts) - 1):
-        dd = seg_dist(pts[i], a, b)
-        if dd > dmax:
-            idx, dmax = i, dd
-    if dmax <= eps:
-        return [a, b]
-    left = douglas_peucker(pts[: idx + 1], eps)
-    right = douglas_peucker(pts[idx:], eps)
-    return left[:-1] + right
-
-
-def simplify_ring(ring, eps):
-    """Douglas-Peucker on a closed ring, split at the two farthest vertices."""
-    i0 = 0
-    i1 = max(range(len(ring)), key=lambda i: math.dist(ring[0], ring[i]))
-    a = ring[i0: i1 + 1]
-    b = ring[i1:] + ring[:1]
-    out = douglas_peucker(a, eps)[:-1] + douglas_peucker(b, eps)[:-1]
-    while len(out) > MAX_RING:
-        eps *= 1.25
-        out = douglas_peucker(a, eps)[:-1] + douglas_peucker(b, eps)[:-1]
-    return out
-
-
-def convex_hull(pts):
-    pts = sorted(set(pts))
-    if len(pts) < 3:
-        return pts
-
-    def cross(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-    lower, upper = [], []
-    for p in pts:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
-    for p in reversed(pts):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
-    return lower[:-1] + upper[:-1]
-
-
-def ring_gap(a, b):
-    return min(min(poly_dist(p, b + b[:1]) for p in a), min(poly_dist(p, a + a[:1]) for p in b))
-
-
-def build_mask(src):
-    rings = [([d(*p) for p in f["ring"]], f["id"]) for f in src["walls"]]
-    n = len(rings)
-    parent = list(range(n))
-
-    def find(i):
-        while parent[i] != i:
-            i = parent[i]
-        return i
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if ring_gap(rings[i][0], rings[j][0]) < MERGE_GAP:
-                parent[find(i)] = find(j)
-    groups = {}
-    for i in range(n):
-        groups.setdefault(find(i), []).append(i)
-    cand, dropped = [], []
-    for members in sorted(groups.values()):
-        ids = [rings[i][1] for i in members]
-        if len(members) == 1:
-            ring = rings[members[0]][0]
-        else:
-            ring = convex_hull([p for i in members for p in rings[i][0]])
-        ring = simplify_ring(ring, DP_EPSILON)
-        a = abs(area(ring)) if len(ring) >= 3 else 0.0
-        width = 2 * a / perimeter(ring) if a else 0.0
-        if a < MIN_AREA or width < MIN_WIDTH:
-            dropped += ids
-            continue
-        cand.append((a, ids, ring))
-    cand.sort(key=lambda c: (-c[0], c[1]))
-    mask, total = [], 0
-    for a, ids, ring in cand:
-        if total + len(ring) > MAX_TOTAL:
-            dropped += ids
-            continue
-        mask.append(ring)
-        total += len(ring)
-    return mask, sorted(dropped)
-
-
 def bez(c, t):
     (x0, y0), (x1, y1), (x2, y2), (x3, y3) = c
     u = 1 - t
@@ -242,40 +129,6 @@ def bez(c, t):
     dx = 3 * u * u * (x1 - x0) + 6 * u * t * (x2 - x1) + 3 * t * t * (x3 - x2)
     dy = 3 * u * u * (y1 - y0) + 6 * u * t * (y2 - y1) + 3 * t * t * (y3 - y2)
     return x, y, dx, dy
-
-
-def scan_intervals(rings, coord, horizontal):
-    """Inside-intervals of the union of rings along one scanline."""
-    xs_all = []
-    for ring in rings:
-        xs = []
-        for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
-            if horizontal:
-                a0, b0, a1, b1 = y0, x0, y1, x1
-            else:
-                a0, b0, a1, b1 = x0, y0, x1, y1
-            if (a0 > coord) != (a1 > coord):
-                xs.append(b0 + (coord - a0) * (b1 - b0) / (a1 - a0))
-        xs.sort()
-        xs_all += [(xs[i], xs[i + 1]) for i in range(0, len(xs) - 1, 2)]
-    xs_all.sort()
-    merged = []
-    for a, b in xs_all:
-        if merged and a - merged[-1][1] < MERGE_GAP:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
-        else:
-            merged.append((a, b))
-    return merged
-
-
-def intersect(i1, i2):
-    out = []
-    for a, b in i1:
-        for c, e in i2:
-            lo, hi = max(a, c), min(b, e)
-            if hi > lo:
-                out.append((lo, hi))
-    return out
 
 
 # ---- Load and validate ------------------------------------------------------
@@ -524,13 +377,6 @@ def build_sketch(src):
         return out
 
     samples = centre_samples()
-    dense = []
-    for c in cubics:
-        dense += [bez(c, i / 400)[:2] for i in range(401)]
-
-    def river_dist(p):
-        return min(math.dist(p, q) for q in dense)
-
     def runs_of(points, cut):
         runs, run = [], []
         for p in points:
@@ -553,6 +399,26 @@ def build_sketch(src):
         banks += runs_of(pts, lambda p: mid_dist(p) < BRIDGE)
     inset_river = runs_of([(x, y) for x, y, _, _ in samples], lambda p: mid_dist(p) < INSET_BRIDGE)
 
+    # Inset lanes (critique r1 surfaces, fix 2): the outer lanes without their
+    # diagonal corner bends. Top and bottom together otherwise close into an
+    # octagon that reads as a frame (an X in a box at 88 px); the inset has none.
+    inset_lanes = []
+    for name in ("top", "mid", "bot"):
+        pts = lanes[name]
+        if name == "mid":
+            inset_lanes.append(pts)
+            continue
+        run = [pts[0]]
+        for a, b in zip(pts, pts[1:]):
+            if abs(a[0] - b[0]) > 0.01 and abs(a[1] - b[1]) > 0.01:
+                if len(run) > 1:
+                    inset_lanes.append(run)
+                run = [b]
+            else:
+                run.append(b)
+        if len(run) > 1:
+            inset_lanes.append(run)
+
     # Bases.
     base_blue = (f"M{fmt(blue[0] - BASE_R)},{fmt(blue[1])}a{fmt(BASE_R)},{fmt(BASE_R)} 0 1 0 "
                  f"{fmt(2 * BASE_R)},0a{fmt(BASE_R)},{fmt(BASE_R)} 0 1 0 {fmt(-2 * BASE_R)},0")
@@ -571,11 +437,6 @@ def build_sketch(src):
     def diamond(c):
         return f"M{fmt(c[0])},{fmt(c[1] - h)}l{fmt(h)},{fmt(h)}l{fmt(-h)},{fmt(h)}l{fmt(-h)},{fmt(-h)}Z"
 
-    # Mark word boxes: a 12 px mono caps word is about 8.6 px a letter, so
-    # "DRAGON" spans 15 units of the 358 px sheet (the narrowest one).
-    mark_boxes = [(baron[0] - h - 0.6, baron[1] - 2.4, baron[0] + h + 16.0, baron[1] + 2.4),
-                  (dragon[0] - h - 16.0, dragon[1] - 2.4, dragon[0] + h + 0.6, dragon[1] + 2.4)]
-
     # Leader anchors: from the edge of the base mark, 7 units outward.
     ub = (0.94, -0.34)
     lb0 = (blue[0] + ub[0] * (BASE_R + 0.5), blue[1] + ub[1] * (BASE_R + 0.5))
@@ -584,84 +445,6 @@ def build_sketch(src):
     edge = BASE_SQ / 2 / abs(ur[0]) + 0.5
     lr0 = (red[0] + ur[0] * edge, red[1] + ur[1] * edge)
     lr1 = (lr0[0] + ur[0] * LEADER, lr0[1] + ur[1] * LEADER)
-    label_box = (lb1[0], lb1[1] - 2.6, lb1[0] + 24.0, lb1[1] + 2.6)  # "YOUR TEAM", 13 px at 358 px
-
-    # Hatch mask (card A, critique fix 4): survey wall rings closer than
-    # MERGE_GAP are merged (each group becomes its convex hull), simplified
-    # (Douglas-Peucker, <= 14 vertices), filtered by area and width, and the
-    # smallest rings go until the mask has at most MAX_TOTAL vertices.
-    mask, dropped = build_mask(src)
-    mask_vertices = sum(len(r) for r in mask)
-
-    def blocked(p):
-        if math.dist(p, blue) < BASE_R + BASE_GAP or in_red_sq(p, BASE_GAP):
-            return True
-        for x0, y0, x1, y1 in mark_boxes + [label_box]:
-            if x0 < p[0] < x1 and y0 < p[1] < y1:
-                return True
-        return mid_dist(p) < 2 or river_dist(p) < BANK + 2
-
-    def quadrant(p):
-        # The mid line and the river split the sheet into four triangles.
-        above_mid = p[1] < (blue[1] + (red[1] - blue[1]) * (p[0] - blue[0]) / (red[0] - blue[0]))
-        above_river = p[1] < p[0]  # the river runs from (14,14) to (86,86)
-        if above_mid and above_river:
-            return "top"
-        if not above_mid and not above_river:
-            return "bottom"
-        return "left" if above_mid else "right"
-
-    rnd = random.Random(SEED)
-    hatch = []
-    for horizontal in (True, False):
-        want = ("left", "right") if horizontal else ("top", "bottom")
-        k = HATCH_PITCH / 2
-        while k < 100:
-            iv = scan_intervals(mask, k, horizontal)
-            iv = intersect(intersect(iv, scan_intervals(mask, k - HATCH_INSET, horizontal)),
-                           scan_intervals(mask, k + HATCH_INSET, horizontal))
-            for a, b in iv:
-                a, b = a + HATCH_INSET, b - HATCH_INSET
-                if b - a < RUN_MIN:
-                    continue
-                # Walk the run, split where blocked or out of quadrant.
-                pieces, cur = [], []
-                t = a
-                while t <= b + 1e-9:
-                    p = (t, k) if horizontal else (k, t)
-                    ok = quadrant(p) in want and not blocked(p)
-                    if ok:
-                        cur.append(t)
-                    elif cur:
-                        pieces.append((cur[0], cur[-1]))
-                        cur = []
-                    t += 0.1
-                if cur:
-                    pieces.append((cur[0], cur[-1]))
-                for lo, hi in pieces:
-                    mid_t = (lo + hi) / 2
-                    p = (mid_t, k) if horizontal else (k, mid_t)
-                    q = quadrant(p)
-                    # Inner end = the end nearer the centre of the sheet.
-                    inner_hi = (q in ("left", "top"))
-                    if hi - lo > RUN_MAX:
-                        if inner_hi:
-                            hi = lo + RUN_MAX
-                        else:
-                            lo = hi - RUN_MAX
-                    j = rnd.uniform(-JITTER, JITTER)
-                    if inner_hi:
-                        hi = min(hi, hi + j) if j < 0 else hi
-                    else:
-                        lo = max(lo, lo - j) if j < 0 else lo
-                    if hi - lo < RUN_MIN:
-                        continue
-                    if horizontal:
-                        hatch.append(((lo, k), (hi, k)))
-                    else:
-                        hatch.append(((k, lo), (k, hi)))
-            k += HATCH_PITCH
-
     # Bush clusters: the ten largest bushes, three dots in a triangle (0.9 units apart).
     bushes = sorted(src["bushes"], key=lambda b: (-abs(area(b["ring"])), b["id"]))[:10]
     dots = []
@@ -690,15 +473,14 @@ def build_sketch(src):
     return {
         "frame": frame, "ticks": ticks, "lanes": lanes, "banks": banks, "inset_river": inset_river,
         "base_blue": base_blue, "base_red": base_red, "blue": blue, "red": red,
-        "hatch": hatch, "dots": dots, "baron": baron, "dragon": dragon,
+        "inset_lanes": inset_lanes, "dots": dots, "baron": baron, "dragon": dragon,
         "diamonds": [diamond(baron), diamond(dragon)],
         "leader_blue": (lb0, lb1), "leader_red": (lr0, lr1), "cubics": cubics,
         "stats": {
             "river_dev_r1a": round(dev_r1a, 2),
             "river_dev_fit": None if dev_fit is None else round(dev_fit, 2),
             "lane_dev": round(lane_dev, 2),
-            "mask_rings": len(mask), "mask_vertices": mask_vertices, "mask_dropped": dropped,
-            "hatch_lines": len(hatch), "bush_clusters": len(bushes),
+            "bush_clusters": len(bushes),
         },
     }
 
@@ -750,7 +532,6 @@ def rust_str(s):
 
 
 def rust_module(src, sk):
-    st = sk["stats"]
     walls = " ".join(path_poly([d(*p) for p in f["ring"]], True) for f in src["walls"])
     bushes = " ".join(path_poly([d(*p) for p in f["ring"]], True) for f in src["bushes"])
     river = path_poly([d(*p) for p in src["river"]["ring"]], True)
@@ -760,7 +541,7 @@ def rust_module(src, sk):
     inset_river = " ".join(path_poly(r) for r in sk["inset_river"])
     frame = " ".join(path_poly(s) for s in sk["frame"])
     ticks = " ".join(path_poly(s) for s in sk["ticks"])
-    hatch = " ".join(f"M{fmt1(a[0])},{fmt1(a[1])}{'H' + fmt1(b[0]) if a[1] == b[1] else 'V' + fmt1(b[1])}" for a, b in sk["hatch"])
+    inset_lanes = " ".join(path_poly(r) for r in sk["inset_lanes"])
     dots = " ".join(f"M{fmt(x)},{fmt(y)}h0" for x, y in sk["dots"])
     marks = " ".join(sk["diamonds"])
     (lb0, lb1), (lr0, lr1) = sk["leader_blue"], sk["leader_red"]
@@ -806,11 +587,11 @@ def rust_module(src, sk):
         f"/// River banks either side of the two-cubic centreline, broken at mid.\npub const SKETCH_BANKS: &str = {rust_str(banks)};",
         f"/// Blue base: circle r3 on the blue nexus.\npub const SKETCH_BASE_BLUE: &str = {rust_str(sk['base_blue'])};",
         f"/// Red base: square 6 on the red nexus.\npub const SKETCH_BASE_RED: &str = {rust_str(sk['base_red'])};",
-        f"/// Impassable terrain as axis-aligned hatch ({st['hatch_lines']} lines).\npub const SKETCH_HATCH: &str = {rust_str(hatch)};",
         f"/// Bush clusters: three dots each, the ten largest bushes.\npub const SKETCH_BUSH_DOTS: &str = {rust_str(dots)};",
         f"/// Baron and Dragon diamonds.\npub const SKETCH_MARKS: &str = {rust_str(marks)};",
         f"/// Baron pit centre (word to its right).\npub const BARON_AT: (f32, f32) = {pt(sk['baron'])};",
         f"/// Dragon position (word to its left).\npub const DRAGON_AT: (f32, f32) = {pt(sk['dragon'])};",
+        f"/// Match Day inset: the lanes with the outer lanes' corner bends left out, so\n/// no closed outline reads as a frame (critique r1 surfaces, fix 2).\npub const INSET_LANES: &str = {rust_str(inset_lanes)};",
         f"/// Match Day inset: the river centreline, broken 5 units either side of mid.\npub const INSET_RIVER: &str = {rust_str(inset_river)};",
         f"/// Chalk leader from the blue base mark (start, end).\npub const LEADER_BLUE: ((f32, f32), (f32, f32)) = ({pt(lb0)}, {pt(lb1)});",
         f"/// Chalk leader from the red base mark (start, end).\npub const LEADER_RED: ((f32, f32), (f32, f32)) = ({pt(lr0)}, {pt(lr1)});",

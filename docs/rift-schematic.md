@@ -13,6 +13,7 @@ picture to make it. This note says where every number came from (M152, scope ite
 | `scripts/rift-geometry/test_build.py` | Generator tests: deterministic output, committed outputs current, counts, fixture positions used as recorded, no image library in the directory. |
 | `assets/rift/map11-geometry.json` | Generated: every feature in game units with its source, the counts and the check results. |
 | `src/components/ui/rift_geometry.rs` | Generated (`// @generated`): SVG path data for the sketch and survey levels, in drawing units. |
+| `scripts/og/build.py`, `scripts/og/capture.mjs` | The link-preview cards `public/og/{landing,share,default}.png` (recipe card F): `build.py` writes three 1200x630 pages from `rift_geometry.rs` (the sketch's own path data), the `input.css` tokens and the fonts in `public/fonts`; `capture.mjs` serves them on a loopback port, captures them with Playwright, reduces each to 64 colours (ImageMagick) and fails unless each is 1200x630, under 100 KB and fetched nothing else. Run `PLAYWRIGHT_CORE=<path to playwright-core> [CHROMIUM=<executable>] node scripts/og/capture.mjs` after the geometry changes. |
 
 To change the drawing, edit the source file, then run `python3 -I scripts/rift-geometry/build.py` and
 `python3 -I scripts/rift-geometry/test_build.py`.
@@ -72,16 +73,16 @@ is what is used.
 
 ## Deviations from the recipe card (for the atelier)
 
-- **Sketch hatch (card A, critique-r1-rift.md fixes 1 to 6, applied as written).** Wall rings closer than 2
-  units are merged (each group becomes its convex hull), simplified (Douglas-Peucker 2.0, at most 14 vertices),
-  rings under 20 square units or narrower than 6 units (2A/P) dropped, at most 60 vertices in all; hatch pitch
-  5.0, inset 1.5, runs 6 to 16 units, inner-end jitter up to 0.6 (seed 151). Measured walls are 4 to 7 units
-  wide, so only 6 merged masses (31 vertices) pass and the sheet carries 13 hatch lines. Lit pixels in the
-  sheet: **4.47 % at 1280 (560 px) and 6.41 % at 390 (358 px)**. No pitch in 5 to 7 puts both in the 4.5 to
-  6.0 % band (5.5: 4.25 / 6.20; 6.0: 4.21 / 6.09; 6.5: 4.21 / 6.07; 7.0: 4.24 / 6.22): with this few hatch
-  lines the figure is set by the frame, lanes, banks, labels and ticks, not by the pitch. Pitch 5.0 is closest.
-  Most of the impassable terrain therefore carries no hatch at the sketch level (it is drawn at the survey
-  level).
+- **No hatch at the sketch level (critique-r1-surfaces.md ruling 4, fix 1).** Hatch is survey-only. The earlier
+  sketch hatch (card A as amended by critique-r1-rift.md fixes 1 to 6: walls merged within 2 units, simplified,
+  filtered by area and width, pitch 5.0) left **13 lines**: measured walls are 4 to 7 units wide, so only 6 merged
+  masses passed, and the sheet carried 4.47 % lit pixels at 1280 and 6.41 % at 390 with the figure set by the
+  frame, lanes and labels rather than the pitch. Because the sketch never outlines a wall, those 13 lines had no
+  visible mass: they read as arbitrary bars (at 390 the left stack read as text lines), not as terrain. Hatch only
+  reads as terrain inside an outline, and outlines belong to the survey level, so the generator no longer emits
+  `SKETCH_HATCH` and the sketch is frame, lanes, river, bases, Baron and Dragon, bush dots and the one chalk label.
+  The quadrant hatch of R0 does not come back (it had no relation to measured walls). The 4.5 to 6 % lit-pixel
+  target of card A now applies to the survey level only.
 - **River centreline (card A, critique fix 7).** The rule is applied: the R1-a cubics are kept unless the
   measured centreline (the middle of the two banks, pits left out) deviates more than 1.5 units. It deviates up
   to 3.8 units, so the generator refits the same two cubics (smooth join at the mid crossing, then a
@@ -90,9 +91,11 @@ is what is used.
   allows no third cubic, so this residual stays; it is recorded here and in the geometry JSON's checks
   (`river_dev_r1a`, `river_dev_fit`).
 - **Sketch budget.** The sketch's path data is 3.1 KB, within the card's 4 KB estimate.
-- **Match Day inset (critique fix 8).** The inset draws no frame path: what reads as an octagon is the top and
-  bottom lanes, whose measured outer corners are chamfered. Lanes, the river with its gap (mid distance under 5)
-  and the bases are all it draws.
+- **Match Day inset (critique fix 8; critique-r1-surfaces.md fix 2).** The inset draws no frame path, but at
+  88 px the top and bottom lanes, whose measured outer corners are chamfered, closed into an octagon that read as
+  a frame (an X in a box). The inset therefore draws its own lanes (`INSET_LANES`): the same snapped lanes with the
+  two diagonal corner bends left out, so the corners stay open like the sheet's frame. Lanes, the river with its
+  gap (centreline broken where the mid distance is under 5) and the bases are all it draws.
 - **Share strip (critique fix 9).** Centred on (50, 50); the card's 40 x 10.7 (below `md`) and 50 x 9.4 (from
   `md`) are each widened by 3 units, to 43 x 11.53 and 53 x 9.96, so the strokes run to the edge.
 - **Lanes.** The measured top and bottom lanes cut their outer corner on a diagonal (the playable ground is

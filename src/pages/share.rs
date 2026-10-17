@@ -11,8 +11,8 @@ use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{
     AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ChampionAvatar, Dialog, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, PageHeader,
-    PageShell, PageWidth, ResultGlyph, RiftAnchor, RiftCrop, RiftSketch, Role, RoleLabel,
-    SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, Toast, ToastContext,
+    PageShell, PageWidth, ResultGlyph, RiftAnchor, RiftCrop, RiftLabel, RiftSketch, Role,
+    RoleLabel, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, Toast, ToastContext,
 };
 use crate::models::share::{
     share_path, CardChampion, PlayerCard, ShareKind, ShareLink, Shared, SharedPlan, SharedReview,
@@ -405,13 +405,30 @@ pub fn strip_crop(our_side: Option<&str>) -> RiftCrop {
     }
 }
 
+/// The chalk label of a base crop (card A, critique r1 surfaces fix 5): a
+/// base crop is only legitimate with its label, and the label is "Ours",
+/// the word the page already prints over our five champions. The bridge
+/// crop (no side in the data; reviews, player cards, and unknown, expired
+/// or revoked links) never gets one.
+pub fn strip_label(crop: RiftCrop) -> Option<RiftLabel> {
+    match crop {
+        RiftCrop::ShareStripAt(anchor) => Some(RiftLabel::new("Ours", anchor)),
+        _ => None,
+    }
+}
+
 /// The drawn Rift as a strip above the share page's title (M152, card D):
-/// no hatch, no bushes (R1-b) and no chalk label: a shared page prints no
-/// team name the label could repeat, and never anything from the token.
+/// no hatch, no bushes (R1-b); the chalk label only on a base crop, which
+/// comes from the shared plan's own data, never from the token. The page's
+/// `<head>` (title, Open Graph image) is static and does not depend on it.
 fn share_strip(crop: RiftCrop) -> impl IntoView {
+    let label = strip_label(crop);
     view! {
         <div class="mb-6" data-share-strip>
-            <RiftSketch crop=crop class="w-full md:max-w-[640px]" />
+            {match label {
+                Some(l) => view! { <RiftSketch crop=crop label=l class="w-full md:max-w-[640px]" /> }.into_any(),
+                None => view! { <RiftSketch crop=crop class="w-full md:max-w-[640px]" /> }.into_any(),
+            }}
         </div>
     }
 }
@@ -722,5 +739,20 @@ mod tests {
         );
         assert_eq!(strip_crop(None), RiftCrop::ShareStrip);
         assert_eq!(strip_crop(Some("")), RiftCrop::ShareStrip);
+    }
+
+    #[test]
+    fn only_a_base_crop_carries_the_ours_label() {
+        assert_eq!(
+            strip_label(RiftCrop::ShareStripAt(RiftAnchor::RedBase)),
+            Some(RiftLabel::new("Ours", RiftAnchor::RedBase))
+        );
+        assert_eq!(
+            strip_label(strip_crop(Some("blue"))),
+            Some(RiftLabel::new("Ours", RiftAnchor::BlueBase))
+        );
+        // No side in the data, and the unknown/expired/revoked page.
+        assert_eq!(strip_label(strip_crop(None)), None);
+        assert_eq!(strip_label(RiftCrop::ShareStrip), None);
     }
 }

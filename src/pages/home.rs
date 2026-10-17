@@ -588,10 +588,8 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             })}
             {next.clone().map(|m| view! {
                 <FieldCard
-                    team_name=md.team_name.clone()
                     starts_at=m.starts_at.clone()
                     format=m.format.clone()
-                    opponent=m.opponent_name.clone()
                     steps=steps.clone()
                 />
             })}
@@ -664,41 +662,28 @@ pub fn field_sentence(format: &str, steps: &[PrepStep]) -> String {
 /// T1-4 and T1-7): eyebrow, one figure (the start time), one sentence (the
 /// format and the prep count, from the team's records), one action (the
 /// prep sequence's next step, the page's only primary button) and the 88 px
-/// Rift inset, ink only.
+/// Rift inset, ink only, floated top right with the sentence wrapping
+/// beside it.
 ///
-/// Facing (mission scope 4, built for critique; recipe card E would drop
-/// it): the two team names sit at the two ends of the inset's river, ours
-/// above its upper end, theirs below its lower end, so each is as near to
-/// one base as to the other. That faces the teams along the river without
-/// pinning either to a side: no side colour, no side shape, no chalk.
+/// No team names beside the inset (recipe card E, critique r1 surfaces
+/// ruling 1): a name by a map pins a team to a base the data does not hold
+/// (a best of 3 has no sides), and the page title already faces the teams
+/// ("Scrim vs Riverside Rooks").
 ///
-/// A11y: one `<h2>` ("Next match"); the figure is a `<time>`; the inset
-/// and the facing names are `aria-hidden` (the page title already says who
-/// plays); the action is a real link.
+/// A11y: one `<h2>` ("Next match"); the figure is a `<time>`; the inset is
+/// `aria-hidden` (the page title already says who plays); the action is a
+/// real link.
 #[component]
-fn FieldCard(
-    team_name: String,
-    starts_at: String,
-    format: String,
-    opponent: Option<String>,
-    steps: Vec<PrepStep>,
-) -> impl IntoView {
+fn FieldCard(starts_at: String, format: String, steps: Vec<PrepStep>) -> impl IntoView {
     let sentence = field_sentence(&format, &steps);
     let action = steps
         .iter()
         .find(|s| s.state == PrepState::Next)
         .and_then(|s| Some((s.href.clone()?, s.action.clone()?)));
-    let facing = opponent.map(|o| (team_name, o));
     view! {
         <Surface layer=Layer::Ink1 edge=Edge::RuleY pad=Pad::Md tag=SurfaceTag::Section labelled_by="field-h" class="mb-10 max-w-[40rem] flow-root" attr:data-field-card="">
-            <div class="float-right ml-4 w-[88px]" aria-hidden="true" data-field-inset>
-                {facing.clone().map(|(ours, _)| view! {
-                    <p class="mb-1 break-words text-caption text-primary" data-facing="ours">{ours}</p>
-                })}
+            <div class="float-right mb-2 ml-4 w-[88px]" aria-hidden="true" data-field-inset>
                 <RiftSketch crop=RiftCrop::Inset ground=RiftGround::Ink1 class="w-[88px]" />
-                {facing.map(|(_, theirs)| view! {
-                    <p class="mt-1 break-words text-right text-caption text-secondary" data-facing="theirs">{theirs}</p>
-                })}
             </div>
             <h2 id="field-h" class="eyebrow">"Next match"</h2>
             <p class="mt-2 flex flex-wrap items-baseline gap-x-3">
