@@ -4,6 +4,12 @@ use leptos::prelude::*;
 /// the nav shows. Change only when the product is renamed.
 pub const RIOT_DISCLAIMER: &str = "Team Companion isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.";
 
+/// The notice Riot's "Legal Jibber Jabber" policy (section 6) asks a
+/// project to show, word for word from https://www.riotgames.com/en/legal
+/// (read 2026-10-17) with the project's title filled in. Shown beside
+/// [`RIOT_DISCLAIMER`], never instead of it.
+pub const RIOT_LJJ_NOTICE: &str = "Team Companion was created under Riot Games' \"Legal Jibber Jabber\" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.";
+
 /// Community links for everyone: (label, path).
 pub const PUBLIC_COMMUNITY: &[(&str, &str)] = &[
     ("Changelog", "/changelog"),
@@ -27,7 +33,10 @@ pub fn SiteFooter() -> impl IntoView {
     view! {
         <footer class="mt-6 border-t border-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 sm:flex-row sm:items-start sm:justify-between sm:gap-10 sm:px-8">
-                <p class="max-w-3xl text-caption leading-relaxed text-muted" data-testid="riot-disclaimer">{RIOT_DISCLAIMER}</p>
+                <div class="flex max-w-3xl flex-col gap-2">
+                    <p class="text-caption leading-relaxed text-muted" data-testid="riot-disclaimer">{RIOT_DISCLAIMER}</p>
+                    <p class="text-caption leading-relaxed text-muted" data-testid="riot-notice">{RIOT_LJJ_NOTICE}</p>
+                </div>
                 <nav class="flex shrink-0 flex-wrap gap-x-5 gap-y-2 text-caption" aria-label="Community">
                     {PUBLIC_COMMUNITY.iter().map(|(l, h)| view! { <a href=*h class=link>{*l}</a> }).collect_view()}
                     <a href=SOURCE_URL class=link rel="noopener noreferrer" data-testid="source-link">"Source"</a>
@@ -51,7 +60,7 @@ pub fn SiteFooter() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{MEMBER_COMMUNITY, PUBLIC_COMMUNITY, RIOT_DISCLAIMER, SOURCE_URL};
+    use super::{MEMBER_COMMUNITY, PUBLIC_COMMUNITY, RIOT_DISCLAIMER, RIOT_LJJ_NOTICE, SOURCE_URL};
 
     /// The source link goes to the public repository itself (not a funding
     /// page; the community test checks the footer's words).
@@ -80,5 +89,18 @@ mod tests {
         assert!(RIOT_DISCLAIMER.ends_with(
             "Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc."
         ));
+    }
+
+    /// Section 6 of Riot's "Legal Jibber Jabber", word for word with the
+    /// title filled in; the existing disclaimer stays beside it.
+    #[test]
+    fn notice_is_the_legal_jibber_jabber_wording() {
+        assert_eq!(
+            RIOT_LJJ_NOTICE,
+            "Team Companion was created under Riot Games' \"Legal Jibber Jabber\" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project."
+        );
+        assert!(RIOT_LJJ_NOTICE.starts_with("Team Companion was created under"));
+        assert!(RIOT_LJJ_NOTICE.ends_with("Riot Games does not endorse or sponsor this project."));
+        assert_ne!(RIOT_LJJ_NOTICE, RIOT_DISCLAIMER);
     }
 }

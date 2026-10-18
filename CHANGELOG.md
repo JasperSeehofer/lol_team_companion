@@ -8,6 +8,21 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Identity, round 1 (2026-10-17)
+
+#### Added
+- Link previews: a link to Team Companion pasted into a chat app shows a card with the name, a short description and an image. A shared link's card only says that it is a shared, read-only page: never the team, the plan or the player, and it looks the same whether the link still works or not. The browser tab has its own icon, and phone browsers colour their bar to match the app.
+- Role labels now show the lane's position icon beside the letters (TOP, JGL, MID, BOT, SUP), in the label's own colour (never the highlight colour). The icons come from Team Companion itself, never from another site; screen readers still hear the role's name, and a guessed role keeps its dashed underline and "?".
+- The footer, the privacy page and the terms now also carry the notice Riot's "Legal Jibber Jabber" policy asks for (that Team Companion was made under that policy using assets owned by Riot Games, and that Riot Games does not endorse it), word for word, beside Riot's existing disclaimer, which stays.
+- For admins: the design gallery (/design) has a "Drawn Rift" section, the map as Team Companion draws it from measured coordinates (no picture of the game's map is used): a sketch with lanes, river, bases, Baron and Dragon and bush marks, and, zoomed in to 2x or 4x, a survey with exact wall outlines, bushes, towers, inhibitors, pits and camps. How each coordinate was measured is in docs/rift-schematic.md.
+
+#### Changed
+- The landing and the closed-beta page open on the drawn Rift, with "Your team" marked at a base, beside one headline, one sentence and one way in (Sign in). On a phone the drawing comes after the button, still on the first screen.
+- A shared game plan, review or player card opens under a strip of the drawn Rift. For a game plan whose draft says which side the team drafted on, the strip looks at that side's base and marks it "Ours"; otherwise it shows the bridge at mid with no mark. It never names the team or anything from the link, and a link that no longer opens anything gets no mark.
+- A shared game plan shows each team's five champions in one row that never breaks onto a second line on any screen size (the icons get smaller first), with their names written underneath.
+- Match Day opens with the next match as a card: the start time large, the day beside it, one sentence with the format and how many of the five prep steps are done ("Best of 3, with 2 of 5 prep steps done."), and the next prep step as the page's one main button, beside a small drawing of the Rift (lanes, river and the two bases; the title already names both teams). The preparation list below keeps every step, with the next one outlined and in plain colours, so the card's button is the only highlighted thing. The start time and format moved from the line under the title into the card.
+- The game plan's step list and the getting-started checklist mark their next step with an outline in plain colours instead of the highlight colour, so each page's own main button stays the one highlighted action.
+
 ### First patch, round 2 (2026-10-17)
 
 #### Changed

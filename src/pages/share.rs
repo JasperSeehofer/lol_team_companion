@@ -11,8 +11,8 @@ use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{
     AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
     ChampionAvatar, Dialog, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, PageHeader,
-    PageShell, PageWidth, ResultGlyph, Role, RoleLabel, SectionHeader, Select, SelectOption,
-    Skeleton, SkeletonGroup, Toast, ToastContext,
+    PageShell, PageWidth, ResultGlyph, RiftAnchor, RiftCrop, RiftLabel, RiftSketch, Role,
+    RoleLabel, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, Toast, ToastContext,
 };
 use crate::models::share::{
     share_path, CardChampion, PlayerCard, ShareKind, ShareLink, Shared, SharedPlan, SharedReview,
@@ -81,6 +81,16 @@ pub async fn get_shared(token: String) -> Result<Option<Shared>, ServerFnError> 
             else {
                 return Ok(None);
             };
+            // The side comes from the plan's own draft (team-scoped); a
+            // missing or deleted draft gives no side, never a guessed one.
+            let our_side = match p.draft_id.as_deref().filter(|d| !d.is_empty()) {
+                Some(d) => db::get_draft_for_prefill(&db, &link.team_id, d)
+                    .await
+                    .map_err(authz::server_err)?
+                    .map(|d| d.our_side)
+                    .filter(|s| s == "blue" || s == "red"),
+                None => None,
+            };
             let briefs = [
                 (Role::Top, &p.top_strategy),
                 (Role::Jungle, &p.jungle_strategy),
@@ -125,6 +135,7 @@ pub async fn get_shared(token: String) -> Result<Option<Shared>, ServerFnError> 
                 early_game: p.early_game.filter(|t| !t.trim().is_empty()),
                 role_briefs: briefs,
                 notes: p.notes.filter(|t| !t.trim().is_empty()),
+                our_side,
             })
         }
         ShareKind::Review => {
@@ -348,10 +359,12 @@ pub fn SharePage() -> impl IntoView {
                 {move || shared.get().map(|r| match r {
                     Ok(Some(s)) => view! { <SharedBody shared=s /> }.into_any(),
                     Ok(None) => view! {
+                        {share_strip(RiftCrop::ShareStrip)}
                         <PageHeader title="This link does not open anything" eyebrow="Shared link" document_title="Shared link" />
                         <EmptyState message="It may have expired or been revoked, or it was copied incompletely. Ask the team that sent it for a new link." />
                     }.into_any(),
                     Err(e) => view! {
+                        {share_strip(RiftCrop::ShareStrip)}
                         <PageHeader title="This link could not be opened" eyebrow="Shared link" document_title="Shared link" />
                         <Callout tone=CalloutTone::Warning>{crate::models::utils::error_text(&e)}</Callout>
                     }.into_any(),
@@ -372,27 +385,91 @@ fn SharedBody(shared: Shared) -> impl IntoView {
         }
     };
     match shared.view {
-        SharedView::GamePlan(p) => view! { <SharedPlanView plan=p /> {note()} }.into_any(),
-        SharedView::Review(r) => view! { <SharedReviewView review=r /> {note()} }.into_any(),
-        SharedView::Player(c) => view! { <PageHeader title=c.username.clone() eyebrow="Player card" document_title="Shared player card" /> <PlayerCardView card=c /> {note()} }.into_any(),
+        SharedView::GamePlan(p) => {
+            let crop = strip_crop(p.our_side.as_deref());
+            view! { {share_strip(crop)} <SharedPlanView plan=p /> {note()} }.into_any()
+        }
+        SharedView::Review(r) => view! { {share_strip(RiftCrop::ShareStrip)} <SharedReviewView review=r /> {note()} }.into_any(),
+        SharedView::Player(c) => view! { {share_strip(RiftCrop::ShareStrip)} <PageHeader title=c.username.clone() eyebrow="Player card" document_title="Shared player card" /> <PlayerCardView card=c /> {note()} }.into_any(),
     }
 }
 
-fn champ_row(list: Vec<String>, empty: &'static str) -> AnyView {
-    if list.is_empty() {
-        return view! { <p class="text-body text-muted">{empty}</p> }.into_any();
+/// Where the share strip looks (recipe card A crop rule, R0 T1-5): at the
+/// base of the side the artefact was drafted on when it carries one,
+/// otherwise at the river-mid bridge. Never a side the data does not hold.
+pub fn strip_crop(our_side: Option<&str>) -> RiftCrop {
+    match our_side {
+        Some("blue") => RiftCrop::ShareStripAt(RiftAnchor::BlueBase),
+        Some("red") => RiftCrop::ShareStripAt(RiftAnchor::RedBase),
+        _ => RiftCrop::ShareStrip,
     }
+}
+
+/// The chalk label of a base crop (card A, critique r1 surfaces fix 5): a
+/// base crop is only legitimate with its label, and the label is "Ours",
+/// the word the page already prints over our five champions. The bridge
+/// crop (no side in the data; reviews, player cards, and unknown, expired
+/// or revoked links) never gets one.
+pub fn strip_label(crop: RiftCrop) -> Option<RiftLabel> {
+    match crop {
+        RiftCrop::ShareStripAt(anchor) => Some(RiftLabel::new("Ours", anchor)),
+        _ => None,
+    }
+}
+
+/// The drawn Rift as a strip above the share page's title (M152, card D):
+/// no hatch, no bushes (R1-b); the chalk label only on a base crop, which
+/// comes from the shared plan's own data, never from the token. The page's
+/// `<head>` (title, Open Graph image) is static and does not depend on it.
+fn share_strip(crop: RiftCrop) -> impl IntoView {
+    let label = strip_label(crop);
     view! {
-        <ul class="flex flex-wrap gap-x-4 gap-y-2">
-            {list.into_iter().map(|c| view! {
-                <li class="inline-flex items-center gap-1.5 text-body text-primary">
-                    <ChampionAvatar name=c.clone() size=AvatarSize::Sm decorative=true />
-                    {c}
-                </li>
-            }).collect_view()}
-        </ul>
+        <div class="mb-6" data-share-strip>
+            {match label {
+                Some(l) => view! { <RiftSketch crop=crop label=l class="w-full md:max-w-[640px]" /> }.into_any(),
+                None => view! { <RiftSketch crop=crop class="w-full md:max-w-[640px]" /> }.into_any(),
+            }}
+        </div>
     }
-    .into_any()
+}
+
+/// One team's side of the match-up (Jasper's rule, M152): its five
+/// champions are one row that never wraps. The row is `flex-nowrap` with
+/// `Md` avatars (5 x 32 px + 4 x 8 px = 192 px); in a team column narrower
+/// than 12.5rem (container query) the `Sm` row (5 x 24 + 4 x 4 = 136 px)
+/// replaces it before a wrap could happen. The names are written under the
+/// row (text may wrap; the icons never do).
+///
+/// A11y: the icon rows are `aria-hidden` (both sizes are in the DOM, one is
+/// shown); the names list carries the content under the team's `<h3>`.
+fn matchup_team(label: &'static str, key: &'static str, list: Vec<String>) -> impl IntoView {
+    let body = if list.is_empty() {
+        view! { <p class="text-body text-muted">"Not set."</p> }.into_any()
+    } else {
+        let row = |size: AvatarSize, class: &'static str, tag: &'static str| {
+            view! {
+                <div class=class aria-hidden="true" data-matchup-row=tag>
+                    {list.iter().map(|c| view! {
+                        <span class="shrink-0"><ChampionAvatar name=c.clone() size=size decorative=true /></span>
+                    }).collect_view()}
+                </div>
+            }
+        };
+        view! {
+            {row(AvatarSize::Md, "flex flex-nowrap gap-2 @max-[12.5rem]:hidden", "md")}
+            {row(AvatarSize::Sm, "hidden flex-nowrap gap-1 @max-[12.5rem]:flex", "sm")}
+            <ul class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-label text-secondary">
+                {list.iter().map(|c| view! { <li>{c.clone()}</li> }).collect_view()}
+            </ul>
+        }
+        .into_any()
+    };
+    view! {
+        <div class="@container min-w-0" data-matchup-team=key>
+            <h3 class="mb-2 eyebrow">{label}</h3>
+            {body}
+        </div>
+    }
 }
 
 fn line_list(list: Vec<String>) -> AnyView {
@@ -411,10 +488,10 @@ fn SharedPlanView(plan: SharedPlan) -> impl IntoView {
         <div class="flex flex-col gap-10">
             <section aria-labelledby="sp-comp">
                 <SectionHeader title="Champions" id="sp-comp" />
-                <h3 class="mb-2 eyebrow">"Ours"</h3>
-                {champ_row(plan.our_champions, "Not set.")}
-                <h3 class="mb-2 mt-4 eyebrow">"Theirs"</h3>
-                {champ_row(plan.enemy_champions, "Not set.")}
+                <div class="grid gap-6 md:grid-cols-2" data-matchup>
+                    {matchup_team("Ours", "ours", plan.our_champions)}
+                    {matchup_team("Theirs", "theirs", plan.enemy_champions)}
+                </div>
             </section>
             {(!plan.win_conditions.is_empty()).then(|| view! {
                 <section aria-labelledby="sp-win"><SectionHeader title="How we win" id="sp-win" />{line_list(plan.win_conditions.clone())}</section>
@@ -648,5 +725,34 @@ mod tests {
         assert_eq!(tier_words("x"), "In the pool");
         assert_eq!(place_words("substitute"), "Substitute");
         assert_eq!(days_label(30), "One month");
+    }
+
+    #[test]
+    fn the_strip_names_a_base_only_from_the_data() {
+        assert_eq!(
+            strip_crop(Some("blue")),
+            RiftCrop::ShareStripAt(RiftAnchor::BlueBase)
+        );
+        assert_eq!(
+            strip_crop(Some("red")),
+            RiftCrop::ShareStripAt(RiftAnchor::RedBase)
+        );
+        assert_eq!(strip_crop(None), RiftCrop::ShareStrip);
+        assert_eq!(strip_crop(Some("")), RiftCrop::ShareStrip);
+    }
+
+    #[test]
+    fn only_a_base_crop_carries_the_ours_label() {
+        assert_eq!(
+            strip_label(RiftCrop::ShareStripAt(RiftAnchor::RedBase)),
+            Some(RiftLabel::new("Ours", RiftAnchor::RedBase))
+        );
+        assert_eq!(
+            strip_label(strip_crop(Some("blue"))),
+            Some(RiftLabel::new("Ours", RiftAnchor::BlueBase))
+        );
+        // No side in the data, and the unknown/expired/revoked page.
+        assert_eq!(strip_label(strip_crop(None)), None);
+        assert_eq!(strip_label(RiftCrop::ShareStrip), None);
     }
 }

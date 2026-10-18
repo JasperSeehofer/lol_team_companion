@@ -106,6 +106,11 @@ mod tests {
         for f in files {
             let src = std::fs::read_to_string(root.join(f)).expect(f);
             for lit in literals(&src) {
+                // Riot's Legal Jibber Jabber notice is quoted word for word
+                // ("does not endorse or sponsor"): legal wording, not ours.
+                if crate::components::footer::RIOT_LJJ_NOTICE.contains(lit.as_str()) {
+                    continue;
+                }
                 let found = forbidden_money_words(&lit);
                 if !found.is_empty() {
                     hits.push(format!("{f}: {found:?} in {lit:?}"));

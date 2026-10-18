@@ -11,7 +11,7 @@ use std::time::Duration;
 use lol_team_companion::app::{shell, App};
 use lol_team_companion::server::{
     auth::AuthBackend, config, db, images, rate_limit, riot::RiotClient,
-    session_store::SurrealSessionStore,
+    session_store::SurrealSessionStore, ui_icons,
 };
 use tower_sessions::ExpiredDeletion;
 
@@ -430,6 +430,9 @@ async fn main() {
         .route("/img/champion/{key}", get(images::champion_portrait))
         .route("/img/champion/{key}/icon", get(images::champion_icon))
         .route("/img/item/{id}", get(images::item_icon))
+        // Interface icons (positions, objectives, structures): a fixed
+        // allow-list, pinned CommunityDragon copies with committed fallbacks.
+        .route("/img/ui/{kind}/{name}", get(ui_icons::ui_icon))
         // Parked pages and the old solo dashboard redirect here, in axum: a
         // Leptos `<Redirect>` rendered on the server left its 302 status
         // behind for later static-file responses on the same worker thread.

@@ -9,6 +9,7 @@
 //! ResultGlyph, StatReadout, LegendBlock, CanvasFrame/ScaleBar,
 //! Annotation, TimelineScrub; ProportionBar (M7).
 //! M141: SaveStatus / SaveTracker / LoadFailed (status.rs).
+//! M152: RiftSketch (rift.rs; geometry generated into rift_geometry.rs).
 //!
 //! Rules for every component here: typed variants (enums, no strings),
 //! class names written out in full (Tailwind only sees literals), identical
@@ -32,6 +33,9 @@ pub mod markers;
 pub mod menu;
 pub mod prep;
 pub mod readout;
+pub mod rift;
+#[rustfmt::skip]
+pub mod rift_geometry;
 pub mod skeleton;
 pub mod status;
 pub mod table;
@@ -73,6 +77,7 @@ pub use markers::{
 pub use menu::{Menu, MenuAlign, MenuItem};
 pub use prep::{PrepEmphasis, PrepSequence, PrepState, PrepStep};
 pub use readout::{Delta, ReadoutSize, Sentiment, StatReadout, Trend};
+pub use rift::{RiftAnchor, RiftCrop, RiftGround, RiftLabel, RiftLevel, RiftSketch, RiftZoom};
 pub use skeleton::{Skeleton, SkeletonGroup, SkeletonShape};
 pub use status::{
     save_failure_reason, use_save_state, use_unsaved_guard, LoadFailed, SaveState, SaveStatus,

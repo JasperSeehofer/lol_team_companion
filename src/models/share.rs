@@ -80,6 +80,11 @@ pub struct SharedPlan {
     /// (role word, brief) for each role with a brief.
     pub role_briefs: Vec<(String, String)>,
     pub notes: Option<String>,
+    /// The side the linked draft was drafted on ("blue" or "red"), when the
+    /// plan has a draft: the share strip centres on that base (M152). No
+    /// draft, no side: the strip shows the bridge.
+    #[serde(default)]
+    pub our_side: Option<String>,
 }
 
 /// A shared review.

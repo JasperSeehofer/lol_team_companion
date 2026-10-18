@@ -1,0 +1,136 @@
+{
+  "id": "m152-r1-team-companion-identity",
+  "title": "M152 · Team Companion identity R1: the drawn Rift, real icons and the hero on the live routes",
+  "date": "2026-10-18",
+  "mission": "M152",
+  "status": "open",
+  "summary": "Treatment T1 is now on the real routes of mission/M152-identity-survey-sharpened-r1. The landing, the closed-beta page and the share page open on an original drawn Rift. Its 127 features each carry their source: walls measured by eye and redrawn (never traced), towers at the positions Match-V5 reports, bushes placed approximately. Each page follows the lead-figure grammar, with at most two chalk elements. The five champions per team never wrap at 320, 390 or 1280. Match Day is a field card: the start time is the figure, the next prep step is the one action, and Quiet prep no longer uses chalk. Role labels show the real position icons, and objective and structure icons are ready too. All of them come from the app's own /img/ui/ route: pinned to CommunityDragon 16.20, on a hard allow-list, with sanitised SVGs and committed fallbacks, so the browser still loads nothing from a third party. Link previews: theme colour, favicon and three 1200×630 cards; the share card is static and byte-identical for valid, unknown and revoked links. Riot's s.6 notice now appears word for word beside the disclaimer in the footer, Terms and Privacy, and docs/ASSETS.md records provenance and footing. The atelier passed the landing, closed-beta, share, RoleLabel, survey Rift and the three OG cards. The Match Day inset size is R1b. Items 7 and 8 (lock-in stroke, paper theme) were not started, per the stop rule; the paper theme can come back in R1b if you want it. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M152-identity-survey-sharpened-r1 once the fresh verifier's VERIFY-R1 says PASS? Deploy stays a separate step (82-release.sh behind its own cards). Landing also releases M149 (its rift map builds on this Rift) and M150.",
+      "kind": "merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS; M149 and M150 are released. Deploy is a separate card."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open, and R1b (Match Day inset, rulings below) continues on top of it."
+        }
+      ],
+      "recommend": "Yes, merge. Every must-have item shipped with tests, and the atelier passed every surface except the Match Day inset, which is cosmetic and listed as R1b."
+    },
+    {
+      "text": "(react) The Rift's walls are measured by eye on private references and redrawn, never traced (your 'try measured and redrawn first'). Towers use Match-V5's reported positions, and the bushes are approximate because no reference shows brush. Does the survey level look exact enough, or should the Riot ticket's answer decide on a closer outline?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Good enough",
+          "consequence": "The measured geometry stays the base for M149's rift map. Only spot fixes you name are made."
+        },
+        {
+          "label": "Refine by hand",
+          "consequence": "R1b re-measures the walls at higher zoom and adds more vertices. Still no tracing."
+        },
+        {
+          "label": "Wait for Riot",
+          "consequence": "Nothing changes until your portal ticket is answered. If Riot allows map reuse, a later round may derive outlines from the texture."
+        }
+      ],
+      "recommend": "Good enough for now. The survey level reads as the Rift, the sketch level hides the detail anyway, and your ticket can upgrade it later."
+    },
+    {
+      "text": "(react) DESIGN.md allows one chalk element per view. The landing and share heroes use two: the surveyed label ('YOUR TEAM' or 'OURS') and the one action. Should DESIGN.md be amended as proposed in REPORT-R1 (at most two, only on landing and share)?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Amend DESIGN.md",
+          "consequence": "The proposed text goes into DESIGN.md (principle 3 and the accent rule) in R1b or the next round."
+        },
+        {
+          "label": "Label to ink",
+          "consequence": "R1b draws the label in primary ink. Chalk stays on the action only."
+        }
+      ],
+      "recommend": "Amend DESIGN.md. The label is the hero's signature, and the atelier passed both surfaces with exactly two chalk elements."
+    },
+    {
+      "text": "(react) Scope 4 asked for both teams facing each other across the Match Day inset. It was built that way, and the atelier rejected it on the render: in a best of 3 neither team owns a side, and the names repeated the title. The names were removed, so the title 'Scrim vs X' carries the facing. Keep it this way?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep it removed",
+          "consequence": "Nothing changes. R1b only fixes the inset size (hide it below 120 px or use the bridge crop)."
+        },
+        {
+          "label": "Bring it back",
+          "consequence": "R1b restores the facing names, aligned with the bases, overriding the atelier."
+        }
+      ],
+      "recommend": "Keep it removed. Facing names imply blue and red sides the data does not have."
+    }
+  ],
+  "links": [
+    {
+      "label": "Review page: all frames side by side (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/report.html"
+    },
+    {
+      "label": "Landing 1280 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/landing-1280.png"
+    },
+    {
+      "label": "Landing 390 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/landing-390.png"
+    },
+    {
+      "label": "Landing reading flow 390 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/landing-390-flow.png"
+    },
+    {
+      "label": "Closed beta 390 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/closed-beta-390.png"
+    },
+    {
+      "label": "Share 390 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/share-390.png"
+    },
+    {
+      "label": "Match Day 390 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/match-day-390.png"
+    },
+    {
+      "label": "Match Day 390 before, main (context)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/before/match-day-390.png"
+    },
+    {
+      "label": "Role icons in the roster 390 (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/rolelabel-roster-390.png"
+    },
+    {
+      "label": "Survey-level Rift (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/rift-survey-1280.png"
+    },
+    {
+      "label": "Link preview: landing (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/og-landing.png"
+    },
+    {
+      "label": "Link preview: share (react)",
+      "href": "/app/previews/m152-r1-team-companion-identity/strips/after/og-share.png"
+    },
+    {
+      "label": "Report (context)",
+      "href": "/app/previews/m152-r1-team-companion-identity/REPORT-R1.md"
+    },
+    {
+      "label": "Atelier critique: surfaces (context)",
+      "href": "/app/previews/m152-r1-team-companion-identity/critique-r1-surfaces.md"
+    },
+    {
+      "label": "Rift measurement note (context)",
+      "href": "/app/previews/m152-r1-team-companion-identity/rift-schematic.md"
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 //! legal bases ([`LEGAL_BASES`]) are drafted defaults pending the operator's
 //! adviser (M10 review); the callout says so. Nothing here is invented.
 
-use crate::components::footer::RIOT_DISCLAIMER;
+use crate::components::footer::{RIOT_DISCLAIMER, RIOT_LJJ_NOTICE};
 use crate::components::ui::{
     Callout, CalloutTone, PageHeader, PageShell, PageWidth, SectionHeader,
 };
@@ -236,6 +236,7 @@ pub fn DatenschutzPage() -> impl IntoView {
             <section class="mt-10" aria-labelledby="riot-h">
                 <SectionHeader title="Riot Games" id="riot-h" />
                 <p class="max-w-prose text-body text-secondary">{RIOT_DISCLAIMER}</p>
+                <p class="mt-3 max-w-prose text-body text-secondary" data-testid="legal-riot-notice">{RIOT_LJJ_NOTICE}</p>
             </section>
         </PageShell>
     }

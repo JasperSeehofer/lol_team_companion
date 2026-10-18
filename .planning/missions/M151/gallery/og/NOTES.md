@@ -1,0 +1,11 @@
+# OG card: what R1 needs
+
+- **Files.** `og.html?t=<t>` captures the card (`capture-all.sh` makes `out/og-<t>.png` and `og-<t>-share.png` for every treatment whose art exists; all under 100 KB). R1 copies the chosen one to `public/og/default.png` (cargo-leptos serves `public/` at `/`, so `/og/default.png`) and `favicon.svg` to `public/favicon.svg`. Static, so caching it publicly for a long time is fine.
+- **Meta tags.** `../og-meta.diff` (checked with `git apply --check` against `src/app.rs`): `theme-color` `#081415` (`page`, oklch(0.180 0.018 200) through `tools/oklch.py`) and the favicon link in `shell()`'s head; `og:*` and `twitter:card` through `leptos_meta::Meta` in `App`, so they reach the server-rendered HTML that crawlers read. No new dependency. The theme-color line carries `lint:allow(hex)` for `scripts/lint_design.sh`.
+- **leptos_meta does not dedupe.** A second `Meta property="og:title"` on a page adds a tag; it does not replace the site-wide one. Per-page tags need the site-wide ones moved into a component that pages can override, not just added.
+- **`/s/{token}` previews (recommendation: keep the static card).** Chat apps fetch the page and its `og:image` through their own proxies and cache both publicly, beyond revocation and expiry. So:
+  - never put the token, or anything derived from it, in an `og:image` URL; a per-share image would be a second public address for the shared artefact that outlives the link;
+  - og tags on `/s/` describe the kind of thing only ("Shared game plan · Team Companion"), never the plan name, notes or player names; unknown, expired and revoked tokens get the same tags, so a preview reveals nothing about a token's state;
+  - the team name appears only where the page shows it: the player card shows `team_name`, the shared plan and review do not, so the share variant of the card (team name, `?v=share`) fits only a player-card preview, if ever;
+  - if a per-team card is wanted, key it by an opaque per-team id and render it once per team, never per token; and keep `noindex, nofollow` on `/s/` (already there) plus `Cache-Control: private, no-store` on the page itself.
+- **Open.** The chalk label reads "YOUR TEAM" in the share variant too (the sharing team); T2's hairline contours read faint at the size Discord shows the card (about 400 px wide).
