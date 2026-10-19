@@ -486,6 +486,55 @@ fn assign_lanes(sorted_pcts: &[f64]) -> Vec<u8> {
         .collect()
 }
 
+/// How many events the phone row "Events near the playhead" shows.
+const NEAR_ROW_LEN: usize = 5;
+
+/// The phone row's events (M149): up to `n` consecutive entries of `order`
+/// (visible events sorted by `(timestamp_ms, idx)`) nearest to `at_ms`, in
+/// time order. The `selected` event, when visible, is always in the window,
+/// so a press on a row button or Previous / Next keeps it on screen.
+fn near_window(
+    order: &[(usize, i64)],
+    at_ms: i64,
+    selected: Option<usize>,
+    n: usize,
+) -> Vec<(usize, i64)> {
+    if order.is_empty() || n == 0 {
+        return Vec::new();
+    }
+    let (mut lo, mut hi) = match selected.and_then(|s| order.iter().position(|(i, _)| *i == s)) {
+        Some(p) => (p, p + 1),
+        None => {
+            let p = order.partition_point(|(_, t)| *t < at_ms);
+            (p, p)
+        }
+    };
+    while hi - lo < n && (lo > 0 || hi < order.len()) {
+        let left = (lo > 0).then(|| at_ms - order[lo - 1].1);
+        let right = (hi < order.len()).then(|| order[hi].1 - at_ms);
+        match (left, right) {
+            (Some(l), Some(r)) if r < l => hi += 1,
+            (Some(_), _) => lo -= 1,
+            (None, _) => hi += 1,
+        }
+    }
+    order[lo..hi].to_vec()
+}
+
+/// How a marker is drawn: (big shape, side colour class, the user was involved).
+fn marker_look(e: &TimelineEvent, user_pid: i32) -> (bool, &'static str, bool) {
+    let big = matches!(e.monster_type.as_deref(), Some(m) if m.contains("BARON") || m.contains("HORDE"))
+        || e.category == EventCategory::Teamfight;
+    let side = match e.team_id {
+        Some(100) => "text-side-blue",
+        Some(200) => "text-side-red",
+        _ => "text-muted",
+    };
+    let mine =
+        e.killer_participant_id == Some(user_pid) || e.involved_participants.contains(&user_pid);
+    (big, side, mine)
+}
+
 /// The short name of an objective, for the scrubber's moments.
 fn objective_word(monster_type: Option<&str>) -> &'static str {
     match monster_type.unwrap_or("") {
@@ -561,6 +610,38 @@ fn Timeline(
         playhead.set((ts.max(0) / 1000) as u32);
     };
     let playhead_pct = move || timeline_pct(playhead.get() as i64 * 1000, duration);
+    // Below `md` the track markers sit about 12 px apart late in a game, too
+    // close for a 44 px target; the "Events near the playhead" row carries
+    // them instead, and the track markers leave the tab order (taps on them
+    // still work). `tabindex` cannot follow a CSS breakpoint, so the width is
+    // read after hydration (and on resize). Before that, and without
+    // JavaScript, the track markers stay focusable.
+    let phone = RwSignal::new(false);
+    #[cfg(feature = "hydrate")]
+    {
+        let below_md = || {
+            web_sys::window()
+                .and_then(|w| w.match_media("(min-width: 48rem)").ok().flatten())
+                .is_some_and(|m| !m.matches())
+        };
+        Effect::new(move |_| phone.set(below_md()));
+        let handle = window_event_listener(leptos::ev::resize, move |_| {
+            let now = below_md();
+            if phone.get_untracked() != now {
+                phone.set(now);
+            }
+        });
+        on_cleanup(move || handle.remove());
+    }
+    // The phone row's events: shown events nearest the playhead (see `near_window`).
+    let near = Memo::new(move |_| {
+        near_window(
+            &visible_order(),
+            playhead.get() as i64 * 1000,
+            selected.get(),
+            NEAR_ROW_LEN,
+        )
+    });
     view! {
         <section aria-labelledby="timeline-h" data-timeline>
             <SectionHeader title="Timeline" id="timeline-h" meta=format!("0:00 to {}", format_duration(duration)) />
@@ -628,14 +709,7 @@ fn Timeline(
                                         {visible.is_empty().then(|| view! { <p class="absolute inset-0 flex items-center justify-center text-label text-muted">{empty}</p> })}
                                         {visible.into_iter().zip(pcts).zip(lanes).map(|(((idx, e), left), lane)| {
                                             let label = event_tooltip(&e, &parts);
-                                            let big = matches!(e.monster_type.as_deref(), Some(m) if m.contains("BARON") || m.contains("HORDE"))
-                                                || e.category == EventCategory::Teamfight;
-                                            let side = match e.team_id {
-                                                Some(100) => "text-side-blue",
-                                                Some(200) => "text-side-red",
-                                                _ => "text-muted",
-                                            };
-                                            let mine = e.killer_participant_id == Some(user_pid) || e.involved_participants.contains(&user_pid);
+                                            let (big, side, mine) = marker_look(&e, user_pid);
                                             let size = if big { "size-4" } else { "size-3" };
                                             let top = match (two, lane) {
                                                 (false, _) => 50,
@@ -653,7 +727,9 @@ fn Timeline(
                                                     style=format!("left: {left:.2}%; top: {top}%")
                                                     aria-label=format!("{label}{}", if mine { ", you were involved" } else { "" })
                                                     aria-pressed=move || (selected.get() == Some(idx)).to_string()
+                                                    tabindex=move || phone.get().then_some("-1")
                                                     data-event-category=category_word(&e.category)
+                                                    data-event-idx=idx.to_string()
                                                     on:click=move |_| {
                                                         selected.update(|s| *s = if *s == Some(idx) { None } else { Some(idx) });
                                                         playhead.set(at);
@@ -669,6 +745,44 @@ fn Timeline(
                         </div>
                     }
                 }).collect_view()}
+                // Phones only: the shown events nearest the playhead as 44 px
+                // targets (same filter as Previous / Next, same handler as
+                // the track markers). From `md` up nothing is added.
+                // Keyed, so the pressed button survives the re-centring and
+                // keeps keyboard focus.
+                <div
+                    role="group"
+                    aria-label="Events near the playhead"
+                    data-near-row
+                    class=move || if near.with(|n| n.is_empty()) { "hidden" } else { "flex h-14 items-center gap-2 md:hidden" }
+                >
+                    <For each=move || near.get() key=|(idx, _)| *idx let:item>
+                        {
+                            let (idx, ts) = item;
+                            let e = events.with_value(|evs| evs[idx].clone());
+                            let label = participants.with_value(|parts| event_tooltip(&e, parts));
+                            let (big, side, mine) = marker_look(&e, user_pid);
+                            let svg_class = if mine { "size-4 overflow-visible stroke-accent [stroke-width:1.5]" } else { "size-4 overflow-visible" };
+                            let at = (ts.max(0) / 1000) as u32;
+                            view! {
+                                <button
+                                    type="button"
+                                    class="flex size-11 shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-ctl border border-outline bg-transparent hover:bg-ink-3 aria-pressed:border-secondary aria-pressed:bg-ink-3"
+                                    aria-label=format!("{label}{}", if mine { ", you were involved" } else { "" })
+                                    aria-pressed=move || (selected.get() == Some(idx)).to_string()
+                                    data-event-idx=idx.to_string()
+                                    on:click=move |_| {
+                                        selected.update(|s| *s = if *s == Some(idx) { None } else { Some(idx) });
+                                        playhead.set(at);
+                                    }
+                                >
+                                    <svg viewBox="0 0 16 16" class=format!("{svg_class} {side}") aria-hidden="true">{marker_shape(&e.category, big)}</svg>
+                                    <span class="figures text-caption leading-none text-secondary" aria-hidden="true">{format_duration(at as i32)}</span>
+                                </button>
+                            }
+                        }
+                    </For>
+                </div>
                 <TimelineScrub label="Playhead over the timeline" duration=duration_secs value=playhead moments=moments />
                 <p class="text-label text-secondary" aria-live="polite" data-near-playhead>
                     {move || {
@@ -955,6 +1069,31 @@ fn MatchBody(d: MatchDetail) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn near_window_takes_the_events_nearest_the_playhead() {
+        let order: Vec<(usize, i64)> = (0..10).map(|i| (i, i as i64 * 10_000)).collect();
+        let idx = |v: Vec<(usize, i64)>| v.into_iter().map(|(i, _)| i).collect::<Vec<_>>();
+        // At the start: the first five.
+        assert_eq!(idx(near_window(&order, 0, None, 5)), vec![0, 1, 2, 3, 4]);
+        // At the end: the last five, in time order.
+        assert_eq!(
+            idx(near_window(&order, 200_000, None, 5)),
+            vec![5, 6, 7, 8, 9]
+        );
+        // In the middle: centred on the playhead.
+        assert_eq!(
+            idx(near_window(&order, 50_000, None, 5)),
+            vec![3, 4, 5, 6, 7]
+        );
+        // Fewer events than the row: all of them.
+        assert_eq!(idx(near_window(&order[..3], 0, None, 5)), vec![0, 1, 2]);
+        assert!(near_window(&[], 0, None, 5).is_empty());
+        // Many events in one second: the selected one stays in the row.
+        let same: Vec<(usize, i64)> = (0..8).map(|i| (i, 60_000)).collect();
+        assert!(idx(near_window(&same, 60_000, Some(7), 5)).contains(&7));
+        assert_eq!(near_window(&same, 60_000, Some(7), 5).len(), 5);
+    }
 
     #[test]
     fn verdicts_and_bars() {
