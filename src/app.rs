@@ -20,6 +20,7 @@ use crate::pages::{
     admin::invites::AdminInvitesPage,
     admin::ledger::AdminLedgerPage,
     admin::proposals::AdminProposalsPage,
+    admin::reimport::AdminReimportPage,
     admin::resets::AdminResetsPage,
     admin::surveys::AdminSurveysPage,
     admin::texts::AdminTextsPage,
@@ -152,6 +153,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/admin/texts") view=AdminTextsPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/invites") view=AdminInvitesPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/resets") view=AdminResetsPage ssr=SsrMode::Async />
+                        <Route path=path!("/admin/reimport") view=AdminReimportPage ssr=SsrMode::Async />
                         <Route path=path!("/admin/traits") view=AdminTraitsPage ssr=SsrMode::Async />
                         <Route path=path!("/design") view=DesignGalleryPage ssr=SsrMode::Async />
                         <Route path=path!("/legal/impressum") view=ImpressumPage />

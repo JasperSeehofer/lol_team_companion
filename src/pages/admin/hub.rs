@@ -87,6 +87,11 @@ pub fn hub_rows(o: &AdminOverview) -> Vec<(&'static str, &'static str, String)> 
             "One-time codes for forgotten passwords".to_string(),
         ),
         (
+            "Re-import games",
+            "/admin/reimport",
+            "Fetch old games again for recalls and positions".to_string(),
+        ),
+        (
             "Champion traits",
             "/admin/traits",
             "Draft Graph trait table".to_string(),
@@ -152,6 +157,7 @@ mod tests {
             "/admin/texts",
             "/admin/invites",
             "/admin/resets",
+            "/admin/reimport",
             "/admin/traits",
             "/design",
         ] {

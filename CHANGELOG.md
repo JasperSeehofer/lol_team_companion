@@ -8,6 +8,13 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Feedback batch 1, round 2 (2026-10-18)
+
+#### Added
+- Match detail: the Vision rail of the timeline now shows your team's recalls. Riot's game data has no recall event, so they are inferred from item purchases (a shop visit after the opening shop that does not follow a death) and always marked as inferred: a dashed outline, "Recall (inferred)" on the toggle and "Inferred recall" when you point at one. Your wards stay yours only. A game opened before this change shows "Re-import this game to see recalls and positions." instead of empty markers. One line under the legend says the map view comes with the Rift Board.
+- Games opened from now on also keep where kills, towers and objectives happened on the map, and every item purchase, for the recalls. This is game information from Riot like the rest of the timeline and is deleted with it after 12 months, as before.
+- For admins: Re-import games (/admin/reimport) fetches games stored before this change from Riot again, five at a time, so their timelines get recalls and positions. It can be run as often as needed (a game is never imported twice), stops with a message when Riot is busy, skips games Riot no longer has, and says when the server has no Riot key. A re-import does not extend how long a game is kept.
+
 ### Identity, round 1 (2026-10-17)
 
 #### Added

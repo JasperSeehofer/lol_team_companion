@@ -57,6 +57,9 @@ pub enum Bucket {
     /// Team invites minted, disabled or redeemed, per user (polish pass):
     /// slow enough that codes cannot be guessed through the redeem form.
     TeamInvite,
+    /// Admin re-import batches of stored games (`/admin/reimport`, M149),
+    /// per admin: each batch makes up to ten Riot requests.
+    Reimport,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -145,6 +148,11 @@ fn limit(bucket: Bucket) -> Limit {
         Bucket::TeamInvite => Limit {
             capacity: 10.0,
             refill_per_sec: 1.0 / 30.0,
+        },
+        // 6 batches, then one every 20 s (at most 30 Riot requests a minute).
+        Bucket::Reimport => Limit {
+            capacity: 6.0,
+            refill_per_sec: 1.0 / 20.0,
         },
         // 120 page loads, then two a second.
         Bucket::PublicRead => Limit {
