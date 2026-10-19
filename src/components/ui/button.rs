@@ -8,7 +8,9 @@ use super::text::join;
 /// Visual weight of a [`Button`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ButtonVariant {
-    /// Chalk fill. At most one per view: the next thing to do.
+    /// Chalk fill. At most one per view: the next thing to do. Disabled, it
+    /// drops the chalk for `ink-3` with muted text (5.5:1, M149), never a
+    /// faded chalk fill; hover and active keep that look.
     Primary,
     /// Outline. The default for everything else.
     #[default]
@@ -24,7 +26,7 @@ impl ButtonVariant {
     pub fn class(self) -> &'static str {
         match self {
             ButtonVariant::Primary => {
-                "bg-accent border-accent text-accent-ink font-semibold hover:bg-accent-hover hover:border-accent-hover data-[force=hover]:bg-accent-hover data-[force=hover]:border-accent-hover active:bg-accent data-[force=active]:bg-accent"
+                "bg-accent border-accent text-accent-ink font-semibold hover:bg-accent-hover hover:border-accent-hover data-[force=hover]:bg-accent-hover data-[force=hover]:border-accent-hover active:bg-accent data-[force=active]:bg-accent disabled:bg-ink-3 disabled:border-outline disabled:text-muted disabled:opacity-100 disabled:hover:bg-ink-3 disabled:hover:border-outline disabled:active:bg-ink-3"
             }
             ButtonVariant::Secondary => {
                 "bg-transparent border-outline text-primary hover:bg-ink-3 data-[force=hover]:bg-ink-3 active:bg-ink-2 data-[force=active]:bg-ink-2"

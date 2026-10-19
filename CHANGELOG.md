@@ -12,6 +12,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 #### Fixed
 - Match detail on a phone: late in a game the timeline's markers sit too close together to tap one reliably, so phones now show "Events near the playhead" under the rails: the up to five shown events closest to the playhead as large buttons, each with its marker and clock. Pressing one selects that event and moves the playhead to it, exactly like tapping its marker; Previous event and Next event still step through every shown event. On a phone the keyboard reaches the events through this row instead of every marker on the track; on wider screens the timeline is unchanged.
+- A main button that cannot be used yet (such as "Sync my games" before a Riot account is linked) is now drawn as a plain grey button with readable text instead of a faded highlight, so its label stays easy to read.
 
 ### Identity, round 1 (2026-10-17)
 
