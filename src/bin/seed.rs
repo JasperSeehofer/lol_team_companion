@@ -620,6 +620,9 @@ async fn demo_match(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String
         multi_kill_length: None,
         is_teamfight: false,
         involved_participants: Vec::new(),
+        participant_id: None,
+        item_id: None,
+        position: None,
     };
     let kill = |ts: i64, killer: i32, victim: i32, assists: &[i32], fight: bool| {
         let mut e = ev(

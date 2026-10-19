@@ -349,6 +349,11 @@ DEFINE FIELD IF NOT EXISTS fetched_at ON match_detail TYPE datetime DEFAULT time
 DEFINE INDEX IF NOT EXISTS match_detail_match_id ON match_detail FIELDS match_id UNIQUE;
 -- The nightly retention task (M11) deletes cached games by this time.
 DEFINE INDEX IF NOT EXISTS match_detail_fetched_at ON match_detail FIELDS fetched_at;
+-- M149: the importer version that wrote the timeline (NONE = version 1, before
+-- positions and purchases were kept), and the version whose admin re-import
+-- found the game missing at Riot (not asked for again).
+DEFINE FIELD IF NOT EXISTS timeline_version ON match_detail TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS timeline_reimport_failed ON match_detail TYPE option<int>;
 
 -- Match timeline events cache
 DEFINE TABLE IF NOT EXISTS match_timeline_event SCHEMAFULL;
@@ -365,6 +370,12 @@ DEFINE FIELD IF NOT EXISTS is_first_blood ON match_timeline_event TYPE bool DEFA
 DEFINE FIELD IF NOT EXISTS multi_kill_length ON match_timeline_event TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS is_teamfight ON match_timeline_event TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS involved_participants ON match_timeline_event TYPE option<string>;
+-- M149: the buyer of an ITEM_PURCHASED or the creator of a WARD_PLACED, the
+-- purchased item, and Riot's map position (kills, buildings, elite monsters).
+DEFINE FIELD IF NOT EXISTS participant_id ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS item_id ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS position_x ON match_timeline_event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS position_y ON match_timeline_event TYPE option<int>;
 DEFINE INDEX IF NOT EXISTS timeline_match_id ON match_timeline_event FIELDS match_id;
 
 -- Personal Learnings (Phase 14) — user-scoped, NOT team-scoped

@@ -38,6 +38,19 @@ pub enum RiotError {
     Busy(u64),
 }
 
+impl RiotError {
+    /// Whether asking again later cannot help: Riot has no such game (our
+    /// own "not found" or an HTTP 404). Busy budgets, rate limits, a
+    /// rejected key and server errors are not permanent.
+    pub fn is_permanent(&self) -> bool {
+        match self {
+            RiotError::Api(_) => true,
+            RiotError::Riven(e) => e.status_code().map(|s| s.as_u16()) == Some(404),
+            RiotError::NotConfigured | RiotError::Busy(_) => false,
+        }
+    }
+}
+
 impl From<riven::RiotApiError> for RiotError {
     fn from(e: riven::RiotApiError) -> Self {
         RiotError::Riven(Box::new(e))
@@ -354,202 +367,270 @@ impl RiotClient {
             .collect())
     }
 
-    pub async fn fetch_full_match_detail(
+    /// Fetch a game and its timeline from Match-V5 (two requests from the
+    /// global budget). `None` for the timeline: Riot has none for it.
+    pub async fn fetch_match_and_timeline(
         &self,
         match_id: &str,
         platform: PlatformRoute,
-    ) -> Result<FullMatchData, RiotError> {
+    ) -> Result<
+        (
+            riven::models::match_v5::Match,
+            Option<riven::models::match_v5::Timeline>,
+        ),
+        RiotError,
+    > {
         let api = self.api()?;
         let regional = platform.to_regional();
-
-        // Fetch match data (all 10 participants)
         self.take().await?;
         let m = api
             .match_v5()
             .get_match(regional, match_id)
             .await?
             .ok_or_else(|| RiotError::Api(format!("Match {match_id} not found")))?;
-
-        let game_duration = m.info.game_duration as i32;
-        let game_mode = format!("{:?}", m.info.game_mode);
-
-        let participants: Vec<MatchParticipant> = m
-            .info
-            .participants
-            .iter()
-            .map(|p| MatchParticipant {
-                participant_id: p.participant_id,
-                puuid: p.puuid.clone(),
-                summoner_name: p.summoner_name.clone(),
-                champion_name: p.champion_name.clone(),
-                team_id: u16::from(p.team_id) as i32,
-                team_position: p.team_position.clone(),
-                kills: p.kills,
-                deaths: p.deaths,
-                assists: p.assists,
-                cs: p.total_minions_killed + p.neutral_minions_killed,
-                vision_score: p.vision_score,
-                damage: p.total_damage_dealt_to_champions,
-                gold_earned: p.gold_earned,
-                items: [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5],
-                win: p.win,
-            })
-            .collect();
-
-        // Fetch timeline
         self.take().await?;
-        let timeline_opt = api.match_v5().get_timeline(regional, match_id).await?;
-        let mut raw_events = Vec::new();
+        let timeline = api.match_v5().get_timeline(regional, match_id).await?;
+        Ok((m, timeline))
+    }
 
-        if let Some(timeline) = timeline_opt {
-            for frame in &timeline.info.frames {
-                for event in &frame.events {
-                    let event_type = event.r#type.clone();
-                    let category = classify_event(
-                        &event_type,
-                        event.monster_type.as_deref(),
-                        event.building_type.as_deref(),
-                    );
-                    let Some(category) = category else { continue };
+    pub async fn fetch_full_match_detail(
+        &self,
+        match_id: &str,
+        platform: PlatformRoute,
+    ) -> Result<FullMatchData, RiotError> {
+        let (m, timeline) = self.fetch_match_and_timeline(match_id, platform).await?;
+        Ok(full_match_from_riot(match_id, &m, timeline.as_ref()))
+    }
+}
 
-                    let mut involved = Vec::new();
-                    if let Some(kid) = event.killer_id {
-                        involved.push(kid);
-                    }
-                    if let Some(vid) = event.victim_id {
-                        involved.push(vid);
-                    }
-                    if let Some(ref assists) = event.assisting_participant_ids {
-                        involved.extend(assists.iter().copied());
-                    }
+/// All ten participants of a Match-V5 game.
+pub fn participants_from_match(m: &riven::models::match_v5::Match) -> Vec<MatchParticipant> {
+    m.info
+        .participants
+        .iter()
+        .map(|p| MatchParticipant {
+            participant_id: p.participant_id,
+            puuid: p.puuid.clone(),
+            summoner_name: p.summoner_name.clone(),
+            champion_name: p.champion_name.clone(),
+            team_id: u16::from(p.team_id) as i32,
+            team_position: p.team_position.clone(),
+            kills: p.kills,
+            deaths: p.deaths,
+            assists: p.assists,
+            cs: p.total_minions_killed + p.neutral_minions_killed,
+            vision_score: p.vision_score,
+            damage: p.total_damage_dealt_to_champions,
+            gold_earned: p.gold_earned,
+            items: [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5],
+            win: p.win,
+        })
+        .collect()
+}
 
-                    raw_events.push(TimelineEvent {
-                        timestamp_ms: event.timestamp,
-                        event_type,
-                        category,
-                        team_id: event
-                            .team_id
-                            .map(|t| u16::from(t) as i32)
-                            .or_else(|| event.killer_team_id.map(|t| u16::from(t) as i32)),
-                        killer_participant_id: event.killer_id,
-                        victim_participant_id: event.victim_id,
-                        monster_type: event.monster_type.clone(),
-                        monster_sub_type: event.monster_sub_type.clone(),
-                        building_type: event.building_type.clone(),
-                        is_first_blood: false, // set below
-                        multi_kill_length: event.multi_kill_length,
-                        is_teamfight: false, // set below
-                        involved_participants: involved,
-                    });
-                }
+/// The cached form of a fetched game (no network): its participants and,
+/// when Riot has a timeline, the timeline events ([`timeline_events_from_riot`]).
+pub fn full_match_from_riot(
+    match_id: &str,
+    m: &riven::models::match_v5::Match,
+    timeline: Option<&riven::models::match_v5::Timeline>,
+) -> FullMatchData {
+    let participants = participants_from_match(m);
+    let raw_timeline_events = timeline
+        .map(|t| timeline_events_from_riot(t, &participants))
+        .unwrap_or_default();
+    FullMatchData {
+        match_id: match_id.to_string(),
+        game_duration: m.info.game_duration as i32,
+        game_mode: format!("{:?}", m.info.game_mode),
+        participants,
+        raw_timeline_events,
+        has_timeline: timeline.is_some(),
+    }
+}
+
+/// Convert a Match-V5 timeline into the events the app keeps (importer
+/// version [`TIMELINE_VERSION`](crate::models::match_data::TIMELINE_VERSION)):
+/// objectives, buildings, champion kills, ward placements and (since M149)
+/// item purchases, with Riot's position where the event has one, plus one
+/// `TEAMFIGHT` event per cluster of kills. Pure: no network, no database.
+///
+/// Positions: Match-V5 gives `CHAMPION_KILL`, `BUILDING_KILL` and
+/// `ELITE_MONSTER_KILL` a position; `WARD_PLACED` and `ITEM_PURCHASED` have
+/// none (a ward names its `creatorId` and `wardType` only).
+pub fn timeline_events_from_riot(
+    timeline: &riven::models::match_v5::Timeline,
+    participants: &[MatchParticipant],
+) -> Vec<TimelineEvent> {
+    let team_of = |pid: Option<i32>| {
+        pid.and_then(|id| participants.iter().find(|p| p.participant_id == id))
+            .map(|p| p.team_id)
+    };
+    let mut raw_events = Vec::new();
+    for frame in &timeline.info.frames {
+        for event in &frame.events {
+            let event_type = event.r#type.clone();
+            let category = classify_event(
+                &event_type,
+                event.monster_type.as_deref(),
+                event.building_type.as_deref(),
+            );
+            let Some(category) = category else { continue };
+
+            let mut involved = Vec::new();
+            if let Some(kid) = event.killer_id {
+                involved.push(kid);
+            }
+            if let Some(vid) = event.victim_id {
+                involved.push(vid);
+            }
+            if let Some(ref assists) = event.assisting_participant_ids {
+                involved.extend(assists.iter().copied());
+            }
+            // The actor that is not a killer: a ward's creator, a buyer.
+            let actor = match category {
+                EventCategory::Ward => event.creator_id.filter(|&c| c > 0),
+                EventCategory::Purchase => event.participant_id.filter(|&c| c > 0),
+                _ => None,
+            };
+            let item_id = if category == EventCategory::Purchase {
+                event.item_id
+            } else {
+                None
+            };
+
+            raw_events.push(TimelineEvent {
+                timestamp_ms: event.timestamp,
+                event_type,
+                category,
+                team_id: event
+                    .team_id
+                    .map(|t| u16::from(t) as i32)
+                    .or_else(|| event.killer_team_id.map(|t| u16::from(t) as i32))
+                    .or_else(|| team_of(actor)),
+                killer_participant_id: event.killer_id,
+                victim_participant_id: event.victim_id,
+                monster_type: event.monster_type.clone(),
+                monster_sub_type: event.monster_sub_type.clone(),
+                building_type: event.building_type.clone(),
+                is_first_blood: false, // set below
+                multi_kill_length: event.multi_kill_length,
+                is_teamfight: false, // set below
+                involved_participants: involved,
+                participant_id: actor,
+                item_id,
+                position: event
+                    .position
+                    .as_ref()
+                    .map(|p| MapPosition { x: p.x, y: p.y }),
+            });
+        }
+    }
+    mark_kills(raw_events)
+}
+
+/// First blood, teamfight flags and one `TEAMFIGHT` event per cluster of
+/// kills, then the events in time order.
+fn mark_kills(mut raw_events: Vec<TimelineEvent>) -> Vec<TimelineEvent> {
+    // Mark first blood
+    if let Some(first_kill) = raw_events
+        .iter_mut()
+        .find(|e| e.event_type == "CHAMPION_KILL")
+    {
+        first_kill.is_first_blood = true;
+    }
+
+    // Detect teamfights: sliding 10s window, 4+ unique participant IDs
+    let kill_events: Vec<(usize, i64, Vec<i32>)> = raw_events
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.event_type == "CHAMPION_KILL")
+        .map(|(i, e)| (i, e.timestamp_ms, e.involved_participants.clone()))
+        .collect();
+
+    let mut teamfight_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    for (i, (idx, ts, _)) in kill_events.iter().enumerate() {
+        let mut unique_ids: std::collections::HashSet<i32> = std::collections::HashSet::new();
+        let mut window_indices = vec![*idx];
+        for (jdx, jts, jparticipants) in &kill_events[i..] {
+            if *jts - *ts > 10_000 {
+                break;
+            }
+            for pid in jparticipants {
+                unique_ids.insert(*pid);
+            }
+            window_indices.push(*jdx);
+        }
+        if unique_ids.len() >= 4 {
+            for idx in &window_indices {
+                teamfight_indices.insert(*idx);
             }
         }
-
-        // Mark first blood
-        if let Some(first_kill) = raw_events
-            .iter_mut()
-            .find(|e| e.event_type == "CHAMPION_KILL")
-        {
-            first_kill.is_first_blood = true;
+    }
+    for idx in &teamfight_indices {
+        if let Some(e) = raw_events.get_mut(*idx) {
+            e.is_teamfight = true;
         }
+    }
 
-        // Detect teamfights: sliding 10s window, 4+ unique participant IDs
-        let kill_events: Vec<(usize, i64, Vec<i32>)> = raw_events
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| e.event_type == "CHAMPION_KILL")
-            .map(|(i, e)| (i, e.timestamp_ms, e.involved_participants.clone()))
-            .collect();
-
-        let mut teamfight_indices: std::collections::HashSet<usize> =
-            std::collections::HashSet::new();
-        for (i, (idx, ts, _)) in kill_events.iter().enumerate() {
-            let mut unique_ids: std::collections::HashSet<i32> = std::collections::HashSet::new();
-            let mut window_indices = vec![*idx];
-            for (jdx, jts, jparticipants) in &kill_events[i..] {
-                if *jts - *ts > 10_000 {
-                    break;
+    // Group adjacent teamfight kills into clusters and create a single TEAMFIGHT event per cluster
+    let mut teamfight_clusters: Vec<Vec<usize>> = Vec::new();
+    let mut sorted_tf_indices: Vec<usize> = teamfight_indices.into_iter().collect();
+    sorted_tf_indices.sort();
+    let mut current_cluster: Vec<usize> = Vec::new();
+    for idx in sorted_tf_indices {
+        if let Some(last) = current_cluster.last() {
+            let last_ts = raw_events[*last].timestamp_ms;
+            let cur_ts = raw_events[idx].timestamp_ms;
+            if cur_ts - last_ts > 10_000 {
+                if !current_cluster.is_empty() {
+                    teamfight_clusters.push(current_cluster.clone());
                 }
-                for pid in jparticipants {
-                    unique_ids.insert(*pid);
-                }
-                window_indices.push(*jdx);
-            }
-            if unique_ids.len() >= 4 {
-                for idx in &window_indices {
-                    teamfight_indices.insert(*idx);
-                }
-            }
-        }
-        for idx in &teamfight_indices {
-            if let Some(e) = raw_events.get_mut(*idx) {
-                e.is_teamfight = true;
-            }
-        }
-
-        // Group adjacent teamfight kills into clusters and create a single TEAMFIGHT event per cluster
-        let mut teamfight_clusters: Vec<Vec<usize>> = Vec::new();
-        let mut sorted_tf_indices: Vec<usize> = teamfight_indices.into_iter().collect();
-        sorted_tf_indices.sort();
-        let mut current_cluster: Vec<usize> = Vec::new();
-        for idx in sorted_tf_indices {
-            if let Some(last) = current_cluster.last() {
-                let last_ts = raw_events[*last].timestamp_ms;
-                let cur_ts = raw_events[idx].timestamp_ms;
-                if cur_ts - last_ts > 10_000 {
-                    if !current_cluster.is_empty() {
-                        teamfight_clusters.push(current_cluster.clone());
-                    }
-                    current_cluster = vec![idx];
-                } else {
-                    current_cluster.push(idx);
-                }
+                current_cluster = vec![idx];
             } else {
                 current_cluster.push(idx);
             }
+        } else {
+            current_cluster.push(idx);
         }
-        if !current_cluster.is_empty() {
-            teamfight_clusters.push(current_cluster);
-        }
-
-        for cluster in teamfight_clusters {
-            if cluster.is_empty() {
-                continue;
-            }
-            let center_ts = raw_events[cluster[cluster.len() / 2]].timestamp_ms;
-            let mut all_involved: Vec<i32> = cluster
-                .iter()
-                .flat_map(|i| raw_events[*i].involved_participants.clone())
-                .collect();
-            all_involved.sort();
-            all_involved.dedup();
-            raw_events.push(TimelineEvent {
-                timestamp_ms: center_ts,
-                event_type: "TEAMFIGHT".to_string(),
-                category: EventCategory::Teamfight,
-                team_id: None,
-                killer_participant_id: None,
-                victim_participant_id: None,
-                monster_type: None,
-                monster_sub_type: None,
-                building_type: None,
-                is_first_blood: false,
-                multi_kill_length: None,
-                is_teamfight: true,
-                involved_participants: all_involved,
-            });
-        }
-
-        raw_events.sort_by_key(|e| e.timestamp_ms);
-
-        Ok(FullMatchData {
-            match_id: match_id.to_string(),
-            game_duration,
-            game_mode,
-            participants,
-            raw_timeline_events: raw_events,
-        })
     }
+    if !current_cluster.is_empty() {
+        teamfight_clusters.push(current_cluster);
+    }
+
+    for cluster in teamfight_clusters {
+        if cluster.is_empty() {
+            continue;
+        }
+        let center_ts = raw_events[cluster[cluster.len() / 2]].timestamp_ms;
+        let mut all_involved: Vec<i32> = cluster
+            .iter()
+            .flat_map(|i| raw_events[*i].involved_participants.clone())
+            .collect();
+        all_involved.sort();
+        all_involved.dedup();
+        raw_events.push(TimelineEvent {
+            timestamp_ms: center_ts,
+            event_type: "TEAMFIGHT".to_string(),
+            category: EventCategory::Teamfight,
+            team_id: None,
+            killer_participant_id: None,
+            victim_participant_id: None,
+            monster_type: None,
+            monster_sub_type: None,
+            building_type: None,
+            is_first_blood: false,
+            multi_kill_length: None,
+            is_teamfight: true,
+            involved_participants: all_involved,
+            participant_id: None,
+            item_id: None,
+            position: None,
+        });
+    }
+
+    raw_events.sort_by_key(|e| e.timestamp_ms);
+    raw_events
 }
 
 pub struct MatchData {
@@ -587,7 +668,9 @@ pub struct RankedEntry {
     pub losses: i32,
 }
 
-use crate::models::match_data::{EventCategory, MatchParticipant, PerformanceStats, TimelineEvent};
+use crate::models::match_data::{
+    EventCategory, MapPosition, MatchParticipant, PerformanceStats, TimelineEvent,
+};
 
 pub struct FullMatchData {
     pub match_id: String,
@@ -595,6 +678,9 @@ pub struct FullMatchData {
     pub game_mode: String,
     pub participants: Vec<MatchParticipant>,
     pub raw_timeline_events: Vec<TimelineEvent>,
+    /// Whether Riot returned a timeline (a re-import never replaces stored
+    /// events with nothing).
+    pub has_timeline: bool,
 }
 
 pub fn platform_route_from_str(region: &str) -> PlatformRoute {
@@ -681,9 +767,12 @@ fn classify_event(
         "BUILDING_KILL" => Some(EventCategory::Tower),
         "CHAMPION_KILL" => Some(EventCategory::Kill),
         "WARD_PLACED" => Some(EventCategory::Ward),
+        // Kept since M149 so recalls can be inferred from shop visits
+        // (`models::match_data::infer_recalls`); never drawn.
+        "ITEM_PURCHASED" => Some(EventCategory::Purchase),
         // ITEM_UNDO is the shop's "undo purchase", not a recall: Riot's
-        // Match-V5 timeline has no event for pressing B (M141), so nothing
-        // is classified as a recall. Skip it with GAME_END, ITEM_PURCHASED, etc.
+        // Match-V5 timeline has no event for pressing B (M141). Skip it with
+        // GAME_END, ITEM_SOLD, SKILL_LEVEL_UP, etc.
         _ => None,
     }
 }
@@ -988,5 +1077,134 @@ mod tests {
         assert_eq!(perf.vision_score, 30);
         // Lane opponent is participant with team_position="MIDDLE" on team 200
         assert!(perf.lane_opponent_damage.is_some());
+    }
+
+    /// A trimmed Match-V5 timeline that deserializes into riven's own type
+    /// (the Sand Table fixture is read as JSON values and has no full
+    /// participant frames). Hand-written, not captured from Riot.
+    const RIVEN_TIMELINE: &str =
+        include_str!("../../tests/fixtures/riot_match_v5_timeline_riven.json");
+
+    fn fixture_participants() -> Vec<MatchParticipant> {
+        (1..=10)
+            .map(|pid| MatchParticipant {
+                participant_id: pid,
+                puuid: format!("fx-{pid:02}"),
+                summoner_name: format!("P{pid}"),
+                champion_name: "Ahri".into(),
+                team_id: if pid <= 5 { 100 } else { 200 },
+                team_position: String::new(),
+                kills: 0,
+                deaths: 0,
+                assists: 0,
+                cs: 0,
+                vision_score: 0,
+                damage: 0,
+                gold_earned: 0,
+                items: [0; 6],
+                win: pid <= 5,
+            })
+            .collect()
+    }
+
+    fn converted() -> Vec<TimelineEvent> {
+        let t: riven::models::match_v5::Timeline =
+            serde_json::from_str(RIVEN_TIMELINE).expect("fixture is a riven Timeline");
+        timeline_events_from_riot(&t, &fixture_participants())
+    }
+
+    #[test]
+    fn conversion_keeps_purchases_with_buyer_item_and_team() {
+        let events = converted();
+        let buys: Vec<(i64, Option<i32>, Option<i32>, Option<i32>)> = events
+            .iter()
+            .filter(|e| e.category == EventCategory::Purchase)
+            .map(|e| (e.timestamp_ms, e.participant_id, e.item_id, e.team_id))
+            .collect();
+        assert_eq!(
+            buys,
+            vec![
+                (1200, Some(1), Some(1055), Some(100)),
+                (1500, Some(1), Some(2003), Some(100)),
+                (1800, Some(6), Some(1056), Some(200)),
+                (320_000, Some(6), Some(1001), Some(200)),
+                (400_000, Some(1), Some(3802), Some(100)),
+                (410_000, Some(1), Some(2003), Some(100)),
+            ]
+        );
+        assert!(events.iter().all(|e| e.event_type != "ITEM_PURCHASED"
+            || (e.position.is_none() && e.involved_participants.is_empty())));
+    }
+
+    #[test]
+    fn conversion_keeps_positions_where_riot_has_them() {
+        let events = converted();
+        let pos = |kind: &str| {
+            events
+                .iter()
+                .find(|e| e.event_type == kind)
+                .and_then(|e| e.position)
+        };
+        assert_eq!(pos("CHAMPION_KILL"), Some(MapPosition { x: 5000, y: 9000 }));
+        assert_eq!(
+            pos("ELITE_MONSTER_KILL"),
+            Some(MapPosition { x: 9866, y: 4414 })
+        );
+        assert_eq!(pos("BUILDING_KILL"), Some(MapPosition { x: 8955, y: 8510 }));
+        // Match-V5 gives wards no position; they name their creator.
+        let wards: Vec<(Option<i32>, Option<i32>, Option<MapPosition>)> = events
+            .iter()
+            .filter(|e| e.category == EventCategory::Ward)
+            .map(|e| (e.participant_id, e.team_id, e.position))
+            .collect();
+        assert_eq!(
+            wards,
+            vec![(Some(1), Some(100), None), (Some(7), Some(200), None)]
+        );
+    }
+
+    #[test]
+    fn conversion_skips_other_events_and_marks_first_blood() {
+        let events = converted();
+        for skipped in [
+            "PAUSE_END",
+            "SKILL_LEVEL_UP",
+            "ITEM_UNDO",
+            "GAME_END",
+            "MYSTERY_EVENT_FROM_A_FUTURE_PATCH",
+        ] {
+            assert!(events.iter().all(|e| e.event_type != skipped), "{skipped}");
+        }
+        let kill = events
+            .iter()
+            .find(|e| e.event_type == "CHAMPION_KILL")
+            .unwrap();
+        assert!(kill.is_first_blood);
+        assert_eq!(kill.involved_participants, vec![1, 6, 2]);
+        assert_eq!(kill.participant_id, None);
+        assert!(events
+            .windows(2)
+            .all(|w| w[0].timestamp_ms <= w[1].timestamp_ms));
+    }
+
+    #[test]
+    fn converted_purchases_give_inferred_recalls() {
+        use crate::models::match_data::{infer_recalls, RECALL_EVENT_TYPE};
+        let recalls = infer_recalls(&converted());
+        // Participant 1's visit at 6:40 (two purchases 10 s apart) is one
+        // recall; participant 6's purchase 20 s after dying is the respawn,
+        // and the purchases before 1:30 are the opening shop.
+        let got: Vec<(i64, Option<i32>, &str)> = recalls
+            .iter()
+            .map(|e| (e.timestamp_ms, e.participant_id, e.event_type.as_str()))
+            .collect();
+        assert_eq!(got, vec![(400_000, Some(1), RECALL_EVENT_TYPE)]);
+    }
+
+    #[test]
+    fn only_missing_games_are_permanent_failures() {
+        assert!(RiotError::Api("Match X not found".into()).is_permanent());
+        assert!(!RiotError::Busy(3).is_permanent());
+        assert!(!RiotError::NotConfigured.is_permanent());
     }
 }

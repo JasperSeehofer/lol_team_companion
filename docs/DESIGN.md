@@ -283,6 +283,8 @@ The older feedback components became batch 2 primitives or shims for them (secti
 | `Annotation` | `x`, `y` (anchor in percent of the canvas), `placement: NotePlacement {NorthEast (default), NorthWest, SouthEast, SouthWest}`, `title?` (mono, "17:00 Pick-off"), `at?` (grid reference read to screen readers), children (the note) | `role="note"` with real text in reading order; `title` and `at` are written out so the note stands without the drawing; anchor dot and leader line decorative. Serif italic (the `note` utility): "a person wrote this here". | Canvases only. Never elsewhere: the serif means a coach's annotation. |
 | `TimelineScrub` | `label`, `duration` (s), `value: RwSignal<u32>`, `moments: Vec<Moment {at, label}>` | The ruler is one tab stop, `role="slider"` with `aria-valuemin/max/now` (seconds) and `aria-valuetext` ("17:05, moment: Pick-off"). Left/Right 1 s (Shift 10 s), PageUp/PageDown 60 s, Home/End, J/L previous/next moment (K is reserved for pause once playback exists); a click seeks. Moments are also a visually hidden list. On phones flags show the time only and every other scale label drops. No play button until there is playback. | Reserved for the Sand Table (M4). Static data today. |
 
+**Inferred = dashed outline.** A mark the app inferred instead of reading it from data (a `RoleLabel guessed`, an inferred recall on the match timeline, M149) carries a dashed outline or underline, and its words say so ("Recall (inferred)", a tooltip that starts "Inferred recall"). Exact events stay solid.
+
 Shared keyboard helpers live in `ui/a11y.rs` (`roving_index`, `typeahead`, `focus_id`, `click_id`), unit-tested so the contracts above hold without a browser.
 
 ### 6.4 Compatibility shims (removed)

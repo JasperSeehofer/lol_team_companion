@@ -385,6 +385,9 @@ async fn match_detail_cache_is_written_whole() {
         multi_kill_length: None,
         is_teamfight: false,
         involved_participants: vec![1, 6],
+        participant_id: None,
+        item_id: None,
+        position: None,
     };
     forbid(&d, "match_timeline_event", "event_type", "BOOM").await;
     assert!(db::store_match_detail(
