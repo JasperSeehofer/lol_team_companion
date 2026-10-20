@@ -2,7 +2,7 @@
 
 Date: 2026-10-20. Branches: `mission/M166-scout-half-c-and-navgrid-prep` (part B and this report) and the
 local `scout/M166-halfc` (part A, worktree `/home/ops/Repositories/lol_team_companion-wt/M166-scout-halfc`).
-Neither branch has been pushed by this item. No VERIFY file was written here.
+The orchestrator pushed `mission/M166-scout-half-c-and-navgrid-prep` (branch only) at the end of R1; `scout/M166-halfc` was not pushed. No VERIFY file was written here.
 
 ## Budget
 
@@ -251,8 +251,6 @@ The real-file run itself. R2 runs after Wednesday as a separate spawn (about 0.6
    (non-forced). The part A worktree's own push is disabled on purpose.
 2. `git -C /home/ops/Repositories/lol_team_companion-wt/M156-scout-replay-spike pull --ff-only`.
 3. Point M156's half-C dispatch at `python -m scout.halfc`.
-4. Push `mission/M166-scout-half-c-and-navgrid-prep` (branch only), so that Jasper can switch to it on the PC.
-   This item did not push it.
 
 ## Open flags carried from the page
 
