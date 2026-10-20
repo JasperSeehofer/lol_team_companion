@@ -1,11 +1,15 @@
 """Fetch one match and its timeline from Riot's Match-V5 API.
 
-  $env:RIOT_API_KEY = "RGAPI-..."   (PowerShell, this shell only)
+  $env:RIOT_API_KEY = Read-Host "Riot key"   (PowerShell, this shell only; never in history)
   python -m scout.fetch_timeline --match-id EUW1_1234567890 --out RUN_DIR
 
 The key is read from the environment only. It is never written to a file,
 never logged and never printed; the run log records only the URLs.
-Writes RUN_DIR/timeline.json and RUN_DIR/match.json.
+Writes RUN_DIR/timeline.json and RUN_DIR/match.json, both minimised (M166 A5):
+match.json keeps only participantId, championName, teamId, teamPosition and
+win per participant plus the game's gameVersion and gameDuration (and the
+matchId); the timeline loses its PUUIDs (metadata.participants and
+info.participants[].puuid). The raw responses are never written.
 """
 
 from __future__ import annotations
@@ -35,6 +39,39 @@ def fetch(match_id: str, region: str, key: str, timeout: float = 20.0) -> tuple[
     return out[0], out[1]
 
 
+MATCH_PARTICIPANT_KEYS = ("participantId", "championName", "teamId", "teamPosition", "win")
+MATCH_INFO_KEYS = ("gameVersion", "gameDuration")
+IDENTIFIER_KEYS = {"puuid", "summonername", "summonerid", "accountid", "gamename", "tagline"}
+
+
+def strip_identifiers(node):
+    """A copy without any PUUID, Riot ID (riotId*) or summoner key, at any depth."""
+    if isinstance(node, dict):
+        return {k: strip_identifiers(v) for k, v in node.items()
+                if k.lower() not in IDENTIFIER_KEYS and not k.lower().startswith("riotid")}
+    if isinstance(node, list):
+        return [strip_identifiers(v) for v in node]
+    return node
+
+
+def minimise_match(match: dict) -> dict:
+    info = match.get("info", {})
+    out_info = {k: info[k] for k in MATCH_INFO_KEYS if k in info}
+    out_info["participants"] = [{k: p[k] for k in MATCH_PARTICIPANT_KEYS if k in p}
+                                for p in info.get("participants", [])]
+    return {"metadata": {"matchId": match.get("metadata", {}).get("matchId")}, "info": out_info}
+
+
+def minimise_timeline(timeline: dict) -> dict:
+    tl = strip_identifiers(timeline)
+    meta = tl.get("metadata", {})
+    meta.pop("participants", None)        # the PUUID list
+    tl["info"]["participants"] = [{"participantId": p["participantId"]}
+                                  for p in tl.get("info", {}).get("participants", [])
+                                  if "participantId" in p]
+    return tl
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="scout.fetch_timeline", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -55,9 +92,11 @@ def main(argv=None) -> int:
     except (RuntimeError, requests.RequestException) as e:
         log.error("fetch failed: %s", str(e).replace(key, "<key>"))
         return 1
+    timeline, match = minimise_timeline(timeline), minimise_match(match)
     write_json(args.out / "timeline.json", timeline)
     write_json(args.out / "match.json", match)
-    log.info("timeline.json: %d frames; match.json: %d participants",
+    log.info("timeline.json: %d frames; match.json: %d participants (minimised, identifiers "
+             "removed)",
              len(timeline["info"]["frames"]), len(match["info"]["participants"]))
     return 0
 

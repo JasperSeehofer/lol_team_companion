@@ -12,8 +12,8 @@ note it in the run's `run.log`, skip the step and go on. Run data never goes to 
    `py -3.12 -m venv tools\scout\.venv; .\tools\scout\.venv\Scripts\pip install -e "tools/scout[yolo]"`, then
    `.\tools\scout\.venv\Scripts\python -m scout.session start EUW1_<gameId>` (the match id from your match history).
    If it fails: `py -0` must list 3.12; rerun pip with `-v`.
-3. **PC-only. Weights.** Brain's class check (M166): **not checked** (host below its floors). If the card
-   says the weights were checked, copy them from brain:
+3. **PC-only. Weights.** Brain's class check (M166, 2026-10-20): **not checked** (free -g: 2 GB available,
+   floor 3 GB; df 17 GB free; load 2.37). If the card says the weights were checked, copy them from brain:
    `scp ops@10.44.0.1:.cache/scout/models/yolov12.pt tools\scout\models\yolov12.pt`
    Otherwise download `yolov12.pt` (227 MB) from the Google Drive link in `tools\scout\vendor\pyLoL\README.md`
    into `tools\scout\models\`. If it fails: skip it; step 7 then uses the template detector by itself.
