@@ -1,0 +1,269 @@
+{
+ "errors": {},
+ "spec": {
+  "answered": "/swagger/v3/openapi.json",
+  "tried": {
+   "/swagger/v3/openapi.json": 200
+  },
+  "paths": [
+   "/replay/game",
+   "/replay/playback",
+   "/replay/recording",
+   "/replay/render"
+  ]
+ },
+ "game": {
+  "processID": 4242
+ },
+ "interface": {
+  "interfaceAll": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceMinimap": {
+   "sent": true,
+   "read": true,
+   "honoured": true
+  },
+  "screenshot": {
+   "file": "probe_minimap_only.png",
+   "mean_brightness": 41.3,
+   "black": false
+  }
+ },
+ "speed": {
+  "steps": [
+   {
+    "sent": 1,
+    "read": 1.0,
+    "game_s_per_wall_s": 0.98
+   },
+   {
+    "sent": 2,
+    "read": 2.0,
+    "game_s_per_wall_s": 1.96
+   },
+   {
+    "sent": 4,
+    "read": 4.0,
+    "game_s_per_wall_s": 3.92
+   },
+   {
+    "sent": 8,
+    "read": 8.0,
+    "game_s_per_wall_s": 7.84
+   },
+   {
+    "sent": 10,
+    "read": 8.0,
+    "game_s_per_wall_s": 7.84
+   },
+   {
+    "sent": 16,
+    "read": 8.0,
+    "game_s_per_wall_s": 7.84
+   }
+  ],
+  "max_honoured": 8,
+  "window_s": 3.0
+ },
+ "recording": {
+  "realtime": {
+   "read_back": {
+    "recording": true,
+    "codec": "png",
+    "lossless": true,
+    "enforceFrameRate": true,
+    "replaySpeed": 1.0
+   },
+   "wall_s": 10.2,
+   "game_s": 10.0,
+   "game_s_per_wall_s": 0.98,
+   "frames_written": 40,
+   "frames_expected": 40,
+   "frame_size": [
+    1920,
+    1080
+   ],
+   "scratch": "scout-rec/probe-realtime"
+  },
+  "accelerated": {
+   "read_back": {
+    "recording": true,
+    "codec": "png",
+    "lossless": true,
+    "enforceFrameRate": false,
+    "replaySpeed": 4.0
+   },
+   "wall_s": 2.7,
+   "game_s": 10.0,
+   "game_s_per_wall_s": 3.7,
+   "frames_written": 40,
+   "frames_expected": 40,
+   "frame_size": [
+    1920,
+    1080
+   ],
+   "scratch": "scout-rec/probe-accelerated"
+  }
+ },
+ "camera": {
+  "steps": [
+   {
+    "sent_y": 2000,
+    "read_y": 2000.0,
+    "read_farClip": 13000.0,
+    "honoured": true,
+    "screenshot": {
+     "file": "probe_camera_2000.png",
+     "mean_brightness": 30.0,
+     "black": false
+    }
+   },
+   {
+    "sent_y": 5000,
+    "read_y": 5000.0,
+    "read_farClip": 17500.0,
+    "honoured": true,
+    "screenshot": {
+     "file": "probe_camera_5000.png",
+     "mean_brightness": 31.0,
+     "black": false
+    }
+   },
+   {
+    "sent_y": 10000,
+    "read_y": 10000.0,
+    "read_farClip": 25000.0,
+    "honoured": true,
+    "screenshot": {
+     "file": "probe_camera_10000.png",
+     "mean_brightness": 32.0,
+     "black": false
+    }
+   },
+   {
+    "sent_y": 20000,
+    "read_y": 20000.0,
+    "read_farClip": 40000.0,
+    "honoured": true,
+    "screenshot": {
+     "file": "probe_camera_20000.png",
+     "mean_brightness": 33.0,
+     "black": false
+    }
+   },
+   {
+    "sent_y": 40000,
+    "read_y": 40000.0,
+    "read_farClip": 70000.0,
+    "honoured": true,
+    "screenshot": {
+     "file": "probe_camera_40000.png",
+     "mean_brightness": 34.0,
+     "black": false
+    }
+   },
+   {
+    "sent_y": 60000,
+    "read_y": 60000.0,
+    "read_farClip": 100000.0,
+    "honoured": true,
+    "screenshot": {
+     "file": "probe_camera_60000.png",
+     "mean_brightness": 35.0,
+     "black": false
+    }
+   },
+   {
+    "sent_y": 80000,
+    "read_y": 60000.0,
+    "read_farClip": 130000.0,
+    "honoured": false,
+    "screenshot": {
+     "file": "probe_camera_80000.png",
+     "mean_brightness": 36.0,
+     "black": false
+    }
+   }
+  ],
+  "max_honoured_y": 60000,
+  "note": "whether the whole map is in view is read from the screenshots"
+ },
+ "health_bars": {
+  "healthBarChampions": {
+   "off": {
+    "sent": false,
+    "read": false,
+    "honoured": true
+   },
+   "on": {
+    "sent": true,
+    "read": true,
+    "honoured": true
+   },
+   "honoured": true
+  },
+  "healthBarStructures": {
+   "off": {
+    "sent": false,
+    "read": false,
+    "honoured": true
+   },
+   "on": {
+    "sent": true,
+    "read": true,
+    "honoured": true
+   },
+   "honoured": true
+  },
+  "healthBarWards": {
+   "off": {
+    "sent": false,
+    "read": false,
+    "honoured": true
+   },
+   "on": {
+    "sent": true,
+    "read": true,
+    "honoured": true
+   },
+   "honoured": true
+  },
+  "healthBarPets": {
+   "off": {
+    "sent": false,
+    "read": false,
+    "honoured": true
+   },
+   "on": {
+    "sent": true,
+    "read": true,
+    "honoured": true
+   },
+   "honoured": true
+  },
+  "healthBarMinions": {
+   "off": {
+    "sent": false,
+    "read": false,
+    "honoured": true
+   },
+   "on": {
+    "sent": true,
+    "read": true,
+    "honoured": true
+   },
+   "honoured": true
+  }
+ },
+ "fog": {
+  "fogOfWar": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  }
+ },
+ "base": "https://127.0.0.1:2999"
+}

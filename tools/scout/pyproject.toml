@@ -26,6 +26,9 @@ dev = ["pytest"]
 [tool.setuptools]
 packages = ["scout"]
 
+[tool.setuptools.package-data]
+scout = ["thresholds.json", "templates/*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

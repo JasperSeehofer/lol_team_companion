@@ -253,6 +253,194 @@ def topdown_frame() -> np.ndarray:
     return img
 
 
+# ---------------------------------------------------------------- run_synth (M166 A1)
+# A whole synthetic run directory in the run-dir contract of M156 (file names
+# unchanged), already minimised as A5's fetch_timeline writes it. scout.halfc
+# runs end to end on it. Expected outcome under the proposed thresholds:
+# A GO, B GO, wards blue and red NO-GO (hand check 3/4), recalls GO, route A+B.
+
+RUN_SYNTH = HERE / "run_synth"
+WARD_TIMES = [95, 130, 170, 230]          # rounded WARD_PLACED times (EVENTS)
+TOPDOWN_RANGE = (120, 240)
+TOPDOWN_WARDS_T = [(131.0, "red", 9800, 9000), (171.0, "blue", 5200, 9000),
+                   (200.0, "red", 9000, 5000), (231.0, "red", 9800, 5200)]
+
+
+def synth_probe() -> dict:
+    def shot(name, b):
+        return {"file": name, "mean_brightness": b, "black": b < 3}
+
+    heights = [2000, 5000, 10000, 20000, 40000, 60000, 80000]
+    cam_cap = 60000
+    return {
+        "errors": {},
+        "spec": {"answered": "/swagger/v3/openapi.json", "tried": {"/swagger/v3/openapi.json": 200},
+                 "paths": ["/replay/game", "/replay/playback", "/replay/recording", "/replay/render"]},
+        "game": {"processID": 4242},
+        "interface": {"interfaceAll": {"sent": False, "read": False, "honoured": True},
+                      "interfaceMinimap": {"sent": True, "read": True, "honoured": True},
+                      "screenshot": shot("probe_minimap_only.png", 41.3)},
+        "speed": {"steps": [{"sent": s, "read": float(min(s, 8)),
+                             "game_s_per_wall_s": round(min(s, 8) * 0.98, 2)}
+                            for s in [1, 2, 4, 8, 10, 16]],
+                  "max_honoured": 8, "window_s": 3.0},
+        "recording": {
+            "realtime": {"read_back": {"recording": True, "codec": "png", "lossless": True,
+                                       "enforceFrameRate": True, "replaySpeed": 1.0},
+                         "wall_s": 10.2, "game_s": 10.0, "game_s_per_wall_s": 0.98,
+                         "frames_written": 40, "frames_expected": 40, "frame_size": [1920, 1080],
+                         "scratch": "scout-rec/probe-realtime"},
+            "accelerated": {"read_back": {"recording": True, "codec": "png", "lossless": True,
+                                          "enforceFrameRate": False, "replaySpeed": 4.0},
+                            "wall_s": 2.7, "game_s": 10.0, "game_s_per_wall_s": 3.7,
+                            "frames_written": 40, "frames_expected": 40, "frame_size": [1920, 1080],
+                            "scratch": "scout-rec/probe-accelerated"}},
+        "camera": {"steps": [{"sent_y": h, "read_y": float(min(h, cam_cap)),
+                              "read_farClip": h * 1.5 + 10000, "honoured": h <= cam_cap,
+                              "screenshot": shot(f"probe_camera_{h}.png", 30.0 + i)}
+                             for i, h in enumerate(heights)],
+                   "max_honoured_y": cam_cap,
+                   "note": "whether the whole map is in view is read from the screenshots"},
+        "health_bars": {b: {"off": {"sent": False, "read": False, "honoured": True},
+                            "on": {"sent": True, "read": True, "honoured": True}, "honoured": True}
+                        for b in ["healthBarChampions", "healthBarStructures", "healthBarWards",
+                                  "healthBarPets", "healthBarMinions"]},
+        "fog": {"fogOfWar": {"sent": False, "read": False, "honoured": True}},
+        "base": "https://127.0.0.1:2999",
+    }
+
+
+SYNTH_SPEC = {"openapi": "3.0.0", "info": {"title": "synthetic replay api"},
+              "paths": {"/replay/game": {}, "/replay/playback": {"post": {"speed": "number"}},
+                        "/replay/recording": {"post": {"replaySpeed": "number",
+                                                       "enforceFrameRate": "boolean"}},
+                        "/replay/render": {"post": {"interfaceAll": "boolean",
+                                                    "interfaceMinimap": "boolean",
+                                                    "farClip": "number", "fogOfWar": "boolean"}}}}
+
+
+def minimised_timeline() -> dict:
+    tl = timeline()
+    del tl["metadata"]["participants"]
+    tl["info"]["participants"] = [{"participantId": i} for i in range(1, 11)]
+    return tl
+
+
+def minimised_match() -> dict:
+    roles = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] * 2
+    return {"metadata": {"dataVersion": "2", "matchId": MATCH_ID},
+            "info": {"gameVersion": "16.20.700.0000", "gameDuration": 360, "participants": [
+                {"participantId": i + 1, "championName": c, "teamId": 100 if i < 5 else 200,
+                 "teamPosition": roles[i], "win": i < 5} for i, c in enumerate(CHAMPIONS)]}}
+
+
+def synth_minimap_track() -> dict:
+    from scout.track import find_gaps
+
+    tr = track_synth()
+    tr["source"] = "minimap"
+    tr["gaps"] = find_gaps(tr["samples"], CHAMPIONS)
+    tr["calibration"] = bounds_map(MINIMAP_PX, MINIMAP_PX).as_dict()
+    tr["frame_size"] = [MINIMAP_PX, MINIMAP_PX]
+    return tr
+
+
+def synth_topdown_track() -> dict:
+    from scout.track import find_gaps
+
+    rng = np.random.default_rng(21)
+    samples, det_px = [], []
+    for t in range(TOPDOWN_RANGE[0], TOPDOWN_RANGE[1] + 1):
+        pos, dets = {}, []
+        for i, c in enumerate(CHAMPIONS):
+            p = position(c, t)
+            if c == "Leona" or p is None:      # one bar never found: hit rate 0.9
+                pos[c] = None
+                continue
+            pos[c] = [round(p[0] + rng.normal(0, 60), 1), round(p[1] + rng.normal(0, 60), 1)]
+            px, py = world_to_topdown(*p)
+            dets.append({"label": "champion", "team": "blue" if i < 5 else "red",
+                         "x": round(px, 1), "y": round(py, 1), "score": 1.0})
+        samples.append({"t": float(t), "pos": pos})
+        det_px.append({"t": float(t), "dets": dets})
+    wards = [{"t": t, "x": float(x), "y": float(y), "team": team, "last_seen": t + 2}
+             for t, team, x, y in TOPDOWN_WARDS_T]
+    return {"matchId": MATCH_ID, "source": "topdown", "fps": 1.0, "champions": CHAMPIONS,
+            "samples": samples, "gaps": find_gaps(samples, CHAMPIONS),
+            "detector": {"kind": "synthetic-bars"}, "missing_classes": [],
+            "calibration": {"kind": "homography", "synthetic": True},
+            "frame_size": list(TOPDOWN_SIZE), "wards": wards, "ward_units": "world",
+            "detections_px": det_px,
+            "recording": {"camera": {"mode": "api", "height": 60000}, "frames": 242}}
+
+
+def synth_handcheck(mm: dict, td: dict, tl: dict, mt: dict) -> str:
+    import csv
+    import io
+
+    from scout import score
+
+    pmap = score.participant_map(mt)
+    ts = [s["t"] for s in td["samples"]]
+    wards = score.match_wards(td["wards"], tl, pmap, (min(ts), max(ts)))
+    rows = score.handcheck_rows(wards, score.detect_recalls(mm, tl, pmap), pmap)
+    for r in rows:   # Jasper's marks: every claimed event seen except the false ward
+        r["jasper_says"] = "no" if "no WARD_PLACED" in r["auto_says"] else "yes"
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=score.HANDCHECK_COLUMNS)
+    w.writeheader()
+    w.writerows(rows)
+    return buf.getvalue()
+
+
+def synth_minimap_frame(t: int, icons) -> np.ndarray:
+    img = render_frame(t, icons)
+    for i, wt in enumerate(WARD_TIMES):   # blue wards drawn once placed, red ones never
+        if i % 2 == 0 and t >= wt:
+            cv2.circle(img, (60 + 40 * i, 200), 4, (40, 220, 240), -1)
+    return img
+
+
+def make_run_synth(dest: Path = RUN_SYNTH) -> Path:
+    import shutil
+
+    from scout.calibrate import anchors_template
+
+    if dest.exists():
+        shutil.rmtree(dest)
+    (dest / "frames_minimap").mkdir(parents=True)
+    (dest / "frames_topdown").mkdir()
+    png = [cv2.IMWRITE_PNG_COMPRESSION, 9]
+    probe = synth_probe()
+    for s in [probe["interface"]["screenshot"]] + [c["screenshot"] for c in probe["camera"]["steps"]]:
+        img = np.full((36, 64, 3), int(s["mean_brightness"]), np.uint8)
+        cv2.imwrite(str(dest / s["file"]), img, png)
+    icons = [make_icon(i) for i in range(10)]
+    times = sorted({0, 180, 360} | {t + d for t in WARD_TIMES for d in (-2, -1, 0, 1, 2)})
+    for t in times:
+        cv2.imwrite(str(dest / "frames_minimap" / f"t{t:05d}.png"), synth_minimap_frame(t, icons), png)
+    td_img = cv2.resize(topdown_frame(), (480, 270), interpolation=cv2.INTER_AREA)
+    for t in TOPDOWN_RANGE:
+        cv2.imwrite(str(dest / "frames_topdown" / f"t{t:05d}.png"), td_img, png)
+    mm, td = synth_minimap_track(), synth_topdown_track()
+    tl, mt = minimised_timeline(), minimised_match()
+    files = {"probe.json": (probe, 1), "openapi.json": (SYNTH_SPEC, 1),
+             "track_minimap.json": (mm, None), "track_topdown.json": (td, None),
+             "anchors_template.json": (anchors_template(), 1), "timeline.json": (tl, 1),
+             "match.json": (mt, 1)}
+    for name, (data, indent) in files.items():
+        (dest / name).write_text(json.dumps(data, indent=indent) + "\n", encoding="utf-8")
+    with open(dest / "handcheck.csv", "w", encoding="utf-8", newline="") as fh:
+        fh.write(synth_handcheck(mm, td, tl, mt))
+    (dest / "run.log").write_text(
+        "2026-10-21 14:00:00,000 scout.probe INFO probe.json written; 0 sub-probes failed: none\n"
+        "2026-10-21 14:20:00,000 scout.track_minimap INFO track_minimap.json: 361 samples\n"
+        "2026-10-21 14:40:00,000 scout.track_topdown INFO track_topdown.json: 121 frames\n"
+        "2026-10-21 14:45:00,000 scout.fetch_timeline INFO timeline.json: 7 frames; "
+        "match.json: 10 participants (minimised)\n", encoding="utf-8")
+    return dest
+
+
 def main() -> None:
     icons_dir = HERE / "icons"
     frames_dir = HERE / "frames"
@@ -271,6 +459,7 @@ def main() -> None:
                        ("track_synth.json", track_synth()), ("anchors_topdown.json", anchors)):
         indent = None if name == "track_synth.json" else 1
         (HERE / name).write_text(json.dumps(data, indent=indent) + "\n", encoding="utf-8")
+    make_run_synth()
     print("fixtures written to", HERE)
 
 
