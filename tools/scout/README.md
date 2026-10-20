@@ -12,8 +12,11 @@ AGPL-3.0-or-later (`LICENSE`); `vendor/pyLoL/` is GPL-3.0 (see its `ATTRIBUTION.
 | `scout.track_topdown` | Route B: whole-map camera, health bars thresholded in HSV, identities from the minimap track, homography from `anchors.json` | `track_topdown.json`, `frames_topdown/` |
 | `scout.fetch_timeline` | Match-V5 timeline and match (key from `RIOT_API_KEY` only, never stored) | `timeline.json`, `match.json` |
 | `scout.score` | Median error, detection rate, gaps; wards vs `WARD_PLACED`; recalls vs purchases; `plots` | `score.json`, `handcheck.csv`, `plots/` |
+| `scout.session` | The PC driver: one-line verbs (`start`, `enable-api`, `probe`, `minimap`, `topdown`, `timeline`, `score`, `handcheck`, `check`, `send`); current run in `runs/.current` | the run dir; `send` copies it to brain by `scp` |
+| `scout.halfc` | M156 half C on a run dir: manifest check, facts table, scores, hand check, plots, go/no-go and route | `facts.md`, `halfc-summary.json`, `plots/`, `scout-findings.md` |
 
-Running it on a replay: `CHECKLIST.md` (Windows). Tests (Linux, no network, no client):
+Running it on a replay: `CHECKLIST.md` (Windows). Run dirs (`runs/`) are git-ignored and never
+go to GitHub; `python -m scout.session send` copies one to brain. Tests (Linux, no network, no client):
 
 ```bash
 uv venv --python python3.12 --seed tools/scout/.venv   # or python3.12 -m venv
