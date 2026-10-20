@@ -67,3 +67,13 @@ def test_home_and_localappdata_redirected(tmp_path_factory):
     assert os.environ["HOME"].startswith(base)
     assert os.environ["LOCALAPPDATA"].startswith(base)
     assert str(Path.home()).startswith(base)
+
+
+def test_pc_run_needs_no_vector_extra():
+    """pc-run and validate must work on a PC without shapely installed."""
+    import sys
+
+    code = ("import sys; import navgrid.cli, navgrid.pcrun, navgrid.validate; "
+            "assert 'shapely' not in sys.modules, 'shapely imported'")
+    res = subprocess.run([sys.executable, "-c", code], cwd=str(TOOL), capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
