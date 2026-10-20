@@ -1,0 +1,80 @@
+{
+  "id": "m166-r1-wednesday-prep",
+  "title": "M166 · Wednesday prep: the Scout half-C runner and a navgrid tool tested on a synthetic grid",
+  "date": "2026-10-20",
+  "mission": "M166",
+  "status": "open",
+  "summary": "Your Wednesday session is now 22 one-line steps that only produce data, in a phone sheet with a copy button on each command. Part A (Scout, on a local branch that the overseer fast-forwards into M156 after PASS) adds python -m scout.halfc, which writes the whole first draft of half C from a run dir: the facts table, the scored tracks, wards and recalls next to your hand check, the plots, and docs/scout-findings.md with a computed go/no-go per signal and a route. It also adds a session driver, so nothing is typed again after the sign-out; match.json saved without player identifiers; and session send, which copies the run to brain by scp and never to GitHub. There are 80 tests (34 earlier plus 46 new). The weights could not be checked on brain (2 GB of memory free, the floor is 3 GB), so skip step 9 and use the Google Drive download. Part B (this branch) adds tools/navgrid: a WAD reader, the v7.1 grid parser with both flag readings, pc-run with validation, and a GeoJSON vectoriser. It has 60 tests, all on synthetic files, and is licensed AGPL-3.0-only because the converter it ports from grants no 'or later'. Nothing derived from a real Riot file is committed. R2 checks the real grid on brain after Wednesday. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Merge the navgrid tool (code and synthetic tests only) into main. It touches only tools/navgrid/, .gitignore and the mission folder, and no app code. The Scout half is not part of this merge; it reaches M156's branch through the overseer's fast-forward.",
+      "kind": "merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands mission/M166-scout-half-c-and-navgrid-prep after VERIFY-R1 PASS. The tool goes into main before anything has run it on a real file."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open. R2 runs the tool on your real grid on brain, and this card comes back with the numbers."
+        }
+      ],
+      "recommend": "Not yet — after R2's real-file check. The flag meanings and the structure check are only proven on synthetic data so far."
+    },
+    {
+      "text": "(react) Extract the navgrid on Wednesday? Steps 2 to 5 of the sheet read Map11.wad.client once with the client closed and scp one folder to brain. It stays local and can be deleted, and nothing derived ships before Riot answers ticket 2.",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Yes, with the Scout run",
+          "consequence": "You run steps 1 to 22. R2 vectorises and validates the real grid on brain and reports numbers only."
+        },
+        {
+          "label": "Wait for Riot's answer to ticket 2",
+          "consequence": "You skip steps 2 to 5. The tool waits on its branch until Riot answers."
+        }
+      ],
+      "recommend": "Yes, with the Scout run. It adds about 5 minutes, it is local and deletable, and nothing ships."
+    },
+    {
+      "text": "(react) Go/no-go thresholds for half C (proposed in tools/scout/scout/thresholds.json). Minimap positions (A): GO at median error ≤350 world units (about one brush width), detection ≥0.85 and longest gap ≤15 s (deaths excluded); PARTIAL (dashed, coarse) at median ≤700 and detection ≥0.60. Top-down (B): GO at median ≤150 and health-bar hit rate ≥0.80. Wards, per team: precision ≥0.80, recall ≥0.70, hand check ≥4 of 5. Recalls: precision ≥0.80 against purchase bursts, recall ≥0.70, hand check ≥4 of 5. Route: A and B GO gives A+B; B only gives B-first; A only, or B not reached, gives A-only; neither gives no-go. Half C may override the route only with a written reason.",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep as proposed",
+          "consequence": "Half C scores your run against these numbers as they are."
+        },
+        {
+          "label": "Edit (free text)",
+          "consequence": "Write the numbers you want; they go into thresholds.json before half C runs."
+        }
+      ],
+      "recommend": "Keep as proposed. Each number maps to something the board can show: one brush width for A, a lane-side read for B."
+    },
+    {
+      "text": "(react) Scout run data in main: should M156's landing leave tools/scout/runs/ out of main? Run data is now gitignored, with a guard test, and goes to brain only by scp (session send). The M156 branch tracks no run data today. The repo is public, and a run holds all ten players' positions.",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Yes, keep it on the branch only",
+          "consequence": "M156's landing leaves tools/scout/runs/ out of main. The ignore rule and the guard test stay."
+        },
+        {
+          "label": "Include it",
+          "consequence": "M156's landing would have to lift the ignore rule. This is not advised while the L-1 notice and purge route are missing."
+        }
+      ],
+      "recommend": "Yes, keep it on the branch only. Tracks of scouted players are personal data, and there is no notice or purge route yet."
+    }
+  ],
+  "links": [
+    {
+      "label": "Wednesday sheet: every command with a copy button (react)",
+      "href": "/app/previews/m166-r1-wednesday-prep/report.html"
+    },
+    {
+      "label": "Report (context)",
+      "href": "/app/previews/m166-r1-wednesday-prep/REPORT-R1.md"
+    }
+  ]
+}
