@@ -67,6 +67,7 @@ async fn test_save_draft_with_actions() {
         None,
         None, // series_id
         None, // game_number
+        None, // scheduled_match
     )
     .await
     .unwrap();
@@ -102,6 +103,7 @@ async fn test_update_draft_replaces_actions() {
         None,
         None, // series_id
         None, // game_number
+        None, // scheduled_match
     )
     .await
     .unwrap();
@@ -135,6 +137,7 @@ async fn test_update_draft_replaces_actions() {
         Some("Watch for scaling".into()),
         None, // series_id
         None, // game_number
+        None, // scheduled_match
     )
     .await
     .unwrap();
@@ -171,6 +174,7 @@ async fn test_list_drafts_aggregates_actions_correctly() {
         None,
         None, // series_id
         None, // game_number
+        None, // scheduled_match
     )
     .await
     .unwrap();
@@ -191,6 +195,7 @@ async fn test_list_drafts_aggregates_actions_correctly() {
         None,
         None, // series_id
         None, // game_number
+        None, // scheduled_match
     )
     .await
     .unwrap();
@@ -224,6 +229,7 @@ async fn test_delete_draft() {
         None,
         None, // series_id
         None, // game_number
+        None, // scheduled_match
     )
     .await
     .unwrap();
@@ -267,6 +273,7 @@ async fn guessed_roles_round_trip() {
         None,
         "blue".into(),
         vec![],
+        None,
         None,
         None,
         None,

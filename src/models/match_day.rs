@@ -45,6 +45,91 @@ pub struct ScheduledMatch {
     pub notes: Option<String>,
     /// Members (user ids) who marked the opponent brief read.
     pub brief_read_by: Vec<String>,
+    /// M159: the series a Bo3 or Bo5 is played as (if any).
+    #[serde(default)]
+    pub series_id: Option<String>,
+}
+
+/// M159: one row of Match Day's upcoming-match list.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct UpcomingMatch {
+    pub id: String,
+    /// Start time, RFC 3339 in UTC.
+    pub starts_at: String,
+    /// "scrim" | "match"
+    pub kind: String,
+    /// "bo1" | "bo3" | "bo5"
+    pub format: String,
+    pub opponent_name: Option<String>,
+    /// How many members confirmed (RSVP, M159 item 7). Not shown while
+    /// `None`.
+    #[serde(default)]
+    pub confirmed: Option<usize>,
+}
+
+impl From<&ScheduledMatch> for UpcomingMatch {
+    fn from(m: &ScheduledMatch) -> Self {
+        UpcomingMatch {
+            id: m.id.clone(),
+            starts_at: m.starts_at.clone(),
+            kind: m.kind.clone(),
+            format: m.format.clone(),
+            opponent_name: m.opponent_name.clone(),
+            confirmed: None,
+        }
+    }
+}
+
+/// M159: whether two scheduled-match ids name the same record (with or
+/// without the `scheduled_match:` prefix).
+pub fn same_match_id(a: &str, b: &str) -> bool {
+    let key = |s: &str| {
+        let s = s.trim();
+        s.strip_prefix("scheduled_match:").unwrap_or(s).to_string()
+    };
+    !a.trim().is_empty() && key(a) == key(b)
+}
+
+/// The current match of Match Day and the rest of the upcoming list (M159).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct MatchChoice {
+    /// The match the page is about: the chosen one, else the next one.
+    pub current: Option<ScheduledMatch>,
+    /// The other upcoming matches, earliest first (the current one left out).
+    pub others: Vec<ScheduledMatch>,
+    /// A `match_id` was given and is the current match, not the next one.
+    pub chosen: bool,
+    /// A `match_id` was given but is not one of the team's upcoming
+    /// matches: the page shows the next match and says so.
+    pub unknown: bool,
+}
+
+/// Pick Match Day's current match from the team's upcoming matches
+/// (earliest first) and an optional `match_id` from the address. An id that
+/// is not in `upcoming` (another team's, an old or a made-up one) falls
+/// back to `next`, the same for every such id.
+pub fn choose_match(
+    upcoming: Vec<ScheduledMatch>,
+    next: Option<ScheduledMatch>,
+    match_id: Option<&str>,
+) -> MatchChoice {
+    let wanted = match_id.map(str::trim).filter(|s| !s.is_empty());
+    let found = wanted.and_then(|w| upcoming.iter().position(|m| same_match_id(w, &m.id)));
+    let current = match found {
+        Some(i) => Some(upcoming[i].clone()),
+        None => next,
+    };
+    let chosen = found.is_some_and(|i| i != 0);
+    let others = upcoming
+        .into_iter()
+        .filter(|m| current.as_ref().is_none_or(|c| c.id != m.id))
+        .collect();
+    MatchChoice {
+        current,
+        others,
+        chosen,
+        unknown: wanted.is_some() && found.is_none(),
+    }
 }
 
 /// What the "next match" editor sends.
@@ -149,6 +234,18 @@ pub struct MatchDay {
     pub opponents: Vec<LinkRef>,
     /// Server time when this was built, RFC 3339.
     pub now: String,
+    /// M159: the team's other upcoming matches, earliest first (the
+    /// current one left out; at most 19).
+    #[serde(default)]
+    pub upcoming: Vec<UpcomingMatch>,
+    /// M159: the current match was chosen from the list (`/?match_id=`)
+    /// and is not the next one.
+    #[serde(default)]
+    pub chosen: bool,
+    /// M159: the address named a match that is not on the team's schedule;
+    /// the page shows the next match instead and says so.
+    #[serde(default)]
+    pub unknown_match: bool,
 }
 
 /// Shorten a line to `max` characters on a word boundary, with an ellipsis.
@@ -199,5 +296,73 @@ mod tests {
             shorten("Lost tempo after twenty minutes, again", 20),
             "Lost tempo after\u{2026}"
         );
+    }
+
+    fn sm(id: &str, starts_at: &str) -> super::ScheduledMatch {
+        super::ScheduledMatch {
+            id: id.into(),
+            starts_at: starts_at.into(),
+            kind: "scrim".into(),
+            format: "bo3".into(),
+            opponent_id: None,
+            opponent_name: Some("Rooks".into()),
+            notes: None,
+            brief_read_by: vec![],
+            series_id: None,
+        }
+    }
+
+    #[test]
+    fn the_current_match_comes_from_the_list_or_falls_back_to_the_next() {
+        use super::choose_match;
+        let list = vec![
+            sm("scheduled_match:a", "2026-10-20T18:00:00Z"),
+            sm("scheduled_match:b", "2026-10-21T18:00:00Z"),
+            sm("scheduled_match:c", "2026-10-22T18:00:00Z"),
+        ];
+        let next = Some(list[0].clone());
+
+        // No id: the next match, the others listed.
+        let c = choose_match(list.clone(), next.clone(), None);
+        assert_eq!(
+            c.current.as_ref().map(|m| m.id.as_str()),
+            Some("scheduled_match:a")
+        );
+        assert_eq!(c.others.len(), 2);
+        assert!(!c.chosen && !c.unknown);
+
+        // A later match, with or without the prefix: it is current and the
+        // next one moves into the list.
+        for id in ["scheduled_match:b", "b", " b "] {
+            let c = choose_match(list.clone(), next.clone(), Some(id));
+            assert_eq!(
+                c.current.as_ref().map(|m| m.id.as_str()),
+                Some("scheduled_match:b")
+            );
+            let ids: Vec<&str> = c.others.iter().map(|m| m.id.as_str()).collect();
+            assert_eq!(ids, ["scheduled_match:a", "scheduled_match:c"]);
+            assert!(c.chosen && !c.unknown);
+        }
+
+        // The next match by id is not "chosen".
+        let c = choose_match(list.clone(), next.clone(), Some("scheduled_match:a"));
+        assert!(!c.chosen && !c.unknown);
+
+        // Unknown (or another team's) id: the next match and a flag.
+        let c = choose_match(list.clone(), next.clone(), Some("scheduled_match:zzz"));
+        assert_eq!(
+            c.current.as_ref().map(|m| m.id.as_str()),
+            Some("scheduled_match:a")
+        );
+        assert!(c.unknown && !c.chosen);
+        assert_eq!(c.others.len(), 2);
+
+        // A blank id is no id.
+        let c = choose_match(list.clone(), next.clone(), Some("  "));
+        assert!(!c.unknown);
+
+        // Nothing scheduled.
+        let c = choose_match(vec![], None, Some("scheduled_match:a"));
+        assert!(c.current.is_none() && c.others.is_empty() && c.unknown);
     }
 }

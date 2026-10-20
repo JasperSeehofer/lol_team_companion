@@ -22,6 +22,7 @@ mod db_users;
 mod graph;
 mod guidance;
 mod match_day;
+mod match_thread;
 mod migrations;
 mod password;
 mod retention;

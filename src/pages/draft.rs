@@ -102,6 +102,7 @@ pub async fn save_draft(
         watch_out,
         series_id,
         game_number,
+        None,
     )
     .await
     .map_err(authz::server_err)?;
@@ -158,6 +159,7 @@ pub async fn update_draft(
         watch_out,
         series_id,
         game_number,
+        None,
     )
     .await
     .map_err(authz::server_err)

@@ -1,0 +1,584 @@
+//! M159: the match thread. Drafts, plans and reviews carry a stamp of the
+//! scheduled match (and series and game) they were made for; each stamp is
+//! checked as the caller's team record. Deleting a match clears the stamps
+//! and marks the work, never deletes it.
+
+use crate::common;
+
+use lol_team_companion::models::game_plan::{GamePlan, PostGameLearning};
+use lol_team_companion::models::match_day::ScheduledMatchInput;
+use lol_team_companion::server::db::{self, DbError};
+use surrealdb::{engine::local::Db, Surreal};
+
+struct T {
+    a: String,
+    team1: String,
+    b: String,
+    team2: String,
+}
+
+async fn tenants(db: &Surreal<Db>) -> T {
+    let a = db::create_user(db, "alice".into(), "alice@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let b = db::create_user(db, "bob".into(), "bob@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let team1 = db::create_team(db, &a, "Team One".into(), "EUW".into())
+        .await
+        .unwrap();
+    let team2 = db::create_team(db, &b, "Team Two".into(), "EUW".into())
+        .await
+        .unwrap();
+    T { a, team1, b, team2 }
+}
+
+fn not_found<T: std::fmt::Debug>(r: Result<T, DbError>, what: &str) {
+    match r {
+        Err(DbError::NotFound) => {}
+        other => panic!("{what}: expected NotFound, got {other:?}"),
+    }
+}
+
+fn invalid<T: std::fmt::Debug>(r: Result<T, DbError>, what: &str) {
+    match r {
+        Err(DbError::Invalid(_)) => {}
+        other => panic!("{what}: expected Invalid, got {other:?}"),
+    }
+}
+
+fn in_hours(h: i64) -> String {
+    (chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339()
+}
+
+async fn new_match(db: &Surreal<Db>, team: &str, user: &str, hours: i64) -> String {
+    db::save_scheduled_match(
+        db,
+        team,
+        user,
+        ScheduledMatchInput {
+            id: None,
+            starts_at: in_hours(hours),
+            kind: "scrim".into(),
+            format: "bo3".into(),
+            opponent_id: None,
+            notes: None,
+        },
+    )
+    .await
+    .unwrap()
+}
+
+async fn draft(
+    db: &Surreal<Db>,
+    team: &str,
+    user: &str,
+    series: Option<String>,
+    game: Option<i32>,
+    scheduled_match: Option<String>,
+) -> Result<String, DbError> {
+    db::save_draft(
+        db,
+        team,
+        user,
+        "Draft for the match".into(),
+        None,
+        None,
+        vec![],
+        vec![],
+        None,
+        "blue".into(),
+        vec![],
+        None,
+        None,
+        series,
+        game,
+        scheduled_match,
+    )
+    .await
+}
+
+async fn update_draft(
+    db: &Surreal<Db>,
+    team: &str,
+    id: &str,
+    series: Option<String>,
+    game: Option<i32>,
+    scheduled_match: Option<String>,
+) -> Result<(), DbError> {
+    db::update_draft(
+        db,
+        team,
+        id,
+        "Draft for the match".into(),
+        None,
+        None,
+        vec![],
+        vec![],
+        None,
+        "red".into(),
+        vec![],
+        None,
+        None,
+        series,
+        game,
+        scheduled_match,
+    )
+    .await
+}
+
+fn plan(team: &str, scheduled_match: Option<String>, game: Option<i32>) -> GamePlan {
+    GamePlan {
+        scheduled_match_id: scheduled_match,
+        game_number: game,
+        scheduled_match_deleted: false,
+        draft_deleted: false,
+        id: None,
+        team_id: team.into(),
+        draft_id: None,
+        name: "Plan for the match".into(),
+        our_champions: vec![],
+        enemy_champions: vec![],
+        win_conditions: vec![],
+        objective_priority: vec![],
+        teamfight_strategy: String::new(),
+        early_game: None,
+        top_strategy: None,
+        jungle_strategy: None,
+        mid_strategy: None,
+        bot_strategy: None,
+        support_strategy: None,
+        notes: None,
+        win_condition_tag: None,
+    }
+}
+
+fn review(
+    team: &str,
+    user: &str,
+    scheduled_match: Option<String>,
+    series: Option<String>,
+    game: Option<i32>,
+) -> PostGameLearning {
+    PostGameLearning {
+        scheduled_match_id: scheduled_match,
+        series_id: series,
+        game_number: game,
+        scheduled_match_deleted: false,
+        draft_deleted: false,
+        created_at: None,
+        id: None,
+        team_id: team.into(),
+        match_riot_id: None,
+        game_plan_id: None,
+        draft_id: None,
+        what_went_well: vec![],
+        improvements: vec![],
+        action_items: vec![],
+        open_notes: Some("Scrim, no synced game".into()),
+        created_by: user.into(),
+        win_loss: None,
+        rating: None,
+    }
+}
+
+async fn series(db: &Surreal<Db>, team: &str, user: &str) -> String {
+    db::create_series(
+        db,
+        team,
+        user,
+        "vs Rooks Bo3".into(),
+        None,
+        Some("Rooks".into()),
+        "bo3".into(),
+        false,
+        None,
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn stamps_take_the_teams_own_match_series_and_game() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let m = new_match(&db, &t.team1, &t.a, 24).await;
+    let s = series(&db, &t.team1, &t.a).await;
+
+    let d = draft(
+        &db,
+        &t.team1,
+        &t.a,
+        Some(s.clone()),
+        Some(2),
+        Some(m.clone()),
+    )
+    .await
+    .unwrap();
+    let got = db::get_draft_for_prefill(&db, &t.team1, &d)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(m.as_str()));
+    assert_eq!(got.series_id.as_deref(), Some(s.as_str()));
+    assert_eq!(got.game_number, Some(2));
+    // An update without a match keeps the stamp (the page does not carry it).
+    update_draft(&db, &t.team1, &d, Some(s.clone()), Some(2), None)
+        .await
+        .unwrap();
+    let got = db::get_draft_for_prefill(&db, &t.team1, &d)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(m.as_str()));
+
+    let p = db::save_game_plan(&db, plan(&t.team1, Some(m.clone()), Some(1)), &t.a)
+        .await
+        .unwrap();
+    let got = db::get_game_plan(&db, &t.team1, &p).await.unwrap().unwrap();
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(m.as_str()));
+    assert_eq!(got.game_number, Some(1));
+    // Saving the plan from the page (no stamp in the form) keeps it.
+    let mut edited = got.clone();
+    edited.scheduled_match_id = None;
+    edited.game_number = None;
+    edited.name = "Renamed".into();
+    db::update_game_plan(&db, &t.team1, edited).await.unwrap();
+    let got = db::get_game_plan(&db, &t.team1, &p).await.unwrap().unwrap();
+    assert_eq!(got.name, "Renamed");
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(m.as_str()));
+    assert_eq!(got.game_number, Some(1));
+
+    // A scrim review without a Riot id, stamped to the match.
+    let (r, _) = db::create_review_with_action_items(
+        &db,
+        review(&t.team1, &t.a, Some(m.clone()), Some(s.clone()), Some(3)),
+    )
+    .await
+    .unwrap();
+    let got = db::get_post_game_learning(&db, &t.team1, &r)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(m.as_str()));
+    assert_eq!(got.series_id.as_deref(), Some(s.as_str()));
+    assert_eq!(got.game_number, Some(3));
+    assert!(got.match_riot_id.is_none());
+
+    // Game numbers are 1 to 5.
+    invalid(
+        draft(&db, &t.team1, &t.a, Some(s.clone()), Some(6), None).await,
+        "draft game 6",
+    );
+    invalid(
+        db::save_game_plan(&db, plan(&t.team1, Some(m.clone()), Some(0)), &t.a).await,
+        "plan game 0",
+    );
+    invalid(
+        db::create_review_with_action_items(
+            &db,
+            review(&t.team1, &t.a, Some(m.clone()), None, Some(-1)),
+        )
+        .await,
+        "review game -1",
+    );
+}
+
+#[tokio::test]
+async fn another_teams_match_or_series_is_not_found() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let theirs = new_match(&db, &t.team2, &t.b, 24).await;
+    let their_series = series(&db, &t.team2, &t.b).await;
+
+    not_found(
+        draft(&db, &t.team1, &t.a, None, None, Some(theirs.clone())).await,
+        "draft stamped with a foreign match",
+    );
+    not_found(
+        draft(
+            &db,
+            &t.team1,
+            &t.a,
+            Some(their_series.clone()),
+            Some(1),
+            None,
+        )
+        .await,
+        "draft in a foreign series",
+    );
+    not_found(
+        draft(
+            &db,
+            &t.team1,
+            &t.a,
+            None,
+            None,
+            Some("scheduled_match:nope".into()),
+        )
+        .await,
+        "draft stamped with an unknown match",
+    );
+    not_found(
+        db::save_game_plan(&db, plan(&t.team1, Some(theirs.clone()), None), &t.a).await,
+        "plan stamped with a foreign match",
+    );
+    not_found(
+        db::create_review_with_action_items(
+            &db,
+            review(&t.team1, &t.a, Some(theirs.clone()), None, None),
+        )
+        .await,
+        "review stamped with a foreign match",
+    );
+    not_found(
+        db::save_post_game_learning(
+            &db,
+            review(&t.team1, &t.a, None, Some(their_series.clone()), Some(1)),
+        )
+        .await,
+        "review in a foreign series",
+    );
+
+    // Updates are checked too, and nothing changed.
+    let d = draft(&db, &t.team1, &t.a, None, None, None).await.unwrap();
+    not_found(
+        update_draft(&db, &t.team1, &d, None, None, Some(theirs.clone())).await,
+        "draft update with a foreign match",
+    );
+    let p = db::save_game_plan(&db, plan(&t.team1, None, None), &t.a)
+        .await
+        .unwrap();
+    let mut edited = db::get_game_plan(&db, &t.team1, &p).await.unwrap().unwrap();
+    edited.scheduled_match_id = Some(theirs.clone());
+    not_found(
+        db::update_game_plan(&db, &t.team1, edited).await,
+        "plan update with a foreign match",
+    );
+    let (r, _) = db::create_review_with_action_items(&db, review(&t.team1, &t.a, None, None, None))
+        .await
+        .unwrap();
+    let mut edited = db::get_post_game_learning(&db, &t.team1, &r)
+        .await
+        .unwrap()
+        .unwrap();
+    edited.scheduled_match_id = Some(theirs.clone());
+    not_found(
+        db::update_review_with_action_items(&db, &t.team1, edited.clone()).await,
+        "review update with a foreign match",
+    );
+    not_found(
+        db::update_post_game_learning(&db, &t.team1, edited).await,
+        "review update (plain) with a foreign match",
+    );
+    let got = db::get_post_game_learning(&db, &t.team1, &r)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(got.scheduled_match_id.is_none());
+    // Team two cannot delete team one's match either.
+    let ours = new_match(&db, &t.team1, &t.a, 24).await;
+    not_found(
+        db::delete_scheduled_match(&db, &t.team2, &ours).await,
+        "foreign match deletion",
+    );
+}
+
+#[tokio::test]
+async fn deleting_a_match_clears_its_stamps_and_keeps_the_work() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let m = new_match(&db, &t.team1, &t.a, 24).await;
+    let other = new_match(&db, &t.team1, &t.a, 48).await;
+    let d = draft(&db, &t.team1, &t.a, None, None, Some(m.clone()))
+        .await
+        .unwrap();
+    let d_other = draft(&db, &t.team1, &t.a, None, None, Some(other.clone()))
+        .await
+        .unwrap();
+    let p = db::save_game_plan(&db, plan(&t.team1, Some(m.clone()), Some(1)), &t.a)
+        .await
+        .unwrap();
+    let (r, _) = db::create_review_with_action_items(
+        &db,
+        review(&t.team1, &t.a, Some(m.clone()), None, Some(1)),
+    )
+    .await
+    .unwrap();
+
+    db::delete_scheduled_match(&db, &t.team1, &m).await.unwrap();
+
+    let got = db::get_draft_for_prefill(&db, &t.team1, &d)
+        .await
+        .unwrap()
+        .expect("the draft survives");
+    assert!(got.scheduled_match_id.is_none() && got.scheduled_match_deleted);
+    let got = db::get_game_plan(&db, &t.team1, &p)
+        .await
+        .unwrap()
+        .expect("the plan survives");
+    assert!(got.scheduled_match_id.is_none() && got.scheduled_match_deleted);
+    assert_eq!(got.game_number, Some(1));
+    let got = db::get_post_game_learning(&db, &t.team1, &r)
+        .await
+        .unwrap()
+        .expect("the review survives");
+    assert!(got.scheduled_match_id.is_none() && got.scheduled_match_deleted);
+    // Work for another match is untouched.
+    let got = db::get_draft_for_prefill(&db, &t.team1, &d_other)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(other.as_str()));
+    assert!(!got.scheduled_match_deleted);
+
+    // Stamping the plan to another match clears the mark.
+    let mut edited = db::get_game_plan(&db, &t.team1, &p).await.unwrap().unwrap();
+    edited.scheduled_match_id = Some(other.clone());
+    db::update_game_plan(&db, &t.team1, edited).await.unwrap();
+    let got = db::get_game_plan(&db, &t.team1, &p).await.unwrap().unwrap();
+    assert_eq!(got.scheduled_match_id.as_deref(), Some(other.as_str()));
+    assert!(!got.scheduled_match_deleted);
+}
+
+#[tokio::test]
+async fn deleting_a_series_unlinks_reviews_and_matches() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let s = series(&db, &t.team1, &t.a).await;
+    let r =
+        db::save_post_game_learning(&db, review(&t.team1, &t.a, None, Some(s.clone()), Some(2)))
+            .await
+            .unwrap();
+    // Item 6 links a match to its series; set the link directly here.
+    let m = new_match(&db, &t.team1, &t.a, 24).await;
+    db.query("UPDATE type::record('scheduled_match', $m) SET series = type::record('series', $s)")
+        .bind(("m", db::record_key(&m, "scheduled_match")))
+        .bind(("s", db::record_key(&s, "series")))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let next = db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.series_id.as_deref(), Some(s.as_str()));
+    db::delete_series(&db, &t.team1, &s).await.unwrap();
+    let next = db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(next.series_id.is_none());
+    let got = db::get_post_game_learning(&db, &t.team1, &r)
+        .await
+        .unwrap()
+        .expect("the review survives");
+    assert!(got.series_id.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Item 2: the upcoming-match list
+// ---------------------------------------------------------------------------
+
+/// Move a match's start (past the editor's checks) for the grace cases.
+async fn set_start(db: &Surreal<Db>, id: &str, hours: i64) {
+    db.query("UPDATE type::record('scheduled_match', $k) SET starts_at = <datetime>$s")
+        .bind(("k", db::record_key(id, "scheduled_match")))
+        .bind(("s", in_hours(hours)))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn upcoming_matches_are_ordered_bounded_and_team_scoped() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    // Created out of order; one long over, one in its grace period.
+    let later = new_match(&db, &t.team1, &t.a, 72).await;
+    let soon = new_match(&db, &t.team1, &t.a, 24).await;
+    let in_grace = new_match(&db, &t.team1, &t.a, 1).await;
+    set_start(&db, &in_grace, -6).await;
+    let over = new_match(&db, &t.team1, &t.a, 2).await;
+    set_start(&db, &over, -20).await;
+    let theirs = new_match(&db, &t.team2, &t.b, 12).await;
+
+    let list = db::upcoming_scheduled_matches(&db, &t.team1).await.unwrap();
+    let ids: Vec<&str> = list.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(ids, [in_grace.as_str(), soon.as_str(), later.as_str()]);
+    // The first row is the next match.
+    let next = db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.id, in_grace);
+    // The other team sees only its own.
+    let other = db::upcoming_scheduled_matches(&db, &t.team2).await.unwrap();
+    assert_eq!(other.len(), 1);
+    assert_eq!(other[0].id, theirs);
+
+    // At most 20 rows, the earliest ones.
+    for h in 0..20 {
+        new_match(&db, &t.team1, &t.a, 100 + h).await;
+    }
+    let list = db::upcoming_scheduled_matches(&db, &t.team1).await.unwrap();
+    assert_eq!(list.len(), db::UPCOMING_MATCHES_MAX);
+    assert_eq!(list[0].id, in_grace);
+    assert!(list.windows(2).all(|w| w[0].starts_at <= w[1].starts_at));
+    // Nothing more than 366 days ahead.
+    let far = new_match(&db, &t.team2, &t.b, 48).await;
+    set_start(&db, &far, 24 * 400).await;
+    let other = db::upcoming_scheduled_matches(&db, &t.team2).await.unwrap();
+    assert!(other.iter().all(|m| m.id != far));
+}
+
+#[tokio::test]
+async fn a_match_id_from_the_address_falls_back_to_the_next_match() {
+    use lol_team_companion::models::match_day::choose_match;
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let first = new_match(&db, &t.team1, &t.a, 24).await;
+    let second = new_match(&db, &t.team1, &t.a, 48).await;
+    let theirs = new_match(&db, &t.team2, &t.b, 36).await;
+    let over = new_match(&db, &t.team1, &t.a, 2).await;
+    set_start(&db, &over, -30).await;
+
+    let pick = |id: Option<String>| {
+        let db = db.clone();
+        let team = t.team1.clone();
+        async move {
+            let upcoming = db::upcoming_scheduled_matches(&db, &team).await.unwrap();
+            let next = db::next_scheduled_match(&db, &team).await.unwrap();
+            choose_match(upcoming, next, id.as_deref())
+        }
+    };
+
+    // The team's own later match becomes the current view.
+    let c = pick(Some(second.clone())).await;
+    assert_eq!(
+        c.current.as_ref().map(|m| m.id.as_str()),
+        Some(second.as_str())
+    );
+    assert!(c.chosen && !c.unknown);
+    assert_eq!(c.others.len(), 1);
+    assert_eq!(c.others[0].id, first);
+
+    // Another team's match, a match long over and a made-up id all fall
+    // back to the next match, the same way.
+    for id in [
+        theirs.clone(),
+        over.clone(),
+        "scheduled_match:nope".to_string(),
+    ] {
+        let c = pick(Some(id.clone())).await;
+        assert_eq!(
+            c.current.as_ref().map(|m| m.id.as_str()),
+            Some(first.as_str()),
+            "{id}"
+        );
+        assert!(c.unknown && !c.chosen, "{id}");
+        assert!(c.others.iter().all(|m| m.id != theirs));
+    }
+}

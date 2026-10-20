@@ -68,6 +68,7 @@ async fn test_get_draft_for_prefill_found() {
         None,
         None,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -114,12 +115,16 @@ async fn test_get_game_plans_for_draft_found() {
         None,
         None,
         None,
+        None,
     )
     .await
     .unwrap();
 
     // Create a game plan linked to that draft
     let plan = GamePlan {
+        scheduled_match_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         id: None,
         team_id: team_id.clone(),
@@ -170,6 +175,7 @@ async fn test_get_game_plans_for_draft_empty() {
         None,
         None,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -216,6 +222,7 @@ async fn dashboard_counts_follow_record_links() {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap()
@@ -224,6 +231,9 @@ async fn dashboard_counts_follow_record_links() {
     let d1 = mk_draft("planned").await;
     let _d2 = mk_draft("unplanned").await;
     let plan = GamePlan {
+        scheduled_match_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         id: None,
         team_id: t.clone(),
@@ -247,6 +257,9 @@ async fn dashboard_counts_follow_record_links() {
     let _p2 = db::save_game_plan(
         &d,
         GamePlan {
+            scheduled_match_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             draft_id: None,
             ..plan
@@ -258,6 +271,10 @@ async fn dashboard_counts_follow_record_links() {
     db::save_post_game_learning(
         &d,
         PostGameLearning {
+            scheduled_match_id: None,
+            series_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             created_at: None,
             id: None,

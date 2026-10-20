@@ -72,6 +72,7 @@ async fn draft_vs(db: &Surreal<Db>, team: &str, user: &str, opponent: Option<Str
         None,
         None,
         None,
+        None,
     )
     .await
     .unwrap()
@@ -79,6 +80,9 @@ async fn draft_vs(db: &Surreal<Db>, team: &str, user: &str, opponent: Option<Str
 
 fn plan(team: &str, draft: Option<String>) -> GamePlan {
     GamePlan {
+        scheduled_match_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         id: None,
         team_id: team.into(),
@@ -102,6 +106,10 @@ fn plan(team: &str, draft: Option<String>) -> GamePlan {
 
 fn review(team: &str, user: &str, plan: Option<String>, draft: Option<String>) -> PostGameLearning {
     PostGameLearning {
+        scheduled_match_id: None,
+        series_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         created_at: None,
         id: None,

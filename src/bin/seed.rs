@@ -1018,11 +1018,15 @@ async fn populate(
             None,
             None,
             None,
+            None,
         )
         .await
         .map_err(err)?;
 
         let plan = GamePlan {
+            scheduled_match_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             id: None,
             team_id: team.id.clone(),
@@ -1101,6 +1105,10 @@ async fn populate(
         db::create_review_with_action_items(
             db,
             PostGameLearning {
+                scheduled_match_id: None,
+                series_id: None,
+                game_number: None,
+                scheduled_match_deleted: false,
                 draft_deleted: false,
                 created_at: None,
                 id: None,

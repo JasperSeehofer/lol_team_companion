@@ -467,6 +467,8 @@ struct ReviewEd {
     rating: RwSignal<String>,
     /// The draft this review was linked to was deleted.
     draft_deleted: RwSignal<bool>,
+    /// M159: the scheduled match this review was of was deleted.
+    match_deleted: RwSignal<bool>,
     /// The match as loaded (or cleared): a different value is a choice
     /// someone made, which fills the form from the match (M141).
     loaded_match: RwSignal<String>,
@@ -489,6 +491,7 @@ impl ReviewEd {
             outcome: s(),
             rating: s(),
             draft_deleted: RwSignal::new(false),
+            match_deleted: RwSignal::new(false),
             loaded_match: s(),
             auto: RwSignal::new(None),
         }
@@ -496,6 +499,7 @@ impl ReviewEd {
     fn clear(&self) {
         self.id.set(None);
         self.draft_deleted.set(false);
+        self.match_deleted.set(false);
         self.loaded_match.set(String::new());
         self.auto.set(None);
         for sig in [
@@ -529,6 +533,7 @@ impl ReviewEd {
         self.rating
             .set(r.rating.map(|n| n.to_string()).unwrap_or_default());
         self.draft_deleted.set(r.draft_deleted);
+        self.match_deleted.set(r.scheduled_match_deleted);
     }
     /// Subscribe to every field (for the "unsaved changes" memo).
     fn track(&self) {
@@ -549,6 +554,10 @@ impl ReviewEd {
     }
     fn build(&self) -> PostGameLearning {
         PostGameLearning {
+            scheduled_match_id: None,
+            series_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             created_at: None,
             id: self.id.get_untracked(),
@@ -987,6 +996,9 @@ fn LinksSection(
             </div>
             {move || (ed.draft_id.get().is_empty() && ed.draft_deleted.get()).then(|| view! {
                 <p class="text-caption text-muted" data-testid="review-draft-deleted">"Draft deleted: the draft this review was linked to no longer exists."</p>
+            })}
+            {move || ed.match_deleted.get().then(|| view! {
+                <p class="text-caption text-muted" data-testid="review-match-deleted">"The match this was made for was deleted."</p>
             })}
             <Suspense fallback=|| ()>
                 {move || facts.get().map(|r| match r {

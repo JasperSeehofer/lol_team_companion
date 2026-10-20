@@ -308,6 +308,10 @@ pub async fn start_post_game_review(
     }
 
     let review = PostGameLearning {
+        scheduled_match_id: None,
+        series_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         created_at: None,
         id: None,
@@ -479,6 +483,8 @@ struct PlanEd {
     from_draft: RwSignal<bool>,
     /// The draft this plan was linked to was deleted.
     draft_deleted: RwSignal<bool>,
+    /// M159: the scheduled match this plan was made for was deleted.
+    match_deleted: RwSignal<bool>,
 }
 
 impl PlanEd {
@@ -499,6 +505,7 @@ impl PlanEd {
             tag: s(),
             from_draft: RwSignal::new(false),
             draft_deleted: RwSignal::new(false),
+            match_deleted: RwSignal::new(false),
         }
     }
 
@@ -526,6 +533,7 @@ impl PlanEd {
         }
         self.from_draft.set(false);
         self.draft_deleted.set(false);
+        self.match_deleted.set(false);
     }
 
     fn load(&self, p: &GamePlan) {
@@ -557,6 +565,7 @@ impl PlanEd {
             .set(p.win_condition_tag.clone().unwrap_or_default());
         self.from_draft.set(false);
         self.draft_deleted.set(p.draft_deleted);
+        self.match_deleted.set(p.scheduled_match_deleted);
     }
 
     /// Seed picks (and, for a new plan, name, tag, win conditions and role
@@ -610,6 +619,9 @@ impl PlanEd {
     fn build(&self, tracked: bool) -> GamePlan {
         let g = |s: RwSignal<String>| if tracked { s.get() } else { s.get_untracked() };
         GamePlan {
+            scheduled_match_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             id: if tracked {
                 self.id.get()
@@ -1122,6 +1134,9 @@ fn BasicsSection(
                             }.into_any())
                         }
                     }}
+                    {move || ed.match_deleted.get().then(|| view! {
+                        <p class="text-caption text-muted" data-testid="plan-match-deleted">"The match this was made for was deleted."</p>
+                    })}
                 </div>
             </div>
         </section>

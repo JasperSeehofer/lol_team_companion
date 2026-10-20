@@ -62,9 +62,11 @@ async fn home_guide_for(
 }
 
 /// Home. `guide` is "Guide me" (`/?guide=1`): the checklist shows even when
-/// it is hidden or complete.
+/// it is hidden or complete. `match_id` (`/?match_id=`, M159) makes one of
+/// the team's upcoming matches the current view; any other id shows the
+/// next match with a neutral line.
 #[server]
-pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
+pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, ServerFnError> {
     use crate::models::match_day::{shorten, BriefPlayer, OpponentBrief, PatchLine, ReviewLine};
     use crate::models::opponent::is_stale;
     use crate::models::utils::format_timestamp;
@@ -86,9 +88,17 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
     };
     let team_id = team.id.clone().unwrap_or_default();
 
-    let mut next = db::next_scheduled_match(&db, &team_id)
+    // M159: the current match is the next one unless the address chose
+    // another of the team's upcoming matches (checked against the team's
+    // own list; a foreign or unknown id is treated like no match).
+    let upcoming = db::upcoming_scheduled_matches(&db, &team_id)
         .await
         .map_err(authz::server_err)?;
+    let next_match = db::next_scheduled_match(&db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let choice = crate::models::match_day::choose_match(upcoming, next_match, match_id.as_deref());
+    let mut next = choice.current;
     // "Read by N of M" counts current members only (people who left keep
     // their mark in the row).
     if let Some(m) = next.as_mut() {
@@ -204,6 +214,13 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
         patch,
         opponents,
         now: chrono::Utc::now().to_rfc3339(),
+        upcoming: choice
+            .others
+            .iter()
+            .map(crate::models::match_day::UpcomingMatch::from)
+            .collect(),
+        chosen: choice.chosen,
+        unknown_match: choice.unknown,
     };
     // A nudge never repeats the prep sequence's next step.
     let skip = prep_steps(&md)
@@ -414,8 +431,14 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
 pub fn HomePage() -> impl IntoView {
     let query = leptos_router::hooks::use_query_map();
     let home = Resource::new(
-        move || query.read().get("guide").as_deref() == Some("1"),
-        get_home,
+        move || {
+            let q = query.read();
+            (
+                q.get("guide").as_deref() == Some("1"),
+                q.get("match_id").filter(|m| !m.trim().is_empty()),
+            )
+        },
+        |(guide, match_id)| get_home(guide, match_id),
     );
     view! {
         <Suspense fallback=|| view! {
@@ -531,6 +554,11 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
     let has_match = next.is_some();
     let team_name = md.team_name.clone();
     let nudge = guide.nudge.clone();
+    let upcoming = md.upcoming.clone();
+    let chosen = md.chosen;
+    let unknown_match = md.unknown_match;
+    // M159: the editor edits the current match, or adds another one.
+    let adding = RwSignal::new(false);
 
     let set_read = Callback::new(move |read: bool| {
         let Some(id) = match_id.clone() else {
@@ -561,6 +589,10 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             view! {
                 <span>{team_name.clone()}</span>
                 {patch}
+                {chosen.then(|| view! {
+                    <span aria-hidden="true" class="text-muted">"/"</span>
+                    <a href="/" class="text-primary underline decoration-outline underline-offset-4 hover:decoration-accent" data-testid="back-to-next-match">"Back to next match"</a>
+                })}
             }
         }
     };
@@ -572,13 +604,36 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                 eyebrow="Match Day"
                 meta=meta
                 actions=move || has_match.then(|| view! {
-                    <div class="hidden md:block">
-                        <Button on_click=Callback::new(move |_| editor_open.set(true)) attr:data-testid="edit-next-match">
+                    <div class="hidden gap-2 md:flex">
+                        <Button
+                            on_click=Callback::new(move |_| {
+                                adding.set(false);
+                                editor_open.set(true);
+                            })
+                            attr:data-testid="edit-next-match"
+                        >
                             "Edit match"
+                        </Button>
+                        <Button
+                            variant=ButtonVariant::Quiet
+                            on_click=Callback::new(move |_| {
+                                adding.set(true);
+                                editor_open.set(true);
+                            })
+                            attr:data-testid="add-another-match"
+                        >
+                            "Add a match"
                         </Button>
                     </div>
                 })
             />
+            {unknown_match.then(|| view! {
+                <div class="mb-6" data-testid="unknown-match">
+                    <crate::components::ui::Callout tone=crate::components::ui::CalloutTone::Info>
+                        "That match is not on your team's schedule. This is the next match."
+                    </crate::components::ui::Callout>
+                </div>
+            })}
             // Phones may add the first match (the empty state's action) but
             // editing an existing one stays a larger-screen task (DESIGN 6.9).
             {has_match.then(|| view! {
@@ -591,8 +646,10 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                     starts_at=m.starts_at.clone()
                     format=m.format.clone()
                     steps=steps.clone()
+                    heading=if chosen { "Upcoming match" } else { "Next match" }
                 />
             })}
+            {(!upcoming.is_empty()).then(|| view! { <UpcomingMatches matches=upcoming.clone() /> })}
             {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=false on_change=on_change /> })}
             // Match Day has its own primary action (the prep sequence's
             // next step or "Add the next match"): the checklist stays quiet.
@@ -642,7 +699,11 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                     </div>
                 }.into_any(),
             }}
-            <MatchEditor open=editor_open existing=editor_match.get_value() opponents=opponents.get_value() on_saved=on_change />
+            {move || {
+                let add = adding.get();
+                let existing = if add { None } else { editor_match.get_value() };
+                view! { <MatchEditor open=editor_open existing=existing later=add opponents=opponents.get_value() on_saved=on_change /> }
+            }}
         </PageShell>
     }
 }
@@ -674,7 +735,14 @@ pub fn field_sentence(format: &str, steps: &[PrepStep]) -> String {
 /// `aria-hidden` (the page title already says who plays); the action is a
 /// real link.
 #[component]
-fn FieldCard(starts_at: String, format: String, steps: Vec<PrepStep>) -> impl IntoView {
+fn FieldCard(
+    starts_at: String,
+    format: String,
+    steps: Vec<PrepStep>,
+    /// "Next match", or "Upcoming match" for one chosen from the list (M159).
+    #[prop(default = "Next match")]
+    heading: &'static str,
+) -> impl IntoView {
     let sentence = field_sentence(&format, &steps);
     let action = steps
         .iter()
@@ -685,7 +753,7 @@ fn FieldCard(starts_at: String, format: String, steps: Vec<PrepStep>) -> impl In
             <div class="float-right mb-2 ml-4 w-[88px]" aria-hidden="true" data-field-inset>
                 <RiftSketch crop=RiftCrop::Inset ground=RiftGround::Ink1 class="w-[88px]" />
             </div>
-            <h2 id="field-h" class="eyebrow">"Next match"</h2>
+            <h2 id="field-h" class="eyebrow">{heading}</h2>
             <p class="mt-2 flex flex-wrap items-baseline gap-x-3">
                 <LocalTime iso=starts_at.clone() style=TimeStyle::Clock class="figures font-medium text-headline text-primary lg:text-display" attr:data-field-figure="" />
                 <LocalTime iso=starts_at style=TimeStyle::Day class="text-label text-muted" />
@@ -697,6 +765,91 @@ fn FieldCard(starts_at: String, format: String, steps: Vec<PrepStep>) -> impl In
                 </div>
             })}
         </Surface>
+    }
+}
+
+/// "Bo3" for a stored format.
+fn format_short(format: &str) -> &'static str {
+    match format {
+        "bo3" => "Bo3",
+        "bo5" => "Bo5",
+        _ => "Bo1",
+    }
+}
+
+/// How many upcoming rows show before "Show all".
+const UPCOMING_COLLAPSED: usize = 3;
+
+/// M159, recipe card 1: the team's other upcoming matches under the
+/// current one, a ruled list (time · kind · format · opponent). Three rows,
+/// then "Show all (n)". Each row is a plain link to `/?match_id=`, which
+/// makes that match the current view.
+///
+/// A11y: a `<nav>` labelled "Upcoming matches"; each row is one link whose
+/// name reads its time, kind, format ("best of 3") and opponent; rows are
+/// at least 44 px tall below `md`; "Show all" carries `aria-expanded` and
+/// `aria-controls`.
+#[component]
+fn UpcomingMatches(matches: Vec<crate::models::match_day::UpcomingMatch>) -> impl IntoView {
+    let total = matches.len();
+    let expanded = RwSignal::new(false);
+    let rows = matches
+        .into_iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let href = format!("/?match_id={}", m.id);
+            let kind = if m.kind == "match" { "Official" } else { "Scrim" };
+            let tone = if m.kind == "match" {
+                crate::components::ui::BadgeTone::Info
+            } else {
+                crate::components::ui::BadgeTone::Neutral
+            };
+            let opponent = m.opponent_name.clone();
+            let confirmed = m.confirmed;
+            let folded = i >= UPCOMING_COLLAPSED;
+            view! {
+                <li class="border-b border-rule" class:hidden=move || folded && !expanded.get()>
+                    <a
+                        href=href
+                        class="flex min-h-11 flex-col justify-center gap-1 py-2 hover:bg-ink-1 md:grid md:min-h-8 md:grid-cols-[10rem_5rem_4rem_minmax(0,1fr)_auto] md:items-center md:gap-3"
+                        data-testid="upcoming-match"
+                    >
+                        <LocalTime iso=m.starts_at.clone() style=TimeStyle::When class="text-label font-semibold text-primary" />
+                        <span class="flex min-w-0 items-center gap-2 md:contents">
+                            <span><crate::components::ui::Badge tone=tone>{kind}</crate::components::ui::Badge></span>
+                            <span><crate::components::ui::Badge label=format_label(&m.format).to_string()>{format_short(&m.format)}</crate::components::ui::Badge></span>
+                            {match opponent {
+                                Some(o) => view! { <span class="min-w-0 truncate text-body text-secondary">"vs " {o}</span> }.into_any(),
+                                None => view! { <span class="min-w-0 truncate text-body text-muted">"No opponent yet"</span> }.into_any(),
+                            }}
+                        </span>
+                        {confirmed.map(|n| view! {
+                            <span class="figures text-caption text-secondary">{format!("{n} confirmed")}</span>
+                        })}
+                    </a>
+                </li>
+            }
+        })
+        .collect_view();
+    view! {
+        <nav aria-labelledby="upcoming-h" class="mb-10 max-w-[40rem]" data-testid="upcoming-matches">
+            <SectionHeader title="Upcoming matches" level=HeadingLevel::H3 id="upcoming-h" meta=total.to_string() />
+            <ul id="upcoming-list" class="border-t border-rule">{rows}</ul>
+            {(total > UPCOMING_COLLAPSED).then(|| view! {
+                <div class="mt-2">
+                    <Button
+                        variant=ButtonVariant::Quiet
+                        size=ButtonSize::Touch
+                        on_click=Callback::new(move |_| expanded.update(|e| *e = !*e))
+                        attr:aria-expanded=move || expanded.get().to_string()
+                        attr:aria-controls="upcoming-list"
+                        attr:data-testid="upcoming-show-all"
+                    >
+                        {move || if expanded.get() { "Show fewer".to_string() } else { format!("Show all ({total})") }}
+                    </Button>
+                </div>
+            })}
+        </nav>
     }
 }
 
@@ -903,6 +1056,9 @@ fn Form(md: MatchDay) -> impl IntoView {
 fn MatchEditor(
     open: RwSignal<bool>,
     existing: Option<crate::models::match_day::ScheduledMatch>,
+    /// Adding a match while one is already next (M159): "Add a match".
+    #[prop(optional)]
+    later: bool,
     opponents: Vec<LinkRef>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
@@ -1011,7 +1167,7 @@ fn MatchEditor(
         <Dialog
             id="match-editor"
             open=open
-            title=if editing { "Edit the next match" } else { "Add the next match" }
+            title=if editing { "Edit the next match" } else if later { "Add a match" } else { "Add the next match" }
             description="Times are in your own time zone."
             dismiss_on_scrim=false
             footer=move || view! {
@@ -1085,6 +1241,7 @@ mod tests {
                 opponent_name: Some("Rooks".into()),
                 notes: None,
                 brief_read_by: vec![],
+                series_id: None,
             }),
             brief: Some(OpponentBrief {
                 id: "opponent:o".into(),
@@ -1105,6 +1262,9 @@ mod tests {
             patch: None,
             opponents: vec![],
             now: now.to_rfc3339(),
+            upcoming: vec![],
+            chosen: false,
+            unknown_match: false,
         }
     }
 

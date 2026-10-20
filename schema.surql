@@ -113,6 +113,10 @@ DEFINE FIELD IF NOT EXISTS win_conditions ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS watch_out ON draft TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS series_id ON draft TYPE option<record<series>>;
 DEFINE FIELD IF NOT EXISTS game_number ON draft TYPE option<int>;
+-- M159: the scheduled match this draft was made for (cleared, with
+-- scheduled_match_deleted set, when the match is deleted).
+DEFINE FIELD IF NOT EXISTS scheduled_match ON draft TYPE option<record<scheduled_match>>;
+DEFINE FIELD IF NOT EXISTS scheduled_match_deleted ON draft TYPE option<bool>;
 DEFINE FIELD IF NOT EXISTS created_at ON draft TYPE datetime DEFAULT time::now();
 
 -- Picks/bans in a draft
@@ -148,6 +152,11 @@ DEFINE FIELD IF NOT EXISTS win_condition_tag ON game_plan TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_by ON game_plan TYPE option<record<user>>;
 -- M5: the linked draft was deleted (the link is cleared; the page says so).
 DEFINE FIELD IF NOT EXISTS draft_deleted ON game_plan TYPE option<bool>;
+-- M159: the scheduled match (and game of its series) this plan was made for;
+-- the match being deleted clears the link and sets scheduled_match_deleted.
+DEFINE FIELD IF NOT EXISTS scheduled_match ON game_plan TYPE option<record<scheduled_match>>;
+DEFINE FIELD IF NOT EXISTS game_number ON game_plan TYPE option<int> ASSERT $value = NONE OR ($value >= 1 AND $value <= 5);
+DEFINE FIELD IF NOT EXISTS scheduled_match_deleted ON game_plan TYPE option<bool>;
 DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::now();
 
 -- Post-game learnings
@@ -166,6 +175,12 @@ DEFINE FIELD IF NOT EXISTS win_loss ON post_game_learning TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS rating ON post_game_learning TYPE option<int>;
 -- M5: the linked draft was deleted (the link is cleared; the page says so).
 DEFINE FIELD IF NOT EXISTS draft_deleted ON post_game_learning TYPE option<bool>;
+-- M159: the scheduled match, series and game this review is of; the match
+-- being deleted clears the link and sets scheduled_match_deleted.
+DEFINE FIELD IF NOT EXISTS scheduled_match ON post_game_learning TYPE option<record<scheduled_match>>;
+DEFINE FIELD IF NOT EXISTS series ON post_game_learning TYPE option<record<series>>;
+DEFINE FIELD IF NOT EXISTS game_number ON post_game_learning TYPE option<int> ASSERT $value = NONE OR ($value >= 1 AND $value <= 5);
+DEFINE FIELD IF NOT EXISTS scheduled_match_deleted ON post_game_learning TYPE option<bool>;
 
 -- Champion pool (personal champion pool per role)
 DEFINE TABLE IF NOT EXISTS champion_pool SCHEMAFULL;
@@ -492,6 +507,10 @@ DEFINE INDEX IF NOT EXISTS draft_series ON draft FIELDS series_id;
 DEFINE INDEX IF NOT EXISTS game_plan_draft ON game_plan FIELDS draft;
 DEFINE INDEX IF NOT EXISTS post_game_learning_plan ON post_game_learning FIELDS game_plan_id;
 DEFINE INDEX IF NOT EXISTS checklist_instance_plan ON checklist_instance FIELDS game_plan_id;
+-- M159: match stamps (Match Day counts the work made for a match).
+DEFINE INDEX IF NOT EXISTS draft_scheduled_match ON draft FIELDS scheduled_match;
+DEFINE INDEX IF NOT EXISTS game_plan_scheduled_match ON game_plan FIELDS scheduled_match;
+DEFINE INDEX IF NOT EXISTS post_game_learning_scheduled_match ON post_game_learning FIELDS scheduled_match;
 
 -- Indexes on the scope fields that tenant-scoped reads filter on (M6).
 -- Plain (non-unique) indexes are safe to add to an existing database here.
@@ -578,6 +597,8 @@ DEFINE FIELD IF NOT EXISTS brief_read_by ON scheduled_match TYPE array<record<us
 DEFINE FIELD IF NOT EXISTS created_by ON scheduled_match TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS created_at ON scheduled_match TYPE datetime DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON scheduled_match TYPE datetime DEFAULT time::now();
+-- M159: the best-of series this match is played as (Bo3/Bo5 only).
+DEFINE FIELD IF NOT EXISTS series ON scheduled_match TYPE option<record<series>>;
 DEFINE INDEX IF NOT EXISTS scheduled_match_team ON scheduled_match FIELDS team, starts_at;
 
 -- Share links (M5): a read-only link to one game plan, review or player
