@@ -1,0 +1,30 @@
+{
+ "status": "proposed",
+ "status_note": "Proposed by M166 (A3); Jasper reacts on the M166 card ('Keep as proposed' or 'Edit'). Half C may override the route rule only with a written reason.",
+ "positions_minimap": {
+  "go": {"median_error_max": 350, "detection_rate_min": 0.85, "longest_gap_s_max": 15},
+  "partial": {"median_error_max": 700, "detection_rate_min": 0.60},
+  "note": "World units; 350 is about one brush width. PARTIAL ships as dashed and coarse. Detection rate and longest gap are read with death gaps removed (a gap that starts within 3 s of that champion's CHAMPION_KILL)."
+ },
+ "positions_topdown": {
+  "go": {"median_error_max": 150, "bar_hit_rate_min": 0.80},
+  "note": "Bar hit rate: champion health bars found per top-down frame over 10."
+ },
+ "wards": {
+  "go": {"precision_min": 0.80, "recall_min": 0.70, "handcheck_agree_min": 4, "handcheck_of": 5},
+  "note": "Per team (blue = creatorId 1-5, red = 6-10); the enemy team is counted separately. With fewer than 5 marked rows the same share (4/5) applies."
+ },
+ "recalls": {
+  "go": {"precision_min": 0.80, "recall_min": 0.70, "handcheck_agree_min": 4, "handcheck_of": 5},
+  "note": "Precision: detected recalls confirmed by a purchase within 15 s. Recall: purchase bursts (outside the first 60 s and not within 120 s after that champion's death) matched by a detected recall within 15 s."
+ },
+ "route_rule": [
+  "A GO and B GO: A+B (B the primary source where recorded, A for full-game continuity).",
+  "B GO but recording real time only, A GO or PARTIAL: A+B with B on key windows.",
+  "B GO without A: B-first.",
+  "A GO without B, or B not reached: A-only.",
+  "Neither GO: no-go (the board stays on tier 0+1; Scout is retired on evidence).",
+  "Half C may override the rule only with a written reason."
+ ],
+ "realtime_only_below": 1.5
+}
