@@ -31,3 +31,7 @@ deploy/backup-ssh/
 .previous-tag
 restore-drills.log
 restore-*/
+
+# navgrid tool (M166): local venv and build metadata
+tools/navgrid/.venv/
+tools/navgrid/*.egg-info/
