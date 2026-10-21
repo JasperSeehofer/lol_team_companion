@@ -393,8 +393,27 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
             },
             team,
             "Done".to_string(),
-            Some("/team/roster"),
+            Some("/team/dashboard"),
             "Create or join your team",
+        ),
+        item(
+            "Invite a teammate",
+            if f.members > 1 {
+                format!("{} on the team.", count(f.members, "member", "members"))
+            } else if f.pending_requests > 0 {
+                "A join request is waiting on the team page.".to_string()
+            } else {
+                "The team leader or a coach sends an invite link from the team page. Teammates who already have an account find your team on the roster page, then ask to join."
+                    .to_string()
+            },
+            f.members > 1 || f.pending_requests > 0,
+            if f.members > 1 {
+                count(f.members, "member", "members")
+            } else {
+                "Request waiting".to_string()
+            },
+            t("/team/dashboard#joining-h"),
+            "How teammates join",
         ),
         item(
             "Fill the starting five",
@@ -442,25 +461,6 @@ pub fn checklist(f: &ChecklistFacts) -> Vec<ChecklistItem> {
             count(f.reviews, "review", "reviews"),
             t("/post-game"),
             "Write a review",
-        ),
-        item(
-            "Invite a teammate",
-            if f.members > 1 {
-                format!("{} on the team.", count(f.members, "member", "members"))
-            } else if f.pending_requests > 0 {
-                "A join request is waiting on the team page.".to_string()
-            } else {
-                "The team leader or a coach sends an invite link from the team page. Teammates who already have an account find your team on the roster page, then ask to join."
-                    .to_string()
-            },
-            f.members > 1 || f.pending_requests > 0,
-            if f.members > 1 {
-                count(f.members, "member", "members")
-            } else {
-                "Request waiting".to_string()
-            },
-            t("/team/roster#joining-h"),
-            "How teammates join",
         ),
     ]
 }
@@ -730,7 +730,7 @@ mod tests {
         assert_eq!(items.len(), 7);
         assert!(items.iter().all(|i| !i.done));
         assert_eq!(next_step(&items), Some(0));
-        assert_eq!(items[0].href.as_deref(), Some("/team/roster"));
+        assert_eq!(items[0].href.as_deref(), Some("/team/dashboard"));
         assert!(items[1..].iter().all(|i| i.href.is_none()));
         assert_eq!(items[3].status, "Needs a team");
     }
@@ -749,7 +749,7 @@ mod tests {
         );
         assert_eq!(next_step(&items), Some(1));
         assert_eq!(
-            items[1].detail,
+            items[2].detail,
             "0 of 5 positions have a starter. The team leader places players on the team page."
         );
         f.drafts = 2;
@@ -763,7 +763,7 @@ mod tests {
         assert_eq!(next_step(&items), Some(1));
         f.starting_positions = 5;
         f.opponents = 1;
-        assert_eq!(next_step(&checklist(&f)), Some(4));
+        assert_eq!(next_step(&checklist(&f)), Some(3));
     }
 
     #[test]
@@ -781,7 +781,7 @@ mod tests {
         let items = checklist(&f);
         assert!(checklist_complete(&items));
         assert_eq!(next_step(&items), None);
-        assert_eq!(items[6].status, "6 members");
+        assert_eq!(items[1].status, "6 members");
         // A waiting join request counts as an invited teammate.
         let solo = ChecklistFacts {
             team_name: Some("Rooks".into()),
@@ -789,7 +789,7 @@ mod tests {
             pending_requests: 1,
             ..Default::default()
         };
-        assert!(checklist(&solo)[6].done);
+        assert!(checklist(&solo)[1].done);
     }
 
     #[test]
@@ -812,6 +812,23 @@ mod tests {
         });
         assert!(!checklist_due(true, &[], &done, false));
         assert!(checklist_due(true, &[], &done, true));
+    }
+
+    #[test]
+    fn invite_comes_before_the_starting_five() {
+        let items = checklist(&ChecklistFacts::default());
+        assert_eq!(items.len(), 7);
+        assert!(items[1].title.contains("Invite"));
+        assert!(items[2].title.contains("starting five"));
+        // For a new team with 1 member and 0 starters, next_step should be Some(1) (Invite a teammate)
+        let f = ChecklistFacts {
+            team_name: Some("NewTeam".into()),
+            members: 1,
+            starting_positions: 0,
+            ..Default::default()
+        };
+        let items = checklist(&f);
+        assert_eq!(next_step(&items), Some(1));
     }
 
     #[test]

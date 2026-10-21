@@ -154,7 +154,7 @@ async fn the_welcome_shows_once_and_the_checklist_follows_the_users_team() {
         .await
         .unwrap();
     let w = home.welcome.expect("a new account is welcomed");
-    assert_eq!(w.start_href, "/team/roster");
+    assert_eq!(w.start_href, "/team/dashboard");
     assert_eq!(w.team_name, None);
     let items = home.checklist.unwrap();
     assert!(items.iter().all(|i| !i.done));

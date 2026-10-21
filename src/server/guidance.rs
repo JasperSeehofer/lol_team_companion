@@ -470,7 +470,7 @@ pub async fn home_guide(
     let items = checklist(&facts);
     let start_href = next_step(&items)
         .and_then(|i| items[i].href.clone())
-        .unwrap_or_else(|| "/team/roster".to_string());
+        .unwrap_or_else(|| "/team/dashboard".to_string());
     let welcome = welcome_due(enabled, &rows, created, now).then(|| Welcome {
         username: username.to_string(),
         team_name: facts.team_name.clone(),
