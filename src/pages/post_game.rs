@@ -705,6 +705,7 @@ pub fn PostGamePage() -> impl IntoView {
     // M159: `?match_id=&game=` (from the match thread) stamps a new review
     // with that match on its first save. The match is resolved for the
     // team on the server; an unknown or foreign id is dropped with a line.
+    use crate::models::match_day::ThreadLookup;
     let thread_res = Resource::new(
         move || {
             query
@@ -714,8 +715,11 @@ pub fn PostGamePage() -> impl IntoView {
         },
         |id| async move {
             match id {
-                Some(id) => Some(crate::pages::home::get_thread_match(id).await.ok()),
-                None => None,
+                Some(id) => match crate::pages::home::get_thread_match(id).await {
+                    Ok(t) => ThreadLookup::Found(t),
+                    Err(_) => ThreadLookup::Unknown,
+                },
+                None => ThreadLookup::NoLink,
             }
         },
     );
@@ -725,12 +729,12 @@ pub fn PostGamePage() -> impl IntoView {
     Effect::new(move |_| {
         let game = query.read().get("game");
         match thread_res.get() {
-            Some(Some(Some(t))) => {
+            Some(ThreadLookup::Found(t)) => {
                 let g = crate::models::match_day::parse_game(game.as_deref(), &t.format);
                 thread.set(Some((t.id, g)));
                 thread_unknown.set(false);
             }
-            Some(Some(None)) => {
+            Some(ThreadLookup::Unknown) => {
                 thread.set(None);
                 thread_unknown.set(true);
             }

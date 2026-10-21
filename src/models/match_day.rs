@@ -152,6 +152,22 @@ pub struct LinkRef {
     pub name: String,
 }
 
+/// M159: how a match-thread link (`?match_id=`) resolved for the caller's
+/// team, as the draft, plan and review pages hold it in a resource. An
+/// explicit enum, not `Option<Option<ThreadMatch>>`: a resource is sent
+/// from the server render to the browser as JSON, where `Some(None)` and
+/// `None` are both `null`, so an unknown match hydrated as "no link" and
+/// the neutral line never showed.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum ThreadLookup {
+    /// No `match_id` in the address.
+    NoLink,
+    /// The team's match.
+    Found(ThreadMatch),
+    /// Unknown, malformed or another team's id.
+    Unknown,
+}
+
 /// M159: a scheduled match as a carried link (`?match_id=`) resolves it for
 /// the caller's team (`get_thread_match`): what the draft, plan and review
 /// pages need to prefill and stamp new work. Nothing else of the match.
@@ -556,6 +572,16 @@ pub fn shorten(s: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn thread_lookup_survives_json() {
+        // Hydration sends resources as JSON: "unknown" must not read back
+        // as "no link" (the Option<Option<_>> bug).
+        for v in [ThreadLookup::NoLink, ThreadLookup::Unknown] {
+            let json = serde_json::to_string(&v).unwrap();
+            assert_eq!(serde_json::from_str::<ThreadLookup>(&json).unwrap(), v);
+        }
+    }
+
     #[test]
     fn a_patch_is_news_for_two_weeks() {
         let now = chrono::DateTime::parse_from_rfc3339("2026-10-12T12:00:00Z")

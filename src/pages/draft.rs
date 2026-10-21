@@ -1377,8 +1377,11 @@ pub fn DraftPage() -> impl IntoView {
         },
         |id| async move {
             match id {
-                Some(id) => Some(crate::pages::home::get_thread_match(id).await.ok()),
-                None => None,
+                Some(id) => match crate::pages::home::get_thread_match(id).await {
+                    Ok(t) => crate::models::match_day::ThreadLookup::Found(t),
+                    Err(_) => crate::models::match_day::ThreadLookup::Unknown,
+                },
+                None => crate::models::match_day::ThreadLookup::NoLink,
             }
         },
     );
@@ -1419,7 +1422,7 @@ pub fn DraftPage() -> impl IntoView {
         let known = |id: &str| opps.iter().any(|o| o.id.as_deref() == Some(id));
         let opp_param = opp_q.filter(|o| known(o));
         match resolved {
-            Some(Some(t)) => {
+            crate::models::match_day::ThreadLookup::Found(t) => {
                 use crate::components::local_time::{format_time, parse_utc, TimeStyle};
                 use crate::models::match_day::{parse_game, thread_draft_name};
                 let game = parse_game(game_q.as_deref(), &t.format);
@@ -1452,13 +1455,13 @@ pub fn DraftPage() -> impl IntoView {
                 ed.match_id.set(t.id.clone());
                 thread_shown.set(Some(t));
             }
-            Some(None) => {
+            crate::models::match_day::ThreadLookup::Unknown => {
                 thread_unknown.set(true);
                 if let Some(o) = opp_param {
                     ed.opponent.set(o);
                 }
             }
-            None => {
+            crate::models::match_day::ThreadLookup::NoLink => {
                 if let Some(o) = opp_param {
                     ed.opponent.set(o);
                 }
