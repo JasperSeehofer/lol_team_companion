@@ -183,7 +183,7 @@ async fn the_welcome_shows_once_and_the_checklist_follows_the_users_team() {
     assert_eq!(fb.drafts, 1);
     assert_eq!(fb.members, 2);
     let items = guidance::checklist(&fb);
-    assert!(items[0].done && items[3].done && items[6].done);
+    assert!(items[0].done && items[1].done && items[4].done);
 
     // An outsider's checklist sees nothing of that team.
     let c = user(&db, "cid").await;

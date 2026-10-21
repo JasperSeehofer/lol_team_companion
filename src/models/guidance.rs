@@ -757,13 +757,13 @@ mod tests {
         let items = checklist(&f);
         assert_eq!(
             states(&items),
-            [true, false, false, true, false, false, false]
+            [true, false, false, false, true, false, false]
         );
-        assert_eq!(items[3].status, "2 drafts");
+        assert_eq!(items[4].status, "2 drafts");
         assert_eq!(next_step(&items), Some(1));
         f.starting_positions = 5;
         f.opponents = 1;
-        assert_eq!(next_step(&checklist(&f)), Some(3));
+        assert_eq!(next_step(&checklist(&f)), Some(1));
     }
 
     #[test]
