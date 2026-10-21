@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M159 Round 1</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d2320; --muted:#5b6560; --rule:#d9dcd6; --ok:#1f7a4a; --warn:#9a5b00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; } }
+:root[data-theme="dark"] { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; margin:0; padding:24px 16px; }
+main { max-width:1200px; margin:0 auto; }
+.prose { max-width:68ch; }
+h1 { font-size:1.6rem; margin:0 0 .25rem; } h2 { font-size:1.15rem; margin:2rem 0 .5rem; } h3 { font-size:1rem; margin:1.25rem 0 .4rem; }
+p.meta { color:var(--muted); margin:0 0 1.5rem; }
+table { width:100%; border-collapse:collapse; font-size:.95rem; } td, th { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+.ok { color:var(--ok); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+code { font-size:.9em; overflow-wrap:anywhere; }
+.pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:16px; align-items:start; }
+figure { margin:0; } figure img { width:100%; height:auto; border:1px solid var(--rule); display:block; }
+figcaption { color:var(--muted); font-size:.85rem; margin-top:.3rem; }
+.narrow img { max-width:390px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Match thread R1: schedule and scoping</h1>
+<p class="meta">Mission M159 · branch <code>mission/M159-match-thread-schedule-and-scoping</code> · 2026-10-21 · full report: REPORT-R1.md · atelier critique: atelier-frames-critique.md · before-frame sources: frames/before/SOURCES.md</p>
+
+<div class="prose">
+<h2>What shipped</h2>
+<table>
+<tr><th>#</th><th>Item</th><th>State</th></tr>
+<tr><td>1, 2</td><td>Drafts, plans and reviews are stamped with their match; Match Day lists every upcoming match</td><td class="ok">shipped</td></tr>
+<tr><td>3, 4</td><td>Links from a match open the draft, plan or review prefilled and linked; prep counts only this match's work (Bo3 readout); earlier work is offered with "Use for this match"</td><td class="ok">shipped</td></tr>
+<tr><td>5</td><td>Review from a real game: a picker on the review page, and "Review as a team" on a team game's match page</td><td class="ok">shipped</td></tr>
+<tr><td>9, 10</td><td>Privacy and account audit (no stored-data sentence needed changing); ARCHITECTURE and CHANGELOG</td><td class="ok">shipped</td></tr>
+<tr><td>6, 7, 8</td><td>Series on the match, RSVP, brief share link with migration v17</td><td class="warn">R2 (stop rule, nothing half-built)</td></tr>
+</table>
+
+<h2>Gates</h2>
+<p>CI on the tip cc88702 (run 39638849658): all five jobs green, 191/191 e2e, 0 flaky. Two real bugs were caught by CI during the round and fixed (a duplicate "Start a draft" link; the unknown-match line lost in hydration). The rubric harness measures only public pages, so the signed-in surfaces below were judged by the atelier alone.</p>
+
+<h2>Worth knowing</h2>
+<ul>
+<li>The <span class="warn">before frames are proxies</span>: the closest M152 and M141 frames of the same pages. None of these M159 states existed before.</li>
+<li>The two atelier FIXes are resolved on the tip's frames, but the atelier has not re-read the new captures.</li>
+<li>A best of 3 counts a game as played only when a draft or review is stamped with it (G1 always counts). This is a react question on the card.</li>
+</ul>
+</div>
+<h2>Match Day: upcoming matches (before → after) · PASS</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/before/match-day-upcoming-390.png" alt="Match Day at 390 before M159"><figcaption>Before (M152 proxy), 390</figcaption></figure>
+<figure class="narrow"><img src="frames/after/match-day-upcoming-390.png" alt="Match Day with the upcoming list at 390"><figcaption>After, 390</figcaption></figure>
+</div>
+<div class="pair">
+<figure><img src="frames/before/match-day-upcoming-1280.png" alt="Match Day at 1280 before M159"><figcaption>Before (M152 proxy), 1280</figcaption></figure>
+<figure><img src="frames/after/match-day-upcoming-1280-flow.png" alt="Match Day upcoming list, reading flow at 1280"><figcaption>After, 1280 reading flow</figcaption></figure>
+</div>
+<h2>Match Day: Bo3 prep readout · FIX resolved in cc88702</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/before/match-day-prep-bo3-390.png" alt="Match Day prep at 390 before M159"><figcaption>Before (M152 proxy), 390</figcaption></figure>
+<figure class="narrow"><img src="frames/after/match-day-prep-bo3-390.png" alt="Bo3 prep readout at 390"><figcaption>After, 390: G1 done · G2 to do · G3 not played</figcaption></figure>
+</div>
+<div class="pair">
+<figure><img src="frames/after/match-day-prep-bo3-1280.png" alt="Bo3 prep readout at 1280"><figcaption>After, 1280</figcaption></figure>
+</div>
+<h2>Draft opened from the match · FIX resolved in cc88702</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/before/draft-from-thread-390.png" alt="Draft page at 390 before M159"><figcaption>Before (M152 proxy), 390</figcaption></figure>
+<figure class="narrow"><img src="frames/after/draft-from-thread-390.png" alt="Draft opened from a match at 390"><figcaption>After, 390</figcaption></figure>
+<figure class="narrow"><img src="frames/after/draft-from-thread-390-flow.png" alt="Draft opened from a match, full page at 390"><figcaption>After, 390 full page</figcaption></figure>
+</div>
+<div class="pair">
+<figure><img src="frames/before/draft-from-thread-1280.png" alt="Draft page at 1280 before M159"><figcaption>Before (M152 proxy), 1280</figcaption></figure>
+<figure><img src="frames/after/draft-from-thread-1280-flow.png" alt="Draft opened from a match, reading flow at 1280"><figcaption>After, 1280 reading flow</figcaption></figure>
+</div>
+<h2>Review picker · PASS</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/before/post-game-picker-390.png" alt="Review page at 390 before M159"><figcaption>Before (M141 proxy), 390</figcaption></figure>
+<figure class="narrow"><img src="frames/after/post-game-picker-390.png" alt="Review picker at 390"><figcaption>After, 390</figcaption></figure>
+</div>
+<div class="pair">
+<figure><img src="frames/before/post-game-picker-1280.png" alt="Review page at 1280 before M159"><figcaption>Before (M141 proxy), 1280</figcaption></figure>
+<figure><img src="frames/after/post-game-picker-1280-flow.png" alt="Review picker, reading flow at 1280"><figcaption>After, 1280 reading flow: near the match, then other recent games</figcaption></figure>
+</div>
+<h2>Match page: Review as a team · PASS</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/before/match-detail-review-390.png" alt="Match page at 390 before M159"><figcaption>Before (M141 proxy), 390</figcaption></figure>
+<figure class="narrow"><img src="frames/after/match-detail-review-390.png" alt="Match page with Review as a team at 390"><figcaption>After, 390</figcaption></figure>
+</div>
+<div class="pair">
+<figure><img src="frames/before/match-detail-review-1280.png" alt="Match page at 1280 before M159"><figcaption>Before (M141 proxy), 1280</figcaption></figure>
+<figure><img src="frames/after/match-detail-review-1280.png" alt="Match page with Review as a team at 1280"><figcaption>After, 1280</figcaption></figure>
+</div>
+</main>
+</body>
+</html>

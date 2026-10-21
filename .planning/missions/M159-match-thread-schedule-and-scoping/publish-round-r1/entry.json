@@ -1,0 +1,140 @@
+{
+  "id": "m159-r1-match-thread-schedule-and-scoping",
+  "title": "M159 · Match thread R1: upcoming matches, carried links and reviews from real games (items 6–8 are R2)",
+  "date": "2026-10-21",
+  "mission": "M159",
+  "status": "open",
+  "summary": "Match Day now lists every upcoming match, not just the next one, and each match is a thread. 'Start a draft', 'Write the plan' and 'Review' from a match open the page already filled in and linked to that match. The server re-checks match and opponent ids as your team's own, and an unknown or foreign link shows a neutral line. Prep steps count only work for this match. A best of 3 reads e.g. 'G1 done · G2 to do · G3 not played'. Earlier work against the same opponent is offered with 'Use for this match' and never counted on its own. Reviews can start from a real game: the review page has a picker that puts games near the match first, with 'Not in the list' for scrims. A team game's match page offers 'Review as a team'. The privacy audit found no stored-data sentence to change. Items 6–8 (series on the match, RSVP, brief share link with migration v17) were not built, per the overseer's early stop rule (weekly limit at 80 %, host outages). They are R2, and nothing of them is half-built. CI is green on the tip cc88702 (run 39638849658: all five jobs, 191/191 e2e, 0 flaky). The atelier passed upcoming, picker and match detail; its two FIXes (draft-from-thread, Bo3 prep) are resolved on the tip's frames. The round ran far past its 18 h wall because of host starvation and a stop and resume. No migration runs at the next start. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M159-match-thread-schedule-and-scoping once the fresh verifier's VERIFY-R1 says PASS? Landing is tap-only, and merged is not live: deploy stays a separate step (82-release.sh behind its own cards). No migration runs at the next start from this round; migration v17 comes with R2.",
+      "kind": "merge",
+      "yes": "Yes, merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS. Deploy is a separate card. R2 (items 6–8) starts from main."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open, and R2 (series, RSVP, brief share link, migration v17) continues on top of it."
+        }
+      ],
+      "recommend": "Yes, merge. Items 0–5, 9 and 10 are complete with tests, CI is green on the tip, and items 6–8 are additions that do not depend on this branch staying open."
+    },
+    {
+      "text": "(react) No stored-data sentence on the Privacy page changed this round. It still says 'the next match' (datenschutz.rs:43), but teams can now keep several upcoming matches. My suggestion: in R2, change it to 'scheduled matches' together with the RSVP and share-link lines, and show all three to your adviser. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Yes, in R2",
+          "consequence": "R2 rewrites the sentence with the RSVP and share-link lines, and you show the three to your adviser."
+        },
+        {
+          "label": "Fix it now",
+          "consequence": "A small follow-up changes only 'the next match' before landing, and the adviser read waits for R2."
+        }
+      ],
+      "recommend": "Yes, in R2. One adviser read covers all three changes, and the current sentence is not wrong, only narrow."
+    },
+    {
+      "text": "(react) Drafts and plans made before a match was scheduled are offered under 'Earlier work' with a one-tap 'Use for this match'. They are never stamped automatically by date. My suggestion: keep it one-tap and never auto-stamp. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep one-tap",
+          "consequence": "Nothing changes. Only a tap links earlier work to a match."
+        },
+        {
+          "label": "Auto-stamp by date",
+          "consequence": "R2 links unstamped work against the same opponent automatically when it was made in the days before the match."
+        }
+      ],
+      "recommend": "Keep one-tap. An automatic link can attach the wrong draft, and one tap is cheap."
+    },
+    {
+      "text": "(react) My R2 defaults: RSVP is stored in a new match_rsvp table, deleted with the match and with the account, and included in the export. The brief share link shows the time, kind, format, opponent team name, roles, and the linked plan's win conditions and role lines. It shows no per-player opponent data. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Yes, these defaults",
+          "consequence": "R2 builds RSVP and the brief share link exactly as stated, with migration v17."
+        },
+        {
+          "label": "Change them",
+          "consequence": "Tell me what to add or drop (free text). R2 follows your list."
+        }
+      ],
+      "recommend": "Yes, these defaults. They keep availability private to the team and the match, and the share page exposes no opponent player data."
+    },
+    {
+      "text": "(react) The Bo3 'played' rule: a game counts as played when a draft or review is stamped with it, and G1 is always required. Games with no work read 'not played', so a G3 played without any draft or review shows as not played. My suggestion: keep it. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep it",
+          "consequence": "Nothing changes."
+        },
+        {
+          "label": "Ask after the match",
+          "consequence": "R2 adds a 'How many games did you play?' choice on the match once it has started, which overrides the rule."
+        }
+      ],
+      "recommend": "Keep it. It needs no extra input and is honest about what the app knows. A choice can come later if it misleads in practice."
+    }
+  ],
+  "links": [
+    {
+      "label": "Review page: all frames side by side (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/report.html"
+    },
+    {
+      "label": "Match Day upcoming list 390 (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/match-day-upcoming-390.png"
+    },
+    {
+      "label": "Match Day upcoming list 1280 (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/match-day-upcoming-1280.png"
+    },
+    {
+      "label": "Bo3 prep readout 390 (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/match-day-prep-bo3-390.png"
+    },
+    {
+      "label": "Draft opened from the match 390, full page (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/draft-from-thread-390-flow.png"
+    },
+    {
+      "label": "Review picker 390 (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/post-game-picker-390.png"
+    },
+    {
+      "label": "Review picker 1280 (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/post-game-picker-1280.png"
+    },
+    {
+      "label": "Match page 'Review as a team' 390 (react)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/after/match-detail-review-390.png"
+    },
+    {
+      "label": "Match Day 390 before, M152 proxy (context)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/before/match-day-upcoming-390.png"
+    },
+    {
+      "label": "Report (context)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/REPORT-R1.md"
+    },
+    {
+      "label": "Atelier critique: frames (context)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/atelier-frames-critique.md"
+    },
+    {
+      "label": "Rubric check (context)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/rubric-check.md"
+    },
+    {
+      "label": "Before frame sources (context)",
+      "href": "/app/previews/m159-r1-match-thread-schedule-and-scoping/frames/before/SOURCES.md"
+    }
+  ]
+}
