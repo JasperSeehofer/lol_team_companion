@@ -1,0 +1,4 @@
+# M160 item 2a — e2e follow-up (spec gap, not a fix round)
+The checklist order is now 0 team, 1 invite, 2 starting five, 3 dossier, 4 draft, 5 plan, 6 review.
+1. e2e/tests/guidance.spec.ts ~:60-62: for a fresh `teamPage` (team with one member) the current step is now "Invite a teammate". Change the comment to "The next open step is inviting a teammate, with a link to the team page." and the expectation to `toContainText("Invite a teammate")`.
+2. Read the rest of e2e/tests/guidance.spec.ts and grep e2e/tests/ for "Fill the starting five", "starting five", `aria-current="step"`, "of 7 done" and any assertion about which checklist step is current or how many are done; adjust only the ones that are wrong under the new order (trace each against the done-rules: team done when in a team; invite done when members > 1 or a join request is pending; starting five done at 5 starters; dossier/draft/plan/review done at ≥1 record). Change nothing else.
