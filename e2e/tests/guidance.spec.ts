@@ -58,9 +58,9 @@ test("the checklist ticks after creating a team and a draft, and hides on reques
   await navigateTo(page, "/");
   const checklist = page.locator("[data-checklist]");
   await expect(checklist).toContainText("1 of 7 done");
-  // The next open step is the starting five, with a link to the team page.
+  // The next open step is inviting a teammate, with a link to the team page.
   const current = checklist.locator('li[aria-current="step"]');
-  await expect(current).toContainText("Fill the starting five");
+  await expect(current).toContainText("Invite a teammate");
 
   await createDraft(page, `Guide draft ${Date.now()}`);
   await navigateTo(page, "/");
