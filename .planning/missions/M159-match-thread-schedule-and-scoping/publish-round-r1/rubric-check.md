@@ -1,4 +1,48 @@
-# UX rubric check
+# UX rubric check (M159 publish round r1)
+
+## Summary
+
+Source: CI's e2e job (run 39631700231, sha c69ee0c), step "UX rubric check
+(public touched surfaces, report only)" in .github/workflows/ci.yml, using
+scripts/ux-rubric/rubric-check.mjs (identical to the garden copy). The
+harness drives live pages in Chromium; it cannot run on PNGs, so it was not
+re-run locally (no server on this host). Verdicts are identical to M152's
+table (no regression, no change).
+
+Measured: four public pages (/auth/login, /auth/login?next=/draft,
+/auth/register?invite=..., /auth/reset), phone and desktop each.
+
+**Not measured: every M159 surface.** Match Day (upcoming, Bo3 prep),
+/draft from a thread, /post-game picker and /match/:id review are signed-in
+pages and the harness has no sign-in step. Their after frames exist under
+frames/after/ for review by eye (atelier/human).
+
+| id | result (4 pages x 2 viewports) | note |
+|---|---|---|
+| A1 target size | PASS 8/8 | |
+| A2 contrast from pixels | PASS 8/8 | |
+| A3 reduced motion | PASS 8/8 | |
+| A4 single-pointer + screen reader | not measured | run_by: human |
+| I1 manual path to Settings | FIX 8/8 | heuristic; signed-out pages have no Settings by design |
+| I2 progress past 10 s | FIX 8/8 | GUESS; no agent actions on these pages |
+| I3 disclosure depth | not measured | run_by: atelier |
+| I4 correction path | not measured | run_by: human |
+| I5 confirms stay rare | not measured | run_by: atelier |
+| I6 interruption budget | FIX 8/8 | GUESS; no notifier policy object in this app |
+| I7 primary content readable | PASS 8/8 | |
+| I8 undo/consent for agent action | FIX 8/8 | GUESS; no agent-initiated actions on these pages |
+| V1 closed token vocabulary | PASS 8/8 | |
+| V2 4/8 spacing scale | FIX 8/8 | off-scale values on [data-feedback-...] (feedback widget), pre-existing |
+| V3 measure 45-75 CPL | FIX 8/8 | short hints and footer paragraphs outside the range, pre-existing |
+
+The FIX rows are the same as in M152 and come from surfaces M159 did not
+change; the I-row FIXes are agent-product heuristics that do not fit a
+signed-out form.
+
+Design lint (scripts/lint_design.sh, 2026-10-21, this branch): exit 0,
+"Design lint: OK (every rule at zero)".
+
+## CI output (verbatim)
 
 - run: 39631700231
 - sha: c69ee0c54b4e88064f175813cd5fe996ba62021e
