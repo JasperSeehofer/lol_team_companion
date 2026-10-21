@@ -421,6 +421,7 @@ pub async fn nudge_facts(
     }
 
     let (_, created) = account(db, user_id).await?;
+    let viewer_manages = db::is_team_leader_or_coach(db, user_id, team_id).await?;
     Ok(NudgeFacts {
         now,
         last_write: last_write(db, user_id, Some(team_id)).await?,
@@ -430,6 +431,7 @@ pub async fn nudge_facts(
         old_open_items: old.map(|c| c.n.max(0) as usize).unwrap_or(0),
         draft_without_plan,
         dossier_without_draft,
+        viewer_manages,
     })
 }
 

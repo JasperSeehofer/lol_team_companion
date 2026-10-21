@@ -577,6 +577,8 @@ pub struct NudgeFacts {
     pub draft_without_plan: Option<(String, String)>,
     /// (opponent id, name) of a recent dossier without a recent draft.
     pub dossier_without_draft: Option<(String, String)>,
+    /// Whether the viewer is the team leader or a coach (can manage drafts/plans).
+    pub viewer_manages: bool,
 }
 
 /// Whether the user has been away: neither a write nor a visit for
@@ -630,23 +632,33 @@ fn candidate(kind: NudgeKind, f: &NudgeFacts) -> Option<Nudge> {
                 "/action-items".into(),
             )
         }),
-        NudgeKind::DraftWithoutPlan => f.draft_without_plan.as_ref().map(|(id, name)| {
-            n(
-                format!("\u{201c}{name}\u{201d} has no game plan yet."),
-                "Write the game plan",
-                format!("/game-plan?draft_id={id}"),
-            )
-        }),
-        NudgeKind::DossierWithoutDraft => f.dossier_without_draft.as_ref().map(|(_, name)| {
-            n(
-                format!(
-                    "You scouted {name}, but there is no draft against them in the last {} weeks.",
-                    RECENT_DAYS / 7
-                ),
-                "Start a draft",
-                "/draft".into(),
-            )
-        }),
+        NudgeKind::DraftWithoutPlan => {
+            if !f.viewer_manages {
+                return None;
+            }
+            f.draft_without_plan.as_ref().map(|(id, name)| {
+                n(
+                    format!("\u{201c}{name}\u{201d} has no game plan yet."),
+                    "Write the game plan",
+                    format!("/game-plan?draft_id={id}"),
+                )
+            })
+        }
+        NudgeKind::DossierWithoutDraft => {
+            if !f.viewer_manages {
+                return None;
+            }
+            f.dossier_without_draft.as_ref().map(|(_, name)| {
+                n(
+                    format!(
+                        "You scouted {name}, but there is no draft against them in the last {} weeks.",
+                        RECENT_DAYS / 7
+                    ),
+                    "Start a draft",
+                    "/draft".into(),
+                )
+            })
+        }
     }
 }
 
@@ -832,6 +844,44 @@ mod tests {
     }
 
     #[test]
+    fn nudges_are_filtered_by_role() {
+        let mut f = facts("2026-10-12T12:00:00Z");
+        f.draft_without_plan = Some(("draft:d".into(), "Rooks bo3".into()));
+        f.dossier_without_draft = Some(("opponent:o".into(), "Rooks".into()));
+        f.match_without_review = Some(PastMatch {
+            opponent: "Rooks".into(),
+            kind_label: "Scrim".into(),
+            plan_id: "game_plan:p".into(),
+        });
+        f.old_open_items = 3;
+
+        // Leader/coach sees all nudges
+        f.viewer_manages = true;
+        let n = pick_nudge(true, &f, &[], None).unwrap();
+        assert_eq!(n.kind, NudgeKind::MatchWithoutReview);
+
+        // Regular member doesn't see draft/planning nudges
+        f.viewer_manages = false;
+        let n = pick_nudge(true, &f, &[], None).unwrap();
+        assert_eq!(n.kind, NudgeKind::MatchWithoutReview);
+
+        // But if match_without_review is skipped, they see old_action_items
+        let n = pick_nudge(true, &f, &[], Some("/post-game?plan_id=game_plan:p")).unwrap();
+        assert_eq!(n.kind, NudgeKind::OldActionItems);
+
+        // While leader/coach would see draft_without_plan
+        f.viewer_manages = true;
+        let n = pick_nudge(true, &f, &[], Some("/post-game?plan_id=game_plan:p")).unwrap();
+        assert_eq!(n.kind, NudgeKind::DraftWithoutPlan);
+
+        // No draft/planning nudges for regular members
+        f.viewer_manages = false;
+        assert!(pick_nudge(true, &f, &[], Some("/post-game?plan_id=game_plan:p")).is_some());
+        assert!(pick_nudge(true, &f, &[], Some("/action-items")).is_some());
+        assert!(pick_nudge(true, &f, &[], Some("/game-plan?draft_id=draft:d")).is_none());
+    }
+
+    #[test]
     fn the_welcome_is_for_young_accounts_once() {
         let now = at("2026-10-12T12:00:00Z");
         let young = Some(at("2026-10-12T11:00:00Z"));
@@ -854,6 +904,7 @@ mod tests {
             old_open_items: 0,
             draft_without_plan: None,
             dossier_without_draft: None,
+            viewer_manages: true,
         }
     }
 
