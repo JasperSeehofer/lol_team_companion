@@ -443,16 +443,16 @@ async fn community(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String>
 /// scoreboard and a timeline without Riot: Northgate Academy on blue (the
 /// first draft's picks, seed-alpha-top on Darius) beats Riverside Rooks.
 /// Stored like a cached Riot game (`match_detail` with its timeline rows)
-/// plus seed-alpha-top's synced row, under an id no Riot platform uses
+/// plus every Northgate member's synced row, under an id no Riot platform uses
 /// (`SEED1_...`; the match page never sends it to Riot). Cleanup removes it.
 async fn demo_match(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String> {
     let err = |e: db::DbError| e.to_string();
     let Some(alpha) = teams.first() else {
         return Ok(());
     };
-    let Some(user_id) = alpha.members.first() else {
+    if alpha.members.is_empty() {
         return Ok(());
-    };
+    }
     const DURATION: i32 = 29 * 60 + 14;
     // (name, champion, position, k, d, a, cs, vision, damage, gold, items)
     type Line = (
@@ -705,29 +705,31 @@ async fn demo_match(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String
     )
     .await
     .map_err(err)?;
-    let me = &participants[0];
-    db::store_matches(
-        db,
-        user_id,
-        vec![riot::MatchData {
-            match_id: DEMO_MATCH_ID.to_string(),
-            queue_id: 420,
-            game_duration: DURATION,
-            game_end_epoch_ms: Some(
-                (chrono::Utc::now() - chrono::Duration::days(1)).timestamp_millis(),
-            ),
-            champion: me.champion_name.clone(),
-            kills: me.kills,
-            deaths: me.deaths,
-            assists: me.assists,
-            cs: me.cs,
-            vision_score: me.vision_score,
-            damage: me.damage,
-            win: me.win,
-        }],
-    )
-    .await
-    .map_err(err)?;
+    // Every Northgate member synced the game (M159: a team review lists
+    // games three or more current members played together).
+    let game_end = Some((chrono::Utc::now() - chrono::Duration::days(1)).timestamp_millis());
+    for (member, me) in alpha.members.iter().zip(participants.iter()) {
+        db::store_matches(
+            db,
+            member,
+            vec![riot::MatchData {
+                match_id: DEMO_MATCH_ID.to_string(),
+                queue_id: 420,
+                game_duration: DURATION,
+                game_end_epoch_ms: game_end,
+                champion: me.champion_name.clone(),
+                kills: me.kills,
+                deaths: me.deaths,
+                assists: me.assists,
+                cs: me.cs,
+                vision_score: me.vision_score,
+                damage: me.damage,
+                win: me.win,
+            }],
+        )
+        .await
+        .map_err(err)?;
+    }
     // The game is the team's too (Team games, the post-game review's match list).
     let response = db
         .query(

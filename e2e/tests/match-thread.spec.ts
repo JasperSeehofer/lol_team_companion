@@ -243,3 +243,111 @@ test("match thread: earlier work is offered, not counted, and used for this matc
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
+
+/**
+ * M159 item 5 (atelier card 2a): the review's game picker. A fresh team
+ * has no synced games (CI never syncs from Riot), so the picker says so
+ * honestly and "Not in the list (scrim / custom)" stays usable: a review
+ * saves through it without a game. A `riot_match_id` in the address that
+ * is not one of the team's games preselects nothing.
+ */
+test("review picker: a scrim review saves through Not in the list", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await navigateTo(page, "/post-game?riot_match_id=EUW1_7000000001");
+  const picker = page.getByTestId("review-game-picker");
+  await expect(picker.getByRole("radiogroup", { name: "Which game is this review of?" })).toBeVisible({ timeout: 10000 });
+  await expect(picker).toContainText("No synced game where three or more of your members played together yet");
+  // The foreign id is ignored: no game row, nothing chosen, never shown.
+  await expect(picker.getByTestId("review-game")).toHaveCount(0);
+  await expect(picker.getByTestId("review-game-stored")).toHaveCount(0);
+  await expect(picker.locator("input[type=radio]:checked")).toHaveCount(0);
+  await expect(page.locator("main")).not.toContainText("EUW1_7000000001");
+  // No <select> for the game any more.
+  await expect(page.locator("#review-match")).toHaveCount(0);
+
+  const custom = picker.getByRole("radio", { name: "Not in the list (scrim / custom)" });
+  await expect(async () => {
+    await custom.check();
+    await expect(custom).toBeChecked({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await page.locator("#review-well").fill("Early dragon setups in the scrim");
+  await page.getByTestId("review-save").click();
+  await expect(page.getByTestId("review-save-state")).toHaveText("Saved", { timeout: 10000 });
+  await expect(page).toHaveURL(/\/post-game\?review_id=post_game_learning:/);
+  // The saved review keeps "Not in the list" as its choice.
+  await expect(custom).toBeChecked();
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});
+
+const DEMO_GAME = "SEED1_1000000001";
+
+async function signInSeedTop(page: Page): Promise<boolean> {
+  await page.goto("/auth/login");
+  await page.fill("input[name=email]", "seed-alpha-top@example.com");
+  await page.fill("input[name=password]", "seedpass123");
+  await page.click("main button[type=submit]");
+  return page
+    .waitForURL((u) => new URL(u).pathname === "/", { timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+}
+
+/**
+ * M159 item 5 with the seed tool's demo game (all five Northgate members
+ * synced it): the picker row reads date, champions and the result in words,
+ * never the Riot id; "Review as a team" on the match page and on Team games
+ * opens the review with the game chosen. CI seeds the database; locally the
+ * test is skipped without the seed.
+ *
+ * Frames: post-game-picker-390.png, post-game-picker-1280.png,
+ * post-game-picker-1280-flow.png, match-detail-review-1280.png and
+ * match-detail-review-390.png when $MISSION_FRAMES_DIR is set.
+ */
+test("review picker: a team game is chosen from the match page", async ({ page }) => {
+  const ok = await signInSeedTop(page);
+  if (process.env.CI) expect(ok, "CI must seed the database before starting the server").toBe(true);
+  test.skip(!ok, "needs the seed data: stop the server, run the seed tool, start it again");
+  await page.waitForTimeout(500);
+  const errors = captureErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // The match page offers the team review (the game is the team's).
+  await navigateTo(page, `/match/${DEMO_GAME}`);
+  const action = page.getByTestId("review-as-team");
+  await expect(action).toBeVisible({ timeout: 10000 });
+  await expect(action).toHaveText(/^(Review as a team|Open team review)$/);
+  await expect(action).toHaveAttribute("href", `/post-game?riot_match_id=${DEMO_GAME}`);
+  await settle(page);
+  await shot(page, "match-detail-review-1280", false);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  await shot(page, "match-detail-review-390", false);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // Team games rows carry it too, named with the game.
+  await navigateTo(page, "/stats");
+  await expect(page.getByTestId("team-game-review").first()).toBeVisible({ timeout: 10000 });
+
+  // Following it chooses the game; the row never shows the Riot id.
+  await navigateTo(page, `/post-game?riot_match_id=${DEMO_GAME}`);
+  const picker = page.getByTestId("review-game-picker");
+  const row = picker.getByTestId("review-game").filter({ has: page.locator(`input[value="${DEMO_GAME}"]`) });
+  await expect(row).toHaveCount(1, { timeout: 10000 });
+  await expect(row.locator("input[type=radio]")).toBeChecked({ timeout: 10000 });
+  await expect(row).toContainText("Win");
+  // Our five champions (named for screen readers beside the avatars).
+  await expect(row).toContainText("Darius");
+  await expect(row).toContainText("Thresh");
+  await expect(page.locator("main")).not.toContainText(DEMO_GAME);
+  await expect(picker.getByRole("radio", { name: "Not in the list (scrim / custom)" })).toBeVisible();
+  await expect(page.getByTestId("review-match-facts")).toBeVisible();
+  await settle(page);
+  await shot(page, "post-game-picker-1280", false);
+  await shot(page, "post-game-picker-1280-flow", true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  await shot(page, "post-game-picker-390", true);
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});

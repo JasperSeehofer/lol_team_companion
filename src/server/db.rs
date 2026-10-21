@@ -167,6 +167,23 @@ pub async fn ensure_team_record(
     ensure_owned(db, table, id, "team", "team", team_id).await
 }
 
+/// M159: a draft's opponent is free text, or an `opponent:` dossier id
+/// carried by a match-thread link; an id must be one of the team's dossiers
+/// (`NotFound` otherwise). Free-text names are not records and pass.
+pub async fn ensure_opponent_ref(
+    db: &Surreal<Db>,
+    team_id: &str,
+    opponent: Option<&str>,
+) -> DbResult<()> {
+    match opponent
+        .map(str::trim)
+        .filter(|o| o.starts_with("opponent:"))
+    {
+        Some(o) => ensure_team_record(db, "opponent", o, team_id).await,
+        None => Ok(()),
+    }
+}
+
 /// `table:id` must exist and belong to `user_id` (via its `user` field).
 pub async fn ensure_user_record(
     db: &Surreal<Db>,
@@ -2112,6 +2129,7 @@ pub async fn update_draft(
     scheduled_match: Option<String>,
 ) -> DbResult<()> {
     ensure_team_record(db, "draft", draft_id, team_id).await?;
+    ensure_opponent_ref(db, team_id, opponent.as_deref()).await?;
     check_stamps(
         db,
         team_id,

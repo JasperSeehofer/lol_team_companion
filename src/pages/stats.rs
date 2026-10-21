@@ -5,10 +5,10 @@
 
 use crate::components::local_time::LocalTime;
 use crate::components::ui::{
-    AvatarSize, Button, ButtonVariant, Callout, CalloutTone, ChampionAvatar, EmptyState,
-    GameResult, GlyphSize, NoTeamState, PageHeader, PageShell, ReadoutSize, ResultGlyph,
-    SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton, SkeletonGroup, SortState,
-    SortStatus, SortTh, StatReadout, Table, Td, Toast, ToastContext, Tr,
+    AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar,
+    EmptyState, GameResult, GlyphSize, NoTeamState, PageHeader, PageShell, ReadoutSize,
+    ResultGlyph, SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton, SkeletonGroup,
+    SortState, SortStatus, SortTh, StatReadout, Table, Td, Toast, ToastContext, Tr,
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -308,6 +308,12 @@ pub fn StatsPage() -> impl IntoView {
     );
     let api_key = Resource::new(|| (), |_| check_api_key());
     let stats = Resource::new(|| (), |_| get_team_stats());
+    // M159: the games the team can review (three or more members together),
+    // for each row's "Review as a team".
+    let reviewable = Resource::new(
+        || (),
+        |_| crate::pages::post_game::get_review_candidates(None),
+    );
     let queue = RwSignal::new("all".to_string());
     let syncing = RwSignal::new(false);
     let sync = Callback::new(move |_| {
@@ -322,6 +328,7 @@ pub fn StatsPage() -> impl IntoView {
                 Ok(msg) => {
                     toast.push.run(Toast::success(msg));
                     stats.refetch();
+                    reviewable.refetch();
                 }
                 Err(e) => toast
                     .push
@@ -360,7 +367,7 @@ pub fn StatsPage() -> impl IntoView {
                             view! { <EmptyState title="No games stored yet" message="Members link their Riot account on their profile; then a team sync stores their recent games here, grouped by game, with a summary per member." /> }.into_any()
                         }
                     }
-                    Ok(rows) => view! { <StatsBody rows=rows /> }.into_any(),
+                    Ok(rows) => view! { <StatsBody rows=rows reviewable=reviewable /> }.into_any(),
                 })}
             </Suspense>
         </PageShell>
@@ -368,7 +375,10 @@ pub fn StatsPage() -> impl IntoView {
 }
 
 #[component]
-fn StatsBody(rows: Vec<TeamMatchRow>) -> impl IntoView {
+fn StatsBody(
+    rows: Vec<TeamMatchRow>,
+    reviewable: Resource<Result<Vec<crate::models::review_pick::ReviewCandidate>, ServerFnError>>,
+) -> impl IntoView {
     let groups = group_matches(&rows);
     let members = member_summary(&rows);
     let member_sort = RwSignal::new(SortState::none());
@@ -393,6 +403,30 @@ fn StatsBody(rows: Vec<TeamMatchRow>) -> impl IntoView {
                 <ul class="border-b border-rule">
                     {groups.into_iter().map(|g| {
                         let href = format!("/match/{}", g.riot_match_id);
+                        let rid = g.riot_match_id.clone();
+                        let when = g.game_end.clone();
+                        let win = g.win;
+                        // M159: "Review as a team" for a game the team can
+                        // review; "Open team review" once it has one.
+                        let review = move || {
+                            let reviewed = reviewable.get().and_then(|r| r.ok())?
+                                .into_iter()
+                                .find(|c| c.riot_match_id == rid)?
+                                .reviewed;
+                            let label = if reviewed { "Open team review" } else { "Review as a team" };
+                            let date = when.as_deref()
+                                .and_then(crate::components::local_time::parse_utc)
+                                .map(|t| t.format("%-d %b").to_string());
+                            let aria = match date {
+                                Some(d) => format!("{label}: game of {d}, {}", if win { "win" } else { "loss" }),
+                                None => format!("{label}: {}", if win { "win" } else { "loss" }),
+                            };
+                            Some(view! {
+                                <span class="col-start-2 sm:col-start-3">
+                                    <Button variant=ButtonVariant::Quiet size=ButtonSize::Touch href=format!("/post-game?riot_match_id={rid}") aria_label=aria attr:data-testid="team-game-review">{label}</Button>
+                                </span>
+                            })
+                        };
                         view! {
                             <li class="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-rule py-3 sm:grid-cols-[1.5rem_12rem_minmax(0,1fr)]">
                                 <span class="pt-0.5"><ResultGlyph result=GameResult::from_win(g.win) size=GlyphSize::Sm /></span>
@@ -412,6 +446,7 @@ fn StatsBody(rows: Vec<TeamMatchRow>) -> impl IntoView {
                                         </span>
                                     }).collect_view()}
                                 </span>
+                                <Suspense fallback=|| ()>{review}</Suspense>
                             </li>
                         }
                     }).collect_view()}

@@ -817,3 +817,216 @@ async fn use_for_match_is_team_scoped() {
         .await
         .unwrap();
 }
+
+// ---------------------------------------------------------------------------
+// Item 5: review from a real game
+// ---------------------------------------------------------------------------
+
+async fn member(db: &Surreal<Db>, name: &str, team: &str) -> String {
+    let u = db::create_user(db, name.into(), format!("{name}@example.com"), "h".into())
+        .await
+        .unwrap();
+    db::join_team(db, &u, team).await.unwrap();
+    u
+}
+
+/// `user` synced `game`, which ended `hours` from now (negative: ago).
+async fn synced(db: &Surreal<Db>, user: &str, game: &str, hours: i64, champion: &str) {
+    use lol_team_companion::server::riot::MatchData;
+    db::store_matches(
+        db,
+        user,
+        vec![MatchData {
+            match_id: game.into(),
+            queue_id: 420,
+            game_duration: 1800,
+            game_end_epoch_ms: Some(
+                (chrono::Utc::now() + chrono::Duration::hours(hours)).timestamp_millis(),
+            ),
+            champion: champion.into(),
+            kills: 1,
+            deaths: 1,
+            assists: 1,
+            cs: 100,
+            vision_score: 10,
+            damage: 1000,
+            win: true,
+        }],
+    )
+    .await
+    .unwrap();
+}
+
+fn ids(c: &[lol_team_companion::models::review_pick::ReviewCandidate]) -> Vec<&str> {
+    c.iter().map(|c| c.riot_match_id.as_str()).collect()
+}
+
+/// The picker lists games three or more of the team's current members
+/// played together; another team's games (and a game only one of ours
+/// played with them) are not the team's; a thread match orders the games
+/// within six hours of its start first, another team's match orders
+/// nothing; a review saves without a Riot id (a scrim).
+#[tokio::test]
+async fn review_candidates_are_team_scoped() {
+    use lol_team_companion::server::review_pick;
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let c = member(&db, "carol", &t.team1).await;
+    let d = member(&db, "dave", &t.team1).await;
+    let f = member(&db, "fay", &t.team2).await;
+    let g = member(&db, "gus", &t.team2).await;
+
+    // Team one together, two days ago and two hours ago.
+    for u in [&t.a, &c, &d] {
+        synced(&db, u, "EUW1_100", -48, "Jinx").await;
+        synced(&db, u, "EUW1_104", -2, "Azir").await;
+    }
+    // Only two of team one.
+    for u in [&t.a, &c] {
+        synced(&db, u, "EUW1_101", -5, "Ahri").await;
+    }
+    // Team two together.
+    for u in [&t.b, &f, &g] {
+        synced(&db, u, "EUW1_102", -3, "Darius").await;
+    }
+    // Two of team one with one of team two: three players, not three members.
+    for u in [&t.a, &c, &t.b] {
+        synced(&db, u, "EUW1_103", -1, "Thresh").await;
+    }
+
+    let ours = review_pick::review_candidates(&db, &t.team1, None)
+        .await
+        .unwrap();
+    assert_eq!(ids(&ours), vec!["EUW1_104", "EUW1_100"], "newest first");
+    assert!(ours.iter().all(|c| !c.near && !c.reviewed));
+    assert_eq!(ours[0].champions.len(), 3);
+    let theirs = review_pick::review_candidates(&db, &t.team2, None)
+        .await
+        .unwrap();
+    assert_eq!(ids(&theirs), vec!["EUW1_102"]);
+
+    // A match that started 40 hours ago: the game two days ago (8 h before
+    // it) is not near; one that started three hours ago puts the game two
+    // hours ago first.
+    let m = new_match(&db, &t.team1, &t.a, 24).await;
+    set_start(&db, &m, -40).await;
+    let c1 = review_pick::review_candidates(&db, &t.team1, Some(&m))
+        .await
+        .unwrap();
+    assert!(c1.iter().all(|c| !c.near), "outside six hours is not near");
+    set_start(&db, &m, -50).await;
+    let c2 = review_pick::review_candidates(&db, &t.team1, Some(&m))
+        .await
+        .unwrap();
+    assert_eq!(ids(&c2), vec!["EUW1_100", "EUW1_104"], "near first");
+    assert!(c2[0].near && !c2[1].near);
+    // Team two's match id orders nothing for team one, and is no error.
+    let other = new_match(&db, &t.team2, &t.b, 24).await;
+    set_start(&db, &other, -50).await;
+    let c3 = review_pick::review_candidates(&db, &t.team1, Some(&other))
+        .await
+        .unwrap();
+    assert_eq!(ids(&c3), vec!["EUW1_104", "EUW1_100"]);
+    assert!(c3.iter().all(|c| !c.near));
+
+    // "Review as a team": only the team's own candidate games.
+    assert_eq!(
+        review_pick::team_review_state(&db, &t.team1, "EUW1_100")
+            .await
+            .unwrap(),
+        Some(false)
+    );
+    for game in ["EUW1_101", "EUW1_102", "EUW1_103", "EUW1_999"] {
+        assert_eq!(
+            review_pick::team_review_state(&db, &t.team1, game)
+                .await
+                .unwrap(),
+            None,
+            "{game} is not team one's to review"
+        );
+    }
+
+    // A review of a game marks it reviewed for its team only.
+    let mut r = review(&t.team1, &t.a, None, None, None);
+    r.match_riot_id = Some("EUW1_100".into());
+    db::create_review_with_action_items(&db, r).await.unwrap();
+    assert_eq!(
+        review_pick::team_review_state(&db, &t.team1, "EUW1_100")
+            .await
+            .unwrap(),
+        Some(true)
+    );
+    // Team one's review marks nothing for team two.
+    assert_eq!(
+        review_pick::team_review_state(&db, &t.team2, "EUW1_102")
+            .await
+            .unwrap(),
+        Some(false)
+    );
+
+    // "Not in the list (scrim / custom)": a review without a Riot id saves.
+    let (id, _) =
+        db::create_review_with_action_items(&db, review(&t.team1, &t.a, Some(m), None, Some(1)))
+            .await
+            .unwrap();
+    let saved = db::get_post_game_learning(&db, &t.team1, &id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(saved.match_riot_id.is_none());
+}
+
+/// Item 5 (from items 3–4): updating a draft re-checks an `opponent:` id
+/// as one of the team's dossiers, like saving one; free text still passes.
+#[tokio::test]
+async fn update_draft_rechecks_a_carried_opponent() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let ours = db::create_opponent(&db, &t.team1, "Riverside Rooks".into(), None)
+        .await
+        .unwrap();
+    let theirs = db::create_opponent(&db, &t.team2, "Northgate".into(), None)
+        .await
+        .unwrap();
+    let id = draft(&db, &t.team1, &t.a, None, None, None).await.unwrap();
+    let update = |opponent: Option<String>| {
+        let db = db.clone();
+        let team = t.team1.clone();
+        let id = id.clone();
+        async move {
+            db::update_draft(
+                &db,
+                &team,
+                &id,
+                "Draft for the match".into(),
+                opponent,
+                None,
+                vec![],
+                vec![],
+                None,
+                "blue".into(),
+                vec![],
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+        }
+    };
+    not_found(update(Some(theirs.clone())).await, "another team's dossier");
+    not_found(
+        update(Some("opponent:does-not-exist".into())).await,
+        "a dossier that does not exist",
+    );
+    // The refused update changed nothing.
+    let d = db::get_draft_for_prefill(&db, &t.team1, &id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(d.opponent.as_deref(), Some(theirs.as_str()));
+    update(Some(ours.clone())).await.unwrap();
+    update(Some("Riverside Rooks".into())).await.unwrap();
+    update(None).await.unwrap();
+}
