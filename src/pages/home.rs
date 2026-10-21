@@ -231,6 +231,22 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
     Ok(Home::Team(Box::new(md), guide))
 }
 
+/// M159: the scheduled match a carried link (`?match_id=`) names, for the
+/// caller's team. Another team's or an unknown id is "Not found"; the id
+/// in the address is never trusted beyond this lookup.
+#[server]
+pub async fn get_thread_match(
+    match_id: String,
+) -> Result<crate::models::match_day::ThreadMatch, ServerFnError> {
+    use crate::server::{authz, db};
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    let m = db::get_scheduled_match(&ctx.db, &team_id, &match_id)
+        .await
+        .map_err(authz::server_err)?;
+    Ok(crate::models::match_day::ThreadMatch::from(&m))
+}
+
 /// Create or update the next match (any member).
 #[server]
 pub async fn save_next_match(input_json: String) -> Result<String, ServerFnError> {
@@ -270,6 +286,35 @@ fn plural(n: usize, one: &str, many: &str) -> String {
         format!("1 {one}")
     } else {
         format!("{n} {many}")
+    }
+}
+
+/// M159: `game` for a link, only for a series (a Bo1 has no game number).
+fn series_game(format: &str, game: i32) -> Option<i32> {
+    (crate::models::match_day::game_count(format) > 1).then_some(game)
+}
+
+/// M159: "Start a draft" from the match thread: the draft page prefills the
+/// opponent and a name and stamps the match on the first save.
+pub fn thread_draft_href(
+    m: &crate::models::match_day::ScheduledMatch,
+    game: Option<i32>,
+) -> String {
+    let mut href = format!("/draft?match_id={}", m.id);
+    if let Some(o) = &m.opponent_id {
+        href.push_str(&format!("&opponent_id={o}"));
+    }
+    if let Some(g) = game {
+        href.push_str(&format!("&game={g}"));
+    }
+    href
+}
+
+/// M159: the match stamp (and game) carried onward by a plan or review link.
+fn thread_suffix(m: &crate::models::match_day::ScheduledMatch, game: Option<i32>) -> String {
+    match game {
+        Some(g) => format!("&match_id={}&game={g}", m.id),
+        None => format!("&match_id={}", m.id),
     }
 }
 
@@ -335,7 +380,10 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
             })
             .status("None yet");
         if md.brief.is_some() {
-            s = s.link("/draft", "Start a draft");
+            s = s.link(
+                thread_draft_href(m, series_game(&m.format, 1)),
+                "Start a draft",
+            );
         }
         s
     } else {
@@ -361,7 +409,11 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
                 s = s
                     .detail(format!("Plan the game from \u{201c}{}\u{201d}.", d.name))
                     .link(
-                        format!("/game-plan?draft_id={}", d.id),
+                        format!(
+                            "/game-plan?draft_id={}{}",
+                            d.id,
+                            thread_suffix(m, series_game(&m.format, 1))
+                        ),
                         "Write the game plan",
                     );
             }
@@ -405,10 +457,11 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
             .detail("Write it right after the match, while it is fresh.")
             .status("After the game"),
         (None, true) => {
+            let carried = thread_suffix(m, series_game(&m.format, 1));
             let href = match (md.plans.first(), md.drafts.first()) {
-                (Some(p), _) => format!("/post-game?plan_id={}", p.id),
-                (None, Some(d)) => format!("/post-game?draft_id={}", d.id),
-                _ => "/post-game".to_string(),
+                (Some(p), _) => format!("/post-game?plan_id={}{carried}", p.id),
+                (None, Some(d)) => format!("/post-game?draft_id={}{carried}", d.id),
+                _ => format!("/post-game?{}", &carried[1..]),
             };
             PrepStep::new("After the game: review", PrepState::Todo)
                 .detail("The match has started. Review it while it is fresh.")
@@ -702,7 +755,7 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             {move || {
                 let add = adding.get();
                 let existing = if add { None } else { editor_match.get_value() };
-                view! { <MatchEditor open=editor_open existing=existing later=add opponents=opponents.get_value() on_saved=on_change /> }
+                view! { <MatchEditor open=editor_open existing=existing later=add chosen=chosen opponents=opponents.get_value() on_saved=on_change /> }
             }}
         </PageShell>
     }
@@ -1059,6 +1112,10 @@ fn MatchEditor(
     /// Adding a match while one is already next (M159): "Add a match".
     #[prop(optional)]
     later: bool,
+    /// The match shown was chosen from the upcoming list (`/?match_id=`):
+    /// the editor edits that match, "Edit this match" (M159).
+    #[prop(optional)]
+    chosen: bool,
     opponents: Vec<LinkRef>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
@@ -1167,7 +1224,7 @@ fn MatchEditor(
         <Dialog
             id="match-editor"
             open=open
-            title=if editing { "Edit the next match" } else if later { "Add a match" } else { "Add the next match" }
+            title=if editing && chosen { "Edit this match" } else if editing { "Edit the next match" } else if later { "Add a match" } else { "Add the next match" }
             description="Times are in your own time zone."
             dismiss_on_scrim=false
             footer=move || view! {
@@ -1315,7 +1372,11 @@ mod tests {
         });
         let s = prep_steps(&m);
         assert_eq!(states(&s), vec![Done, Done, Next, Done, Todo]);
-        assert_eq!(s[2].href.as_deref(), Some("/game-plan?draft_id=draft:d"));
+        // M159: the plan link carries the match and the game onward.
+        assert_eq!(
+            s[2].href.as_deref(),
+            Some("/game-plan?draft_id=draft:d&match_id=scheduled_match:1&game=1")
+        );
         m.plans.push(LinkRef {
             id: "game_plan:p".into(),
             name: "P".into(),
@@ -1348,12 +1409,31 @@ mod tests {
         });
         let s = prep_steps(&m);
         assert_eq!(states(&s), vec![Done, Done, Done, Done, Next]);
-        assert_eq!(s[4].href.as_deref(), Some("/post-game?plan_id=game_plan:p"));
+        assert_eq!(
+            s[4].href.as_deref(),
+            Some("/post-game?plan_id=game_plan:p&match_id=scheduled_match:1&game=1")
+        );
         m.review_after = Some(LinkRef {
             id: "post_game_learning:r".into(),
             name: "R".into(),
         });
         assert_eq!(states(&prep_steps(&m)), vec![Done, Done, Done, Done, Done]);
+    }
+
+    #[test]
+    fn start_a_draft_carries_the_match() {
+        let m = md(5);
+        assert_eq!(
+            prep_steps(&m)[1].href.as_deref(),
+            Some("/draft?match_id=scheduled_match:1&opponent_id=opponent:o&game=1")
+        );
+        // A Bo1 has no game number.
+        let mut m = md(5);
+        m.next.as_mut().unwrap().format = "bo1".into();
+        assert_eq!(
+            prep_steps(&m)[1].href.as_deref(),
+            Some("/draft?match_id=scheduled_match:1&opponent_id=opponent:o")
+        );
     }
 
     #[test]

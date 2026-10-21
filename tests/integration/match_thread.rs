@@ -582,3 +582,67 @@ async fn a_match_id_from_the_address_falls_back_to_the_next_match() {
         assert!(c.others.iter().all(|m| m.id != theirs));
     }
 }
+
+/// Item 3: a carried link's match resolves only for the caller's team; the
+/// draft the link starts is stamped with it on the first save, and an
+/// update without a match keeps the stamp.
+#[tokio::test]
+async fn a_carried_match_resolves_for_the_team_only() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let ours = new_match(&db, &t.team1, &t.a, 24).await;
+    let theirs = new_match(&db, &t.team2, &t.b, 24).await;
+    // A match long over still resolves (a review link after the match).
+    let over = new_match(&db, &t.team1, &t.a, 2).await;
+    set_start(&db, &over, -72).await;
+
+    let m = db::get_scheduled_match(&db, &t.team1, &ours).await.unwrap();
+    assert_eq!(m.id, ours);
+    assert_eq!(m.format, "bo3");
+    let key = ours.trim_start_matches("scheduled_match:").to_string();
+    assert_eq!(
+        db::get_scheduled_match(&db, &t.team1, &key)
+            .await
+            .unwrap()
+            .id,
+        ours
+    );
+    assert!(db::get_scheduled_match(&db, &t.team1, &over).await.is_ok());
+    not_found(
+        db::get_scheduled_match(&db, &t.team1, &theirs).await,
+        "another team's match",
+    );
+    not_found(
+        db::get_scheduled_match(&db, &t.team1, "scheduled_match:nope").await,
+        "an unknown match",
+    );
+    not_found(
+        db::get_scheduled_match(&db, &t.team1, "  ").await,
+        "a blank id",
+    );
+
+    // The first save stamps the draft with the match and its game.
+    let d = draft(&db, &t.team1, &t.a, None, Some(2), Some(ours.clone()))
+        .await
+        .unwrap();
+    let saved = db::get_draft_for_prefill(&db, &t.team1, &d)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.scheduled_match_id.as_deref(), Some(ours.as_str()));
+    assert_eq!(saved.game_number, Some(2));
+    // Later saves from the draft page send no match: the stamp stays.
+    update_draft(&db, &t.team1, &d, None, Some(2), None)
+        .await
+        .unwrap();
+    let saved = db::get_draft_for_prefill(&db, &t.team1, &d)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.scheduled_match_id.as_deref(), Some(ours.as_str()));
+    // A link naming another team's match never stamps.
+    not_found(
+        draft(&db, &t.team1, &t.a, None, Some(1), Some(theirs.clone())).await,
+        "a draft stamped with another team's match",
+    );
+}

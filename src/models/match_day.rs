@@ -152,6 +152,83 @@ pub struct LinkRef {
     pub name: String,
 }
 
+/// M159: a scheduled match as a carried link (`?match_id=`) resolves it for
+/// the caller's team (`get_thread_match`): what the draft, plan and review
+/// pages need to prefill and stamp new work. Nothing else of the match.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ThreadMatch {
+    pub id: String,
+    /// Start time, RFC 3339 in UTC.
+    pub starts_at: String,
+    /// "scrim" | "match"
+    pub kind: String,
+    /// "bo1" | "bo3" | "bo5"
+    pub format: String,
+    pub opponent_id: Option<String>,
+    pub opponent_name: Option<String>,
+    /// The series the match is played as (item 6 creates them).
+    pub series_id: Option<String>,
+}
+
+impl From<&ScheduledMatch> for ThreadMatch {
+    fn from(m: &ScheduledMatch) -> Self {
+        ThreadMatch {
+            id: m.id.clone(),
+            starts_at: m.starts_at.clone(),
+            kind: m.kind.clone(),
+            format: m.format.clone(),
+            opponent_id: m.opponent_id.clone(),
+            opponent_name: m.opponent_name.clone(),
+            series_id: m.series_id.clone(),
+        }
+    }
+}
+
+/// M159: how many games a format has (Bo1 1, Bo3 3, Bo5 5).
+pub fn game_count(format: &str) -> i32 {
+    match format {
+        "bo3" => 3,
+        "bo5" => 5,
+        _ => 1,
+    }
+}
+
+/// M159: a `game` parameter for a match of `format`: a number from 1 to
+/// the format's game count, and only for a series (a Bo1 has no game
+/// number). Anything else is no game.
+pub fn parse_game(raw: Option<&str>, format: &str) -> Option<i32> {
+    let n = game_count(format);
+    if n <= 1 {
+        return None;
+    }
+    raw.and_then(|s| s.trim().parse::<i32>().ok())
+        .filter(|g| (1..=n).contains(g))
+}
+
+/// M159: the name a draft started from the match thread gets: "vs Rooks ·
+/// Sun 19:00 · G1". `when` is the match's start as the viewer reads it
+/// (blank leaves it out); the game is left out for a Bo1.
+pub fn thread_draft_name(
+    opponent: Option<&str>,
+    when: &str,
+    format: &str,
+    game: Option<i32>,
+) -> String {
+    let mut parts = vec![match opponent.map(str::trim).filter(|o| !o.is_empty()) {
+        Some(o) => format!("vs {o}"),
+        None => "Draft".to_string(),
+    }];
+    if !when.trim().is_empty() {
+        parts.push(when.trim().to_string());
+    }
+    if game_count(format) > 1 {
+        if let Some(g) = game {
+            parts.push(format!("G{g}"));
+        }
+    }
+    parts.join(" \u{b7} ")
+}
+
 /// One scouted player in the opponent brief.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct BriefPlayer {
@@ -296,6 +373,36 @@ mod tests {
             shorten("Lost tempo after twenty minutes, again", 20),
             "Lost tempo after\u{2026}"
         );
+    }
+
+    #[test]
+    fn thread_links_name_the_draft_and_read_the_game() {
+        use super::{game_count, parse_game, thread_draft_name};
+        assert_eq!(
+            thread_draft_name(Some("Rooks"), "Sun 19:00", "bo3", Some(1)),
+            "vs Rooks \u{b7} Sun 19:00 \u{b7} G1"
+        );
+        // A Bo1 has no game in its name; a blank time is left out.
+        assert_eq!(
+            thread_draft_name(Some("Rooks"), "Sun 19:00", "bo1", Some(1)),
+            "vs Rooks \u{b7} Sun 19:00"
+        );
+        assert_eq!(
+            thread_draft_name(None, " ", "bo5", Some(4)),
+            "Draft \u{b7} G4"
+        );
+        assert_eq!(
+            (game_count("bo1"), game_count("bo3"), game_count("bo5")),
+            (1, 3, 5)
+        );
+        assert_eq!(parse_game(Some("2"), "bo3"), Some(2));
+        assert_eq!(parse_game(Some(" 5 "), "bo5"), Some(5));
+        // Outside the format, not a number, or a Bo1: no game.
+        assert_eq!(parse_game(Some("4"), "bo3"), None);
+        assert_eq!(parse_game(Some("0"), "bo3"), None);
+        assert_eq!(parse_game(Some("x"), "bo3"), None);
+        assert_eq!(parse_game(Some("1"), "bo1"), None);
+        assert_eq!(parse_game(None, "bo3"), None);
     }
 
     fn sm(id: &str, starts_at: &str) -> super::ScheduledMatch {

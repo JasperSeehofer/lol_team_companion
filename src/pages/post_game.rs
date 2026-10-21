@@ -252,6 +252,54 @@ async fn check_review_links(
     Ok(())
 }
 
+/// M159: a new review carries the match stamp onward. Without one from the
+/// link, it takes the stamp (and game) of its plan, else of its draft; a
+/// stamped review takes the match's series. The ids were checked as the
+/// team's by `check_review_links`; the stamp is checked again in the DB
+/// layer.
+#[cfg(feature = "ssr")]
+async fn carry_match_stamp(
+    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
+    team_id: &str,
+    review: &mut PostGameLearning,
+) -> Result<(), ServerFnError> {
+    use crate::server::{authz, db};
+    review.scheduled_match_deleted = false;
+    if review.scheduled_match_id.is_none() {
+        if let Some(pid) = review.game_plan_id.as_deref().filter(|s| !s.is_empty()) {
+            if let Some(p) = db::get_game_plan(db, team_id, pid)
+                .await
+                .map_err(authz::server_err)?
+            {
+                if p.scheduled_match_id.is_some() {
+                    review.scheduled_match_id = p.scheduled_match_id;
+                    review.game_number = review.game_number.or(p.game_number);
+                }
+            }
+        }
+    }
+    if review.scheduled_match_id.is_none() {
+        if let Some(did) = review.draft_id.as_deref().filter(|s| !s.is_empty()) {
+            if let Some(d) = db::get_draft_for_prefill(db, team_id, did)
+                .await
+                .map_err(authz::server_err)?
+            {
+                if d.scheduled_match_id.is_some() {
+                    review.scheduled_match_id = d.scheduled_match_id;
+                    review.game_number = review.game_number.or(d.game_number);
+                }
+            }
+        }
+    }
+    if let (Some(mid), None) = (review.scheduled_match_id.clone(), &review.series_id) {
+        let m = db::get_scheduled_match(db, team_id, &mid)
+            .await
+            .map_err(authz::server_err)?;
+        review.series_id = m.series_id;
+    }
+    Ok(())
+}
+
 #[server]
 pub async fn create_review(review_json: String) -> Result<(String, usize), ServerFnError> {
     use crate::server::authz;
@@ -269,6 +317,7 @@ pub async fn create_review(review_json: String) -> Result<(String, usize), Serve
     review.team_id = team_id.clone();
     review.created_by = user.id.clone();
     check_review_links(&surreal, &team_id, &review).await?;
+    carry_match_stamp(&surreal, &team_id, &mut review).await?;
 
     // The review and its new action items are written in one transaction.
     let created = db::create_review_with_action_items(&surreal, review)
@@ -650,6 +699,42 @@ pub fn PostGamePage() -> impl IntoView {
     let edit_gen = StoredValue::new(0_u64);
     let saving = RwSignal::new(false);
 
+    // M159: `?match_id=&game=` (from the match thread) stamps a new review
+    // with that match on its first save. The match is resolved for the
+    // team on the server; an unknown or foreign id is dropped with a line.
+    let thread_res = Resource::new(
+        move || {
+            query
+                .read()
+                .get("match_id")
+                .filter(|m| !m.trim().is_empty())
+        },
+        |id| async move {
+            match id {
+                Some(id) => Some(crate::pages::home::get_thread_match(id).await.ok()),
+                None => None,
+            }
+        },
+    );
+    // (match id, game) for a new review.
+    let thread = RwSignal::new(None::<(String, Option<i32>)>);
+    let thread_unknown = RwSignal::new(false);
+    Effect::new(move |_| {
+        let game = query.read().get("game");
+        match thread_res.get() {
+            Some(Some(Some(t))) => {
+                let g = crate::models::match_day::parse_game(game.as_deref(), &t.format);
+                thread.set(Some((t.id, g)));
+                thread_unknown.set(false);
+            }
+            Some(Some(None)) => {
+                thread.set(None);
+                thread_unknown.set(true);
+            }
+            _ => {}
+        }
+    });
+
     // `?review_id=` opens a review; `?plan_id=`/`?draft_id=` seed a new one.
     let opened = StoredValue::new(false);
     Effect::new(move |_| {
@@ -718,8 +803,17 @@ pub fn PostGamePage() -> impl IntoView {
             return;
         }
         let review = ed.build();
-        let json = serde_json::to_string(&review).unwrap_or_default();
         let is_update = review.id.is_some();
+        // M159: a new review takes the match thread's stamp (the editor's
+        // own snapshot stays without it, so it compares as before).
+        let mut to_send = review.clone();
+        if !is_update {
+            if let Some((m, g)) = thread.get_untracked() {
+                to_send.scheduled_match_id = Some(m);
+                to_send.game_number = g;
+            }
+        }
+        let json = serde_json::to_string(&to_send).unwrap_or_default();
         let gen = edit_gen.get_value();
         saving.set(true);
         leptos::task::spawn_local(async move {
@@ -756,6 +850,8 @@ pub fn PostGamePage() -> impl IntoView {
     let new_review = Callback::new(move |_: leptos::ev::MouseEvent| {
         opened.set_value(true);
         replace_url(nav, "/post-game");
+        thread.set(None);
+        thread_unknown.set(false);
         ed.clear();
         saved.set(None);
         edit_gen.update_value(|g| *g += 1);
@@ -831,6 +927,19 @@ pub fn PostGamePage() -> impl IntoView {
                 }
             />
             <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::Review target=Signal::derive(move || ed.id.get()) />
+            // M159: a new review from the match thread says which game it is
+            // for; a link whose match is not the team's says so.
+            {move || (ed.id.get().is_none()).then(|| thread.get()).flatten().map(|(_, g)| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted" data-testid="review-thread">
+                    {match g {
+                        Some(g) => format!("Saving links this review to game {g} of the match it was opened from."),
+                        None => "Saving links this review to the match it was opened from.".to_string(),
+                    }}
+                </p>
+            })}
+            {move || (ed.id.get().is_none() && thread_unknown.get()).then(|| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted" data-testid="review-thread-unknown">"The link named a match that is not on your team's schedule. The review is saved without it."</p>
+            })}
             {move || ed.id.get().map(|_| view! {
                 <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::ShareLinks title="Share a read-only link" class="mb-6">
                     "Share makes a link to this review that opens without signing in, for a coach or a sub outside the team. Choose how long it lives; revoke it any time."

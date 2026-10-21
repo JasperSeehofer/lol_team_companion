@@ -83,7 +83,22 @@ pub async fn create_plan(plan_json: String) -> Result<String, ServerFnError> {
         db::ensure_team_record(&surreal, "draft", did, &team_id)
             .await
             .map_err(authz::server_err)?;
+        // M159: a plan from a draft made for a match carries its stamp
+        // onward when the link did not name the match.
+        if plan.scheduled_match_id.is_none() {
+            if let Some(d) = db::get_draft_for_prefill(&surreal, &team_id, did)
+                .await
+                .map_err(authz::server_err)?
+            {
+                if d.scheduled_match_id.is_some() {
+                    plan.scheduled_match_id = d.scheduled_match_id;
+                    plan.game_number = d.game_number;
+                }
+            }
+        }
     }
+    // The match stamp is re-checked in the DB layer as the team's match.
+    plan.scheduled_match_deleted = false;
     plan.team_id = team_id;
     db::save_game_plan(&surreal, plan, &user.id)
         .await
@@ -307,10 +322,17 @@ pub async fn start_post_game_review(
             .map_err(authz::server_err)?;
     }
 
+    // M159: the review carries the plan's match stamp (and game) onward.
+    let stamp = db::get_game_plan(&surreal, &team_id, &plan_id)
+        .await
+        .map_err(authz::server_err)?
+        .filter(|p| p.scheduled_match_id.is_some())
+        .map(|p| (p.scheduled_match_id, p.game_number));
+    let (scheduled_match_id, game_number) = stamp.unwrap_or((None, None));
     let review = PostGameLearning {
-        scheduled_match_id: None,
+        scheduled_match_id,
         series_id: None,
-        game_number: None,
+        game_number,
         scheduled_match_deleted: false,
         draft_deleted: false,
         created_at: None,
@@ -721,6 +743,41 @@ pub fn GamePlanPage() -> impl IntoView {
             prefilled.set_value(true);
         }
     });
+    // M159: `?match_id=&game=` (from the match thread) stamps a new plan
+    // with that match on its first save. The match is resolved for the
+    // team on the server; an unknown or foreign id is dropped with a line.
+    let thread_res = Resource::new(
+        move || {
+            query
+                .read()
+                .get("match_id")
+                .filter(|m| !m.trim().is_empty())
+        },
+        |id| async move {
+            match id {
+                Some(id) => Some(crate::pages::home::get_thread_match(id).await.ok()),
+                None => None,
+            }
+        },
+    );
+    // (match id, game) for a new plan.
+    let thread = RwSignal::new(None::<(String, Option<i32>)>);
+    let thread_unknown = RwSignal::new(false);
+    Effect::new(move |_| {
+        let game = query.read().get("game");
+        match thread_res.get() {
+            Some(Some(Some(t))) => {
+                let g = crate::models::match_day::parse_game(game.as_deref(), &t.format);
+                thread.set(Some((t.id, g)));
+                thread_unknown.set(false);
+            }
+            Some(Some(None)) => {
+                thread.set(None);
+                thread_unknown.set(true);
+            }
+            _ => {}
+        }
+    });
     // What the open plan looked like when it was loaded or last saved, as
     // the editor builds it (so opening a plan does not count as a change).
     let loaded_snapshot: StoredValue<Option<GamePlan>> = StoredValue::new(None);
@@ -850,8 +907,17 @@ pub fn GamePlanPage() -> impl IntoView {
             return;
         }
         name_error.set(None);
-        let json = serde_json::to_string(&plan).unwrap_or_default();
         let is_update = plan.id.is_some();
+        // M159: a new plan takes the match thread's stamp (the editor's own
+        // snapshot stays without it, so it compares as before).
+        let mut to_send = plan.clone();
+        if !is_update {
+            if let Some((m, g)) = thread.get_untracked() {
+                to_send.scheduled_match_id = Some(m);
+                to_send.game_number = g;
+            }
+        }
+        let json = serde_json::to_string(&to_send).unwrap_or_default();
         let gen = edit_gen.get_value();
         saving.set(true);
         save.saving();
@@ -910,6 +976,8 @@ pub fn GamePlanPage() -> impl IntoView {
     let new_plan = Callback::new(move |_: leptos::ev::MouseEvent| {
         opened.set_value(true);
         replace_url(nav, "/game-plan");
+        thread.set(None);
+        thread_unknown.set(false);
         ed.clear();
         edit_gen.update_value(|g| *g += 1);
         loaded_snapshot.set_value(None);
@@ -967,6 +1035,14 @@ pub fn GamePlanPage() -> impl IntoView {
                 }
             />
             <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::GamePlan target=Signal::derive(move || ed.id.get()) />
+            // M159: a new plan from the match thread says which match it is
+            // for; a link whose match is not the team's says so.
+            {move || (ed.id.get().is_none() && thread.get().is_some()).then(|| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted" data-testid="plan-thread">"Saving links this plan to the match it was opened from."</p>
+            })}
+            {move || (ed.id.get().is_none() && thread_unknown.get()).then(|| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted" data-testid="plan-thread-unknown">"The link named a match that is not on your team's schedule. The plan is saved without it."</p>
+            })}
             {move || ed.id.get().map(|_| view! {
                 <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::ShareLinks title="Share a read-only link" class="mb-6">
                     "Share makes a link to this plan that opens without signing in, for a coach or a sub outside the team. Choose how long it lives; revoke it any time."

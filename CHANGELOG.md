@@ -13,6 +13,7 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 #### Added
 - Drafts, game plans and reviews can now remember the scheduled match they were made for (and, for a best-of series, which game). Only your own team's matches can be chosen. Deleting a match never deletes the work made for it: the game plan and review pages then say "The match this was made for was deleted."
 - Match Day lists your team's other upcoming scrims and matches under the current one (three at first, then "Show all"). Open one to make it the current view; "Back to next match" returns. "Add a match" adds a later match while one is already next.
+- "Start a draft", "Write the game plan" and "Write the review" on Match Day now open for that match: the draft comes with the opponent chosen and a name like "vs Rooks · Sun 19:00 · G1", and saving links the draft, plan or review to the match (and game). A plan or review started from a linked draft or plan is linked too. A link naming a match that is not on your team's schedule opens an ordinary new draft, plan or review and says so. Editing a match opened from the upcoming list now reads "Edit this match".
 
 ### Identity, round 1 (2026-10-17)
 

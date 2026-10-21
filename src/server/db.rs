@@ -8146,6 +8146,29 @@ pub async fn upcoming_scheduled_matches(
     Ok(rows.into_iter().map(ScheduledMatch::from).collect())
 }
 
+/// M159: one scheduled match of `team_id` (any date), for the carried
+/// links (`?match_id=`). Another team's or an unknown id is `NotFound`.
+pub async fn get_scheduled_match(
+    db: &Surreal<Db>,
+    team_id: &str,
+    match_id: &str,
+) -> DbResult<ScheduledMatch> {
+    let key = record_key(match_id.trim(), "scheduled_match");
+    if key.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    let mut r = db
+        .query("SELECT id, starts_at, kind, format, opponent, opponent.name AS opponent_name, notes, brief_read_by, series FROM type::record('scheduled_match', $key) WHERE team = type::record('team', $team_key)")
+        .bind(("key", key))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbScheduledMatch> = r.take(0)?;
+    rows.into_iter()
+        .next()
+        .map(ScheduledMatch::from)
+        .ok_or(DbError::NotFound)
+}
+
 /// Longest match note, in characters.
 pub const MATCH_NOTES_MAX: usize = 500;
 

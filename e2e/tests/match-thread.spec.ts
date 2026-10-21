@@ -112,3 +112,79 @@ test("match day: a second match shows in the upcoming list and opens as the curr
   await expect(page.getByRole("heading", { level: 1, name: "Scrim" })).toBeVisible();
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
+
+async function createOpponent(page: Page, name: string) {
+  await navigateTo(page, "/opponents");
+  await page.getByTestId("new-opponent").click();
+  const dialog = page.getByRole("dialog", { name: "New opponent" });
+  await dialog.locator("#opp-new-name").fill(name);
+  await dialog.getByRole("button", { name: "Add opponent" }).click();
+  await expect(page.getByTestId("dossier").getByRole("heading", { level: 2, name })).toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * M159 item 3: "Start a draft" in the match thread carries the match, the
+ * opponent and the game; the draft opens prefilled (opponent chosen, name
+ * "vs <opponent> · <day time> · G1") and the first save stamps the match.
+ * A match id that is not the team's leaves an ordinary new draft.
+ *
+ * Frames: draft-from-thread-390.png, draft-from-thread-1280.png and
+ * draft-from-thread-1280-flow.png when $MISSION_FRAMES_DIR is set.
+ */
+test("match thread: the draft opens prefilled from the thread link", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const opp = `Rooks ${Date.now()}`;
+  await createOpponent(page, opp);
+
+  await navigateTo(page, "/");
+  await page.getByTestId("add-next-match").click();
+  const dialog = page.getByRole("dialog", { name: "Add the next match" });
+  await expect(dialog).toBeVisible();
+  await dialog.locator("#match-date").fill(inDays(1));
+  await dialog.locator("#match-time").fill("19:00");
+  await dialog.locator("#match-opponent").selectOption({ label: opp });
+  await page.getByTestId("save-next-match").click();
+  await expect(dialog).not.toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("heading", { level: 1, name: `Scrim vs ${opp}` })).toBeVisible({ timeout: 10000 });
+  await page.getByTestId("mark-brief-read").click();
+  await expect(page.getByTestId("brief-read")).toBeVisible({ timeout: 10000 });
+
+  // The link carries the match, the opponent and game 1 (a best of 3).
+  const start = page.locator("[data-prep]").getByRole("link", { name: "Start a draft" });
+  await expect(start).toBeVisible({ timeout: 10000 });
+  const href = (await start.getAttribute("href")) ?? "";
+  expect(href).toMatch(/^\/draft\?match_id=scheduled_match:[^&]+&opponent_id=opponent:[^&]+&game=1$/);
+  await start.click();
+  await page.waitForURL((u) => new URL(u).pathname === "/draft", { timeout: 10000 });
+
+  // Prefilled: the opponent is chosen and the draft is named for the match.
+  await expect(page.locator("#draft-opponent")).toHaveValue(/^opponent:/, { timeout: 15000 });
+  const escaped = opp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await expect(page.locator("#draft-name")).toHaveValue(new RegExp(`^vs ${escaped} · \\S+ \\d{2}:\\d{2} · G1$`));
+  await expect(page.getByTestId("draft-thread")).toBeVisible();
+  await settle(page);
+  await shot(page, "draft-from-thread-1280", false);
+  await shot(page, "draft-from-thread-1280-flow", true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  await shot(page, "draft-from-thread-390", false);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // The first save stamps the match: Match Day counts the draft.
+  await page.getByTestId("draft-save").click();
+  await expect(page.getByTestId("draft-save-state")).toHaveText("Saved", { timeout: 10000 });
+  await navigateTo(page, "/");
+  const steps = page.locator("[data-prep] li");
+  await expect(steps.nth(1)).toContainText("1 draft", { timeout: 10000 });
+
+  expect(filterRealErrors(errors)).toHaveLength(0);
+
+  // A match id that is not the team's: the server answers "Not found" (a
+  // failed request in the console, so checked after the error capture)
+  // and the page is an ordinary new draft, said plainly.
+  await navigateTo(page, "/draft?match_id=scheduled_match:not-ours&game=1");
+  await expect(page.getByTestId("draft-thread-unknown")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("#draft-name")).toHaveValue("");
+});

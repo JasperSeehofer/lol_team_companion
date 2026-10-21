@@ -58,6 +58,7 @@ pub async fn save_draft(
     watch_out: Option<String>,
     series_id: Option<String>,
     game_number: Option<i32>,
+    scheduled_match: Option<String>,
 ) -> Result<String, ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
@@ -102,7 +103,9 @@ pub async fn save_draft(
         watch_out,
         series_id,
         game_number,
-        None,
+        // M159: the match thread's stamp, re-checked in the DB layer as a
+        // match of the caller's team ("Not found" otherwise).
+        scheduled_match.filter(|s| !s.trim().is_empty()),
     )
     .await
     .map_err(authz::server_err)?;
@@ -789,6 +792,9 @@ struct Snapshot {
     loaded_id: Option<String>,
     series_id: String,
     game: String,
+    /// M159: the scheduled match a new draft is made for (from the match
+    /// thread's link); stamped on the first save only.
+    match_id: String,
 }
 
 /// The draft being edited. Every field is a signal, so the struct is Copy
@@ -815,6 +821,7 @@ struct Editor {
     loaded_id: RwSignal<Option<String>>,
     series_id: RwSignal<String>,
     game: RwSignal<String>,
+    match_id: RwSignal<String>,
 }
 
 impl Editor {
@@ -836,6 +843,7 @@ impl Editor {
             loaded_id: RwSignal::new(None),
             series_id: RwSignal::new(String::new()),
             game: RwSignal::new("1".to_string()),
+            match_id: RwSignal::new(String::new()),
         }
     }
 
@@ -857,6 +865,7 @@ impl Editor {
             loaded_id: self.loaded_id.get_untracked(),
             series_id: self.series_id.get_untracked(),
             game: self.game.get_untracked(),
+            match_id: self.match_id.get_untracked(),
         }
     }
 
@@ -878,6 +887,7 @@ impl Editor {
             loaded_id: self.loaded_id.get(),
             series_id: self.series_id.get(),
             game: self.game.get(),
+            match_id: self.match_id.get(),
         }
     }
 
@@ -899,6 +909,7 @@ impl Editor {
         self.loaded_id.set(s.loaded_id);
         self.series_id.set(s.series_id);
         self.game.set(s.game);
+        self.match_id.set(s.match_id);
     }
 
     fn blank() -> Snapshot {
@@ -918,6 +929,7 @@ impl Editor {
             loaded_id: None,
             series_id: String::new(),
             game: "1".to_string(),
+            match_id: String::new(),
         }
     }
 
@@ -945,6 +957,7 @@ impl Editor {
         s.loaded_id = d.id.clone();
         s.series_id = d.series_id.clone().unwrap_or_default();
         s.game = d.game_number.unwrap_or(1).to_string();
+        s.match_id = d.scheduled_match_id.clone().unwrap_or_default();
         s
     }
 
@@ -1103,6 +1116,8 @@ struct SaveArgs {
     watch: Option<String>,
     series_id: Option<String>,
     game: Option<i32>,
+    /// M159: the match stamp (sent when a draft is created).
+    scheduled_match: Option<String>,
 }
 
 fn non_empty(s: String) -> Option<String> {
@@ -1113,7 +1128,12 @@ impl SaveArgs {
     fn from(s: &Snapshot) -> Self {
         let actions = build_actions(s.slots.clone(), &s.notes, &s.roles, &s.guessed);
         let series_id = non_empty(s.series_id.clone());
-        let game = series_id.as_ref().and_then(|_| s.game.parse::<i32>().ok());
+        let scheduled_match = non_empty(s.match_id.clone());
+        // A game number belongs to a series or to a match thread's draft
+        // (M159: a Bo3 thread stamps the game without a series yet).
+        let game = (series_id.is_some() || scheduled_match.is_some())
+            .then(|| s.game.parse::<i32>().ok())
+            .flatten();
         Self {
             name: s.name.trim().to_string(),
             opponent: non_empty(s.opponent.clone()),
@@ -1126,6 +1146,7 @@ impl SaveArgs {
             watch: non_empty(s.watch.clone()),
             series_id,
             game,
+            scheduled_match,
         }
     }
 }
@@ -1164,6 +1185,7 @@ async fn persist(s: Snapshot) -> Result<String, ServerFnError> {
                 a.watch,
                 a.series_id,
                 a.game,
+                a.scheduled_match,
             )
             .await
         }
@@ -1231,6 +1253,10 @@ struct Ctx {
     last_saved: StoredValue<Option<Snapshot>>,
     url_loaded: StoredValue<Option<String>>,
     fearless_used: RwSignal<Vec<String>>,
+    /// M159: the match a thread link named, as resolved for the team.
+    thread_shown: RwSignal<Option<crate::models::match_day::ThreadMatch>>,
+    /// M159: the link named a match that is not the team's.
+    thread_unknown: RwSignal<bool>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1264,7 +1290,11 @@ pub fn DraftPage() -> impl IntoView {
         last_saved: StoredValue::new(None),
         url_loaded: StoredValue::new(None),
         fearless_used: RwSignal::new(Vec::new()),
+        thread_shown: RwSignal::new(None),
+        thread_unknown: RwSignal::new(false),
     };
+    let thread_shown = cx.thread_shown;
+    let thread_unknown = cx.thread_unknown;
 
     // Fearless: champions used in the series' other drafts.
     Effect::new(move |_| {
@@ -1319,6 +1349,114 @@ pub fn DraftPage() -> impl IntoView {
                 cx.url_loaded.set_value(Some(target));
             }
         }
+    });
+
+    // M159: a link from the match thread (`?match_id=&opponent_id=&side=&game=`)
+    // starts a new draft for that match: opponent, side and a name ("vs
+    // Rooks · Sun 19:00 · G1") are filled in, and the first save stamps the
+    // match. The match is resolved for the caller's team on the server; an
+    // unknown or another team's id leaves an ordinary new draft and a
+    // neutral line. The opponent must be one of the team's dossiers.
+    let thread = Resource::new(
+        move || {
+            query
+                .read()
+                .get("match_id")
+                .filter(|m| !m.trim().is_empty())
+        },
+        |id| async move {
+            match id {
+                Some(id) => Some(crate::pages::home::get_thread_match(id).await.ok()),
+                None => None,
+            }
+        },
+    );
+    let thread_applied = StoredValue::new(false);
+    // The prefilled editor counts as untouched for the leave guard.
+    let thread_base: StoredValue<Option<Snapshot>> = StoredValue::new(None);
+    Effect::new(move |_| {
+        if thread_applied.get_value() {
+            return;
+        }
+        let (draft_q, match_q, opp_q, side_q, game_q) = {
+            let q = query.read();
+            (
+                q.get("draft_id").filter(|d| !d.is_empty()),
+                q.get("match_id").filter(|m| !m.trim().is_empty()),
+                q.get("opponent_id").filter(|o| !o.trim().is_empty()),
+                q.get("side"),
+                q.get("game"),
+            )
+        };
+        // Opening a saved draft, or nothing carried: nothing to prefill.
+        if draft_q.is_some() || (match_q.is_none() && opp_q.is_none() && side_q.is_none()) {
+            thread_applied.set_value(true);
+            return;
+        }
+        let opps = match opponents_list.get() {
+            Some(Ok(o)) => o,
+            Some(Err(_)) => Vec::new(),
+            None => return,
+        };
+        let Some(resolved) = thread.get() else {
+            return;
+        };
+        thread_applied.set_value(true);
+        if ed.loaded_id.get_untracked().is_some() {
+            return;
+        }
+        let known = |id: &str| opps.iter().any(|o| o.id.as_deref() == Some(id));
+        let opp_param = opp_q.filter(|o| known(o));
+        match resolved {
+            Some(Some(t)) => {
+                use crate::components::local_time::{format_time, parse_utc, TimeStyle};
+                use crate::models::match_day::{parse_game, thread_draft_name};
+                let game = parse_game(game_q.as_deref(), &t.format);
+                // The match's own opponent wins over the address.
+                let opp = t.opponent_id.clone().filter(|o| known(o)).or(opp_param);
+                if let Some(o) = opp {
+                    ed.opponent.set(o);
+                }
+                if ed.name.get_untracked().trim().is_empty() {
+                    let when = parse_utc(&t.starts_at)
+                        .map(|s| {
+                            format_time(
+                                &s.with_timezone(&chrono::Local),
+                                &chrono::Local::now(),
+                                TimeStyle::Short,
+                            )
+                        })
+                        .unwrap_or_default();
+                    ed.name.set(thread_draft_name(
+                        t.opponent_name.as_deref(),
+                        &when,
+                        &t.format,
+                        game,
+                    ));
+                }
+                if let Some(sid) = t.series_id.clone() {
+                    ed.series_id.set(sid);
+                }
+                ed.game.set(game.unwrap_or(1).to_string());
+                ed.match_id.set(t.id.clone());
+                thread_shown.set(Some(t));
+            }
+            Some(None) => {
+                thread_unknown.set(true);
+                if let Some(o) = opp_param {
+                    ed.opponent.set(o);
+                }
+            }
+            None => {
+                if let Some(o) = opp_param {
+                    ed.opponent.set(o);
+                }
+            }
+        }
+        if let Some(side) = side_q.filter(|s| s == "blue" || s == "red") {
+            ed.side.set(side);
+        }
+        thread_base.set_value(Some(ed.snapshot()));
     });
 
     // Save state and auto-save (existing drafts only, 2 s after the last
@@ -1390,7 +1528,10 @@ pub fn DraftPage() -> impl IntoView {
     use_unsaved_guard(Signal::derive(move || {
         let state = cx.save.state.get();
         state.guards_leave()
-            || (state == SaveState::NotSaved && ed.snapshot_tracked() != Editor::blank())
+            || (state == SaveState::NotSaved && {
+                let snap = ed.snapshot_tracked();
+                snap != Editor::blank() && thread_base.with_value(|b| b.as_ref() != Some(&snap))
+            })
     }));
 
     view! {
@@ -2315,9 +2456,38 @@ fn PlanSection(
         <section aria-labelledby="draft-plan-heading" class="mt-12">
             <SectionHeader title="Plan" id="draft-plan-heading" />
             <div class="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-                <Field id="draft-name" label="Draft name" required=true error=Signal::derive(move || name_error.get())>
-                    <TextField value=ed.name placeholder="vs Riverside, game 1" maxlength=120 />
-                </Field>
+                <div class="flex flex-col gap-1.5">
+                    <Field id="draft-name" label="Draft name" required=true error=Signal::derive(move || name_error.get())>
+                        <TextField value=ed.name placeholder="vs Riverside, game 1" maxlength=120 />
+                    </Field>
+                    // M159: the match this new draft is made for (from the
+                    // match thread), or why the link's match was dropped.
+                    {move || {
+                        let fresh = ed.loaded_id.get().is_none();
+                        let mid = ed.match_id.get();
+                        match cx.thread_shown.get() {
+                            Some(t) if fresh && !mid.is_empty() => {
+                                let what = match &t.opponent_name {
+                                    Some(o) => format!("{} vs {o}", crate::models::match_day::kind_label(&t.kind)),
+                                    None => crate::models::match_day::kind_label(&t.kind).to_string(),
+                                };
+                                Some(view! {
+                                    <p class="text-caption text-muted" data-testid="draft-thread">
+                                        "For the match: " {what} ", "
+                                        <crate::components::local_time::LocalTime iso=t.starts_at.clone() style=crate::components::local_time::TimeStyle::When />
+                                        ". Saving links the draft to it."
+                                    </p>
+                                }.into_any())
+                            }
+                            _ if fresh && cx.thread_unknown.get() => Some(view! {
+                                <p class="text-caption text-muted" data-testid="draft-thread-unknown">
+                                    "The link named a match that is not on your team's schedule. This is a new draft without it."
+                                </p>
+                            }.into_any()),
+                            _ => None,
+                        }
+                    }}
+                </div>
                 <div class="flex flex-col gap-1.5">
                     <span class="text-label font-medium text-secondary">"Our side"</span>
                     <div>
