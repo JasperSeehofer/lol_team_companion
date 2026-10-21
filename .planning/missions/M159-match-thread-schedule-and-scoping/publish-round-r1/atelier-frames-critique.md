@@ -61,3 +61,19 @@ Process: no subagent tool in this run, so the atelier read the frames and the fe
 - **Alignment (FIX 6):** from `md`, "Use for this match" is pulled back by its padding (`md:-mr-3`) so its label ends on the edge of the count caption. Phones keep it as it is: the 16 px gutter has no room for the overhang without sideways scroll.
 - **Not done: FIX 4 ("No answers yet").** RSVP is deferred to round 2 and no attendance data exists, so the row stays silent. Showing that text would claim a feature that is not there (honesty rule).
 - **Not re-shot here:** frames come from CI. The re-shoot happens on the next CI run.
+
+## Re-check on cc88702
+Process: atelier read the CI frames itself (no subagent tool available); stills judge layout only. No code touched.
+
+| Item | Result |
+|---|---|
+| Stray / doubled toast | Resolved. No toast in draft-from-thread (390, 1280, flows), prep-bo3 (390, 1280), picker or upcoming-1280-flow. |
+| Bo3 readout | Resolved. Prep step 5 reads "After the game: review / 1 of 2 reviewed / G1 done · G2 to do · G3 not played" at 390 (wraps under the title, uncut) and 1280. Earlier-work row is in the same frame. |
+| Picker +-6 h groups | Resolved. "Near the scheduled match" (21 Oct, Loss) and "Other recent games" (20 Oct, Win) eyebrows both show at 390, 1280 and flow, plus "Not in the list". |
+| 390 flow, "For the match" line | Resolved. Present under Draft name in draft-from-thread-390-flow (caption size, legible at full resolution only). |
+| Alignment | Resolved at 1280. "Use for this match" label ends on the same right edge as "1 draft" above it. Phones unchanged by design. |
+| "No answers yet" (old FIX 4) | Accepted as deferred: RSVP is round 2; silence is honest. |
+
+Remaining notes (non-blocking): the 390 draft H1 still wraps to 3 lines with the long fixture name; picker radios are all unselected in the frame, so the selected-row state is not shown (it was not in the earlier frames either).
+
+Final verdicts: match-day-upcoming PASS; draft-from-thread PASS; match-day-prep-bo3 PASS; post-game-picker PASS; match-detail-review PASS (unchanged).

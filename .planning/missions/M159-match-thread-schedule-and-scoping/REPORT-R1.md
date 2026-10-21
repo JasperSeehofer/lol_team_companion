@@ -160,8 +160,11 @@ is in CI's subset.
   | match-day-prep-bo3 | FIX → resolved in cc88702 (the frame now shows "G1 done · G2 to do · G3 not played" and "1 of 2 reviewed"; "Use for this match" aligned from `md`) |
 
   The executor's answers are in the critique's "Executor response" section. **Critique item 4 ("No answers yet" on the
-  upcoming row) was skipped**: RSVP is R2, and showing the text would claim a feature that does not exist. The tip's
-  frames are recaptured, but **the atelier has not re-read them**; the verifier can.
+  upcoming row) was skipped**: RSVP is R2, and showing the text would claim a feature that does not exist; the atelier
+  accepted it as deferred to R2 with RSVP. The atelier re-read the tip's recaptured frames ("Re-check on cc88702"):
+  **final atelier verdict PASS on all five surfaces** (match-day-upcoming, draft-from-thread, match-day-prep-bo3,
+  post-game-picker, match-detail-review). Non-blocking notes: the draft title wraps to 3 lines at 390 with the long
+  fixture name, and no picker row is selected in the frame.
 - **Rubric harness** (`rubric-check.md`): CI's `rubric-check.mjs` measured only the public auth pages, because it has
   no sign-in step. **The signed-in M159 surfaces were judged by the atelier alone, not by the harness.**
 - `./scripts/lint_design.sh`: zero on every rule.
@@ -190,5 +193,4 @@ goes through `82-release.sh` behind its own cards. No migration runs at the next
 3. **Item 8, the brief share link and migration v17.** Reason: STOP RULE.
 4. **The STORED wording:** "the next match" becomes "scheduled matches", together with the RSVP and share-link lines,
    shown to the adviser.
-5. **An atelier re-read** of the recaptured draft-from-thread and match-day-prep-bo3 frames.
-6. **A sign-in step for the rubric harness**, carried over from M148.
+5. **A sign-in step for the rubric harness**, carried over from M148.
