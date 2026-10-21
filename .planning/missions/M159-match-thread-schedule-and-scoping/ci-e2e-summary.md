@@ -1,14 +1,14 @@
 # CI e2e summary
 
-- run: 39628884536
-- sha: 92e28bdb1296e450da949d0dd4ae325ac2b90f6d
+- run: 39631112808
+- sha: c04ed5729e0807747121dd3763f4dce60f0db4d0
 
 ## Playwright
 
-expected 188, unexpected 1, flaky 0, skipped 0
+expected 190, unexpected 1, flaky 0, skipped 0
 
 ### [unexpected] match-thread.spec.ts:134 match thread: the draft opens prefilled from the thread link
-attempt 1: failed (31723 ms)
+attempt 1: failed (31463 ms)
 ```
 Error: expect(locator).toBeVisible() failed
 
@@ -21,7 +21,7 @@ Call log:
   - Expect "toBeVisible" with timeout 15000ms
   - waiting for getByTestId('draft-thread-unknown')
 ```
-attempt 2: failed (33625 ms)
+attempt 2: failed (33409 ms)
 ```
 Error: expect(locator).toBeVisible() failed
 
