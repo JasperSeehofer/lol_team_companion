@@ -329,6 +329,8 @@ pub async fn nudge_facts(
     }
     #[derive(Debug, Deserialize, SurrealValue)]
     struct PastRow {
+        id: RecordId,
+        #[allow(dead_code)]
         starts_at: Datetime,
         kind: String,
         opponent: Option<RecordId>,
@@ -347,7 +349,7 @@ pub async fn nudge_facts(
              SELECT opponent FROM opponent_player WHERE opponent IN (SELECT VALUE id FROM opponent WHERE team = $t) AND last_fetched >= <datetime>$recent; \
              SELECT id, name, opponent, created_at FROM draft WHERE team = $t AND created_at >= <datetime>$recent ORDER BY created_at DESC; \
              SELECT VALUE draft FROM game_plan WHERE team = $t AND draft != NONE; \
-             SELECT starts_at, kind, opponent, opponent.name AS opponent_name FROM scheduled_match WHERE team = $t AND starts_at < <datetime>$now AND starts_at >= <datetime>$recent ORDER BY starts_at DESC LIMIT 1; \
+             SELECT id, starts_at, kind, opponent, opponent.name AS opponent_name FROM scheduled_match WHERE team = $t AND starts_at < <datetime>$now AND starts_at >= <datetime>$recent ORDER BY starts_at DESC LIMIT 1; \
              SELECT count() AS n FROM action_item WHERE team = $t AND status IN ['open', 'in_progress'] AND created_at < <datetime>$old GROUP ALL;",
         )
         .bind(("tk", record_key(team_id, "team")))
@@ -402,12 +404,13 @@ pub async fn nudge_facts(
     if let Some(p) = past {
         if let Some(opp) = &p.opponent {
             let name = p.opponent_name.clone().unwrap_or_default();
+            // M159: only the plan and review stamped to that match count.
             let facts = db::match_prep_facts(
                 db,
                 team_id,
-                &opp.to_sql(),
-                &name,
-                &db::dt_to_string(&p.starts_at),
+                &p.id.to_sql(),
+                Some(&opp.to_sql()),
+                Some(&name),
             )
             .await?;
             if let (Some(plan), None) = (facts.plans.first(), facts.review_after) {

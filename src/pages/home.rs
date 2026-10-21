@@ -23,8 +23,8 @@ use crate::components::ui::{
 };
 use crate::models::guidance::HomeGuide;
 use crate::models::match_day::{
-    format_label, kind_label, BriefPlayer, LinkRef, MatchDay, OpponentBrief, ScheduledMatchInput,
-    FORMATS, KINDS,
+    format_label, game_count, kind_label, review_games, review_readout, reviews_complete,
+    BriefPlayer, GameReview, LinkRef, MatchDay, OpponentBrief, ScheduledMatchInput, FORMATS, KINDS,
 };
 use crate::pages::closed_beta::Landing;
 
@@ -133,9 +133,6 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
                     })
                     .collect();
                 ps.sort_by_key(|p| Role::parse(&p.role).map(|r| r as u8).unwrap_or(9));
-                facts = db::match_prep_facts(&db, &team_id, opp_id, &opp.name, &m.starts_at)
-                    .await
-                    .map_err(authz::server_err)?;
                 brief = Some(OpponentBrief {
                     id: opp_id.clone(),
                     name: opp.name.clone(),
@@ -147,6 +144,17 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
                 });
             }
         }
+        // M159: only work stamped to this match counts; unstamped work
+        // against its opponent is offered as earlier work.
+        facts = db::match_prep_facts(
+            &db,
+            &team_id,
+            &m.id,
+            brief.as_ref().map(|b| b.id.as_str()),
+            brief.as_ref().map(|b| b.name.as_str()),
+        )
+        .await
+        .map_err(authz::server_err)?;
     }
 
     let open = db::list_open_action_items(&db, &team_id)
@@ -207,6 +215,9 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
         drafts: facts.drafts,
         plans: facts.plans,
         review_after: facts.review_after,
+        played_games: facts.played_games,
+        reviewed_games: facts.reviewed_games,
+        earlier: facts.earlier,
         open_item_count: open.len(),
         open_items: open.into_iter().take(4).collect(),
         last_review,
@@ -245,6 +256,28 @@ pub async fn get_thread_match(
         .await
         .map_err(authz::server_err)?;
     Ok(crate::models::match_day::ThreadMatch::from(&m))
+}
+
+/// M159: "Use for this match": stamps one piece of earlier, unstamped work
+/// (`kind` "draft" | "plan" | "review") with the team's match. Both ids are
+/// checked as the caller's team records in the DB layer ("Not found"
+/// otherwise).
+#[server]
+pub async fn use_for_match(
+    match_id: String,
+    kind: String,
+    item_id: String,
+) -> Result<(), ServerFnError> {
+    use crate::models::match_day::WorkKind;
+    use crate::server::{authz, db};
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    let Some(kind) = WorkKind::parse(&kind) else {
+        return Err(authz::server_err(db::DbError::NotFound));
+    };
+    db::use_for_match(&ctx.db, &team_id, &match_id, kind.table(), &item_id)
+        .await
+        .map_err(authz::server_err)
 }
 
 /// Create or update the next match (any member).
@@ -448,24 +481,60 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
             .link("/action-items", "Go through them")
     };
 
-    let review = match (&md.review_after, started) {
-        (Some(r), _) => PrepStep::new("After the game: review", PrepState::Done)
-            .detail("The review of this match is written.")
+    // M159: the review step counts only reviews stamped to this match, game
+    // by game for a series. A game counts as played when it has a stamped
+    // draft or review; when none does, game 1 is required. The step is done
+    // only when every played game has a review (`review_games`). A stamped
+    // review without a game number counts as game 1.
+    let reviewed: Vec<i32> = if md.reviewed_games.is_empty() && md.review_after.is_some() {
+        vec![1]
+    } else {
+        md.reviewed_games.clone()
+    };
+    let games = review_games(&m.format, &md.played_games, &reviewed);
+    let complete = reviews_complete(&games);
+    let series = game_count(&m.format) > 1;
+    let readout = review_readout(&games);
+    let to_write = games
+        .iter()
+        .find(|(_, s)| *s == GameReview::ToDo)
+        .map(|(g, _)| *g)
+        .unwrap_or(1);
+    let review = match (&md.review_after, complete, started) {
+        (Some(r), true, _) => PrepStep::new("After the game: review", PrepState::Done)
+            .detail(if series {
+                readout.clone()
+            } else {
+                "The review of this match is written.".to_string()
+            })
             .status("Written")
             .link(format!("/post-game?review_id={}", r.id), "Open the review"),
-        (None, false) => PrepStep::new("After the game: review", PrepState::Todo)
+        (None, _, false) => PrepStep::new("After the game: review", PrepState::Todo)
             .detail("Write it right after the match, while it is fresh.")
             .status("After the game"),
-        (None, true) => {
-            let carried = thread_suffix(m, series_game(&m.format, 1));
+        (written, _, _) => {
+            let carried = thread_suffix(m, series_game(&m.format, to_write));
             let href = match (md.plans.first(), md.drafts.first()) {
                 (Some(p), _) => format!("/post-game?plan_id={}{carried}", p.id),
                 (None, Some(d)) => format!("/post-game?draft_id={}{carried}", d.id),
                 _ => format!("/post-game?{}", &carried[1..]),
             };
+            let reviewed_n = games.iter().filter(|(_, s)| *s == GameReview::Done).count();
+            let played_n = games
+                .iter()
+                .filter(|(_, s)| *s != GameReview::NotPlayed)
+                .count();
             PrepStep::new("After the game: review", PrepState::Todo)
-                .detail("The match has started. Review it while it is fresh.")
-                .status("To write")
+                .detail(if series {
+                    readout.clone()
+                } else {
+                    "The match has started. Review it while it is fresh.".to_string()
+                })
+                .status(if written.is_some() {
+                    format!("{reviewed_n} of {played_n} reviewed")
+                } else {
+                    "To write".to_string()
+                })
                 .link(href, "Write the review")
         }
     };
@@ -741,6 +810,14 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                                     <p class="mt-4 max-w-prose text-body text-secondary"><span class="eyebrow mr-2">"Notes"</span>{n}</p>
                                 })}
                                 {nudge.clone().map(|n| view! { <div class="mt-4"><NudgeLine nudge=n on_change=on_change /></div> })}
+                                // M159: unstamped work against this opponent is
+                                // offered, never counted (atelier card 2d).
+                                {match (&md.brief, md.earlier.is_empty()) {
+                                    (Some(b), false) => Some(view! {
+                                        <EarlierWorkList match_id=m.id.clone() opponent=b.name.clone() items=md.earlier.clone() on_change=on_change />
+                                    }),
+                                    _ => None,
+                                }}
                             </section>
                             <Brief brief=md.brief.clone() viewer_read=viewer_read read_by=m.brief_read_by.len() members=md.member_count set_read=set_read />
                         </div>
@@ -832,6 +909,89 @@ fn format_short(format: &str) -> &'static str {
 
 /// How many upcoming rows show before "Show all".
 const UPCOMING_COLLAPSED: usize = 3;
+
+/// M159: "Earlier work vs Rooks (n)": drafts, plans and reviews against
+/// the match's opponent made before the match thread, each with a link and
+/// a Quiet "Use for this match" that stamps it (`use_for_match`, checked as
+/// the team's records on the server) and reloads Match Day. Never counted
+/// as done; nothing renders when there is none.
+#[component]
+fn EarlierWorkList(
+    match_id: String,
+    opponent: String,
+    items: Vec<crate::models::match_day::EarlierWork>,
+    on_change: Callback<()>,
+) -> impl IntoView {
+    use crate::models::match_day::{earlier_breakdown, WorkKind};
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let busy = RwSignal::new(None::<String>);
+    let n = items.len();
+    let breakdown = earlier_breakdown(&items);
+    let rows = items
+        .into_iter()
+        .map(|e| {
+            let kind_word = match e.kind {
+                WorkKind::Draft => "Draft",
+                WorkKind::Plan => "Plan",
+                WorkKind::Review => "Review",
+            };
+            let href = e.kind.href(&e.id);
+            let label = format!("Use {} for this match", e.name);
+            let id = e.id.clone();
+            let id_busy = e.id.clone();
+            let kind = e.kind.as_str().to_string();
+            let match_id = match_id.clone();
+            let on_use = Callback::new(move |_: leptos::ev::MouseEvent| {
+                if busy.get_untracked().is_some() {
+                    return;
+                }
+                busy.set(Some(id.clone()));
+                let (match_id, kind, id) = (match_id.clone(), kind.clone(), id.clone());
+                leptos::task::spawn_local(async move {
+                    match use_for_match(match_id, kind, id).await {
+                        Ok(()) => {
+                            toast.push.run(Toast::success("Linked to this match."));
+                            on_change.run(());
+                        }
+                        Err(e) => {
+                            busy.set(None);
+                            toast
+                                .push
+                                .run(Toast::error(format!("Could not link it: {e}")));
+                        }
+                    }
+                });
+            });
+            view! {
+                <li class="flex min-h-11 items-center justify-between gap-3 border-b border-rule py-1" data-testid="earlier-work">
+                    <a href=href class="min-w-0 truncate text-body text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                        <span class="text-muted">{kind_word} ": "</span>{e.name.clone()}
+                    </a>
+                    <Button
+                        variant=ButtonVariant::Quiet
+                        size=ButtonSize::Touch
+                        aria_label=label
+                        loading=Signal::derive(move || busy.get().as_deref() == Some(id_busy.as_str()))
+                        on_click=on_use
+                        attr:data-testid="use-for-match"
+                    >
+                        "Use for this match"
+                    </Button>
+                </li>
+            }
+        })
+        .collect_view();
+    view! {
+        <section aria-labelledby="earlier-h" class="mt-6" data-earlier>
+            <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-rule pb-2">
+                <h3 id="earlier-h" class="text-label font-medium text-secondary">{format!("Earlier work vs {opponent} ({n})")}</h3>
+                <span class="text-caption text-muted">{breakdown}</span>
+            </div>
+            <p class="mt-2 text-caption text-muted">"Made before this match. It counts in the steps above once you use it for this match."</p>
+            <ul class="mt-1">{rows}</ul>
+        </section>
+    }
+}
 
 /// M159, recipe card 1: the team's other upcoming matches under the
 /// current one, a ruled list (time · kind · format · opponent). Three rows,
@@ -1312,6 +1472,9 @@ mod tests {
             drafts: vec![],
             plans: vec![],
             review_after: None,
+            played_games: vec![],
+            reviewed_games: vec![],
+            earlier: vec![],
             open_items: vec![],
             open_item_count: 0,
             last_review: None,
@@ -1418,6 +1581,57 @@ mod tests {
             name: "R".into(),
         });
         assert_eq!(states(&prep_steps(&m)), vec![Done, Done, Done, Done, Done]);
+    }
+
+    #[test]
+    fn a_series_review_step_reads_game_by_game() {
+        let mut m = md(-1);
+        m.played_games = vec![1, 2];
+        m.reviewed_games = vec![1];
+        m.review_after = Some(LinkRef {
+            id: "post_game_learning:r".into(),
+            name: "R".into(),
+        });
+        let s = prep_steps(&m);
+        assert_ne!(s[4].state, PrepState::Done);
+        assert_eq!(
+            s[4].detail.as_deref(),
+            Some("G1 done \u{b7} G2 to do \u{b7} G3 not played")
+        );
+        assert_eq!(s[4].status.as_deref(), Some("1 of 2 reviewed"));
+        assert_eq!(
+            s[4].href.as_deref(),
+            Some("/post-game?match_id=scheduled_match:1&game=2")
+        );
+        m.reviewed_games = vec![1, 2];
+        let s = prep_steps(&m);
+        assert_eq!(s[4].state, PrepState::Done);
+        assert_eq!(
+            s[4].detail.as_deref(),
+            Some("G1 done \u{b7} G2 done \u{b7} G3 not played")
+        );
+    }
+
+    #[test]
+    fn earlier_work_never_makes_a_step_done() {
+        use crate::models::match_day::{EarlierWork, WorkKind};
+        let mut m = md(-1);
+        m.earlier = vec![
+            EarlierWork {
+                kind: WorkKind::Draft,
+                id: "draft:old".into(),
+                name: "Old".into(),
+            },
+            EarlierWork {
+                kind: WorkKind::Review,
+                id: "post_game_learning:old".into(),
+                name: "Old review".into(),
+            },
+        ];
+        let s = prep_steps(&m);
+        assert_eq!(s[1].state, PrepState::Todo);
+        assert_ne!(s[4].state, PrepState::Done);
+        assert_eq!(s[4].status.as_deref(), Some("To write"));
     }
 
     #[test]

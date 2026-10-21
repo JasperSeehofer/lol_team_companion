@@ -86,6 +86,17 @@ pub async fn save_draft(
             .await
             .map_err(authz::server_err)?;
     }
+    // M159: an opponent carried by a match-thread link is a dossier id; it
+    // must be one of the team's ("Not found" otherwise). Older drafts keep
+    // free-text names, which are not records.
+    if let Some(o) = opponent
+        .as_deref()
+        .filter(|o| o.trim().starts_with("opponent:"))
+    {
+        db::ensure_team_record(&db, "opponent", o.trim(), &resolved_team_id)
+            .await
+            .map_err(authz::server_err)?;
+    }
 
     let draft_id = db::save_draft(
         &db,

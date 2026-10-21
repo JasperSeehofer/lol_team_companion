@@ -666,7 +666,18 @@ pub fn pick_nudge(
         .into_iter()
         .filter(|k| !is_muted(rows, k.key()))
         .filter_map(|k| candidate(k, f))
-        .find(|n| Some(n.href.as_str()) != skip_href)
+        .find(|n| !repeats_step(&n.href, skip_href))
+}
+
+/// A nudge repeats the prep sequence's next step when it links to the same
+/// place, or (M159) when it is the plain page ("/draft") and the step links
+/// to that page with the match thread's parameters
+/// ("/draft?match_id=...").
+fn repeats_step(nudge_href: &str, skip_href: Option<&str>) -> bool {
+    let Some(skip) = skip_href else {
+        return false;
+    };
+    nudge_href == skip || (!nudge_href.contains('?') && skip.split('?').next() == Some(nudge_href))
 }
 
 // ---------------------------------------------------------------------------
@@ -896,6 +907,26 @@ mod tests {
         f.account_created = Some(at("2026-01-01T00:00:00Z"));
         f.prev_seen = Some(at("2026-10-05T00:00:00Z"));
         assert!(!is_returning(&f));
+    }
+
+    #[test]
+    fn a_plain_nudge_link_does_not_repeat_the_thread_link() {
+        let mut f = facts("2026-10-12T12:00:00Z");
+        f.dossier_without_draft = Some(("opponent:o".into(), "Rooks".into()));
+        // M159: the prep step's "Start a draft" carries the match; the
+        // nudge's plain "/draft" is the same action and is skipped.
+        assert!(pick_nudge(
+            true,
+            &f,
+            &[],
+            Some("/draft?match_id=scheduled_match:1&opponent_id=opponent:o&game=1")
+        )
+        .is_none());
+        assert!(pick_nudge(true, &f, &[], Some("/opponents")).is_some());
+        assert!(!repeats_step(
+            "/game-plan?draft_id=draft:a",
+            Some("/game-plan?draft_id=draft:b")
+        ));
     }
 
     #[test]

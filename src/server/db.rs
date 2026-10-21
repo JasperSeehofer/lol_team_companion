@@ -8298,69 +8298,130 @@ pub async fn set_brief_read(
     Ok(())
 }
 
-/// Drafts against an opponent, the plans linked to them, and a review of a
-/// match that started at `starts_at` (linked to those drafts or plans and
-/// written after the start).
-#[derive(Clone, Debug, Default)]
-pub struct MatchPrepFacts {
-    pub drafts: Vec<LinkRef>,
-    pub plans: Vec<LinkRef>,
-    pub review_after: Option<LinkRef>,
-}
+/// The prep work of one scheduled match (M159: only work stamped to it
+/// counts; see `models::match_day::scope_prep`).
+pub type MatchPrepFacts = crate::models::match_day::MatchPrep;
 
+/// M159: the drafts, plans and reviews stamped to `match_id` (per game for
+/// a series), plus the earlier, unstamped work against the match's
+/// opponent (drafts naming its dossier id or, for older ones, its name; the
+/// plans and reviews linked to those drafts), which Match Day offers with
+/// "Use for this match" and never counts as done. Work stamped to another
+/// match is left out. `match_id` must be a match of `team_id` (callers take
+/// it from the team's own schedule); every row is filtered by the team.
 pub async fn match_prep_facts(
     db: &Surreal<Db>,
     team_id: &str,
-    opponent_id: &str,
-    opponent_name: &str,
-    starts_at: &str,
+    match_id: &str,
+    opponent_id: Option<&str>,
+    opponent_name: Option<&str>,
 ) -> DbResult<MatchPrepFacts> {
+    use crate::models::match_day::{scope_prep, PrepWork, Stamp, WorkKind};
     #[derive(Debug, Deserialize, SurrealValue)]
-    struct NameRow {
+    struct WorkRow {
         id: RecordId,
         #[serde(default)]
         name: Option<String>,
-        #[allow(dead_code)]
+        #[serde(default)]
+        game_number: Option<i64>,
+        #[serde(default)]
+        this_match: bool,
+        #[serde(default)]
         created_at: Option<Datetime>,
     }
-    // Drafts store the opponent's id (older ones its name).
+    let opp_id = opponent_id.map(str::trim).unwrap_or_default().to_string();
+    let opp_name = opponent_name
+        .map(|n| n.trim().to_lowercase())
+        .unwrap_or_default();
     let mut r = db
         .query(
             "LET $t = type::record('team', $team_key); \
-             LET $drafts = (SELECT id, name, created_at FROM draft WHERE team = $t AND (opponent = $opp_id OR string::lowercase(opponent ?? '') = $opp_name) ORDER BY created_at DESC); \
+             LET $m = type::record('scheduled_match', $match_key); \
+             LET $drafts = (SELECT id, name, game_number, created_at, (scheduled_match = $m) AS this_match FROM draft WHERE team = $t AND (scheduled_match = $m OR (scheduled_match = NONE AND (($opp_id != '' AND opponent = $opp_id) OR ($opp_name != '' AND string::lowercase(opponent ?? '') = $opp_name)))) ORDER BY created_at DESC LIMIT 100); \
              LET $draft_ids = $drafts.id; \
-             LET $plans = (SELECT id, name, created_at FROM game_plan WHERE team = $t AND draft != NONE AND draft IN $draft_ids ORDER BY created_at DESC); \
+             LET $plans = (SELECT id, name, game_number, created_at, (scheduled_match = $m) AS this_match FROM game_plan WHERE team = $t AND (scheduled_match = $m OR (scheduled_match = NONE AND draft != NONE AND draft IN $draft_ids)) ORDER BY created_at DESC LIMIT 100); \
              LET $plan_ids = $plans.id; \
              RETURN $drafts; \
              RETURN $plans; \
-             SELECT id, created_at FROM post_game_learning WHERE team = $t AND ((draft_id != NONE AND draft_id IN $draft_ids) OR (game_plan_id != NONE AND game_plan_id IN $plan_ids)) AND created_at >= <datetime>$starts ORDER BY created_at DESC LIMIT 1;",
+             SELECT id, game_number, created_at, (scheduled_match = $m) AS this_match FROM post_game_learning WHERE team = $t AND (scheduled_match = $m OR (scheduled_match = NONE AND ((draft_id != NONE AND draft_id IN $draft_ids) OR (game_plan_id != NONE AND game_plan_id IN $plan_ids)))) ORDER BY created_at DESC LIMIT 100;",
         )
         .bind(("team_key", record_key(team_id, "team")))
-        .bind(("opp_id", opponent_id.to_string()))
-        .bind(("opp_name", opponent_name.trim().to_lowercase()))
-        .bind(("starts", starts_at.to_string()))
+        .bind(("match_key", record_key(match_id.trim(), "scheduled_match")))
+        .bind(("opp_id", opp_id))
+        .bind(("opp_name", opp_name))
         .await?;
-    let link = |r: NameRow, fallback: &str| LinkRef {
-        id: r.id.to_sql(),
-        name: r
-            .name
-            .filter(|n| !n.trim().is_empty())
-            .unwrap_or_else(|| fallback.to_string()),
+    let drafts: Vec<WorkRow> = r.take(6).unwrap_or_default();
+    let plans: Vec<WorkRow> = r.take(7).unwrap_or_default();
+    let reviews: Vec<WorkRow> = r.take(8).unwrap_or_default();
+    let work = |kind: WorkKind, row: WorkRow| {
+        let fallback = match kind {
+            WorkKind::Draft => "Untitled draft".to_string(),
+            WorkKind::Plan => "Untitled plan".to_string(),
+            WorkKind::Review => match &row.created_at {
+                Some(c) => format!(
+                    "Review of {}",
+                    crate::models::utils::format_timestamp(&dt_to_string(c))
+                ),
+                None => "Review".to_string(),
+            },
+        };
+        PrepWork {
+            kind,
+            link: LinkRef {
+                id: row.id.to_sql(),
+                name: row
+                    .name
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or(fallback),
+            },
+            // The query returns this match's work and unstamped work only.
+            stamp: if row.this_match {
+                Stamp::ThisMatch
+            } else {
+                Stamp::None
+            },
+            game: row.game_number.and_then(|g| i32::try_from(g).ok()),
+        }
     };
-    let drafts: Vec<NameRow> = r.take(5).unwrap_or_default();
-    let plans: Vec<NameRow> = r.take(6).unwrap_or_default();
-    let review: Option<NameRow> = r.take(7).unwrap_or_default();
-    Ok(MatchPrepFacts {
-        drafts: drafts
-            .into_iter()
-            .map(|d| link(d, "Untitled draft"))
-            .collect(),
-        plans: plans
-            .into_iter()
-            .map(|p| link(p, "Untitled plan"))
-            .collect(),
-        review_after: review.map(|v| link(v, "Review")),
-    })
+    let mut all = Vec::new();
+    all.extend(drafts.into_iter().map(|d| work(WorkKind::Draft, d)));
+    all.extend(plans.into_iter().map(|p| work(WorkKind::Plan, p)));
+    all.extend(reviews.into_iter().map(|v| work(WorkKind::Review, v)));
+    Ok(scope_prep(all))
+}
+
+/// M159: "Use for this match": stamps one unstamped draft, plan or review
+/// of `team_id` with the team's match `match_id`. Both must be the team's
+/// records (`check_stamps`, `ensure_team_record`): another team's or an
+/// unknown id is `NotFound`. Work already stamped to a match is left as it
+/// is (`Invalid`).
+pub async fn use_for_match(
+    db: &Surreal<Db>,
+    team_id: &str,
+    match_id: &str,
+    table: &'static str,
+    item_id: &str,
+) -> DbResult<()> {
+    if !matches!(table, "draft" | "game_plan" | "post_game_learning") {
+        return Err(DbError::NotFound);
+    }
+    check_stamps(db, team_id, Some(match_id), None, None).await?;
+    ensure_team_record(db, table, item_id.trim(), team_id).await?;
+    let mut r = db
+        .query(format!(
+            "UPDATE type::record('{table}', $key) SET scheduled_match = type::record('scheduled_match', $match_key), scheduled_match_deleted = NONE WHERE team = type::record('team', $team_key) AND scheduled_match = NONE RETURN id;"
+        ))
+        .bind(("key", record_key(item_id.trim(), table)))
+        .bind(("match_key", record_key(match_id.trim(), "scheduled_match")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::Invalid(
+            "This is already linked to a match.".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// The team's newest reviews, newest first.

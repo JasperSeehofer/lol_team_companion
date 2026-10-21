@@ -646,3 +646,174 @@ async fn a_carried_match_resolves_for_the_team_only() {
         "a draft stamped with another team's match",
     );
 }
+
+async fn match_vs(db: &Surreal<Db>, team: &str, user: &str, opponent: &str, hours: i64) -> String {
+    db::save_scheduled_match(
+        db,
+        team,
+        user,
+        ScheduledMatchInput {
+            id: None,
+            starts_at: in_hours(hours),
+            kind: "scrim".into(),
+            format: "bo3".into(),
+            opponent_id: Some(opponent.into()),
+            notes: None,
+        },
+    )
+    .await
+    .unwrap()
+}
+
+async fn unstamped_draft_vs(db: &Surreal<Db>, team: &str, user: &str, opponent: &str) -> String {
+    db::save_draft(
+        db,
+        team,
+        user,
+        "Old draft vs Rooks".into(),
+        Some(opponent.into()),
+        None,
+        vec![],
+        vec![],
+        None,
+        "blue".into(),
+        vec![],
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap()
+}
+
+/// Item 4: Match Day's prep facts count only the work stamped to this
+/// match, per game; a rematch against the same opponent starts empty, and
+/// unstamped work against the opponent is earlier work, never counted.
+#[tokio::test]
+async fn prep_facts_count_only_work_stamped_to_the_match() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let opp = db::create_opponent(&db, &t.team1, "Riverside Rooks".into(), None)
+        .await
+        .unwrap();
+    let first = match_vs(&db, &t.team1, &t.a, &opp, 24).await;
+    let rematch = match_vs(&db, &t.team1, &t.a, &opp, 72).await;
+
+    // The first match: games 1 and 2 drafted, a plan, game 1 reviewed.
+    draft(&db, &t.team1, &t.a, None, Some(1), Some(first.clone()))
+        .await
+        .unwrap();
+    draft(&db, &t.team1, &t.a, None, Some(2), Some(first.clone()))
+        .await
+        .unwrap();
+    db::save_game_plan(&db, plan(&t.team1, Some(first.clone()), Some(1)), &t.a)
+        .await
+        .unwrap();
+    db::save_post_game_learning(
+        &db,
+        review(&t.team1, &t.a, Some(first.clone()), None, Some(1)),
+    )
+    .await
+    .unwrap();
+    // Earlier, unstamped work against the same opponent.
+    let old = unstamped_draft_vs(&db, &t.team1, &t.a, &opp).await;
+    // Team two's work never shows.
+    let opp2 = db::create_opponent(&db, &t.team2, "Riverside Rooks".into(), None)
+        .await
+        .unwrap();
+    unstamped_draft_vs(&db, &t.team2, &t.b, &opp2).await;
+
+    let f = db::match_prep_facts(&db, &t.team1, &first, Some(&opp), Some("Riverside Rooks"))
+        .await
+        .unwrap();
+    assert_eq!(f.drafts.len(), 2);
+    assert_eq!(f.plans.len(), 1);
+    assert!(f.review_after.is_some());
+    assert_eq!(f.played_games, vec![1, 2]);
+    assert_eq!(f.reviewed_games, vec![1]);
+    assert_eq!(f.earlier.len(), 1);
+    assert_eq!(f.earlier[0].id, old);
+
+    // The rematch counts none of the first match's work.
+    let f = db::match_prep_facts(&db, &t.team1, &rematch, Some(&opp), Some("Riverside Rooks"))
+        .await
+        .unwrap();
+    assert!(f.drafts.is_empty() && f.plans.is_empty() && f.review_after.is_none());
+    assert!(f.played_games.is_empty() && f.reviewed_games.is_empty());
+    assert_eq!(f.earlier.len(), 1, "only the unstamped draft is offered");
+
+    // "Use for this match" stamps it: it now counts for the rematch and is
+    // no longer offered for either match.
+    db::use_for_match(&db, &t.team1, &rematch, "draft", &old)
+        .await
+        .unwrap();
+    let f = db::match_prep_facts(&db, &t.team1, &rematch, Some(&opp), Some("Riverside Rooks"))
+        .await
+        .unwrap();
+    assert_eq!(f.drafts.len(), 1);
+    assert_eq!(f.drafts[0].id, old);
+    assert!(f.earlier.is_empty());
+    let f = db::match_prep_facts(&db, &t.team1, &first, Some(&opp), Some("Riverside Rooks"))
+        .await
+        .unwrap();
+    assert_eq!(f.drafts.len(), 2);
+    assert!(f.earlier.is_empty());
+    // Work already stamped stays with its match.
+    invalid(
+        db::use_for_match(&db, &t.team1, &first, "draft", &old).await,
+        "a draft already stamped",
+    );
+}
+
+/// Item 4: "Use for this match" checks both records as the caller's team's:
+/// another team's match or work is NotFound.
+#[tokio::test]
+async fn use_for_match_is_team_scoped() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let ours = new_match(&db, &t.team1, &t.a, 24).await;
+    let theirs = new_match(&db, &t.team2, &t.b, 24).await;
+    let our_draft = draft(&db, &t.team1, &t.a, None, None, None).await.unwrap();
+    let their_draft = draft(&db, &t.team2, &t.b, None, None, None).await.unwrap();
+    let their_plan = db::save_game_plan(&db, plan(&t.team2, None, None), &t.b)
+        .await
+        .unwrap();
+
+    not_found(
+        db::use_for_match(&db, &t.team2, &ours, "draft", &their_draft).await,
+        "team two stamping with team one's match",
+    );
+    not_found(
+        db::use_for_match(&db, &t.team1, &ours, "draft", &their_draft).await,
+        "team one stamping team two's draft",
+    );
+    not_found(
+        db::use_for_match(&db, &t.team1, &ours, "game_plan", &their_plan).await,
+        "team one stamping team two's plan",
+    );
+    not_found(
+        db::use_for_match(&db, &t.team1, &theirs, "draft", &our_draft).await,
+        "team one using team two's match",
+    );
+    not_found(
+        db::use_for_match(&db, &t.team1, &ours, "user", &t.a).await,
+        "a table that is not prep work",
+    );
+    // Nothing was stamped by the refused calls.
+    let d = db::get_draft_for_prefill(&db, &t.team2, &their_draft)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(d.scheduled_match_id.is_none());
+    let d = db::get_draft_for_prefill(&db, &t.team1, &our_draft)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(d.scheduled_match_id.is_none());
+    // The team's own pair works.
+    db::use_for_match(&db, &t.team1, &ours, "draft", &our_draft)
+        .await
+        .unwrap();
+}

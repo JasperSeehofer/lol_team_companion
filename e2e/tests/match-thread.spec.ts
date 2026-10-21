@@ -188,3 +188,58 @@ test("match thread: the draft opens prefilled from the thread link", async ({ te
   await expect(page.getByTestId("draft-thread-unknown")).toBeVisible({ timeout: 15000 });
   await expect(page.locator("#draft-name")).toHaveValue("");
 });
+
+/**
+ * M159 item 4: Match Day counts only work stamped to the match. A draft
+ * made on the draft page without the thread is earlier work: shown as
+ * "Earlier work vs <opponent> (1)" and not counted, until "Use for this
+ * match" stamps it.
+ *
+ * Frames: match-day-prep-bo3-390.png and match-day-prep-bo3-1280.png when
+ * $MISSION_FRAMES_DIR is set (a Bo3, the editor's default format).
+ */
+test("match thread: earlier work is offered, not counted, and used for this match", async ({ teamPage }) => {
+  const page = teamPage;
+  const errors = captureErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const opp = `Rooks ${Date.now()}`;
+  await createOpponent(page, opp);
+
+  // A draft against the opponent made without the match thread.
+  await navigateTo(page, "/draft");
+  await page.locator("#draft-opponent").selectOption({ label: opp }, { timeout: 15000 });
+  await page.locator("#draft-name").fill("Old plan vs them");
+  await page.getByTestId("draft-save").click();
+  await expect(page.getByTestId("draft-save-state")).toHaveText("Saved", { timeout: 10000 });
+
+  await navigateTo(page, "/");
+  await page.getByTestId("add-next-match").click();
+  const dialog = page.getByRole("dialog", { name: "Add the next match" });
+  await expect(dialog).toBeVisible();
+  await dialog.locator("#match-date").fill(inDays(1));
+  await dialog.locator("#match-time").fill("19:00");
+  await dialog.locator("#match-opponent").selectOption({ label: opp });
+  await page.getByTestId("save-next-match").click();
+  await expect(dialog).not.toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("heading", { level: 1, name: `Scrim vs ${opp}` })).toBeVisible({ timeout: 10000 });
+
+  // Not counted: the draft step is still to do; the work is offered.
+  const steps = page.locator("[data-prep] li");
+  await expect(steps.nth(1)).toContainText("None yet", { timeout: 10000 });
+  const earlier = page.locator("[data-earlier]");
+  await expect(earlier).toContainText(`Earlier work vs ${opp} (1)`);
+  await expect(earlier.getByRole("link", { name: /Old plan vs them/ })).toHaveAttribute("href", /^\/draft\?draft_id=draft:/);
+  await settle(page);
+  await shot(page, "match-day-prep-bo3-1280", true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  await shot(page, "match-day-prep-bo3-390", true);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // "Use for this match" stamps it: it counts and is no longer offered.
+  await earlier.getByTestId("use-for-match").click();
+  await expect(page.locator("[data-earlier]")).toHaveCount(0, { timeout: 10000 });
+  await expect(steps.nth(1)).toContainText("1 draft", { timeout: 10000 });
+
+  expect(filterRealErrors(errors)).toHaveLength(0);
+});

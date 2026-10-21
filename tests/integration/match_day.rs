@@ -241,10 +241,14 @@ async fn prep_facts_follow_the_artefacts() {
         .await
         .unwrap();
     let starts = in_hours(-1);
-    let facts = db::match_prep_facts(&db, &t.team1, &opp, "Riverside Rooks", &starts)
+    let m = db::save_scheduled_match(&db, &t.team1, &t.a, input(starts, Some(opp.clone())))
         .await
         .unwrap();
-    assert!(facts.drafts.is_empty() && facts.plans.is_empty() && facts.review_after.is_none());
+    let f = db::match_prep_facts(&db, &t.team1, &m, Some(&opp), Some("Riverside Rooks"))
+        .await
+        .unwrap();
+    assert!(f.drafts.is_empty() && f.plans.is_empty() && f.review_after.is_none());
+    assert!(f.earlier.is_empty());
 
     // One draft by id, one older one by name, one against someone else.
     let d1 = draft_vs(&db, &t.team1, &t.a, Some(opp.clone())).await;
@@ -258,27 +262,17 @@ async fn prep_facts_follow_the_artefacts() {
     db::save_game_plan(&db, plan(&t.team1, None), &t.a)
         .await
         .unwrap();
-    let facts = db::match_prep_facts(&db, &t.team1, &opp, "Riverside Rooks", &starts)
+    db::save_post_game_learning(&db, review(&t.team1, &t.a, Some(p1.clone()), None))
         .await
         .unwrap();
-    assert_eq!(facts.drafts.len(), 2);
-    assert_eq!(facts.plans.len(), 1);
-    assert_eq!(facts.plans[0].id, p1);
-    assert!(facts.review_after.is_none());
-
-    db::save_post_game_learning(&db, review(&t.team1, &t.a, Some(p1), None))
+    // M159: unstamped work is earlier work, never counted for the match.
+    let f = db::match_prep_facts(&db, &t.team1, &m, Some(&opp), Some("Riverside Rooks"))
         .await
         .unwrap();
-    let facts = db::match_prep_facts(&db, &t.team1, &opp, "Riverside Rooks", &starts)
-        .await
-        .unwrap();
-    assert!(facts.review_after.is_some());
-    // A review written before the match started does not count.
-    let later = in_hours(2);
-    let facts = db::match_prep_facts(&db, &t.team1, &opp, "Riverside Rooks", &later)
-        .await
-        .unwrap();
-    assert!(facts.review_after.is_none());
+    assert!(f.drafts.is_empty() && f.plans.is_empty() && f.review_after.is_none());
+    assert_eq!(f.earlier.len(), 4, "two drafts, the plan and the review");
+    assert!(f.earlier.iter().any(|e| e.id == p1));
+    assert!(f.earlier.iter().all(|e| !e.id.is_empty()));
 
     let counts = db::team_counts(&db, &t.team1).await.unwrap();
     assert_eq!(
