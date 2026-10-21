@@ -967,16 +967,21 @@ fn EarlierWorkList(
                     <a href=href class="min-w-0 truncate text-body text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
                         <span class="text-muted">{kind_word} ": "</span>{e.name.clone()}
                     </a>
-                    <Button
-                        variant=ButtonVariant::Quiet
-                        size=ButtonSize::Touch
-                        aria_label=label
-                        loading=Signal::derive(move || busy.get().as_deref() == Some(id_busy.as_str()))
-                        on_click=on_use
-                        attr:data-testid="use-for-match"
-                    >
-                        "Use for this match"
-                    </Button>
+                    // From md the quiet button's padding is pulled back so its
+                    // label ends on the edge of the count caption above (on
+                    // phones the page gutter has no room for it).
+                    <div class="shrink-0 md:-mr-3">
+                        <Button
+                            variant=ButtonVariant::Quiet
+                            size=ButtonSize::Touch
+                            aria_label=label
+                            loading=Signal::derive(move || busy.get().as_deref() == Some(id_busy.as_str()))
+                            on_click=on_use
+                            attr:data-testid="use-for-match"
+                        >
+                            "Use for this match"
+                        </Button>
+                    </div>
                 </li>
             }
         })

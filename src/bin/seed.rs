@@ -223,8 +223,9 @@ async fn main() {
              What next ideas (ideas stay unpublished until an admin publishes them; no ledger figures)"
         );
         println!(
-            "  a fictional demo game {DEMO_MATCH_ID} (scoreboards and timeline, never looked up on Riot), \
-             in seed-alpha-top's games"
+            "  a fictional demo game {DEMO_MATCH_ID} (scoreboards and timeline, never looked up on Riot) \
+             and a lost rematch {DEMO_REMATCH_ID} three hours before the seed ran (scoreboard only), \
+             in the Northgate members' games"
         );
         println!("  guidance demo: seed-beta-sup is a returning user (account 40 days old, writes 30 days old)");
         println!("  1 invite code (25 uses, 30 days)");
@@ -730,19 +731,72 @@ async fn demo_match(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String
         .await
         .map_err(err)?;
     }
-    // The game is the team's too (Team games, the post-game review's match list).
+    // M159: a rematch a few hours before the seed ran, which Northgate lost,
+    // so the review's game picker has two games and a match recorded on
+    // Match Day can sit within six hours of one of them. Scoreboard only
+    // (no timeline is stored for it).
+    let rematch: Vec<MatchParticipant> = participants
+        .iter()
+        .map(|p| MatchParticipant {
+            kills: p.deaths,
+            deaths: p.kills,
+            win: !p.win,
+            ..p.clone()
+        })
+        .collect();
+    const REMATCH_DURATION: i32 = 33 * 60 + 41;
+    db::store_match_detail(
+        db,
+        DEMO_REMATCH_ID,
+        &rematch,
+        &[],
+        REMATCH_DURATION,
+        "CLASSIC",
+    )
+    .await
+    .map_err(err)?;
+    let rematch_end = Some((chrono::Utc::now() - chrono::Duration::hours(3)).timestamp_millis());
+    for (member, me) in alpha.members.iter().zip(rematch.iter()) {
+        db::store_matches(
+            db,
+            member,
+            vec![riot::MatchData {
+                match_id: DEMO_REMATCH_ID.to_string(),
+                queue_id: 420,
+                game_duration: REMATCH_DURATION,
+                game_end_epoch_ms: rematch_end,
+                champion: me.champion_name.clone(),
+                kills: me.kills,
+                deaths: me.deaths,
+                assists: me.assists,
+                cs: me.cs,
+                vision_score: me.vision_score,
+                damage: me.damage,
+                win: me.win,
+            }],
+        )
+        .await
+        .map_err(err)?;
+    }
+    // The games are the team's too (Team games, the post-game review's match list).
     let response = db
         .query(
-            "UPDATE match SET team_id = type::record('team', $team_key) WHERE match_id = $match_id",
+            "UPDATE match SET team_id = type::record('team', $team_key) WHERE match_id IN $match_ids",
         )
         .bind(("team_key", db::record_key(&alpha.id, "team")))
-        .bind(("match_id", DEMO_MATCH_ID.to_string()))
+        .bind((
+            "match_ids",
+            vec![DEMO_MATCH_ID.to_string(), DEMO_REMATCH_ID.to_string()],
+        ))
         .await
         .map_err(|e| e.to_string())?;
     response.check().map_err(|e| e.to_string())?;
-    println!("Stored the demo match {DEMO_MATCH_ID}.");
+    println!("Stored the demo match {DEMO_MATCH_ID} and the rematch {DEMO_REMATCH_ID}.");
     Ok(())
 }
+
+/// M159: the seed's second fictional game (see `demo_match`).
+const DEMO_REMATCH_ID: &str = "SEED1_1000000002";
 
 // ---------------------------------------------------------------------------
 // Cleanup

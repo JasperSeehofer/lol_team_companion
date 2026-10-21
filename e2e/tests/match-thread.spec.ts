@@ -28,7 +28,22 @@ async function height(loc: import("@playwright/test").Locator): Promise<number> 
   return loc.evaluate((el) => el.getBoundingClientRect().height);
 }
 
+/**
+ * Toasts are app-wide and outlive a client-side navigation by design (a
+ * "Match saved" stays its 5 s on the next page); a frame is about the page,
+ * so dismiss them before shooting.
+ */
+async function clearToasts(page: Page) {
+  const region = page.locator('section[aria-label="Notifications"]');
+  const dismiss = region.getByRole("button", { name: "Dismiss" });
+  for (let i = 0; i < 6 && (await dismiss.count()) > 0; i++) {
+    await dismiss.first().click({ timeout: 2000 }).catch(() => {});
+  }
+  await expect(region.locator("li")).toHaveCount(0, { timeout: 6000 });
+}
+
 async function shot(page: Page, name: string, fullPage: boolean) {
+  await clearToasts(page);
   const sw = await page.evaluate(() => document.documentElement.scrollWidth);
   const vw = page.viewportSize()?.width ?? 0;
   expect(sw, `${name}: ${sw}px wide in a ${vw}px viewport`).toBeLessThanOrEqual(vw);
@@ -170,6 +185,9 @@ test("match thread: the draft opens prefilled from the thread link", async ({ te
   await page.setViewportSize({ width: 390, height: 844 });
   await settle(page);
   await shot(page, "draft-from-thread-390", false);
+  // The whole page at 390, so the "For the match" line under the name shows.
+  await expect(page.getByTestId("draft-thread")).toBeVisible();
+  await shot(page, "draft-from-thread-390-flow", true);
   await page.setViewportSize({ width: 1280, height: 800 });
 
   // The first save stamps the match: Match Day counts the draft.
@@ -195,8 +213,14 @@ test("match thread: the draft opens prefilled from the thread link", async ({ te
  * "Earlier work vs <opponent> (1)" and not counted, until "Use for this
  * match" stamps it.
  *
+ * For the Bo3 readout, game 2 gets a draft from the thread (so it counts as
+ * played) and game 1 a review from the thread: the review step then reads
+ * "G1 done · G2 to do · G3 not played" and "1 of 2 reviewed" while the match
+ * is still ahead.
+ *
  * Frames: match-day-prep-bo3-390.png and match-day-prep-bo3-1280.png when
- * $MISSION_FRAMES_DIR is set (a Bo3, the editor's default format).
+ * $MISSION_FRAMES_DIR is set (a Bo3, the editor's default format): the
+ * readout and the earlier work in one state.
  */
 test("match thread: earlier work is offered, not counted, and used for this match", async ({ teamPage }) => {
   const page = teamPage;
@@ -229,6 +253,34 @@ test("match thread: earlier work is offered, not counted, and used for this matc
   const earlier = page.locator("[data-earlier]");
   await expect(earlier).toContainText(`Earlier work vs ${opp} (1)`);
   await expect(earlier.getByRole("link", { name: /Old plan vs them/ })).toHaveAttribute("href", /^\/draft\?draft_id=draft:/);
+
+  // Game 2 played (a draft from the thread), game 1 reviewed (from the thread).
+  const draftHref = (await page.locator('[data-prep] a[href^="/draft?match_id="]').first().getAttribute("href")) ?? "";
+  expect(draftHref).toMatch(/&game=1$/);
+  const matchId = new URL(draftHref, "http://local").searchParams.get("match_id") ?? "";
+  expect(matchId).toMatch(/^scheduled_match:/);
+  await navigateTo(page, draftHref.replace(/&game=1$/, "&game=2"));
+  await expect(page.getByTestId("draft-thread")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("#draft-name")).toHaveValue(/ · G2$/, { timeout: 15000 });
+  await page.getByTestId("draft-save").click();
+  await expect(page.getByTestId("draft-save-state")).toHaveText("Saved", { timeout: 10000 });
+
+  await navigateTo(page, `/post-game?match_id=${matchId}&game=1`);
+  await expect(page.getByTestId("review-thread")).toContainText("game 1", { timeout: 15000 });
+  const custom = page.getByTestId("review-game-picker").getByRole("radio", { name: "Not in the list (scrim / custom)" });
+  await expect(async () => {
+    await custom.check();
+    await expect(custom).toBeChecked({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await page.locator("#review-well").fill("Game 1: early dragon setups worked");
+  await page.getByTestId("review-save").click();
+  await expect(page.getByTestId("review-save-state")).toHaveText("Saved", { timeout: 10000 });
+
+  await navigateTo(page, "/");
+  await expect(steps.nth(1)).toContainText("1 draft", { timeout: 10000 });
+  await expect(steps.nth(4)).toContainText("G1 done \u00b7 G2 to do \u00b7 G3 not played", { timeout: 10000 });
+  await expect(steps.nth(4)).toContainText("1 of 2 reviewed");
+  await expect(earlier).toContainText(`Earlier work vs ${opp} (1)`);
   await settle(page);
   await shot(page, "match-day-prep-bo3-1280", true);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -239,7 +291,7 @@ test("match thread: earlier work is offered, not counted, and used for this matc
   // "Use for this match" stamps it: it counts and is no longer offered.
   await earlier.getByTestId("use-for-match").click();
   await expect(page.locator("[data-earlier]")).toHaveCount(0, { timeout: 10000 });
-  await expect(steps.nth(1)).toContainText("1 draft", { timeout: 10000 });
+  await expect(steps.nth(1)).toContainText("2 drafts", { timeout: 10000 });
 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
@@ -282,6 +334,20 @@ test("review picker: a scrim review saves through Not in the list", async ({ tea
 });
 
 const DEMO_GAME = "SEED1_1000000001";
+/** The seed's second game, played a few hours before the seed ran. */
+const RECENT_GAME = "SEED1_1000000002";
+
+/** The viewer's local date and time `hours` from now, as the editor takes them. */
+async function localInputs(page: Page, hours: number): Promise<{ date: string; time: string }> {
+  return page.evaluate((h) => {
+    const d = new Date(Date.now() + h * 3600 * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return {
+      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    };
+  }, hours);
+}
 
 async function signInSeedTop(page: Page): Promise<boolean> {
   await page.goto("/auth/login");
@@ -300,6 +366,14 @@ async function signInSeedTop(page: Page): Promise<boolean> {
  * never the Riot id; "Review as a team" on the match page and on Team games
  * opens the review with the game chosen. CI seeds the database; locally the
  * test is skipped without the seed.
+ *
+ * The ±6 h lift: the leader records a match that started two hours ago
+ * (Match Day accepts a start up to twelve hours back) and opens the review
+ * from it; the seed's second game (ended about three hours before the seed
+ * ran, so within six hours of that start in CI) is "Near the scheduled
+ * match", the day-old demo game under "Other recent games". The match is
+ * removed again at the end, so the seeded Match Day is unchanged for the
+ * specs after this one.
  *
  * Frames: post-game-picker-390.png, post-game-picker-1280.png,
  * post-game-picker-1280-flow.png, match-detail-review-1280.png and
@@ -343,11 +417,56 @@ test("review picker: a team game is chosen from the match page", async ({ page }
   await expect(page.locator("main")).not.toContainText(DEMO_GAME);
   await expect(picker.getByRole("radio", { name: "Not in the list (scrim / custom)" })).toBeVisible();
   await expect(page.getByTestId("review-match-facts")).toBeVisible();
-  await settle(page);
-  await shot(page, "post-game-picker-1280", false);
-  await shot(page, "post-game-picker-1280-flow", true);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await settle(page);
-  await shot(page, "post-game-picker-390", true);
+
+  // A match that started two hours ago, recorded on Match Day.
+  await navigateTo(page, "/");
+  await page.getByTestId("add-another-match").click();
+  const dialog = page.getByRole("dialog", { name: "Add a match" });
+  await expect(dialog).toBeVisible();
+  const at = await localInputs(page, -2);
+  await dialog.locator("#match-date").fill(at.date);
+  await dialog.locator("#match-time").fill(at.time);
+  await page.getByTestId("save-next-match").click();
+  await expect(dialog).not.toBeVisible({ timeout: 10000 });
+  try {
+    // It started, so it is the next match and its review step links on.
+    const reviewLink = page.locator('[data-prep] a[href^="/post-game?"][href*="match_id=scheduled_match:"]').first();
+    await expect(reviewLink).toBeVisible({ timeout: 10000 });
+    const matchId = new URL((await reviewLink.getAttribute("href")) ?? "", "http://local").searchParams.get("match_id") ?? "";
+    expect(matchId).toMatch(/^scheduled_match:/);
+
+    await navigateTo(page, `/post-game?match_id=${matchId}`);
+    const picker2 = page.getByTestId("review-game-picker");
+    await expect(picker2.locator(`input[value="${DEMO_GAME}"]`)).toHaveCount(1, { timeout: 10000 });
+    const near = picker2.getByText("Near the scheduled match", { exact: true });
+    const other = picker2.getByText("Other recent games", { exact: true });
+    if (process.env.CI) {
+      // CI seeds right before the suite: the recent game is within six hours.
+      await expect(near).toBeVisible();
+      await expect(other).toBeVisible();
+      const rows = picker2.getByTestId("review-game");
+      await expect(rows.first().locator("input[type=radio]")).toHaveValue(RECENT_GAME);
+      await expect(rows.nth(1).locator("input[type=radio]")).toHaveValue(DEMO_GAME);
+    }
+    // Champions are named in words for screen readers (the avatars are decorative).
+    await expect(picker2.getByTestId("review-game").first()).toContainText("Darius");
+    await settle(page);
+    await shot(page, "post-game-picker-1280", false);
+    await shot(page, "post-game-picker-1280-flow", true);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settle(page);
+    await shot(page, "post-game-picker-390", true);
+    await page.setViewportSize({ width: 1280, height: 800 });
+  } finally {
+    // Remove the match again: later specs read the seeded Match Day.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await navigateTo(page, "/");
+    await page.getByTestId("edit-next-match").click();
+    await expect(page.getByRole("dialog", { name: "Edit the next match" })).toBeVisible();
+    await page.getByRole("dialog", { name: "Edit the next match" }).getByRole("button", { name: "Remove match" }).click();
+    const confirm = page.getByRole("dialog", { name: "Remove this match?" });
+    await confirm.getByRole("button", { name: "Remove match" }).click();
+    await expect(confirm).not.toBeVisible({ timeout: 10000 });
+  }
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
