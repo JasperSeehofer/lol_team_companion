@@ -136,7 +136,8 @@ test("stale theme cookie is ignored", async ({ authedPage }) => {
 // The draft page switches "Our side" and My games switches the LP period:
 // a click must produce an observable `aria-checked` change after hydration.
 
-test("segmented control observable on /draft", async ({ authedPage }) => {
+// The draft editor needs a team (M160 solo mode shows NoTeamState without).
+test("segmented control observable on /draft", async ({ teamPage: authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
   await authedPage.goto("/draft");
   await authedPage.waitForLoadState("networkidle");
@@ -158,7 +159,7 @@ test("segmented control observable on /me", async ({ authedPage }) => {
   expect(errors, `Panic during /me period switch: ${errors.join("\n")}`).toEqual([]);
 });
 
-test("draft slot click-fill", async ({ authedPage }) => {
+test("draft slot click-fill", async ({ teamPage: authedPage }) => {
   const errors = await attachPanicListeners(authedPage);
   await authedPage.goto("/draft");
   await authedPage.waitForLoadState("networkidle");

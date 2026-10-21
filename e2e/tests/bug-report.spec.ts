@@ -9,6 +9,8 @@ import { captureErrors, filterRealErrors } from "./helpers";
 const REPORT_BUTTON = 'button[aria-label="Give Feedback"]';
 const HINT = "[data-feedback-hint]";
 const TAGGED_DRAFT_ELEMENT = '[data-feedback-label*="Draft"]';
+// Clicked with filter({ visible: true }): without a team the draft editor is
+// in the DOM but hidden behind the no-team state (M160).
 
 const dialog = (page: import("@playwright/test").Page) =>
   page.getByRole("dialog", { name: "Give Feedback" });
@@ -47,7 +49,7 @@ test.describe("bug-report widget", () => {
     await authedPage.waitForTimeout(500);
     await authedPage.locator(REPORT_BUTTON).click();
     await expect(authedPage.locator(HINT)).toContainText("Click the part of the page your report is about.");
-    await authedPage.locator(TAGGED_DRAFT_ELEMENT).first().click();
+    await authedPage.locator(TAGGED_DRAFT_ELEMENT).filter({ visible: true }).first().click();
     await expect(dialog(authedPage)).toBeVisible({ timeout: 3000 });
     await expect(authedPage.getByTestId("report-about")).toContainText("Draft");
     await expect(authedPage.locator(HINT)).toHaveCount(0);
@@ -68,7 +70,7 @@ test.describe("bug-report widget", () => {
     await authedPage.keyboard.press("Escape");
     await expect(authedPage.locator(HINT)).toHaveCount(0);
     // The capture listener is gone: a click on a tagged element opens nothing.
-    await authedPage.locator(TAGGED_DRAFT_ELEMENT).first().click();
+    await authedPage.locator(TAGGED_DRAFT_ELEMENT).filter({ visible: true }).first().click();
     await authedPage.waitForTimeout(300);
     await expect(dialog(authedPage)).toBeHidden();
   });

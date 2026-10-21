@@ -80,15 +80,33 @@ pub fn EmptyState(
 
 /// The "no team" state used by every team-scoped page.
 ///
+/// Without props it is the general wall; a page that replaces its editor
+/// (draft, game plan, review; M160) names what is missing there with
+/// `title` and `message` and points `cta_href` at the team page.
+///
 /// A11y: as [`EmptyState`].
 #[component]
-pub fn NoTeamState() -> impl IntoView {
+pub fn NoTeamState(
+    /// "Drafts belong to a team"; default "No team yet".
+    #[prop(optional)]
+    title: Option<&'static str>,
+    /// What this page needs and what will appear once there is a team.
+    #[prop(optional)]
+    message: Option<&'static str>,
+    /// The single action's label; default "Go to the roster".
+    #[prop(optional)]
+    cta_label: Option<&'static str>,
+    /// Where it goes; default `/team/roster`.
+    #[prop(optional)]
+    cta_href: Option<&'static str>,
+) -> impl IntoView {
     view! {
         <EmptyState
-            title="No team yet"
-            message="Team pages need a team. Create one or ask to join one on the roster page; your drafts, plans and reviews will appear here."
-            cta_label="Go to the roster"
-            cta_href="/team/roster"
+            title=title.unwrap_or("No team yet")
+            message=message.unwrap_or("Team pages need a team. Create one or ask to join one on the roster page; your drafts, plans and reviews will appear here.")
+            cta_label=cta_label.unwrap_or("Go to the roster")
+            cta_href=cta_href.unwrap_or("/team/roster")
+            attr:data-no-team="true"
         />
     }
 }

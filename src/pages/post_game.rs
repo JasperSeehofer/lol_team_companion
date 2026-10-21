@@ -579,6 +579,8 @@ pub fn PostGamePage() -> impl IntoView {
             crate::pages::navigate::redirect_to_login();
         }
     });
+    // M160 solo mode: without a team the page shows NoTeamState instead.
+    let has_team = crate::components::team_gate::has_team_resource();
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let query = leptos_router::hooks::use_query_map();
@@ -791,6 +793,13 @@ pub fn PostGamePage() -> impl IntoView {
     };
 
     view! {
+        <crate::components::team_gate::TeamGate
+            has_team=has_team
+            page="Reviews"
+            feedback_label="Post game"
+            no_team_title="Reviews belong to a team"
+            no_team_message="A review looks back on a game your team played, with its draft and plan. Create a team or ask to join one; your team's reviews will appear here."
+        >
         <PageShell density=Density::Compact attr:data-feedback-label="Post game">
             <PageHeader
                 title=move || if ed.id.get().is_some() { "Review".to_string() } else { "New review".to_string() }
@@ -926,6 +935,7 @@ pub fn PostGamePage() -> impl IntoView {
                 </div>
             </div>
         </PageShell>
+        </crate::components::team_gate::TeamGate>
     }
 }
 

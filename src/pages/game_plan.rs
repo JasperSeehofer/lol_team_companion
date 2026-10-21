@@ -658,6 +658,8 @@ pub fn GamePlanPage() -> impl IntoView {
             crate::pages::navigate::redirect_to_login();
         }
     });
+    // M160 solo mode: without a team the page shows NoTeamState instead.
+    let has_team = crate::components::team_gate::has_team_resource();
 
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let query = leptos_router::hooks::use_query_map();
@@ -938,6 +940,13 @@ pub fn GamePlanPage() -> impl IntoView {
     };
 
     view! {
+        <crate::components::team_gate::TeamGate
+            has_team=has_team
+            page="Game plan"
+            feedback_label="Game plan"
+            no_team_title="Game plans belong to a team"
+            no_team_message="A game plan is written for your team's starting five. Create a team or ask to join one; your team's plans will appear here."
+        >
         <PageShell density=Density::Compact attr:data-feedback-label="Game plan">
             <PageHeader
                 title=title
@@ -1024,6 +1033,7 @@ pub fn GamePlanPage() -> impl IntoView {
                 </div>
             </div>
         </PageShell>
+        </crate::components::team_gate::TeamGate>
     }
 }
 

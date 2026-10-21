@@ -1243,6 +1243,8 @@ pub fn DraftPage() -> impl IntoView {
             crate::pages::navigate::redirect_to_login();
         }
     });
+    // M160 solo mode: without a team the page shows NoTeamState instead.
+    let has_team = crate::components::team_gate::has_team_resource();
 
     let ed = Editor::new();
     let champions_resource = Resource::new(|| (), |_| get_champions());
@@ -1392,6 +1394,13 @@ pub fn DraftPage() -> impl IntoView {
     }));
 
     view! {
+        <crate::components::team_gate::TeamGate
+            has_team=has_team
+            page="Draft"
+            feedback_label="Draft"
+            no_team_title="Drafts belong to a team"
+            no_team_message="A draft is saved for your team, against a team you play. Create a team or ask to join one; your team's drafts will appear here."
+        >
         <PageShell density=Density::Compact attr:data-feedback-label="Draft">
             <Suspense fallback=|| view! {
                 <PageHeader title="Draft" eyebrow="Draft" />
@@ -1438,6 +1447,7 @@ pub fn DraftPage() -> impl IntoView {
                 })}
             </Suspense>
         </PageShell>
+        </crate::components::team_gate::TeamGate>
     }
 }
 

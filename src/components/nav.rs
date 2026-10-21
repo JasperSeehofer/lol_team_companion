@@ -121,6 +121,94 @@ pub const HUBS: &[(&str, &str, &str)] = &[
     ("you", "You", "/me"),
 ];
 
+/// Hubs an account without a team sees (M160 solo mode): Match Day (`/`,
+/// the start page) and You. The team hubs would only land on "No team yet".
+const SOLO_HUBS: &[&str] = &["today", "you"];
+
+/// The phone menu without a team: the start page and the personal pages
+/// (the champion pool is personal, so it moves to You).
+const SOLO_MENU_GROUPS: &[(&str, &[&str])] = &[
+    ("Today", &["/"]),
+    (
+        "You",
+        &["/me", "/personal-learnings", "/champion-pool", "/profile"],
+    ),
+];
+
+/// Where "Find or create a team" goes (desktop bar and phone menu).
+pub const FIND_TEAM_HREF: &str = "/team/dashboard";
+
+/// What the navigation shows for an account with or without a team. One
+/// pure function drives the desktop hubs and sub-navigation, the phone menu
+/// and the command bar, so no surface leads a solo player to a team page.
+#[derive(Clone, Debug)]
+pub struct NavModel {
+    /// Hubs in bar order: (key, label, landing path).
+    pub hubs: Vec<(&'static str, &'static str, &'static str)>,
+    /// Phone menu groups: (heading, pages).
+    pub groups: Vec<(&'static str, Vec<NavPage>)>,
+    /// Every page the command bar may offer, in menu order.
+    pub pages: Vec<NavPage>,
+    /// Show the quiet "Find or create a team" link.
+    pub find_team: bool,
+}
+
+impl NavModel {
+    /// Whether the hub `key` is in the bar.
+    pub fn has_hub(&self, key: &str) -> bool {
+        self.hubs.iter().any(|(k, _, _)| *k == key)
+    }
+
+    /// The sub-navigation of a hub: its pages, or none when the hub is
+    /// not shown.
+    pub fn hub_pages(&self, key: &str) -> Vec<NavPage> {
+        if !self.has_hub(key) {
+            return Vec::new();
+        }
+        PAGES.iter().filter(|p| p.hub == key).copied().collect()
+    }
+}
+
+/// The navigation for an account with (`true`) or without a team.
+pub fn nav_model(has_team: bool) -> NavModel {
+    let groups_src: &[(&str, &[&str])] = if has_team {
+        MENU_GROUPS
+    } else {
+        SOLO_MENU_GROUPS
+    };
+    let groups: Vec<(&'static str, Vec<NavPage>)> = groups_src
+        .iter()
+        .map(|(heading, paths)| {
+            let pages = paths
+                .iter()
+                .filter_map(|p| PAGES.iter().find(|x| x.path == *p).copied())
+                .collect::<Vec<_>>();
+            (*heading, pages)
+        })
+        .filter(|(_, pages)| !pages.is_empty())
+        .collect();
+    let pages = PAGES
+        .iter()
+        .filter(|p| {
+            groups
+                .iter()
+                .any(|(_, g)| g.iter().any(|x| x.path == p.path))
+        })
+        .copied()
+        .collect();
+    let hubs = HUBS
+        .iter()
+        .filter(|(k, _, _)| has_team || SOLO_HUBS.contains(k))
+        .copied()
+        .collect();
+    NavModel {
+        hubs,
+        groups,
+        pages,
+        find_team: !has_team,
+    }
+}
+
 /// The hub a path belongs to, `""` for pages outside the hubs (sign-in,
 /// legal, closed beta, admin, shared links). Match detail pages sit under
 /// Review (they open from team and personal games alike).
@@ -143,8 +231,9 @@ pub fn hub_for_path(path: &str) -> &'static str {
 }
 
 /// Every page the command bar can jump to.
-fn route_commands(is_admin: bool) -> Vec<Command> {
-    let mut out: Vec<Command> = PAGES
+fn route_commands(is_admin: bool, has_team: bool) -> Vec<Command> {
+    let mut out: Vec<Command> = nav_model(has_team)
+        .pages
         .iter()
         .map(|p| {
             let hint = HUBS
@@ -155,6 +244,13 @@ fn route_commands(is_admin: bool) -> Vec<Command> {
             Command::go(p.label, p.path).hint(hint).keywords(p.keywords)
         })
         .collect();
+    if !has_team {
+        out.push(
+            Command::go("Find or create a team", FIND_TEAM_HREF)
+                .hint("Team")
+                .keywords("team join create roster invite"),
+        );
+    }
     out.push(
         Command::go("New learning", "/personal-learnings/new")
             .hint("You")
@@ -334,6 +430,24 @@ pub async fn get_nav_counts() -> Result<NavCounts, ServerFnError> {
     })
 }
 
+/// Whether the signed-in account belongs to a team (M160 solo mode: the
+/// team hubs are hidden without one). Signed out is `false`; the nav shows
+/// no hubs then anyway.
+#[server]
+pub async fn get_nav_has_team() -> Result<bool, ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let Some(user) = authz::optional_user().await? else {
+        return Ok(false);
+    };
+    let db = authz::db()?;
+    Ok(db::get_user_team_id(&db, &user.id)
+        .await
+        .map_err(authz::server_err)?
+        .is_some())
+}
+
 /// "3 drafts", "1 dossier", "" for none.
 fn count_label(n: usize, one: &str, many: &str) -> String {
     match n {
@@ -400,10 +514,14 @@ pub fn is_share_path(path: &str) -> bool {
 fn PhoneMenu(
     open: RwSignal<bool>,
     is_admin: bool,
+    /// Without a team the menu lists only Match Day and You, plus "Find or
+    /// create a team" (M160).
+    has_team: bool,
     username: String,
     counts: ReadSignal<Option<NavCounts>>,
 ) -> impl IntoView {
     let location = use_location();
+    let model = nav_model(has_team);
     let username = StoredValue::new(username);
     let count_for = move |path: &str, c: &NavCounts| -> Option<AnyView> {
         let text = match path {
@@ -439,12 +557,12 @@ fn PhoneMenu(
                     </div>
                     <UserAvatar name=username.get_value() size=AvatarSize::Md />
                 </div>
-                {MENU_GROUPS.iter().map(|(heading, paths)| {
+                {model.groups.into_iter().map(|(heading, pages)| {
                     let heading_id = format!("phone-menu-{}", heading.to_lowercase().replace(' ', "-"));
                     view! {
-                        <h3 id=heading_id.clone() class="eyebrow px-5 pb-2 pt-5">{*heading}</h3>
+                        <h3 id=heading_id.clone() class="eyebrow px-5 pb-2 pt-5">{heading}</h3>
                         <ul aria-labelledby=heading_id>
-                            {paths.iter().filter_map(|p| PAGES.iter().find(|x| x.path == *p)).map(|pg| {
+                            {pages.into_iter().map(|pg| {
                                 let path = pg.path;
                                 view! {
                                     <li>
@@ -469,6 +587,20 @@ fn PhoneMenu(
                         </ul>
                     }
                 }).collect_view()}
+                {model.find_team.then(|| view! {
+                    <ul class="mt-5 border-t border-rule">
+                        <li>
+                            <A
+                                href=FIND_TEAM_HREF
+                                attr:class="grid min-h-12 items-center border-b border-rule px-5 text-reading text-secondary transition-colors hover:bg-ink-2 hover:text-primary"
+                                attr:data-testid="phone-find-team"
+                                on:click=move |_| open.set(false)
+                            >
+                                "Find or create a team"
+                            </A>
+                        </li>
+                    </ul>
+                })}
                 <h3 id="phone-menu-community" class="eyebrow px-5 pb-2 pt-5">"Community"</h3>
                 <ul aria-labelledby="phone-menu-community">
                     {COMMUNITY_LINKS.iter().map(|(label, path, _)| view! {
@@ -514,6 +646,10 @@ pub fn Nav() -> impl IntoView {
     let logout_version = logout_action.version();
     let user = Resource::new(move || logout_version.get(), |_| get_current_user());
     let notifications = Resource::new(|| (), |_| get_notifications());
+    // Team membership (M160 solo mode). Until it is known the hubs are not
+    // drawn at all (as before the user resolves), so a solo player never
+    // sees five hubs collapse to two; a failed check keeps the full bar.
+    let membership = Resource::new(move || logout_version.get(), |_| get_nav_has_team());
     // Created here, not inside the user's Suspense: a resource created after
     // an await would get a different id on the server and in the browser and
     // shift every resource of the page during hydration.
@@ -583,6 +719,8 @@ pub fn Nav() -> impl IntoView {
     let location = use_location();
     let active_hub = Signal::derive(move || hub_for_path(&location.pathname.get()).to_string());
     let signed_in = Signal::derive(move || matches!(user.get(), Some(Ok(Some(_)))));
+    // `None` while membership is loading.
+    let has_team = Signal::derive(move || membership.get().map(|r| r.unwrap_or(true)));
 
     view! {
         <header class="sticky top-0 z-(--z-nav) border-b border-rule bg-ink-1">
@@ -594,24 +732,38 @@ pub fn Nav() -> impl IntoView {
 
                     // The user is a resource: read it inside a Suspense.
                     <Suspense fallback=|| ()>
-                    <Show when=move || signed_in.get()>
+                    <Show when=move || signed_in.get() && has_team.get().is_some()>
                         <nav class="hidden md:flex items-center gap-5" aria-label="Primary">
-                            {HUBS.iter().map(|(key, label, href)| {
-                                let key = *key;
+                            {move || {
+                            let model = nav_model(has_team.get().unwrap_or(true));
+                            let find_team = model.find_team;
+                            view! {
+                            {model.hubs.into_iter().map(|(key, label, href)| {
                                 let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
                                 view! {
                                     <A
-                                        href=*href
+                                        href=href
                                         attr:class=move || hub_class(active_hub.get() == key)
                                         attr:aria-current=move || (active_hub.get() == key).then_some("true")
                                     >
-                                        {*label}
+                                        {label}
                                         {move || crate::components::guidance::any_new(&paths).then(|| view! {
                                             <span class="ml-1.5 text-caption font-semibold text-info" data-new-hub=key><span class="sr-only">", "</span>"New"</span>
                                         })}
                                     </A>
                                 }
                             }).collect_view()}
+                            {find_team.then(|| view! {
+                                <A
+                                    href=FIND_TEAM_HREF
+                                    attr:class="flex h-12 items-center px-0.5 text-label text-secondary transition-colors hover:text-primary"
+                                    attr:data-testid="find-team-link"
+                                >
+                                    "Find or create a team"
+                                </A>
+                            })}
+                            }
+                            }}
                         </nav>
                     </Show>
                     </Suspense>
@@ -729,7 +881,8 @@ pub fn Nav() -> impl IntoView {
                                                 logout_action.dispatch(Logout {});
                                             }
                                         });
-                                        let commands = route_commands(u.is_admin);
+                                        let has_team = membership.await.unwrap_or(true);
+                                        let commands = route_commands(u.is_admin, has_team);
                                         view! {
                                             <crate::components::guidance::CommandBarHint />
                                             <button
@@ -779,7 +932,7 @@ pub fn Nav() -> impl IntoView {
                                             >
                                                 "Menu"
                                             </button>
-                                            <PhoneMenu open=menu_open is_admin=u.is_admin username=name.clone() counts=counts />
+                                            <PhoneMenu open=menu_open is_admin=u.is_admin has_team=has_team username=name.clone() counts=counts />
                                         }.into_any()
                                     }
                                     // A guest on a share page gets the brand only (M5
@@ -807,9 +960,17 @@ pub fn Nav() -> impl IntoView {
                     if hub.is_empty() || hub == "today" || !signed_in.get() {
                         return ().into_any();
                     }
+                    // A team hub's sub-navigation is not drawn without a team.
+                    let Some(team) = has_team.get() else {
+                        return ().into_any();
+                    };
+                    let pages = nav_model(team).hub_pages(&hub);
+                    if pages.is_empty() {
+                        return ().into_any();
+                    }
                     view! {
                         <nav class="-mb-px hidden flex-wrap gap-x-5 border-t border-rule md:flex" aria-label="Sub-navigation">
-                            {PAGES.iter().filter(|p| p.hub == hub).map(|p| {
+                            {pages.into_iter().map(|p| {
                                 let path = p.path;
                                 view! {
                                     <A
@@ -873,7 +1034,7 @@ mod tests {
 
     #[test]
     fn the_command_bar_covers_every_page() {
-        let cmds = route_commands(true);
+        let cmds = route_commands(true, true);
         for p in PAGES {
             assert!(
                 cmds.iter().any(|c| c.href.as_deref() == Some(p.path)),
@@ -884,14 +1045,14 @@ mod tests {
         assert!(cmds
             .iter()
             .any(|c| c.href.as_deref() == Some("/legal/datenschutz")));
-        assert!(!route_commands(false)
+        assert!(!route_commands(false, true)
             .iter()
             .any(|c| c.href.as_deref() == Some("/admin/invites")));
     }
 
     #[test]
     fn community_and_admin_commands() {
-        let cmds = route_commands(true);
+        let cmds = route_commands(true, true);
         for (_, path, _) in COMMUNITY_LINKS {
             assert!(
                 cmds.iter().any(|c| c.href.as_deref() == Some(*path)),
@@ -904,11 +1065,94 @@ mod tests {
                 "{path}"
             );
         }
-        assert!(!route_commands(false)
+        assert!(!route_commands(false, true)
             .iter()
             .any(|c| c.href.as_deref() == Some("/admin")));
         assert_eq!(reports_label(0), "Your reports");
         assert_eq!(reports_label(2), "Your reports (2 updated)");
+    }
+
+    #[test]
+    fn with_a_team_the_model_is_the_full_navigation() {
+        let m = nav_model(true);
+        assert_eq!(m.hubs, HUBS.to_vec());
+        assert_eq!(m.pages.len(), PAGES.len());
+        assert_eq!(m.groups.len(), MENU_GROUPS.len());
+        assert!(!m.find_team);
+        for (key, _, _) in HUBS {
+            assert_eq!(
+                m.hub_pages(key).len(),
+                PAGES.iter().filter(|p| p.hub == *key).count()
+            );
+        }
+        assert!(!route_commands(false, true)
+            .iter()
+            .any(|c| c.label == "Find or create a team"));
+    }
+
+    #[test]
+    fn without_a_team_only_match_day_and_you_show() {
+        let m = nav_model(false);
+        let keys: Vec<&str> = m.hubs.iter().map(|(k, _, _)| *k).collect();
+        assert_eq!(keys, vec!["today", "you"]);
+        assert!(m.find_team);
+        for team_hub in ["prep", "review", "team"] {
+            assert!(!m.has_hub(team_hub));
+            assert!(m.hub_pages(team_hub).is_empty(), "{team_hub}");
+        }
+        assert_eq!(m.hub_pages("you").len(), 3);
+        // Every surface: no page that needs a team, but the personal ones.
+        let team_pages = [
+            "/opponents",
+            "/draft",
+            "/tree-drafter",
+            "/game-plan",
+            "/post-game",
+            "/action-items",
+            "/stats",
+            "/team/dashboard",
+            "/team/roster",
+        ];
+        let menu: Vec<&str> = m
+            .groups
+            .iter()
+            .flat_map(|(_, g)| g.iter().map(|p| p.path))
+            .collect();
+        let headings: Vec<&str> = m.groups.iter().map(|(h, _)| *h).collect();
+        assert_eq!(headings, vec!["Today", "You"]);
+        let cmds = route_commands(false, false);
+        for path in team_pages {
+            assert!(!menu.contains(&path), "phone menu lists {path}");
+            assert!(!m.pages.iter().any(|p| p.path == path), "{path}");
+            assert!(
+                !cmds
+                    .iter()
+                    .any(|c| c.href.as_deref() == Some(path) && c.label != "Find or create a team"),
+                "command bar offers {path}"
+            );
+        }
+        for path in [
+            "/",
+            "/me",
+            "/personal-learnings",
+            "/champion-pool",
+            "/profile",
+        ] {
+            assert_eq!(menu.iter().filter(|x| **x == path).count(), 1, "{path}");
+            assert!(
+                cmds.iter().any(|c| c.href.as_deref() == Some(path)),
+                "{path}"
+            );
+        }
+        assert!(cmds.iter().any(
+            |c| c.label == "Find or create a team" && c.href.as_deref() == Some(FIND_TEAM_HREF)
+        ));
+        // Every solo menu page exists in PAGES.
+        for (_, paths) in SOLO_MENU_GROUPS {
+            for p in *paths {
+                assert!(PAGES.iter().any(|x| x.path == *p), "{p}");
+            }
+        }
     }
 
     #[test]

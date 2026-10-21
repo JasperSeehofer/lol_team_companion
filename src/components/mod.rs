@@ -13,5 +13,6 @@ pub mod nav;
 pub mod og;
 pub mod record_table;
 pub mod survey_prompt;
+pub mod team_gate;
 pub mod tree_graph;
 pub mod ui;

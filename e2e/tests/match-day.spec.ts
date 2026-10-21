@@ -120,8 +120,9 @@ test("share link: a game plan opens alone, an unknown token opens nothing", asyn
   await ctx.close();
 });
 
-test("phone menu at 400 px lists every page by group", async ({ authedPage }) => {
-  const page = authedPage;
+test("phone menu at 400 px lists every page by group", async ({ teamPage }) => {
+  // A team member: without a team the menu lists only Today and You (M160).
+  const page = teamPage;
   await page.setViewportSize({ width: 400, height: 860 });
   await navigateTo(page, "/draft");
   // The desktop hub links and sub-navigation are hidden on phones.
