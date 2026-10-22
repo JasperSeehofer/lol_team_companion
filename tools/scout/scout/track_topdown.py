@@ -83,8 +83,17 @@ def record_live(client: ReplayClient, args, log) -> tuple[Path, dict]:
         if not client.recording().get("recording"):
             break
     wall = time.time() - wall0
-    pngs = sorted(rec_dir.glob("*.png"))
-    log.info("recording: %d png frames in %.0f s wall into %s", len(pngs), wall, rec_dir)
+    # The client writes into its own subfolder (e.g. "16-21_EUW1-8021305006_01") under the path it is
+    # given, and may ignore width/height/endTime (seen 2026-10-22: 2560x1440, endTime -1). Search the
+    # whole scratch dir, and log what the client reports so a failure explains itself.
+    try:
+        state = client.recording()
+    except Exception as e:  # the replay may already be closed
+        state = {"error": str(e)}
+    log.info("client recording state at stop: %s", {k: state.get(k) for k in
+             ("recording", "path", "startTime", "endTime", "currentTime", "width", "height")})
+    pngs = sorted(p for p in rec_dir.rglob("*.png") if p.parent.name != "1hz")
+    log.info("recording: %d png frames in %.0f s wall under %s", len(pngs), wall, rec_dir)
     per_s = rec_dir / "1hz"
     per_s.mkdir(exist_ok=True)
     step = max(1, int(round(args.fps)))
