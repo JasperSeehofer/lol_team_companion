@@ -28,6 +28,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from . import calibrate
+from .camera import default_camera_y
 from .detect import BarDetector
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .track import find_gaps
@@ -54,6 +55,19 @@ def camera_render(height: float, fov: float) -> dict:
             "fieldOfView": fov, "farClip": height * 1.5 + 10000}
 
 
+def camera_height(args) -> tuple[float, str]:
+    """--camera-y, else the probe's visual fit (same fov), else the default
+    scaled to --width/--height (scout.camera)."""
+    if args.camera_y is not None:
+        return float(args.camera_y), "--camera-y"
+    probe = read_json(args.out / "probe.json") if (args.out / "probe.json").exists() else {}
+    fit = probe.get("camera_fit") or {}
+    if fit.get("chosen_y") and float(fit.get("fov", -1)) == float(args.fov):
+        return float(fit["chosen_y"]), f"probe.json camera_fit ({fit.get('chosen_by')})"
+    return default_camera_y(args.width, args.height, args.fov), \
+        f"scaled default for {args.width}x{args.height}"
+
+
 def record_live(client: ReplayClient, args, log) -> tuple[Path, dict]:
     client.set_render(**RENDER_TOPDOWN)
     camera = {"mode": "keystroke" if args.keystroke_unlock else "api"}
@@ -61,12 +75,10 @@ def record_live(client: ReplayClient, args, log) -> tuple[Path, dict]:
         input("In the replay window press Ctrl+Shift+Y, zoom out with the mouse wheel until the "
               "whole map fits, then come back here and press Enter... ")
     else:
-        height = args.camera_y
-        if height is None:
-            probe = read_json(args.out / "probe.json") if (args.out / "probe.json").exists() else {}
-            height = (probe.get("camera") or {}).get("max_honoured_y") or 57447.0
+        height, source = camera_height(args)
         client.set_render(**camera_render(height, args.fov))
-        camera.update(height=height, fov=args.fov)
+        camera.update(height=height, fov=args.fov, height_from=source)
+        log.info("camera height %.0f (%s), fov %s", height, source, args.fov)
     rec_dir = args.scratch / time.strftime("%Y%m%d-%H%M%S")
     rec_dir.mkdir(parents=True, exist_ok=True)
     end = args.start + args.duration
@@ -200,7 +212,8 @@ def main(argv=None) -> int:
     ap.add_argument("--champions", help="ten ids, blue then red (default: from the minimap track)")
     ap.add_argument("--keystroke-unlock", action="store_true",
                     help="ask the player to press Ctrl+Shift+Y instead of moving the API camera")
-    ap.add_argument("--camera-y", type=float, help="camera height (default: probe.json max)")
+    ap.add_argument("--camera-y", type=float,
+                    help="camera height (default: probe.json camera_fit, else scaled 50000)")
     ap.add_argument("--fov", type=float, default=19.0)
     ap.add_argument("--start", type=float, default=600.0, help="game seconds")
     ap.add_argument("--duration", type=float, default=300.0)

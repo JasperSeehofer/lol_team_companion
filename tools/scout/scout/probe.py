@@ -16,6 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from . import camera as cam
 from .render import LEGACY_MINIMAP_ONLY, LEGACY_NOTE, minimap_only_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
@@ -75,6 +76,10 @@ def plan() -> list[str]:
               "POST /replay/recording png accelerated (enforceFrameRate:false, replaySpeed:4)"]
     steps += [f"POST /replay/render cameraPosition.y={h} farClip={h * 1.5 + 10000:.0f} + screenshot"
               for h in CAMERA_HEIGHTS]
+    d = cam.default_camera_y(*cam.REF_SIZE)
+    steps.append("POST /replay/render {interfaceAll:false}, then camera fit check: cameraPosition.y="
+                 + ", ".join(f"{d * f:.0f}" for f in cam.FIT_FACTORS)
+                 + " (default for the captured monitor; here 2560x1440) + screenshot each")
     steps += [f"POST /replay/render {{{b}:false}} then {{{b}:true}}" for b in HEALTH_BARS]
     steps += ["POST /replay/render {fogOfWar:false}", "restore render and playback"]
     return steps
@@ -114,7 +119,7 @@ class Probe:
         subs = [self.spec, self.game, self.interface, self.speed]
         if not skip_recording:
             subs.append(self.recording)
-        subs += [self.camera, self.health_bars, self.fog]
+        subs += [self.camera, self.camera_fit, self.health_bars, self.fog]
         original = {}
         try:
             original = {"render": self.c.render(), "playback": self.c.playback()}
@@ -239,7 +244,35 @@ class Probe:
                           "screenshot": self._shot(f"probe_camera_{h}.png")})
         ok = [s["sent_y"] for s in steps if s["honoured"]]
         return {"steps": steps, "max_honoured_y": max(ok) if ok else None,
-                "note": "whether the whole map is in view is read from the screenshots"}
+                "note": "API read-back only; whether the whole map is in view: camera_fit"}
+
+    def camera_fit(self) -> dict:
+        """Visual fit check around the default height for this screen (see
+        scout.camera): HUD off, a screenshot per height, map_fit on each."""
+        mon = getattr(self.grab, "monitor", None) or {}
+        size = (mon["width"], mon["height"]) if mon else cam.REF_SIZE
+        fov = cam.REF_FOV
+        default = cam.default_camera_y(*size, fov)
+        self.c.set_render(interfaceAll=False)
+        steps = []
+        for f in cam.FIT_FACTORS:
+            y = float(round(default * f))
+            self.c.set_render(**camera_render(y, fov))
+            time.sleep(self.settle)
+            back = self.c.render()
+            shot = self._shot(f"probe_camera_fit_{y:.0f}.png")
+            fit = None
+            if shot and not shot["black"]:
+                import cv2
+
+                img = cv2.imread(str(self.out / shot["file"]))
+                fit = None if img is None else cam.map_fit(img)
+            steps.append({"y": y, "read_y": (back.get("cameraPosition") or {}).get("y"),
+                          "fit": fit, "screenshot": shot})
+        chosen, how = cam.choose_height(steps, default)
+        return {"screen": list(size), "screen_from": "monitor" if mon else "reference (no capture)",
+                "fov": fov, "default_y": default, "rule": cam.RULE, "steps": steps,
+                "chosen_y": chosen, "chosen_by": how}
 
     def health_bars(self) -> dict:
         out = {}
