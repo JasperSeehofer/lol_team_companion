@@ -127,9 +127,9 @@ pub async fn register_action(
     // A team-bound invite: the account joins that team, a member not placed
     // yet. The account exists either way; if joining fails (the team was
     // deleted a moment ago), the welcome offers to create or join a team.
-    let auto_placed_role = if grant.team_id.is_some() {
+    let join_message = if grant.team_id.is_some() {
         match db::join_team_from_invite(&db, &user_id, &grant).await {
-            Ok(role) => role,
+            Ok(role) => role.map(|r| format!("You joined {} as {} starter.", grant.team_name.as_deref().unwrap_or("the team"), Role::parse(&r).unwrap_or(Role::Top))),
             Err(e) => {
                 tracing::warn!(user = %user_id, error = %e, "could not join the invite's team");
                 None
@@ -158,7 +158,7 @@ pub async fn register_action(
     // New users land on Home (no team yet: create or join one). Redirect on
     // the server too, so a form submitted before hydration still lands there.
     leptos_axum::redirect("/");
-    Ok("/".to_string())
+    Ok(join_message.unwrap_or_default())
 }
 
 /// What the register page says about an invite link: the team a usable
@@ -252,26 +252,7 @@ pub fn RegisterPage() -> impl IntoView {
         let code = invite.get_untracked();
         leptos::task::spawn_local(async move {
             match join_with_team_invite(code).await {
-                Ok((dest, auto_placed_role)) => {
-                    if let Some(role) = auto_placed_role {
-                        let role_display = match role.as_str() {
-                            "top" => "Top",
-                            "jungle" => "Jungle",
-                            "mid" => "Mid",
-                            "bot" => "Bot",
-                            "support" => "Support",
-                            _ => &role,
-                        };
-                        toast.show(
-                            Callout {
-                                tone: CalloutTone::Success,
-                                title: "Joined as starter".into(),
-                                body: format!("You joined as {} starter.", role_display).into(),
-                                role: Some("status".into()),
-                            },
-                            None,
-                        );
-                    }
+                Ok((dest, _)) => {
                     #[cfg(feature = "hydrate")]
                     if let Some(window) = web_sys::window() {
                         let _ = window.location().set_href(&dest);

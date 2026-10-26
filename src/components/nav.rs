@@ -873,6 +873,23 @@ pub fn Nav() -> impl IntoView {
                                             >
                                                 "Open the team page"
                                             </A>
+                                            {move || {
+                                                let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
+                                                let count = notifs.auto_placed;
+                                                if count == 0 {
+                                                    ().into_any()
+                                                } else {
+                                                    view! {
+                                                        <A
+                                                            href="/team/dashboard"
+                                                            attr:class="block px-4 py-2.5 text-center text-label text-muted transition-colors hover:text-primary border-t border-rule"
+                                                            on:click=move |_| notif_open.set(false)
+                                                        >
+                                                            {format!("{count} joined and were placed — check the roster")}
+                                                        </A>
+                                                    }.into_any()
+                                                }
+                                            }}
                                         </div>
                                     </div>
                                 }.into_any()

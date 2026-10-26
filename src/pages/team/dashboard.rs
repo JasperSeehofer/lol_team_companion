@@ -407,6 +407,35 @@ pub async fn restore_note(note_id: String) -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
+/// List auto-placed members (leader or coach only).
+#[server]
+pub async fn get_auto_placed() -> Result<Vec<DbAutoPlacedMember>, ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let ctx = authz::authed().await?;
+    if !db::is_team_leader_or_coach(&ctx.db, &ctx.user.id, &ctx.team.id).await? {
+        return Ok(vec![]);
+    }
+    db::list_auto_placed(&ctx.db, &ctx.team.id)
+        .await
+        .map_err(authz::server_err)
+}
+
+/// Clear the auto-placed flag for a member (leader or coach only).
+#[server]
+pub async fn answer_auto_placed(user_id: String, undo: bool) -> Result<(), ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
+    db::clear_auto_placed(&ctx.db, &team_id, &user_id, undo)
+        .await
+        .map_err(authz::server_err)?;
+    Ok(())
+}
+
 #[server]
 pub async fn get_pool_gap_panel() -> Result<Vec<PoolGapWarning>, ServerFnError> {
     use crate::server::authz;
@@ -519,6 +548,7 @@ struct TeamResources {
     games: Resource<Result<Vec<RecentMatch>, ServerFnError>>,
     gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>,
     invites: Resource<Result<(String, Vec<Invite>), ServerFnError>>,
+    auto_placed: Resource<Result<Vec<DbAutoPlacedMember>, ServerFnError>>,
 }
 
 #[component]
@@ -538,10 +568,12 @@ pub fn TeamDashboard() -> impl IntoView {
         games: Resource::new(|| (), |_| get_recent_team_matches()),
         gaps: Resource::new(|| (), |_| get_pool_gap_panel()),
         invites: Resource::new(|| (), |_| list_team_invites()),
+        auto_placed: Resource::new(|| (), |_| get_auto_placed()),
     };
     let reload = Callback::new(move |_| {
         team.refetch();
         res.requests.refetch();
+        res.auto_placed.refetch();
     });
 
     view! {
@@ -588,14 +620,14 @@ fn TeamView(
             .any(|m| m.user_id == me && m.roster_type == "coach");
     
     // Auto-placed members (only shown to leader or coach)
-    let auto_placed = Resource::new(|| (), move |_| get_auto_placed());
-    let reload = RwSignal::new(());
+    let auto_placed = res.auto_placed;
     let answer_action = ServerAction::<AnswerAutoPlaced>::new();
     
     let _ = Effect::new(move |_| {
         if let Some(Ok(())) = answer_action.value().get() {
             toast.push.run(Toast::success("Roster updated"));
             reload.set(());
+            res.requests.refetch();
         }
     });
     let leader_name = members
@@ -603,6 +635,11 @@ fn TeamView(
         .find(|m| m.user_id == team.created_by)
         .map(|m| m.username.clone())
         .unwrap_or_default();
+    
+    // Clone user_id for closures
+    let uid_undo = RwSignal::new(String::new());
+    let uid_keep = RwSignal::new(String::new());
+    
     let groups = group_roster(&members);
     let edit_open = RwSignal::new(false);
     let leave_open = RwSignal::new(false);
