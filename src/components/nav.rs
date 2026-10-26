@@ -737,32 +737,37 @@ pub fn Nav() -> impl IntoView {
                         <nav class="hidden md:flex items-center gap-5" aria-label="Primary">
                             {move || {
                             let model = nav_model(has_team.get().unwrap_or(true));
+                            let hubs = StoredValue::new(model.hubs);
                             let find_team = model.find_team;
-                            view! {
-                            {let hubs = StoredValue::new(model.hubs); move || hubs.get_value().into_iter().map(|(key, label, href)| {
-                                let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
+                            move || {
+                                let hubs_val = hubs.get_value();
                                 view! {
-                                    <A
-                                        href=href
-                                        attr:class=move || hub_class(active_hub.get() == key)
-                                        attr:aria-current=move || (active_hub.get() == key).then_some("true")
-                                    >
-                                        {label}
-                                        {move || crate::components::guidance::any_new(&paths).then(|| view! {
-                                            <span class="ml-1.5 text-caption font-semibold text-info" data-new-hub=key><span class="sr-only">", "</span>"New"</span>
-                                        })}
-                                    </A>
+                                    {hubs_val.into_iter().map(|(key, label, href)| {
+                                        let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
+                                        view! {
+                                            <A
+                                                href=href
+                                                attr:class=move || hub_class(active_hub.get() == key)
+                                                attr:aria-current=move || (active_hub.get() == key).then_some("true")
+                                            >
+                                                {label}
+                                                {move || crate::components::guidance::any_new(&paths).then(|| view! {
+                                                    <span class="ml-1.5 text-caption font-semibold text-info" data-new-hub=key><span class="sr-only">", "</span>"New"</span>
+                                                })}
+                                            </A>
+                                        }
+                                    }).collect_view()}
+                                    {find_team.then(|| view! {
+                                        <A
+                                            href=FIND_TEAM_HREF
+                                            attr:class="flex h-12 items-center px-0.5 text-label text-secondary transition-colors hover:text-primary"
+                                            attr:data-testid="find-team-link"
+                                        >
+                                            "Find or create a team"
+                                        </A>
+                                    })}
                                 }
-                            }).collect_view()}
-                            {find_team.then(|| view! {
-                                <A
-                                    href=FIND_TEAM_HREF
-                                    attr:class="flex h-12 items-center px-0.5 text-label text-secondary transition-colors hover:text-primary"
-                                    attr:data-testid="find-team-link"
-                                >
-                                    "Find or create a team"
-                                </A>
-                            })}
+                            }}
                             }
                             }}
                         </nav>
