@@ -26,6 +26,7 @@ pub const STORED: &[(&str, &[&str])] = &[
             "Whether you are an admin (and whether that was set with the promote command), when the account was created, and when you were last here and the time before (to the hour), so Match Day can tell when you come back after a break.",
             "Your settings: whether you get survey questions, whether guidance (the welcome, checklist, hints and nudges) is on, and whether teammates may share your player card by link.",
             "Guidance you have seen or turned off: which item (for example \u{201c}hint.draft_keys\u{201d}) and when, so it is not shown again.",
+            "When you were placed in the starting five automatically by your invite link (shown to your leader and coaches until they confirm it).",
         ],
     ),
     (
