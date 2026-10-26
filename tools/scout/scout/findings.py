@@ -1,9 +1,11 @@
 """Render docs/scout-findings.md from templates/scout-findings.md (M166 A2).
 
-Slots are written {{name}}. The empty rendering (committed as
-docs/scout-findings.md) fills every slot with a "fills on run" marker; half C's
-rendering fills every slot with computed values. Lines that carry
-"agent judgment" are left for half C to write by hand.
+Slots are written {{name}}. The empty rendering fills every slot with a
+"fills on run" marker; half C's rendering (scout.halfc) fills every slot with
+computed values. Lines that carry "agent judgment" are left for half C to write
+by hand. The committed docs/scout-findings.md is half C's filled, hand-written
+version (aggregate numbers only: no match ID, no per-player data); a test checks
+it keeps the template's section headings.
 """
 
 from __future__ import annotations
