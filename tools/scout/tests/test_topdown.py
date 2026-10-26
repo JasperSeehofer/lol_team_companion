@@ -189,7 +189,7 @@ def test_record_live_finds_frames_in_client_subfolder(tmp_path, monkeypatch):
             pass
 
         def set_recording(self, **kw):
-            sub = Path(kw["path"]) / "16-21_EUW1-8021305006_01"
+            sub = Path(kw["path"]) / "16-21_EUW1-7100000099_01"
             sub.mkdir(parents=True)
             for i in range(4):
                 cv2.imwrite(str(sub / f"frame{i:05d}.png"), np.zeros((4, 4, 3), np.uint8))

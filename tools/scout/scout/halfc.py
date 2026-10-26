@@ -20,10 +20,11 @@ socket. Steps:
 6. OUT/halfc-summary.json: machine-readable, no timestamps, deterministic.
 7. The findings rendered from templates/scout-findings.md (also OUT/scout-findings.md).
 
-Defaults: --out .planning/missions/M156/publish-round-r2/ and --findings
-docs/scout-findings.md. When --out is given and --findings is not, the
-findings go to OUT/scout-findings.md only, so a trial run never overwrites the
-committed template. Missing inputs never crash the run: they are reported as
+Defaults: --out tools/scout/runs/halfc/ (git-ignored: everything halfc writes
+is derived from a run, and run data never goes to git). The findings go to
+OUT/scout-findings.md; docs/scout-findings.md is written only with an explicit
+--findings PATH, because the committed file is half C's hand-written version
+with aggregate numbers only (no match ID, no per-player data). Missing inputs never crash the run: they are reported as
 "not reached: <reason>" and the verdicts say NOT REACHED.
 """
 
@@ -46,7 +47,7 @@ from .track import find_gaps
 from .util import list_frames, mmss, read_json, sample_evenly
 
 REPO = Path(__file__).resolve().parents[3]
-DEFAULT_OUT = REPO / ".planning" / "missions" / "M156" / "publish-round-r2"
+DEFAULT_OUT = REPO / "tools" / "scout" / "runs" / "halfc"
 DEFAULT_FINDINGS = REPO / "docs" / "scout-findings.md"
 MAX_RUN_MB = 50.0
 VIDEO_EXT = {".webm", ".mp4", ".avi", ".mkv", ".mov", ".flv", ".wmv"}
@@ -861,15 +862,15 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="scout.halfc", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_dir", type=Path)
-    ap.add_argument("--out", type=Path, help=f"default {DEFAULT_OUT.relative_to(REPO)}")
-    ap.add_argument("--findings", type=Path, help="default docs/scout-findings.md (only when --out "
-                                                  "is not given; else OUT/scout-findings.md only)")
+    ap.add_argument("--out", type=Path, help="default tools/scout/runs/halfc/ (git-ignored)")
+    ap.add_argument("--findings", type=Path, help="also write the rendered findings here (default: "
+                                                  "OUT/scout-findings.md only; never docs/ by default)")
     ap.add_argument("--thresholds", type=Path, help="default scout/thresholds.json")
     ap.add_argument("--enemy-team", choices=["blue", "red", "both"], default="both",
                     help="whose WARD_PLACED events the fact-6 eye-check strip shows")
     args = ap.parse_args(argv)
     out = args.out or DEFAULT_OUT
-    fpath = args.findings or (None if args.out else DEFAULT_FINDINGS)
+    fpath = args.findings
     s = halfc(args.run_dir, out, fpath, args.thresholds, args.enemy_team)
     print(f"run {s['run']}: manifest {'PASS' if s['manifest']['ok'] else 'FAIL'}; "
           f"A {s['positions_minimap']['verdict']['verdict']}; "

@@ -107,7 +107,7 @@ def record_live(client: ReplayClient, args, log) -> tuple[Path, dict]:
         if not client.recording().get("recording"):
             break
     wall = time.time() - wall0
-    # The client writes into its own subfolder (e.g. "16-21_EUW1-8021305006_01") under the path it is
+    # The client writes into its own subfolder (e.g. "16-21_EUW1-7100000099_01") under the path it is
     # given, and may ignore width/height/endTime (seen 2026-10-22: 2560x1440, endTime -1). Search the
     # whole scratch dir, and log what the client reports so a failure explains itself.
     try:

@@ -78,6 +78,17 @@ def test_findings_default_never_touches_docs_when_out_given(run, tmp_path, monke
     assert not (tmp_path / "must-not-exist.md").exists()
 
 
+def test_defaults_never_write_docs_or_tracked_paths(run, tmp_path, monkeypatch):
+    """With no --out and no --findings, halfc writes only under the git-ignored
+    runs dir and never overwrites the hand-written docs/scout-findings.md."""
+    assert halfc.DEFAULT_OUT.relative_to(halfc.REPO).parts[:3] == ("tools", "scout", "runs")
+    monkeypatch.setattr(halfc, "DEFAULT_OUT", tmp_path / "runs" / "halfc")
+    monkeypatch.setattr(halfc, "DEFAULT_FINDINGS", tmp_path / "must-not-exist.md")
+    halfc.main([str(run)])
+    assert (tmp_path / "runs" / "halfc" / "scout-findings.md").is_file()
+    assert not (tmp_path / "must-not-exist.md").exists()
+
+
 def test_go_no_go_matches_the_synthetic_numbers(run, tmp_path):
     """Recompute the minimap median and detection rate from the inputs and check
     every verdict and the route against thresholds.json by hand."""
