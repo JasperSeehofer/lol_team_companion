@@ -545,6 +545,7 @@ fn PhoneMenu(
         };
         (!text.is_empty()).then(|| view! { <span>{text}</span> }.into_any())
     };
+    let groups = StoredValue::new(model.groups);
     view! {
         <Dialog id="phone-menu" open=open title="Menu" size=DialogSize::Sheet>
             <nav aria-label="Phone menu" class="-mx-5 -my-4" data-phone-menu>
@@ -557,7 +558,7 @@ fn PhoneMenu(
                     </div>
                     <UserAvatar name=username.get_value() size=AvatarSize::Md />
                 </div>
-                {model.groups.into_iter().map(|(heading, pages)| {
+                {move || groups.get_value().into_iter().map(|(heading, pages)| {
                     let heading_id = format!("phone-menu-{}", heading.to_lowercase().replace(' ', "-"));
                     view! {
                         <h3 id=heading_id.clone() class="eyebrow px-5 pb-2 pt-5">{heading}</h3>
@@ -738,7 +739,7 @@ pub fn Nav() -> impl IntoView {
                             let model = nav_model(has_team.get().unwrap_or(true));
                             let find_team = model.find_team;
                             view! {
-                            {model.hubs.into_iter().map(|(key, label, href)| {
+                            {let hubs = StoredValue::new(model.hubs); move || hubs.get_value().into_iter().map(|(key, label, href)| {
                                 let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
                                 view! {
                                     <A

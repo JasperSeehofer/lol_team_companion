@@ -42,7 +42,7 @@ pub fn TeamGate(
     no_team_title: &'static str,
     /// What the page needs and what appears once there is a team.
     no_team_message: &'static str,
-    children: Children,
+    children: ChildrenFn,
 ) -> impl IntoView {
     let no_team = move || matches!(has_team.get(), Some(false));
     view! {
@@ -54,7 +54,7 @@ pub fn TeamGate(
                 </SkeletonGroup>
             </PageShell>
         }>
-            <div hidden=no_team>{children()}</div>
+            <div hidden=no_team>{children}</div>
             {move || no_team().then(|| view! {
                 <PageShell density=Density::Compact attr:data-feedback-label=feedback_label attr:data-testid="no-team-page">
                     <PageHeader title=page eyebrow=page />
