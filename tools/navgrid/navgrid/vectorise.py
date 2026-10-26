@@ -41,8 +41,8 @@ def rasters(g: ngrid.NavGrid) -> dict[str, np.ndarray]:
         "brush": (f & ngrid.BRUSH) != 0,
         "wall": (f & ngrid.BLOCKING) != 0,
         # a transparent wall is 0x02 | 0x40 without 0x04: on 16.21 (M166 R2) 0x40 also
-        # marks every structure and gate cell, and this mask equals the SRX layer's
-        # TransparentWall on 1,683/1,683 cells
+        # marks every structure and gate cell; this mask agrees with the SRX layer's
+        # TransparentWall on 1,681 of its 1,683 cells (both sets hold 1,683)
         "transparent": ((f & (ngrid.WALL | ngrid.TRANSPARENT_WALL)) == (ngrid.WALL | ngrid.TRANSPARENT_WALL))
         & ((f & ngrid.STRUCTURE_WALL) == 0),
         "structures": (f & ngrid.STRUCTURE_WALL) != 0,

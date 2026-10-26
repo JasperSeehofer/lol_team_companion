@@ -87,7 +87,7 @@ FLAG_TABLE: tuple[dict, ...] = (
     {"bit": 0x0040, "plan": "transparent wall", "mapgeo": "SEE_THROUGH",
      "converter": "TransparentWall (see-through, not walkable)",
      "settled": "see-through (MapgeoAddon): never blocks walking on its own; a transparent wall is "
-                "0x02|0x40 without 0x04 (= SRX TransparentWall on 1,683/1,683 cells), it also marks every "
+                "0x02|0x40 without 0x04 (SRX TransparentWall on 1,681 of its 1,683 cells), it also marks every "
                 "structure cell and every gate cell; settled on 16.21 real file, R2"},
     {"bit": 0x0080, "plan": None, "mapgeo": "vision-related (many walkable jungle cells)",
      "converter": "Unknown128 (sporadic noise)",
