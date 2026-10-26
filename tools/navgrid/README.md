@@ -51,9 +51,11 @@ for `vectorise`; `[test]` adds `pytest`.
 
 `python -m navgrid validate GRID [--timeline TIMELINE.json]`
 : Numbers only: each of the 22 turrets and 6 inhibitors within 2 cells of a
-  structure cluster and in its lane region, both fountains walkable, the
-  bit-0x04 structure-wall hypothesis, the flag histogram, and with a Match-V5
-  timeline the `BUILDING_KILL` / `TURRET_PLATE_DESTROYED` positions. Exit 0 on
+  structure cluster and in its lane region (nexus turrets count as mid), both
+  fountains walkable, the bit-0x04 structure-wall hypothesis, the flag
+  histogram, and with a Match-V5 timeline the `BUILDING_KILL` /
+  `TURRET_PLATE_DESTROYED` positions (cluster distance, and the lane check
+  from each event's `laneType` and `teamId`). Exit 0 on
   pass, 1 on fail.
 
 `python -m navgrid vectorise GRID [--out DIR]`

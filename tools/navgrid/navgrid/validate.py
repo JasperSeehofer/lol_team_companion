@@ -5,13 +5,15 @@ Checks:
 - every Bayes turret and inhibitor (structures.py) lies within 2 cells of the
   centroid of a small blocking cluster (an island of blocking cells that fits
   inside a 13 x 13 window around it) or of a bit-0x04 cluster, and, when the
-  region layers parsed, in the matching nearest-lane region (side and lane);
+  region layers parsed, in the matching nearest-lane region (side and lane;
+  nexus turrets count as mid);
 - both fountain spawn points are on walkable cells;
 - the plan's bit-0x04 structure-wall hypothesis (reported, not part of pass);
 - the flag histogram;
 - with a Match-V5 timeline: the BUILDING_KILL and TURRET_PLATE_DESTROYED
-  positions get the same cluster distance plus the distance to the nearest
-  table structure.
+  positions get the same cluster distance, the distance to the nearest
+  table structure and, from the event's laneType and teamId (the building's
+  owner), the same lane check.
 
 The output holds distances, counts and pass/fail only: no cell coordinates,
 no geometry.
@@ -94,17 +96,21 @@ def point_check(g: ngrid.NavGrid, x: float, y: float) -> dict:
     }
 
 
+def lane_match(g: ngrid.NavGrid, x: float, y: float, side: str | None, lane: str | None) -> bool | None:
+    """True/False when the nearest-lane layer can be checked at (x, y), else None."""
+    ix, iz = g.cell_of(x, y)
+    if g.regions is None or not side or not lane or not g.inside(ix, iz):
+        return None
+    return int(g.regions["nearest_lane"][iz, ix]) in ngrid.lane_code(side, lane)
+
+
 def validate(g: ngrid.NavGrid, timeline: dict | None = None) -> dict:
     lanes = g.regions is not None
     rows = {}
     for name, (x, y) in structures.all_structures().items():
         r = point_check(g, x, y)
-        side, lane = structures.side_lane(name)
-        if lanes and lane and r["in_grid"]:
-            ix, iz = g.cell_of(x, y)
-            r["lane_match"] = int(g.regions["nearest_lane"][iz, ix]) in ngrid.lane_code(side, lane)
-        else:
-            r["lane_match"] = None
+        side, lane = structures.check_lane(name)
+        r["lane_match"] = lane_match(g, x, y, side, lane)
         r["pass"] = bool(r["within"] and r["lane_match"] is not False)
         rows[name] = r
 
@@ -157,8 +163,10 @@ def validate(g: ngrid.NavGrid, timeline: dict | None = None) -> dict:
     return out
 
 
-def timeline_events(timeline: dict) -> list[tuple[str, float, float]]:
-    """(type, x, y) for BUILDING_KILL and TURRET_PLATE_DESTROYED; nothing else is read."""
+def timeline_events(timeline: dict) -> list[tuple[str, float, float, str | None, str | None]]:
+    """(type, x, y, side, lane) for BUILDING_KILL and TURRET_PLATE_DESTROYED; side
+    (the building's owner) and lane from teamId and laneType when present.
+    Nothing else is read."""
     frames = (timeline.get("info") or {}).get("frames") or timeline.get("frames") or []
     out = []
     for fr in frames:
@@ -166,16 +174,19 @@ def timeline_events(timeline: dict) -> list[tuple[str, float, float]]:
             t = ev.get("type")
             pos = ev.get("position")
             if t in ("BUILDING_KILL", "TURRET_PLATE_DESTROYED") and isinstance(pos, dict):
-                out.append((t, float(pos["x"]), float(pos["y"])))
+                out.append((t, float(pos["x"]), float(pos["y"]),
+                            structures.TIMELINE_TEAMS.get(ev.get("teamId")),
+                            structures.TIMELINE_LANES.get(ev.get("laneType"))))
     return out
 
 
 def timeline_check(g: ngrid.NavGrid, timeline: dict) -> dict:
     table = np.array(list(structures.all_structures().values()), float)
     rows = []
-    for t, x, y in timeline_events(timeline):
+    for t, x, y, side, lane in timeline_events(timeline):
         r = point_check(g, x, y)
         r["type"] = t
+        r["lane_match"] = lane_match(g, x, y, side, lane)
         r["nearest_table_structure_units"] = round(float(np.min(np.hypot(table[:, 0] - x, table[:, 1] - y))), 1)
         rows.append(r)
     kills = [r for r in rows if r["type"] == "BUILDING_KILL"]
@@ -184,6 +195,8 @@ def timeline_check(g: ngrid.NavGrid, timeline: dict) -> dict:
         "building_kills": len(kills),
         "building_kills_within": sum(r["within"] for r in kills),
         "plates": len(rows) - len(kills),
+        "lane_checked": sum(r["lane_match"] is not None for r in rows),
+        "lane_match": sum(r["lane_match"] is True for r in rows),
         "rows": rows,
     }
 

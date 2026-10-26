@@ -82,6 +82,27 @@ def test_timeline_positions(synth_file, tmp_path):
     t = r["timeline"]
     assert (t["events"], t["building_kills"], t["building_kills_within"], t["plates"]) == (2, 1, 1, 1)
     assert t["rows"][0]["nearest_table_structure_units"] == 0.0
+    assert (t["lane_checked"], t["lane_match"]) == (0, 0)  # no laneType/teamId in these events
+
+
+def test_timeline_and_nexus_lane_check(synth_bytes):
+    """Match-V5 gives laneType and teamId (the owner) on building events, and
+    MID_LANE for nexus turrets; the 16.21 real file agrees (M166 R2)."""
+    g = ngrid.parse(synth_bytes)
+    r = validate.validate(g)
+    for name in ("blue_nexus_top", "blue_nexus_bot", "red_nexus_top", "red_nexus_bot"):
+        assert r["structures"][name]["lane_match"] is True
+    bx, by = structures.TURRETS["blue_bot_outer"]
+    nx, ny = structures.TURRETS["red_nexus_top"]
+    tl = {"info": {"frames": [{"events": [
+        {"type": "BUILDING_KILL", "position": {"x": bx, "y": by}, "laneType": "BOT_LANE", "teamId": 100},
+        {"type": "TURRET_PLATE_DESTROYED", "position": {"x": bx, "y": by}, "laneType": "TOP_LANE",
+         "teamId": 100},
+        {"type": "BUILDING_KILL", "position": {"x": nx, "y": ny}, "laneType": "MID_LANE", "teamId": 200},
+    ]}]}}
+    t = validate.validate(g, tl)["timeline"]
+    assert [row["lane_match"] for row in t["rows"]] == [True, False, True]
+    assert (t["lane_checked"], t["lane_match"]) == (3, 2)
 
 
 def test_validate_cli_exit_codes(synth_file, tmp_path, capsys):

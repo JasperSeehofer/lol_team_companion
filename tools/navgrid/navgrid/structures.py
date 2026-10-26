@@ -51,6 +51,20 @@ def side_lane(name: str) -> tuple[str, str | None]:
     return side, lane
 
 
+def check_lane(name: str) -> tuple[str, str | None]:
+    """(side, lane) for the lane check. Nexus turrets count as mid: Match-V5
+    reports their BUILDING_KILL with laneType MID_LANE, and on the 16.21 real
+    file (M166 R2) all four sit in their side's mid nearest-lane region."""
+    side, lane = side_lane(name)
+    if lane is None and "_nexus_" in name:
+        lane = "mid"
+    return side, lane
+
+
+TIMELINE_LANES = {"TOP_LANE": "top", "MID_LANE": "mid", "BOT_LANE": "bot"}
+TIMELINE_TEAMS = {100: "blue", 200: "red"}
+
+
 def all_structures() -> dict[str, tuple[float, float]]:
     """The 22 turrets and 6 inhibitors validation checks."""
     out = dict(TURRETS)
