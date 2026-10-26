@@ -1,0 +1,104 @@
+{
+  "id": "m156-r2-scout-findings",
+  "title": "M156 · Scout spike, half C (findings in; a 30-minute PC check settles the route)",
+  "date": "2026-10-26",
+  "mission": "M156",
+  "status": "open",
+  "summary": "Half C is on mission/M156-scout-replay-spike (pushed). docs/scout-findings.md has the facts table, go/no-go per signal, the route, the portal question as sent, the licence note and the privacy rules. Top-down (route B) is GO: median error 127.8 world units, 82 % of champion health bars found. Minimap (route A) is PARTIAL: median 172.3, detection 0.78, longest gap 116 s. Most of that error is one identity bug (K: Pyke, Jax and Zed locked onto fixed background spots), fixed since; on 57 saved frames the fixed tracker drops the error from 519 to 162. Wards after fix E: blue 0.89/0.89, red 0.80/0.57. They stay NO-GO until you re-mark the hand check, because the v2 file carries your v1 verdicts. Recalls: precision 0.86, recall only 0.09; the track is rarely at the fountain while you shop. Recording runs at about 10× real time but only once per Windows sign-in. Twelve tool fixes landed this half (HDR warning, circle icons, wards, recall rule, K and F). The real match ID was scrubbed from one code comment and one test; it remains in branch history from 944b0dc (no force-push). Run data, plots and strips stay out of git. Report: REPORT-R2.md.",
+  "questions": [
+    {
+      "text": "(react) Run the short PC validation? About 30 min at your Windows PC on the same game as before: HDR off, minimap pass, one sign-out and sign-in, top-down window, re-mark the hand check, send to brain. It measures the R2 fixes, above all route A after the identity bug K.",
+      "kind": "ruling",
+      "href": "/app/previews/m156-r2-scout-findings/checklist-validate.html",
+      "chips": [
+        {
+          "label": "Tonight",
+          "consequence": "You run it tonight; the overseer scores it tomorrow and updates docs/scout-findings.md with the real post-fix numbers."
+        },
+        {
+          "label": "This week",
+          "consequence": "You run it on a free evening this week; the merge and the route wait until then, and nothing else is blocked."
+        },
+        {
+          "label": "Later — remind me",
+          "consequence": "Nothing runs now. The findings stay as written (route A on 57 frames only), and a later card reminds you."
+        }
+      ],
+      "recommend": "This week. It needs 30 calm minutes and one Windows sign-out, and nothing else waits on it."
+    },
+    {
+      "text": "(react) Route for the Scout product round. The rule says B-first (A is not GO, B is). I recommend overriding it to A+B with B on key windows: B records only one window per Windows sign-in, so a whole game would take about seven sign-ins; A is the only full-game source, and its PARTIAL comes mostly from a bug that is now fixed. The validation run confirms or reverses this.",
+      "kind": "ruling",
+      "href": "/app/previews/m156-r2-scout-findings/report.html",
+      "chips": [
+        {
+          "label": "A+B, B on key windows",
+          "consequence": "The product round tracks the whole game from the minimap and adds top-down windows for fights and objectives (about 4 min per game plus 30 s and a sign-in per window)."
+        },
+        {
+          "label": "B-first",
+          "consequence": "The product round builds on the top-down view (better accuracy) and needs a way around one recording per sign-in before it covers a whole game; the minimap only fills gaps."
+        },
+        {
+          "label": "A-only",
+          "consequence": "The product round uses the minimap only: simplest, one pass of about 4 min per game, coarser positions (PARTIAL today), no top-down detail in fights."
+        }
+      ],
+      "recommend": "A+B, B on key windows. It is the only route that covers a whole game today and still uses B's accuracy where it matters."
+    },
+    {
+      "text": "(react) Land tools/scout/ and docs/scout-findings.md on main? Nothing in src/ changes, and no run data is merged (runs, plots and strips are git-ignored). The findings are written but route A's numbers rest on 57 frames until the validation run.",
+      "kind": "merge",
+      "href": "/app/previews/m156-r2-scout-findings/report.html",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands the branch after a fresh verifier's VERIFY-R2 says PASS; a later validation round lands as a small follow-up."
+        },
+        {
+          "label": "Not yet — after validation",
+          "consequence": "The branch stays open; the validation run may change scorer or tracker code, and the findings and the merge go together after it."
+        }
+      ],
+      "recommend": "Not yet — after validation. The run may change scorer code, and merging once avoids landing numbers we already expect to replace."
+    },
+    {
+      "text": "(react) Delete the quarantined wrong-monitor probe PNGs and the v1 run on brain? The PNGs show the wrong monitor (finding A) and are evidence of nothing. v1 is the only HDR-on run.",
+      "kind": "ruling",
+      "href": "/app/previews/m156-r2-scout-findings/report.html",
+      "chips": [
+        {
+          "label": "Delete both",
+          "consequence": "The overseer deletes the quarantined PNGs and the whole v1 run; the HDR row in the findings keeps its numbers but can no longer be recomputed."
+        },
+        {
+          "label": "Keep v1, delete PNGs",
+          "consequence": "The quarantined PNGs go; the v1 run stays local on brain as the HDR baseline until the product round, then is deleted."
+        },
+        {
+          "label": "Keep all",
+          "consequence": "Nothing is deleted; the PNGs stay quarantined on brain."
+        }
+      ],
+      "recommend": "Keep v1, delete PNGs. The PNGs hold screens of the wrong monitor and serve nothing; v1 is the only HDR-on measurement and stays local."
+    }
+  ],
+  "links": [
+    {
+      "label": "Validation checklist, phone page (react)",
+      "href": "/app/previews/m156-r2-scout-findings/checklist-validate.html"
+    },
+    {
+      "label": "Findings with plots and strips (react)",
+      "href": "/app/previews/m156-r2-scout-findings/report.html"
+    },
+    {
+      "label": "docs/scout-findings.md (context)",
+      "href": "/app/previews/m156-r2-scout-findings/scout-findings.md"
+    },
+    {
+      "label": "REPORT-R2.md (context)",
+      "href": "/app/previews/m156-r2-scout-findings/REPORT-R2.md"
+    }
+  ]
+}

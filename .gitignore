@@ -44,3 +44,7 @@ tools/scout/**/__pycache__/
 tools/scout/**/.pytest_cache/
 tools/scout/runs/**/rec/
 tools/scout/**/*.webm
+# M156 half C: the round's plots and frame strips are derived from a run (ten
+# players' positions); the overseer serves them from the worktree, never from git.
+.planning/missions/M156/publish-round-r2/plots/
+.planning/missions/M156/publish-round-r2/strips/

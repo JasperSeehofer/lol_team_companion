@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout spike findings</title>
+<style>
+:root{--bg:#f7f8f6;--fg:#1d2420;--muted:#55605a;--card:#ffffff;--rule:#d8ddd9;--code:#eef1ee;--accent:#2f6f4f;--warn:#8a4b12;--go:#2f6f4f;--partial:#8a6a12;--nogo:#9a3434}
+@media (prefers-color-scheme: dark){:root{--bg:#141a17;--fg:#e4e9e5;--muted:#a3ada7;--card:#1c2420;--rule:#2f3934;--code:#25302a;--accent:#7cc79f;--warn:#e0a46a;--go:#7cc79f;--partial:#e0c46a;--nogo:#e08a8a}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);overflow-x:hidden}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px;max-width:980px;margin:0 auto}
+h1{font-size:22px;line-height:1.25;margin:4px 0 8px}
+h2{font-size:18px;margin:24px 0 8px;border-top:1px solid var(--rule);padding-top:14px}
+p,li{overflow-wrap:anywhere}
+.lead{color:var(--muted);font-size:15px}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px;margin:10px 0}
+.sig{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:baseline}
+.sig b{font-weight:650}
+.sig .v{font-weight:700;font-size:14px;letter-spacing:.02em}
+.sig .num{grid-column:1 / -1;color:var(--muted);font-size:15px}
+.GO{color:var(--go)}.PARTIAL{color:var(--partial)}.NOGO{color:var(--nogo)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
+figure{margin:0;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:8px;min-width:0}
+figure img{display:block;width:100%;height:auto;border-radius:4px}
+figcaption{font-size:14px;color:var(--muted);margin-top:6px}
+.strip{overflow-x:auto;max-width:100%}
+.strip img{display:block;max-width:none;height:200px;width:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td,th{border-bottom:1px solid var(--rule);padding:6px 4px;text-align:left;vertical-align:top}
+.tablewrap{overflow-x:auto;max-width:100%}
+code{font:13.5px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;background:var(--code);border-radius:4px;padding:1px 4px;overflow-wrap:anywhere;word-break:break-word}
+.note{border-left:3px solid var(--warn);padding:6px 10px;background:var(--card);font-size:15px}
+</style></head><body>
+<h1>Scout spike: findings (M156 half C)</h1>
+<p class="lead">Two runs of one of Jasper's own replays, about 32 minutes. v1: Windows HDR on, square Data Dragon portraits (kept as the HDR baseline). v2: HDR off, base circle icons; the run of record. Twelve tool fixes (A–L, recall) are on the branch since; a short PC validation run (about 30 min) measures them. Full text: <code>docs/scout-findings.md</code>. The plots and strips below are derived from the run and are not in git.</p>
+
+<h2>Go/no-go per signal</h2>
+<div class="card sig"><b>Positions via minimap (A)</b><span class="v PARTIAL">PARTIAL</span>
+<span class="num">v2: median 172.3 world units (n=246), detection 0.778, longest gap 116 s, with three false locks (Pyke, Jax, Zed) in. Without them (static spots dropped): 119.2, detection 0.585. Fixed tracker (K+F) on 57 saved frames: 519 → 315 → 162. v1 (HDR on): 206.4, detection 0.694. GO needs ≤350, ≥0.85, gap ≤15 s.</span></div>
+<div class="card sig"><b>Positions via top-down (B)</b><span class="v GO">GO</span>
+<span class="num">Median 127.8 (leave-one-frame-out; in-sample 88), bar hit rate 0.824; window 600–900 s only. GO needs ≤150 and ≥0.80.</span></div>
+<div class="card sig"><b>Wards, blue</b><span class="v NOGO">NO-GO</span>
+<span class="num">Precision 0.889, recall 0.889 after fix E (was 0.007). Blocked only by the hand check, which carries v1's verdicts (2/8 agree) and must be re-marked.</span></div>
+<div class="card sig"><b>Wards, red</b><span class="v NOGO">NO-GO</span>
+<span class="num">Precision 0.80, recall 0.571 (0.714 at 4 s tolerance); hand check as for blue.</span></div>
+<div class="card sig"><b>Recalls</b><span class="v NOGO">NO-GO</span>
+<span class="num">Precision 0.857 (6/7), recall 0.086 (6 of 70 purchase bursts): the minimap track rarely has a position at the fountain during shop visits. Lucian's 08:03 recall is found again after the inclusive count and gap bridging.</span></div>
+
+<h2>Route for the Scout product round</h2>
+<div class="card"><p><strong>Recommended: A+B, with B on key windows</strong> (a written override of the rule, which gives B-first because A is not GO and B is).</p>
+<p>B cannot be the primary source for a whole game: one recording per Windows sign-in, <code>endTime</code> ignored, so each 5-minute window costs about 30 s of wall time plus a sign-out and sign-in (about seven for a full game). A is the only full-game source, and its PARTIAL is inflated by the identity bug K, now fixed. The validation run confirms or reverses this.</p>
+<p>Time per game: minimap pass at 8× ≈ game length ÷ 7.9 (about 4 min); each top-down window ≈ 30 s + a sign-in.</p></div>
+
+<h2>Facts (six unknowns + HDR)</h2>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Unknown</th><th>Measured</th></tr>
+<tr><td>1</td><td>Minimap-only mode</td><td><code>interfaceAll=false</code> + <code>interfaceMinimap=true</code> hides the minimap (read-back says honoured). Works: <code>interfaceAll=true</code>, every other <code>interface*</code> false.</td></tr>
+<tr><td>2</td><td>Max replay speed</td><td>16× read back and timed; the full minimap pass at 8× ran 7.86 game-s per wall-s.</td></tr>
+<tr><td>3</td><td>Accelerated recording</td><td>About 10× real time (12.5× and 8.6×), PNG lossless; <code>endTime</code> ignored; first frame stale; one recording per sign-in.</td></tr>
+<tr><td>4</td><td>Camera / whole map</td><td>API camera y 50000, fov 19: whole map with margin at 2560×1440 (11.6 units per px); no Ctrl+Shift+Y.</td></tr>
+<tr><td>5</td><td>Black frames</td><td>None (top-down mean 71.4–71.6, minimap 78.5–143.1).</td></tr>
+<tr><td>6</td><td>Enemy wards, fog off</td><td>Yes, both teams' ward glyphs on the minimap; per-event strip too small to confirm each.</td></tr>
+<tr><td>HDR</td><td>Windows HDR</td><td>Tone-maps the capture (mean 137 vs 88); HDR off alone: median 206.4 → 196.6. The tool now warns.</td></tr>
+</table></div>
+
+<h2>Plots and frame strips</h2>
+<div class="grid">
+<figure><img src="plots/minimap_error_per_champion_v2.png" alt="Median minimap error per champion, v2: three champions far above the rest"><figcaption>Route A, v2: median error per champion. The three tall bars are the false locks (bug K, fixed since).</figcaption></figure>
+<figure><img src="plots/minimap_error_per_champion_v1.png" alt="Median minimap error per champion, v1"><figcaption>Route A, v1 (HDR on, square icons): the same three false locks; Viego never detected.</figcaption></figure>
+<figure><img src="plots/minimap_overlay_00060.png" alt="Minimap track against the timeline at 1:00"><figcaption>Track (o) vs timeline (x) at 1:00.</figcaption></figure>
+<figure><img src="plots/minimap_overlay_01020.png" alt="Minimap track against the timeline at 17:00"><figcaption>At 17:00: the false locks sit on fixed spots far from their timeline positions.</figcaption></figure>
+<figure><img src="plots/minimap_overlay_01947.png" alt="Minimap track against the timeline late in the game"><figcaption>Late game.</figcaption></figure>
+<figure><img src="plots/topdown_error_per_champion.png" alt="Top-down error per champion"><figcaption>Route B, window 600–900 s: error per champion after fix D.</figcaption></figure>
+<figure><img src="plots/topdown_overlay_00600.png" alt="Top-down track at 10:00"><figcaption>Route B at 10:00.</figcaption></figure>
+<figure><img src="plots/topdown_overlay_00720.png" alt="Top-down track at 12:00"><figcaption>Route B at 12:00.</figcaption></figure>
+<figure><img src="plots/topdown_overlay_00900.png" alt="Top-down track at 15:00"><figcaption>Route B at 15:00.</figcaption></figure>
+<figure><img src="plots/wards_precision_recall.png" alt="Ward precision and recall per team"><figcaption>Wards after fix E: blue 0.889 / 0.889, red 0.80 / 0.571.</figcaption></figure>
+</div>
+<figure style="margin-top:12px"><div class="strip"><img src="strips/topdown_strip.png" alt="Top-down frames 10:00 to 15:00, whole map in view, health bars visible"></div><figcaption>Top-down frame strip, 10:00–15:00 (scroll sideways): whole map in view, champion and ward bars only.</figcaption></figure>
+<figure style="margin-top:12px"><div class="strip"><img src="strips/fact6_eye_check.png" alt="Minimap crops around ward placements"></div><figcaption>Fact 6 eye check: minimap ±2 s around ward placements (12 events with frames). Too small to confirm each event.</figcaption></figure>
+
+<h2>What the validation run decides</h2>
+<ul>
+<li>Route A's real error, detection and gaps after K+F, on a full game.</li>
+<li>The ward and recall verdicts, from a hand check re-marked on the new outputs.</li>
+<li>Whether the CommunityDragon circle-icon URL answers (unchecked from brain).</li>
+<li>Whether to merge <code>tools/scout/</code> and <code>docs/scout-findings.md</code> (the run may change scorer code).</li>
+</ul>
+<p class="note">Privacy: the tracks hold ten players' positions, opponents included, so they are personal data. Run data stays local (brain's inbox) and never goes to git; no upload into Team Companion before L-1.</p>
+</body></html>
