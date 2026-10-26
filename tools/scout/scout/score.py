@@ -8,7 +8,9 @@ Positions: the timeline's 60 s participantFrames are ground truth; the track
 sample nearest each frame (within +-1 s) is compared, in world units. The
 detection rate counts samples with a position over all samples: the spike
 treats every champion as alive throughout (dead time is counted as missed).
-Wards: track wards matched one-to-one to WARD_PLACED within +-2 s, per team
+Wards: track wards matched one-to-one to WARD_PLACED within +-2 s (--ward-tol), per team;
+with the ward track's ward_window (R2) only WARD_PLACED inside it count and wards
+marked pre_existing are left out
 (creatorId 1-5 blue, 6-10 red). Recalls: a path that arrives inside the own
 fountain radius and stays >= 8 s, confirmed by >= 1 ITEM_PURCHASED by that
 participant within +-15 s of arrival; an arrival within 120 s after that
@@ -113,12 +115,20 @@ def score_positions(track: dict, timeline: dict, pmap: dict[int, str]) -> dict:
 
 
 def match_wards(wards: list[dict], timeline: dict, pmap: dict[int, str],
-                t_range: tuple[float, float] | None, tol: float = WARD_TOL_S) -> dict:
+                t_range: tuple[float, float] | None, tol: float = WARD_TOL_S,
+                window: list[float] | None = None) -> dict:
+    """window: the ward track's own ward_window (R2): WARD_PLACED after its
+    start and up to its end count, without the tolerance on either side, and
+    wards marked pre_existing (visible when the window opened) are left out."""
     truth = [e for e in events(timeline, "WARD_PLACED")
              if e.get("wardType") not in SKIP_WARD_TYPES and e.get("creatorId", 0) > 0]
-    if t_range:
+    if window:
+        truth = [e for e in truth if window[0] < e["timestamp"] / 1000 <= window[1]]
+    elif t_range:
         truth = [e for e in truth if t_range[0] - tol <= e["timestamp"] / 1000 <= t_range[1] + tol]
-    out = {"pairs": [], "tolerance_s": tol}
+    pre = [w for w in wards if w.get("pre_existing")]
+    wards = [w for w in wards if not w.get("pre_existing")]
+    out = {"pairs": [], "tolerance_s": tol, "pre_existing_excluded": len(pre), "window": window}
     for team in ("blue", "red"):
         det = [w for w in wards if w.get("team") == team]
         tru = [e for e in truth if team_of(e["creatorId"]) == team]
@@ -184,7 +194,7 @@ def handcheck_rows(wards: dict, recalls: list[dict], pmap: dict[int, str], n: in
                                         f"{mmss(e['timestamp'] / 1000)}"))
     for w in wards["unmatched_wards"]:
         ward_rows.append(dict(kind="ward", t=w["t"], champion="", x=w["x"], y=w["y"],
-                              auto_says=f"{w['team']} ward; no WARD_PLACED within 2 s"))
+                              auto_says=f"{w['team']} ward; no WARD_PLACED within {wards['tolerance_s']:g} s"))
     rec_rows = [dict(kind="recall", t=r["t"], champion=r["champion"], x=r["x"], y=r["y"],
                      auto_says=(f"recall, {r['purchases']} purchase(s) within 15 s" if r["confirmed"]
                                 else "recall, no purchase within 15 s")) for r in recalls]
@@ -233,8 +243,9 @@ def run(args) -> int:
                         f"fountain radius {FOUNTAIN_RADIUS}, centres {FOUNTAINS}"]}
     result.update(score_positions(track, timeline, pmap))
     wards = match_wards(wards_track.get("wards", []), timeline, pmap,
-                        (min(ts), max(ts)) if ts else None)
-    result["wards"] = {k: v for k, v in wards.items() if k in ("blue", "red", "tolerance_s")}
+                        (min(ts), max(ts)) if ts else None, args.ward_tol, wards_track.get("ward_window"))
+    result["wards"] = {k: v for k, v in wards.items()
+                       if k in ("blue", "red", "tolerance_s", "pre_existing_excluded", "window")}
     result["wards"]["source"] = Path(args.wards_track or args.track).name
     result["recalls"] = detect_recalls(track, timeline, pmap)
     tag = f"_{args.tag}" if args.tag else ""
@@ -311,6 +322,9 @@ def main(argv=None) -> int:
     r.add_argument("--match", type=Path, help="match.json for participantId -> champion")
     r.add_argument("--participants", help="instead of --match: '1=Aatrox,2=LeeSin,...'")
     r.add_argument("--wards-track", type=Path, help="take wards from this track (e.g. top-down)")
+    r.add_argument("--ward-tol", type=float, default=WARD_TOL_S,
+                   help=f"ward time tolerance, s (default {WARD_TOL_S}; 4 recovered one more red ward "
+                        "on Jasper's run)")
     r.add_argument("--tag", help="suffix for score_<tag>.json / handcheck_<tag>.csv")
     r.add_argument("--out", required=True, type=Path)
     p = sub.add_parser("plots", help="error bar chart and minimap overlays")

@@ -116,6 +116,49 @@ def test_cli_fits_from_run_dir_files(series, tmp_path):
     assert track["fit"]["mode"] == "direct" and track["fit"]["lofo_median"] < 40
 
 
+def test_wards_pips_grouped_mana_excluded_first_appearance(series, tmp_path):
+    from scout import score
+
+    track = run(series, tmp_path, series / "anchors.json")
+    summ = track["ward_summary"]
+    assert summ["excluded_blobs"]["mana"] >= 10 * 40          # every mana bar, every frame
+    wards = sorted(track["wards"], key=lambda w: w["first_seen"])
+    assert len(wards) == len(mf.TD_WARDS)                      # one detection per ward
+    for w, (team, x, y, n, placed) in zip(wards, sorted(mf.TD_WARDS, key=lambda q: q[4])):
+        assert (w["team"], w["pips"]) == (team, n)
+        assert np.hypot(w["x"] - x, w["y"] - y) < 150             # bar centre, no ward offset
+        assert w["pre_existing"] == (placed < 600)
+        if not w["pre_existing"]:   # first frame after placement, back-dated 0.15 s
+            assert w["first_seen"] == np.ceil(placed) and w["t"] == pytest.approx(np.ceil(placed) - 0.15)
+            assert abs(w["t"] - placed) <= 0.8
+    assert track["ward_window"] == [601.0, 639.0]
+    res = score.match_wards(track["wards"], mf.td_timeline(), PMAP, None, window=track["ward_window"])
+    assert res["pre_existing_excluded"] == 1
+    for team in ("blue", "red"):
+        assert (res[team]["precision"], res[team]["recall"]) == (1.0, 1.0), (team, res[team])
+    assert res["blue"]["placed"] == 2 and res["red"]["placed"] == 2   # the 590 s ward is not in the window
+
+
+def test_ward_needs_two_frames_and_three_or_four_pips():
+    from scout import track_topdown as td
+
+    def pip(x, y, team="red", w=21.0):
+        return {"label": "ward", "team": team, "x": x + (w - 1) / 2, "y": y, "w": w, "h": 4.0, "sat": 255.0}
+
+    three = [pip(100, 50), pip(124.5, 50), pip(149, 50)]
+    two = [pip(400, 80), pip(424.5, 80)]
+    mana = [{"label": "ward", "team": "blue", "x": 560.0, "y": 211.8, "w": 109.0, "h": 4.0, "sat": 174.0}]
+    champ = [{"label": "champion", "team": "red", "x": 556.0, "y": 200.0, "w": 101.0, "h": 12.0, "left": 506.0}]
+    dull = [pip(700, 300, "blue")]
+    dull[0]["sat"] = 195.0
+    frames = [{"t": 10.0, "dets": two + champ}, {"t": 11.0, "dets": three + two + mana + champ + dull},
+              {"t": 12.0, "dets": three + two + mana + champ + dull}, {"t": 13.0, "dets": three}]
+    merged = {f["t"]: td.merge_bars(f["dets"]) for f in frames}
+    wards, summ = td.track_wards(frames, merged, 1.0, None)
+    assert [(w["pips"], w["first_seen"], w["frames"], w["pre_existing"]) for w in wards] == [(3, 11.0, 3, False)]
+    assert summ["excluded_blobs"]["mana"] == 2 and summ["excluded_blobs"]["low_saturation"] == 2
+
+
 def test_default_offset_scales_with_screen_and_camera():
     assert track_topdown.default_bar_offset((2560, 1440), {"height": 50000, "fov": 19}) == \
         pytest.approx(track_topdown.REF_BAR_OFFSET)

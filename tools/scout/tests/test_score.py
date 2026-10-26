@@ -106,3 +106,22 @@ def test_score_cli_and_plots(fixtures, tmp_path):
     assert rc == 0
     names = sorted(p.name for p in (tmp_path / "plots").iterdir())
     assert "error_per_champion.png" in names and len(names) == 4
+
+
+def test_ward_window_pre_existing_and_tolerance():
+    events = [
+        {"type": "WARD_PLACED", "timestamp": 600500, "creatorId": 2, "wardType": "YELLOW_TRINKET", "_frame": 1},
+        {"type": "WARD_PLACED", "timestamp": 610000, "creatorId": 2, "wardType": "YELLOW_TRINKET", "_frame": 1},
+        {"type": "WARD_PLACED", "timestamp": 620000, "creatorId": 7, "wardType": "SIGHT_WARD", "_frame": 1},
+        {"type": "WARD_PLACED", "timestamp": 700000, "creatorId": 7, "wardType": "SIGHT_WARD", "_frame": 1},
+    ]
+    tl = tiny_timeline([(600, {}), (660, {})], events)
+    wards = [{"t": 600.85, "team": "blue", "pre_existing": True},    # visible when the window opened
+             {"t": 610.15, "team": "blue"},
+             {"t": 623.0, "team": "red"}]                          # 3 s late
+    window = [601.0, 699.0]                                        # the 600.5 and 700 s wards are outside
+    res = score.match_wards(wards, tl, {}, (600, 700), window=window)
+    assert res["pre_existing_excluded"] == 1
+    assert (res["blue"]["detected"], res["blue"]["placed"], res["blue"]["tp"]) == (1, 1, 1)
+    assert (res["red"]["placed"], res["red"]["tp"]) == (1, 0)
+    assert score.match_wards(wards, tl, {}, None, tol=4.0, window=window)["red"]["tp"] == 1

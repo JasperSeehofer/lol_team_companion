@@ -55,9 +55,6 @@ RENDER_TOPDOWN = {
 }
 MAP_CENTRE = (7375.0, 7430.0)
 IDENTITY_GATE = 2000.0   # world units between a bar and the minimap track
-WARD_MERGE = 250.0       # same ward if seen again this close ...
-WARD_MERGE_S = 5.0       # ... within this many seconds
-WARD_MERGE_PX = 12.0     # the same in screen pixels when no homography is fitted yet
 
 
 def camera_render(height: float, fov: float) -> dict:
@@ -245,6 +242,10 @@ class BarMap:
         v = self.H @ np.array([left + self.offset[0], y + self.offset[1], 1.0])
         return float(v[0] / v[2]), float(v[1] / v[2])
 
+    def pixel_to_world(self, px: float, py: float) -> tuple[float, float]:
+        v = self.H @ np.array([px, py, 1.0])
+        return float(v[0] / v[2]), float(v[1] / v[2])
+
     def unit_pixel(self, wx: float, wy: float) -> tuple[float, float]:
         v = np.linalg.inv(self.H) @ np.array([wx, wy, 1.0])
         return float(v[0] / v[2]), float(v[1] / v[2])
@@ -376,24 +377,117 @@ def fit_topdown(frames: list[dict], champions: list[str], start: BarMap, anchore
     return mapping, report
 
 
-def wards_legacy(det_px: list[dict], mapping: BarMap | None) -> list[dict]:
-    wards = []
-    for f in det_px:
+# ---------------------------------------------------------------- wards (R2)
+#
+# Measured on Jasper's run (px at 2560x1440; scaled by the frame height):
+# - mana bars are blue for both teams, wide (w > 40, median 109, h 4) and sit
+#   ~11.8 px below the champion bar's centre row, left-aligned with it (HSV
+#   ~100/174/222); they are not wards;
+# - a ward's bar is 3 pips (sight ward or trinket, spacing 24-25 px) or 4 pips
+#   (control ward, spacing 18 px), each 15-24 px wide; blue pips are fully
+#   saturated (S 255; champion HP ~195, mana ~174);
+# - the ward shows up 0.0-0.8 s (median 0.15) after its WARD_PLACED in the
+#   1 Hz frames: a ward is stamped at its first appearance minus WARD_LAG_S.
+# Pips on one row are one ward; the same ward is followed across frames in
+# pixels (the camera does not move). A ward visible when the window opens was
+# placed before it ("pre_existing", left out of the score).
+
+MANA_MIN_W = 40.0
+MANA_DY = (9.0, 15.0)
+PIP_W = (12.0, 28.0)
+PIP_MIN_SAT_BLUE = 230.0
+PIP_DY = 2.0
+PIP_GAP = 8.0
+WARD_PIPS = (3, 4)
+WARD_MERGE_PX = 10.0       # same ward if seen again this close (px at the reference) ...
+WARD_MERGE_S = 30.0        # ... within this many seconds
+WARD_MIN_FRAMES = 2
+WARD_LAG_S = 0.15
+
+
+def ward_pips(dets: list[dict], bars: list[dict], scale: float, why: dict) -> list[dict]:
+    """Ward-labelled blobs that are pips: mana bars and other wide blobs out,
+    pip width, and (when the saturation was recorded) blue pips fully saturated."""
+    out = []
+    for d in dets:
+        if d.get("label") != "ward":
+            continue
+        w, left = float(d.get("w") or 0.0), bar_left(d)
+        if w > MANA_MIN_W * scale:
+            under = any(MANA_DY[0] * scale <= float(d["y"]) - b["y"] <= MANA_DY[1] * scale
+                        and abs(left - b["left"]) <= PIP_GAP * scale for b in bars)
+            why["mana" if under else "wide"] += 1
+            continue
+        if not PIP_W[0] * scale <= w <= PIP_W[1] * scale:
+            why["pip_width"] += 1
+            continue
+        if d.get("team") == "blue" and d.get("sat") is not None and d["sat"] < PIP_MIN_SAT_BLUE:
+            why["low_saturation"] += 1
+            continue
+        out.append({"team": d.get("team"), "left": left, "right": left + w, "y": float(d["y"])})
+    return out
+
+
+def group_pips(pips: list[dict], scale: float) -> list[dict]:
+    groups: list[dict] = []
+    for p in sorted(pips, key=lambda q: q["left"]):
+        g = next((g for g in groups if g["team"] == p["team"] and abs(g["y"] - p["y"]) <= PIP_DY * scale
+                  and p["left"] - g["right"] <= PIP_GAP * scale), None)
+        if g:
+            g["right"] = max(g["right"], p["right"])
+            g["pips"] += 1
+        else:
+            groups.append({**p, "pips": 1})
+    for g in groups:
+        g["x"] = (g["left"] + g["right"]) / 2
+    return groups
+
+
+def track_wards(kept: list[dict], merged: dict, scale: float, mapping) -> tuple[list[dict], dict]:
+    why = {"mana": 0, "wide": 0, "pip_width": 0, "low_saturation": 0}
+    tracks: list[dict] = []
+    n_groups = 0
+    for f in kept:
         t = f["t"]
-        for d in f["dets"]:
-            if d.get("label") != "ward":
-                continue
-            x, y = (mapping.to_world(bar_left(d), d["y"]) if mapping else (d["x"], d["y"]))
-            radius = WARD_MERGE if mapping else WARD_MERGE_PX
-            known = next((w for w in wards if w["team"] == d.get("team")
-                          and t - w["last_seen"] <= WARD_MERGE_S
-                          and np.hypot(w["x"] - x, w["y"] - y) <= radius), None)
-            if known:
-                known["last_seen"] = t
+        groups = group_pips(ward_pips(f["dets"], merged[t], scale, why), scale)
+        n_groups += len(groups)
+        for g in groups:
+            k = next((w for w in tracks if w["team"] == g["team"] and t - w["last_seen"] <= WARD_MERGE_S
+                      and t > w["last_seen"]
+                      and np.hypot(w["px"][0] - g["x"], w["px"][1] - g["y"]) <= WARD_MERGE_PX * scale), None)
+            if k:
+                k["last_seen"] = t
+                k["frames"] += 1
+                k["pip_counts"].append(g["pips"])
             else:
-                wards.append({"t": t, "x": round(x, 1), "y": round(y, 1), "team": d.get("team"),
-                              "last_seen": t})
-    return wards
+                tracks.append({"team": g["team"], "first_seen": t, "last_seen": t, "frames": 1,
+                               "px": [round(g["x"], 1), round(g["y"], 1)], "pip_counts": [g["pips"]]})
+    ws = kept[0]["t"] if kept else 0.0
+    wards = []
+    for w in tracks:
+        pips = max(set(w["pip_counts"]), key=w["pip_counts"].count)
+        if pips not in WARD_PIPS or w["frames"] < WARD_MIN_FRAMES:
+            continue
+        x, y = mapping.pixel_to_world(*w["px"]) if mapping else tuple(w["px"])
+        wards.append({"t": round(w["first_seen"] - WARD_LAG_S, 2), "x": round(x, 1), "y": round(y, 1),
+                      "team": w["team"], "pips": pips, "kind": "control" if pips == 4 else "sight",
+                      "first_seen": w["first_seen"], "last_seen": w["last_seen"], "frames": w["frames"],
+                      "px": w["px"], "pre_existing": w["first_seen"] <= ws})
+    summary = {"excluded_blobs": why, "pip_groups": n_groups, "tracks": len(tracks), "valid": len(wards),
+               "pre_existing": sum(w["pre_existing"] for w in wards),
+               "rules": {"pips": list(WARD_PIPS), "min_frames": WARD_MIN_FRAMES,
+                         "merge_px": WARD_MERGE_PX, "merge_s": WARD_MERGE_S, "lag_s": WARD_LAG_S},
+               "position": "pip-bar centre through the homography, no offset (not measured)"}
+    return wards, summary
+
+
+def ward_window(kept: list[dict]) -> list[float] | None:
+    """WARD_PLACED times a ward could be scored for: after the first kept frame
+    (a ward seen then is pre-existing) and early enough to be seen
+    WARD_MIN_FRAMES times."""
+    if len(kept) < WARD_MIN_FRAMES:
+        return None
+    return [kept[0]["t"], kept[-WARD_MIN_FRAMES]["t"]]
 
 
 def build_track(det_px: list[dict], champions: list[str], frame_size, minimap: dict | None = None,
@@ -446,13 +540,14 @@ def build_track(det_px: list[dict], champions: list[str], frame_size, minimap: d
         ref = fit_t[t]["truth"] if identity == "oracle" and t in fit_t else \
             (nearest_sample(minimap, t) or {}).get("pos")
         samples.append({"t": t, "pos": assign_identities(t, world, ref, champions)})
-    wards = wards_legacy(kept, mapping)
+    wards, ward_summary = track_wards(kept, merged, scale, mapping)
     track = {
         "source": "topdown", "processing": PROCESSING, "fps": 1.0, "champions": champions,
         "samples": samples, "gaps": find_gaps(samples, champions), "missing_classes": [],
         "calibration": mapping.as_dict() if mapping else None, "fit": fit,
         "frame_size": list(frame_size), "stale_dropped": stale, "bar_counts": counts,
-        "wards": wards, "ward_units": "world" if mapping else "px", "detections_px": det_px,
+        "wards": wards, "ward_units": "world" if mapping else "px", "ward_window": ward_window(kept),
+        "ward_summary": ward_summary, "detections_px": det_px,
     }
     if log:
         log.info("top-down: %d frames (%d stale dropped), fit %s", len(kept), len(stale),
