@@ -10,13 +10,31 @@ Status: half C — R2 tool fixes in, short PC validation run pending (2026-10-26
 - Produced from `python -m scout.halfc <run_dir>` on brain, then written by hand from that output so the
   committed text carries aggregate numbers only (no match ID, no per-player data). Lines marked "agent
   judgment" are half C's reading of the plots and frames; every other number is computed.
-- R2 fixes on the branch since the run (each changes what the next run measures): A primary monitor, B
-  minimap-only combination, C camera visual fit, D merged bar left edge + fitted offset/homography, E wards
-  from pip groups, F static-spot rule, H render settings saved and restored, I HDR warning, J base circle
-  icons, K best detection per label, L fresh sample folder, recall stay counted inclusively with gap
-  bridging.
+- R2 fixes on the branch since the run: the findings A–L and the recall rule, each with its commit, in
+  "Findings from the Windows sessions" below.
 - Manifest check (v2): PASS; 43.5 MB; no video, no key, no player identifiers. The probe's own screenshots
   of both runs are quarantined (they show the wrong monitor, finding A).
+
+## Findings from the Windows sessions
+
+What Jasper's two Windows sessions showed that the mock could not, and the fix for each. All scoring in
+this file is on the v2 run; v1 appears only as the HDR baseline row in (a).
+
+| Letter | What was found | Fix |
+|---|---|---|
+| A | The capture took `mss` monitor 1, not the primary monitor; the probe's screenshots show the wrong screen (quarantined). | 44b31cb: capture the primary monitor (`--monitor N` to choose) |
+| B | `interfaceAll=false` + `interfaceMinimap=true` hides the minimap, although the read-back says honoured. | 7f52dc7: minimap-only keeps `interfaceAll=true`, every other `interface*` false |
+| C | The API camera's height read-back does not say whether the whole map is in view. | 981baab: camera from a visual fit (50000 at 2560×1440, fov 19, scaled by aspect) |
+| D | Top-down positions were off: split health-bar blobs, a guessed bar-to-unit offset, a stale first second. | d76df29: merged bar left edge, fitted offset and homography, first second dropped |
+| E | Wards were mostly false (mana bars, champion pips); precision 0.007 blue, 0.093 red. | 1958842: wards from pip groups, mana excluded, stamped at first appearance, pre-existing left out |
+| F | Some champions' tracks sat on one static background spot. | Superseded by K; the static-spot rule stays as a guard: 1fec258 (4 px, 20 %, two passes; `score --drop-static`, `false_lock`) |
+| G | The recording ignores `endTime` and runs once per Windows sign-in (later recordings write 0 frames). | A fact, no code fix: one top-down window per sign-in (route, (c)) |
+| H | The tool left the client's render settings changed after a run. | 0ad8e06: render state saved and restored |
+| I | Windows HDR on the captured monitor tone-maps the capture (mean 137 vs 88). | 4aa2c5f: `winhdr.py` warns when HDR is on |
+| J | The replay minimap draws each champion's base circle icon; Viego's square portrait scored 0.37 (threshold 0.55), his circle 0.63. | 12d55ea: CommunityDragon base circle icons, Data Dragon fallback |
+| K | Identity bug: Pyke, Jax and Zed were found by the detector within 40 px in 45–79 % of minutes, yet tracked 3600–8300 units off at detection ~1.0; the same-label cost ignored the score, so a static dark spot captured the track. | 3f35c52: best detection per label; two synthetic repro tests that failed on the old code (`test_static_false_spot_does_not_capture_the_track`, `test_static_false_spot_offered_first_does_not_lock_the_track`) |
+| L | Offline re-runs appended to `frames_minimap/`, so samples of several captures mixed. | 0be8d88: a fresh sample folder per run |
+| Recall | Lucian's 08:03 recall, confirmed by Jasper in v1, was missed in v2: the arrival sample was missing and the next one sat just outside the 1000-unit fountain radius, so the stay counted 6 s, under 8 s. | 797d3a4: the stay is counted inclusively, gaps of ≤2 s are bridged, 5–8 s counts with a purchase; the recall is found again (arrival 8:04, stay 7 s, 3 purchases) |
 
 ## (a) Facts table
 
@@ -44,7 +62,7 @@ the old tracker locked onto a static background spot (finding K); the rows say w
 
 | Signal | Measured | Threshold (proposed) | Verdict |
 |---|---|---|---|
-| Positions via minimap (A) | **v1** (HDR on, square icons): median 206.4 (n=225), detection 0.694, false locks in; 113.5 (n=126), detection 0.394 without them. **v2** (HDR off, circle icons, old tracker): median **172.3** (n=246), detection 0.765 raw / **0.778** alive-adjusted, longest gap **116 s**, false locks in; with static samples dropped (`--drop-static`) 119.2 (n=187), detection 0.585. **Fixed tracker (K+F) replayed** on the 57 saved v2 frames: 519 → 315 (K) → **162** (K+F), n = 29–34. | GO: median ≤350, detection ≥0.85, longest gap ≤15 s; PARTIAL: median ≤700, detection ≥0.60 | **PARTIAL** |
+| Positions via minimap (A) | v2 (HDR off, circle icons, old tracker): median **172.3** (n=246), detection 0.765 raw / **0.778** alive-adjusted, longest gap **116 s**, false locks in; with static samples dropped (`--drop-static`) 119.2 (n=187), detection 0.585. **Fixed tracker (K+F) replayed** on the 57 saved v2 frames: 519 → 315 (K) → **162** (K+F), n = 29–34. | GO: median ≤350, detection ≥0.85, longest gap ≤15 s; PARTIAL: median ≤700, detection ≥0.60 | **PARTIAL** |
 | Positions via top-down (B) | v2, after fix D: median **127.8** (leave-one-frame-out; in-sample 88), bar hit rate **0.824**; direct fit with minimap identities. Turret-anchored oracle: 101.7 (LOFO 107.0), bar offset (51.8, 143.7) px. Window 600–900 s only. | GO: median ≤150, bar hit rate ≥0.80 | **GO** |
 | Wards, blue team | v2, after fix E: precision **0.889**, recall **0.889** (9 detected, 8 matched of 9 placed). Before E: precision 0.007. | GO: precision ≥0.80, recall ≥0.70, hand check ≥4 of 5 | **NO-GO** (hand check not re-marked) |
 | Wards, red team | v2, after fix E: precision **0.80**, recall **0.571** (5 detected, 4 of 7 matched); at 4 s tolerance 1.0 / 0.714. Before E: precision 0.093. | GO: precision ≥0.80, recall ≥0.70, hand check ≥4 of 5 | **NO-GO** |
@@ -73,7 +91,7 @@ Why each verdict:
 - Agent judgment, positions (A): PARTIAL with a known, fixed bug inflating the error; the fixed tracker brings the 57-frame sample to 162, so GO on the median is plausible, but detection and the 116 s gap need the validation run.
 - Agent judgment, positions (B): GO on accuracy; usable only for chosen windows, because each window needs its own Windows sign-in.
 - Agent judgment, wards: the automatic numbers after fix E are close to GO (blue passes, red short on recall); the verdict waits on Jasper re-marking the hand check against the new outputs.
-- Agent judgment, recalls: the stay rule is now precise (Lucian's 08:03 recall, found in v1 and missed in v2, is found again after the inclusive count and gap bridging: arrival at 8:04, stay 7 s, 3 purchases), but recall coverage is a tracking problem at the fountain, not a rule problem; NO-GO for this round.
+- Agent judgment, recalls: the stay rule is now precise (Lucian's 08:03 recall is found again, see "Recall" in the findings table), but recall coverage is a tracking problem at the fountain, not a rule problem; NO-GO for this round.
 
 ## (c) Route decision for the Scout product round
 

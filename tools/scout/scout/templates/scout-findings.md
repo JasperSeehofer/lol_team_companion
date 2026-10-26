@@ -9,6 +9,27 @@
   and frames; every other value is computed.
 - Manifest check: {{manifest}}
 
+## Findings from the Windows sessions
+
+What Jasper's two Windows sessions showed that the mock could not, and the fix for each. All scoring in
+this file is on the v2 run; v1 appears only as the HDR baseline row in (a).
+
+| Letter | What was found | Fix |
+|---|---|---|
+| A | The capture took `mss` monitor 1, not the primary monitor; the probe's screenshots show the wrong screen (quarantined). | 44b31cb: capture the primary monitor (`--monitor N` to choose) |
+| B | `interfaceAll=false` + `interfaceMinimap=true` hides the minimap, although the read-back says honoured. | 7f52dc7: minimap-only keeps `interfaceAll=true`, every other `interface*` false |
+| C | The API camera's height read-back does not say whether the whole map is in view. | 981baab: camera from a visual fit (50000 at 2560×1440, fov 19, scaled by aspect) |
+| D | Top-down positions were off: split health-bar blobs, a guessed bar-to-unit offset, a stale first second. | d76df29: merged bar left edge, fitted offset and homography, first second dropped |
+| E | Wards were mostly false (mana bars, champion pips); precision 0.007 blue, 0.093 red. | 1958842: wards from pip groups, mana excluded, stamped at first appearance, pre-existing left out |
+| F | Some champions' tracks sat on one static background spot. | Superseded by K; the static-spot rule stays as a guard: 1fec258 (4 px, 20 %, two passes; `score --drop-static`, `false_lock`) |
+| G | The recording ignores `endTime` and runs once per Windows sign-in (later recordings write 0 frames). | A fact, no code fix: one top-down window per sign-in (route, (c)) |
+| H | The tool left the client's render settings changed after a run. | 0ad8e06: render state saved and restored |
+| I | Windows HDR on the captured monitor tone-maps the capture (mean 137 vs 88). | 4aa2c5f: `winhdr.py` warns when HDR is on |
+| J | The replay minimap draws each champion's base circle icon; Viego's square portrait scored 0.37 (threshold 0.55), his circle 0.63. | 12d55ea: CommunityDragon base circle icons, Data Dragon fallback |
+| K | Identity bug: Pyke, Jax and Zed were found by the detector within 40 px in 45–79 % of minutes, yet tracked 3600–8300 units off at detection ~1.0; the same-label cost ignored the score, so a static dark spot captured the track. | 3f35c52: best detection per label; two synthetic repro tests that failed on the old code (`test_static_false_spot_does_not_capture_the_track`, `test_static_false_spot_offered_first_does_not_lock_the_track`) |
+| L | Offline re-runs appended to `frames_minimap/`, so samples of several captures mixed. | 0be8d88: a fresh sample folder per run |
+| Recall | Lucian's 08:03 recall, confirmed by Jasper in v1, was missed in v2: the arrival sample was missing and the next one sat just outside the 1000-unit fountain radius, so the stay counted 6 s, under 8 s. | 797d3a4: the stay is counted inclusively, gaps of ≤2 s are bridged, 5–8 s counts with a purchase; the recall is found again (arrival 8:04, stay 7 s, 3 purchases) |
+
 ## (a) Facts table
 
 One row per unknown that half A could not settle without the client. Evidence names the file and key, or

@@ -31,11 +31,29 @@ code{font:13.5px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;background
 .note{border-left:3px solid var(--warn);padding:6px 10px;background:var(--card);font-size:15px}
 </style></head><body>
 <h1>Scout spike: findings (M156 half C)</h1>
-<p class="lead">Two runs of one of Jasper's own replays, about 32 minutes. v1: Windows HDR on, square Data Dragon portraits (kept as the HDR baseline). v2: HDR off, base circle icons; the run of record. Twelve tool fixes (A–L, recall) are on the branch since; a short PC validation run (about 30 min) measures them. Full text: <code>docs/scout-findings.md</code>. The plots and strips below are derived from the run and are not in git.</p>
+<p class="lead">Two runs of one of Jasper's own replays, about 32 minutes. v1: Windows HDR on, square Data Dragon portraits (kept as the HDR baseline). v2: HDR off, base circle icons; the run of record. All scoring is on v2. The Windows-session findings A–L and the recall rule are fixed on the branch (table below); a short PC validation run (about 30 min) measures them. Full text: <code>docs/scout-findings.md</code>. The plots and strips below are derived from the run and are not in git.</p>
+
+<h2>Findings from the Windows sessions</h2>
+<div class="tablewrap"><table>
+<tr><th>Letter</th><th>What was found</th><th>Fix</th></tr>
+<tr><td>A</td><td>The capture took <code>mss</code> monitor 1, not the primary monitor; the probe's screenshots show the wrong screen (quarantined).</td><td>44b31cb: capture the primary monitor (<code>--monitor N</code> to choose)</td></tr>
+<tr><td>B</td><td><code>interfaceAll=false</code> + <code>interfaceMinimap=true</code> hides the minimap, although the read-back says honoured.</td><td>7f52dc7: minimap-only keeps <code>interfaceAll=true</code>, every other <code>interface*</code> false</td></tr>
+<tr><td>C</td><td>The API camera's height read-back does not say whether the whole map is in view.</td><td>981baab: camera from a visual fit (50000 at 2560×1440, fov 19, scaled by aspect)</td></tr>
+<tr><td>D</td><td>Top-down positions were off: split health-bar blobs, a guessed bar-to-unit offset, a stale first second.</td><td>d76df29: merged bar left edge, fitted offset and homography, first second dropped</td></tr>
+<tr><td>E</td><td>Wards were mostly false (mana bars, champion pips); precision 0.007 blue, 0.093 red.</td><td>1958842: wards from pip groups, mana excluded, stamped at first appearance, pre-existing left out</td></tr>
+<tr><td>F</td><td>Some champions' tracks sat on one static background spot.</td><td>Superseded by K; the static-spot rule stays as a guard: 1fec258 (4 px, 20 %, two passes; <code>score --drop-static</code>, <code>false_lock</code>)</td></tr>
+<tr><td>G</td><td>The recording ignores <code>endTime</code> and runs once per Windows sign-in (later recordings write 0 frames).</td><td>A fact, no code fix: one top-down window per sign-in (route, (c))</td></tr>
+<tr><td>H</td><td>The tool left the client's render settings changed after a run.</td><td>0ad8e06: render state saved and restored</td></tr>
+<tr><td>I</td><td>Windows HDR on the captured monitor tone-maps the capture (mean 137 vs 88).</td><td>4aa2c5f: <code>winhdr.py</code> warns when HDR is on</td></tr>
+<tr><td>J</td><td>The replay minimap draws each champion's base circle icon; Viego's square portrait scored 0.37 (threshold 0.55), his circle 0.63.</td><td>12d55ea: CommunityDragon base circle icons, Data Dragon fallback</td></tr>
+<tr><td>K</td><td>Identity bug: Pyke, Jax and Zed were found by the detector within 40 px in 45–79 % of minutes, yet tracked 3600–8300 units off at detection ~1.0; the same-label cost ignored the score, so a static dark spot captured the track.</td><td>3f35c52: best detection per label; two synthetic repro tests that failed on the old code (<code>test_static_false_spot_does_not_capture_the_track</code>, <code>test_static_false_spot_offered_first_does_not_lock_the_track</code>)</td></tr>
+<tr><td>L</td><td>Offline re-runs appended to <code>frames_minimap/</code>, so samples of several captures mixed.</td><td>0be8d88: a fresh sample folder per run</td></tr>
+<tr><td>Recall</td><td>Lucian's 08:03 recall, confirmed by Jasper in v1, was missed in v2: the arrival sample was missing and the next one sat just outside the 1000-unit fountain radius, so the stay counted 6 s, under 8 s.</td><td>797d3a4: the stay is counted inclusively, gaps of ≤2 s are bridged, 5–8 s counts with a purchase; the recall is found again (arrival 8:04, stay 7 s, 3 purchases)</td></tr>
+</table></div>
 
 <h2>Go/no-go per signal</h2>
 <div class="card sig"><b>Positions via minimap (A)</b><span class="v PARTIAL">PARTIAL</span>
-<span class="num">v2: median 172.3 world units (n=246), detection 0.778, longest gap 116 s, with three false locks (Pyke, Jax, Zed) in. Without them (static spots dropped): 119.2, detection 0.585. Fixed tracker (K+F) on 57 saved frames: 519 → 315 → 162. v1 (HDR on): 206.4, detection 0.694. GO needs ≤350, ≥0.85, gap ≤15 s.</span></div>
+<span class="num">v2: median 172.3 world units (n=246), detection 0.778, longest gap 116 s, with three false locks (Pyke, Jax, Zed) in. Without them (static spots dropped): 119.2, detection 0.585. Fixed tracker (K+F) on 57 saved frames: 519 → 315 → 162. GO needs ≤350, ≥0.85, gap ≤15 s.</span></div>
 <div class="card sig"><b>Positions via top-down (B)</b><span class="v GO">GO</span>
 <span class="num">Median 127.8 (leave-one-frame-out; in-sample 88), bar hit rate 0.824; window 600–900 s only. GO needs ≤150 and ≥0.80.</span></div>
 <div class="card sig"><b>Wards, blue</b><span class="v NOGO">NO-GO</span>
@@ -65,7 +83,6 @@ code{font:13.5px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;background
 <h2>Plots and frame strips</h2>
 <div class="grid">
 <figure><img src="plots/minimap_error_per_champion_v2.png" alt="Median minimap error per champion, v2: three champions far above the rest"><figcaption>Route A, v2: median error per champion. The three tall bars are the false locks (bug K, fixed since).</figcaption></figure>
-<figure><img src="plots/minimap_error_per_champion_v1.png" alt="Median minimap error per champion, v1"><figcaption>Route A, v1 (HDR on, square icons): the same three false locks; Viego never detected.</figcaption></figure>
 <figure><img src="plots/minimap_overlay_00060.png" alt="Minimap track against the timeline at 1:00"><figcaption>Track (o) vs timeline (x) at 1:00.</figcaption></figure>
 <figure><img src="plots/minimap_overlay_01020.png" alt="Minimap track against the timeline at 17:00"><figcaption>At 17:00: the false locks sit on fixed spots far from their timeline positions.</figcaption></figure>
 <figure><img src="plots/minimap_overlay_01947.png" alt="Minimap track against the timeline late in the game"><figcaption>Late game.</figcaption></figure>
