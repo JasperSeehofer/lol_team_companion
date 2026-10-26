@@ -586,6 +586,18 @@ fn TeamView(
         || members
             .iter()
             .any(|m| m.user_id == me && m.roster_type == "coach");
+    
+    // Auto-placed members (only shown to leader or coach)
+    let auto_placed = Resource::new(|| (), move |_| get_auto_placed());
+    let reload = RwSignal::new(());
+    let answer_action = ServerAction::<AnswerAutoPlaced>::new();
+    
+    let _ = Effect::new(move |_| {
+        if let Some(Ok(())) = answer_action.value().get() {
+            toast.push.run(Toast::success("Roster updated"));
+            reload.set(());
+        }
+    });
     let leader_name = members
         .iter()
         .find(|m| m.user_id == team.created_by)
@@ -789,6 +801,58 @@ fn TeamView(
             <div class="flex min-w-0 flex-col gap-12">
                 <section aria-labelledby="roster-h" data-roster>
                     <SectionHeader title="Roster" id="roster-h" meta=if is_leader { "Use a player's actions to start, bench or make them coach." } else { "The leader places players." } />
+                    
+                    // Auto-placed members (only shown to leader or coach)
+                    <Suspense>
+                        {move || auto_placed.get().map(|res| {
+                            let auto_placed_members = match res {
+                                Ok(members) if !members.is_empty() => {
+                                    members.into_iter().map(|(user_id, username, role)| {
+                                        let role_display = match role.as_str() {
+                                            "top" => "Top",
+                                            "jungle" => "Jungle",
+                                            "mid" => "Mid",
+                                            "bot" => "Bot",
+                                            "support" => "Support",
+                                            _ => &role,
+                                        };
+                                        view! {
+                                            <Callout tone=CalloutTone::Info role="status">
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div>
+                                                        <strong>{username}</strong> " joined as " <strong>{role_display}</strong> " starter."
+                                                    </div>
+                                                    <div class="flex gap-2">
+                                                        <Button
+                                                            variant=ButtonVariant::Quiet
+                                                            size=ButtonSize::Sm
+                                                            on_click=Callback::new(move |_| {
+                                                                answer_action.dispatch(AnswerAutoPlaced { user_id: user_id.clone(), undo: true });
+                                                            })
+                                                        >
+                                                            "Undo"
+                                                        </Button>
+                                                        <Button
+                                                            variant=ButtonVariant::Primary
+                                                            size=ButtonSize::Sm
+                                                            on_click=Callback::new(move |_| {
+                                                                answer_action.dispatch(AnswerAutoPlaced { user_id: user_id.clone(), undo: false });
+                                                            })
+                                                        >
+                                                            "Keep"
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </Callout>
+                                        }
+                                    }).collect_view()
+                                }
+                                _ => view! {}.into_view(),
+                            };
+                            view! { {auto_placed_members} }
+                        })}
+                    </Suspense>
+                    
                     <h3 id="roster-starters" class="mb-2 font-display text-heading font-semibold text-primary">"Starting five"</h3>
                     <ul aria-labelledby="roster-starters" class="border-b border-rule" data-roster-group="starters">{starters_view}</ul>
                     {group_list("Substitutes", "substitutes", groups.substitutes.clone(), "No one on the bench. Substitutes play when needed and see everything the team does.")}
@@ -1484,4 +1548,32 @@ mod tests {
         let own = member_actions(&m("a", "unassigned", "member"), true);
         assert!(!own.iter().any(|i| i.id == "kick" || i.id == "member"));
     }
+}
+
+/// List members who were auto-placed in starter slots by their invite link.
+#[server]
+pub async fn get_auto_placed() -> Result<Vec<(String, String, String)>, ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
+    let members = db::list_auto_placed(&ctx.db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    Ok(members)
+}
+
+/// Clear the auto-placed flag for a member. If undo is true, also move them to "member" roster_type.
+#[server]
+pub async fn answer_auto_placed(user_id: String, undo: bool) -> Result<(), ServerFnError> {
+    use crate::server::authz;
+    use crate::server::db;
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
+    db::clear_auto_placed(&ctx.db, &team_id, &user_id, undo)
+        .await
+        .map_err(authz::server_err)?;
+    Ok(())
 }

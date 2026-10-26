@@ -127,11 +127,17 @@ pub async fn register_action(
     // A team-bound invite: the account joins that team, a member not placed
     // yet. The account exists either way; if joining fails (the team was
     // deleted a moment ago), the welcome offers to create or join a team.
-    if grant.team_id.is_some() {
-        if let Err(e) = db::join_team_from_invite(&db, &user_id, &grant).await {
-            tracing::warn!(user = %user_id, error = %e, "could not join the invite's team");
+    let auto_placed_role = if grant.team_id.is_some() {
+        match db::join_team_from_invite(&db, &user_id, &grant).await {
+            Ok(role) => role,
+            Err(e) => {
+                tracing::warn!(user = %user_id, error = %e, "could not join the invite's team");
+                None
+            }
         }
-    }
+    } else {
+        None
+    };
 
     // Auto-login after registration (leptos rule 51), without a second
     // Argon2 verification.
@@ -183,19 +189,19 @@ pub async fn preview_invite(invite_code: String) -> Result<InvitePreview, Server
 
 /// A signed-in account without a team uses a team invite: it joins that
 /// team (a member not placed yet). Refused without using the code when the
-/// account is already in a team. Returns where to go next.
+/// account is already in a team. Returns where to go next and whether the member was auto-placed.
 #[server]
-pub async fn join_with_team_invite(invite_code: String) -> Result<String, ServerFnError> {
+pub async fn join_with_team_invite(invite_code: String) -> Result<(String, Option<String>), ServerFnError> {
     use crate::server::rate_limit::Bucket;
     use crate::server::{authz, db};
 
     let ctx = authz::authed().await?;
     authz::rate_limit_user(Bucket::TeamInvite, &ctx.user)?;
-    let team = db::redeem_team_invite(&ctx.db, &ctx.user.id, &invite_code)
+    let (team, auto_placed_role) = db::redeem_team_invite(&ctx.db, &ctx.user.id, &invite_code)
         .await
         .map_err(authz::server_err)?;
-    tracing::info!(user = %ctx.user.id, team = %team, "joined a team with an invite");
-    Ok("/".to_string())
+    tracing::info!(user = %ctx.user.id, team = %team, ?auto_placed_role, "joined a team with an invite");
+    Ok(("/".to_string(), auto_placed_role))
 }
 
 #[component]
@@ -239,17 +245,36 @@ pub fn RegisterPage() -> impl IntoView {
         }
     });
 
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let join = Callback::new(move |_| {
         joining.set(true);
         join_error.set(None);
         let code = invite.get_untracked();
         leptos::task::spawn_local(async move {
             match join_with_team_invite(code).await {
-                Ok(_dest) =>
-                {
+                Ok((dest, auto_placed_role)) => {
+                    if let Some(role) = auto_placed_role {
+                        let role_display = match role.as_str() {
+                            "top" => "Top",
+                            "jungle" => "Jungle",
+                            "mid" => "Mid",
+                            "bot" => "Bot",
+                            "support" => "Support",
+                            _ => &role,
+                        };
+                        toast.show(
+                            Callout {
+                                tone: CalloutTone::Success,
+                                title: "Joined as starter".into(),
+                                body: format!("You joined as {} starter.", role_display).into(),
+                                role: Some("status".into()),
+                            },
+                            None,
+                        );
+                    }
                     #[cfg(feature = "hydrate")]
                     if let Some(window) = web_sys::window() {
-                        let _ = window.location().set_href(&_dest);
+                        let _ = window.location().set_href(&dest);
                     }
                 }
                 Err(e) => {

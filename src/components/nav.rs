@@ -772,6 +772,31 @@ pub fn Nav() -> impl IntoView {
 
                     <div class="flex-1" />
 
+                    // Auto-placed members waiting for confirmation from the leader or coach.
+                    <Suspense fallback=|| ()>
+                        {move || {
+                            let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
+                            let count = notifs.auto_placed_count;
+                            if count == 0 {
+                                return ().into_any();
+                            }
+                            view! {
+                                <a
+                                    href="/team/dashboard"
+                                    class="inline-flex h-8 items-center gap-2 rounded-ctl px-2 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary"
+                                    aria-label=format!("Auto-placed members: {count} waiting")
+                                >
+                                    <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                    <span class="figures inline-grid h-5 min-w-5 place-items-center rounded-ctl border border-outline px-1 text-caption font-semibold text-primary">
+                                        {count}
+                                    </span>
+                                </a>
+                            }
+                        }}
+                    </Suspense>
+
                     <div class="flex items-center gap-3">
                         // Join requests waiting for the team leader.
                         <Suspense fallback=|| ()>
