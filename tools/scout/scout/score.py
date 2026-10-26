@@ -12,7 +12,11 @@ Wards: track wards matched one-to-one to WARD_PLACED within +-2 s (--ward-tol), 
 with the ward track's ward_window (R2) only WARD_PLACED inside it count and wards
 marked pre_existing are left out
 (creatorId 1-5 blue, 6-10 red). Recalls: a path that arrives inside the own
-fountain radius and stays >= 8 s, confirmed by >= 1 ITEM_PURCHASED by that
+fountain radius and stays there; the stay is counted inclusively (last minus
+first inside sample, plus one sample step); missing samples do not end it,
+and neither do positions outside the radius spanning <= 2 s (RECALL_BRIDGE_S). A stay >= 8 s counts;
+5 to 8 s counts only with a purchase (a short fountain visit is otherwise
+indistinguishable from walking past). Confirmed = >= 1 ITEM_PURCHASED by that
 participant within +-15 s of arrival; an arrival within 120 s after that
 champion's death is a respawn, not a recall.
 A champion whose positions all sit at one spot (within FALSE_LOCK_RADIUS) for
@@ -44,7 +48,9 @@ from .util import mmss, read_json, sample_evenly, write_json
 # the platform and shop: verify on run.
 FOUNTAINS = {"blue": (554.0, 581.0), "red": (14302.0, 14387.0)}
 FOUNTAIN_RADIUS = 1000.0
-RECALL_MIN_STAY_S = 8.0
+RECALL_MIN_STAY_S = 8.0          # counts with or without a purchase
+RECALL_SHORT_STAY_S = 5.0        # 5..8 s counts only with a purchase
+RECALL_BRIDGE_S = 2.0            # outside stretches this short do not end a stay
 PURCHASE_WINDOW_S = 15.0
 RESPAWN_WINDOW_S = 120.0
 WARD_TOL_S = 2.0
@@ -202,6 +208,12 @@ def match_wards(wards: list[dict], timeline: dict, pmap: dict[int, str],
     return out
 
 
+def _sample_step(samples: list[dict]) -> float:
+    ts = sorted(s["t"] for s in samples)
+    diffs = [b - a for a, b in zip(ts, ts[1:]) if b > a]
+    return float(statistics.median(diffs)) if diffs else 1.0
+
+
 def detect_recalls(track: dict, timeline: dict, pmap: dict[int, str]) -> list[dict]:
     champ_pid = {c: p for p, c in pmap.items()}
     buys = events(timeline, "ITEM_PURCHASED")
@@ -213,22 +225,29 @@ def detect_recalls(track: dict, timeline: dict, pmap: dict[int, str]) -> list[di
         pts = [(s["t"], s["pos"].get(champ)) for s in track["samples"]]
         pts = [(t, p) for t, p in pts if p is not None]
         inside = [np.hypot(p[0] - fx, p[1] - fy) <= FOUNTAIN_RADIUS for _, p in pts]
+        step = _sample_step(track["samples"])
         i = 1
         while i < len(pts):
             if inside[i] and not inside[i - 1]:
                 j = i
-                while j + 1 < len(pts) and inside[j + 1]:
-                    j += 1
-                arrive, stay = pts[i][0], pts[j][0] - pts[i][0]
-                if stay >= RECALL_MIN_STAY_S:
-                    n_buy = sum(1 for e in buys if e["participantId"] == pid
-                                and abs(e["timestamp"] / 1000 - arrive) <= PURCHASE_WINDOW_S)
+                while True:
+                    k = next((m for m in range(j + 1, len(pts)) if inside[m]), None)
+                    # missing samples never end a stay (as before); positions
+                    # outside the radius end it unless they span <= 2 s
+                    if k is None or (k > j + 1 and pts[k - 1][0] - pts[j + 1][0] + step
+                                     > RECALL_BRIDGE_S + 1e-9):
+                        break
+                    j = k
+                arrive, stay = pts[i][0], pts[j][0] - pts[i][0] + step
+                n_buy = sum(1 for e in buys if e["participantId"] == pid
+                            and abs(e["timestamp"] / 1000 - arrive) <= PURCHASE_WINDOW_S)
+                if stay >= RECALL_MIN_STAY_S or (stay >= RECALL_SHORT_STAY_S and n_buy >= 1):
                     died = any(e.get("victimId") == pid and
                                0 <= arrive - e["timestamp"] / 1000 <= RESPAWN_WINDOW_S for e in kills)
                     if not died:
                         out.append({"champion": champ, "participantId": pid, "t": arrive,
-                                    "stay_s": stay, "purchases": n_buy, "confirmed": n_buy >= 1,
-                                    "x": pts[i][1][0], "y": pts[i][1][1]})
+                                    "stay_s": round(stay, 3), "purchases": n_buy,
+                                    "confirmed": n_buy >= 1, "x": pts[i][1][0], "y": pts[i][1][1]})
                 i = j + 1
             else:
                 i += 1

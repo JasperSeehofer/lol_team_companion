@@ -162,3 +162,54 @@ def test_drop_static_removes_recurring_spot_samples():
     assert all(s["pos"]["A"] is not None for s in clean["samples"][::2])
     assert all(s["pos"]["B"] is not None for s in clean["samples"])
     assert tr["samples"][1]["pos"]["A"] is not None   # the input is left as it was
+
+
+# Recall rule (R2): stay counted inclusively, short gaps bridged; stays of 5 to
+# 8 s count only with a purchase. Lucian's 08:03 recall in Jasper's v2 track:
+# arrival sample missing, the last sample at 1027 just outside the radius.
+def _visit_track(inside: dict, n: int = 520, outside=(3000.0, 3000.0)):
+    """Champion A (pid 1, blue); inside: {t: pos or None}."""
+    return {"champions": ["A"], "samples": [
+        {"t": float(t), "pos": {"A": inside[t] if t in inside else list(outside)}} for t in range(n)]}
+
+
+def _buys(times, pid=1):
+    return {"info": {"frames": [{"timestamp": 0, "participantFrames": {}, "events": [
+        {"type": "ITEM_PURCHASED", "participantId": pid, "timestamp": int(t * 1000)} for t in times]}]}}
+
+
+def test_recall_v2_shape_is_detected():
+    inside = {483: None, **{t: [554.0 + 10 * (t % 3), 600.0] for t in range(484, 491)},
+              491: [554.0 + 1027.0, 581.0]}
+    recalls = score.detect_recalls(_visit_track(inside), _buys([486, 487, 489]), {1: "A"})
+    assert [(r["t"], r["stay_s"], r["purchases"], r["confirmed"]) for r in recalls] == \
+        [(484.0, 7.0, 3, True)]
+
+
+def test_short_fountain_visit_without_purchases_is_not_a_recall():
+    for length in (3, 6):
+        inside = {t: [554.0, 581.0] for t in range(300, 300 + length)}
+        assert score.detect_recalls(_visit_track(inside), _buys([]), {1: "A"}) == [], length
+    inside = {t: [554.0, 581.0] for t in range(300, 303)}            # 3 s, even with a purchase
+    assert score.detect_recalls(_visit_track(inside), _buys([301]), {1: "A"}) == []
+
+
+def test_recall_bridges_a_two_second_blip_but_not_three():
+    blip = {t: [554.0, 581.0] for t in range(100, 112)}
+    blip[105] = blip[106] = [2000.0, 2000.0]                        # 2 s outside: bridged
+    r = score.detect_recalls(_visit_track(blip), _buys([]), {1: "A"})
+    assert [(x["t"], x["stay_s"]) for x in r] == [(100.0, 12.0)]
+    split = {t: [554.0, 581.0] for t in range(100, 113)}
+    split[105] = split[106] = split[107] = [2000.0, 2000.0]         # 3 s outside: two visits
+    r = score.detect_recalls(_visit_track(split), _buys([]), {1: "A"})
+    assert r == []                                                  # 5 s each, no purchase
+    r = score.detect_recalls(_visit_track(split), _buys([101, 109]), {1: "A"})
+    assert [(x["t"], x["stay_s"]) for x in r] == [(100.0, 5.0), (108.0, 5.0)]
+
+
+def test_recall_stay_runs_through_missing_samples():
+    """Viego 29:39 in v2: two samples inside, 62 s without a position, one more inside."""
+    inside = {1779: [600.0, 600.0], 1780: [600.0, 600.0], **{t: None for t in range(1781, 1843)},
+              1843: [554.0, 600.0]}
+    r = score.detect_recalls(_visit_track(inside, n=1900), _buys([1778, 1790]), {1: "A"})
+    assert [(x["t"], x["stay_s"]) for x in r] == [(1779.0, 65.0)]
