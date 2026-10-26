@@ -19,6 +19,7 @@ from pathlib import Path
 from . import camera as cam
 from .render import LEGACY_MINIMAP_ONLY, LEGACY_NOTE, minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
+from . import winhdr
 from .screen import all_monitors, describe, pick_monitor
 from .track_topdown import camera_render
 from .util import run_logger, write_json
@@ -35,7 +36,8 @@ SEEK_TO = 120.0  # game seconds to start the speed probe from
 def screen_grabber(max_width: int = 1280, monitor: int | None = None, log=None):
     """Returns grab(path) saving a PNG of the primary monitor (or --monitor N;
     see scout.screen), downscaled to max_width, or None when mss is unavailable
-    (tests, non-Windows). grab.monitor describes the monitor captured."""
+    (tests, non-Windows). grab.monitor describes the monitor captured, grab.hdr
+    its Windows HDR state (scout.winhdr; None off Windows)."""
     try:
         import cv2
         import mss
@@ -61,6 +63,7 @@ def screen_grabber(max_width: int = 1280, monitor: int | None = None, log=None):
         cv2.imwrite(str(path), img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
 
     grab.monitor = describe(index, mon, how)
+    grab.hdr = winhdr.check(box, log)   # finding I: warn when Windows HDR is on
     return grab
 
 
@@ -97,6 +100,8 @@ class Probe:
         self.result: dict = {"errors": {}}
         if getattr(grab, "monitor", None):
             self.result["monitor"] = grab.monitor
+        if grab is not None and hasattr(grab, "hdr"):
+            self.result["hdr"] = grab.hdr
 
     def _info(self, msg, *a):
         if self.log:

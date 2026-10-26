@@ -23,7 +23,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import calibrate
+from . import calibrate, winhdr
 from .detect import TemplateDetector, YoloDetector, fetch_ddragon_icons, load_icons
 from .render import minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
@@ -73,6 +73,7 @@ def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: f
     with mss.mss() as sct:
         index, mon, how = pick_monitor(sct.monitors, monitor)
         chosen = describe(index, mon, how)
+        hdr = winhdr.check(mon, log)   # finding I: warn when Windows HDR is on
         log.info("monitor %d (%s): %dx%d at %d,%d; mss lists %s", index, how, mon["width"],
                  mon["height"], mon["left"], mon["top"], all_monitors(sct.monitors))
         if box is None:   # relative to the chosen monitor's origin
@@ -97,8 +98,8 @@ def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: f
     wall = time.time() - wall0
     log.info("captured %d frames in %.0f s wall (%.2f game-s per wall-s)", n, wall,
              (end - start) / wall if wall else 0)
-    return scratch, {"box": box, "monitor": chosen, "frames": n, "wall_s": round(wall, 1),
-                     "speed": speed}
+    return scratch, {"box": box, "monitor": chosen, "hdr": hdr, "frames": n,
+                     "wall_s": round(wall, 1), "speed": speed}
 
 
 def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
@@ -222,6 +223,7 @@ def main(argv=None) -> int:
                         match_id, log)
     if capture:
         track["capture"] = capture
+        track["hdr"] = capture.get("hdr")
         write_json(args.out / "track_minimap.json", track)
     return 0
 

@@ -19,7 +19,7 @@ note it in the run's `run.log`, skip the step and go on. Run data never goes to 
    into `tools\scout\models\`. If it fails: skip it; step 7 then uses the template detector by itself.
 4. **PC-only. Replay API.** `.\tools\scout\.venv\Scripts\python -m scout.session enable-api`, then restart the
    League client. If it fails: pass `--cfg "<your League folder>\Config\game.cfg"`; untick read-only in Properties.
-5. **PC-only. Open the replay** of that game (current patch) in borderless full screen on the main monitor.
+5. **PC-only. Open the replay** of that game (current patch) in borderless full screen on the main monitor, Windows HDR off (`run.log` warns if it is on).
 6. **PC-only. Probe (about 3 min, hands off).** `.\tools\scout\.venv\Scripts\python -m scout.session probe`
    If it fails: open `https://127.0.0.1:2999/replay/game` in a browser; no answer = replay not open or step 4 did not take.
    If `probe_*.png` show the wrong monitor: `run.log` lists them; add `--monitor N` here and in step 7.

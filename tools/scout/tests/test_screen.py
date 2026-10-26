@@ -83,3 +83,60 @@ def test_minimap_box_relative_to_chosen_monitor(monkeypatch, mock_api, tmp_path)
     box = track_minimap.auto_minimap_box(1920, 1080)
     assert cap["box"] == dict(box, left=box["left"] + 2560, top=box["top"] + 200)
     assert grabs and grabs[-1] == cap["box"]          # the frames come from that box
+
+
+# Finding I: Windows HDR tone-maps captures; the capture tools warn.
+from scout import winhdr  # noqa: E402
+
+D_PRIMARY = {"gdi_name": r"\\.\DISPLAY1", **PRIMARY, "supported": True, "enabled": True}
+D_PORTRAIT = {"gdi_name": r"\\.\DISPLAY2", **PORTRAIT, "supported": False, "enabled": False}
+
+
+def test_hdr_query_is_none_off_windows(monkeypatch):
+    monkeypatch.setattr(winhdr.sys, "platform", "linux")
+    assert winhdr.query_displays() is None
+    assert winhdr.check(PRIMARY, logging.getLogger("t")) is None
+
+
+def test_hdr_on_for_captured_monitor_warns(caplog):
+    caplog.set_level(logging.INFO)
+    res = winhdr.check(dict(PRIMARY), logging.getLogger("t"), query=lambda: [D_PORTRAIT, D_PRIMARY])
+    assert res["enabled"] is True and res["matched_by"] == "rectangle"
+    assert res["display"] == r"\\.\DISPLAY1"
+    assert any(r.levelno == logging.WARNING and "HDR is ON" in r.message for r in caplog.records)
+
+
+def test_hdr_off_for_captured_monitor_does_not_warn(caplog):
+    caplog.set_level(logging.INFO)
+    res = winhdr.check(dict(PORTRAIT), logging.getLogger("t"), query=lambda: [D_PORTRAIT, D_PRIMARY])
+    assert res["enabled"] is False
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_hdr_matching_fallbacks():
+    scaled = dict(D_PRIMARY, width=1707, height=960)   # same origin, other size (DPI)
+    assert winhdr.hdr_for_monitor([D_PORTRAIT, scaled], PRIMARY)["matched_by"] == "origin"
+    assert winhdr.hdr_for_monitor([dict(D_PRIMARY, left=5)], PRIMARY)["matched_by"] == "only display"
+    far = {"left": 9000, "top": 0, "width": 10, "height": 10}
+    res = winhdr.hdr_for_monitor([dict(D_PORTRAIT), dict(D_PRIMARY, left=5)], far)
+    assert res["enabled"] is True and res["display"] is None   # some display has HDR on
+
+
+def test_hdr_query_failure_is_recorded_not_raised(caplog):
+    def boom():
+        raise OSError("QueryDisplayConfig returned 87")
+
+    res = winhdr.check(PRIMARY, logging.getLogger("t"), query=boom)
+    assert res == {"enabled": None, "error": "QueryDisplayConfig returned 87"}
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+def test_probe_and_capture_record_hdr(monkeypatch, mock_api, tmp_path):
+    grabs = []
+    monkeypatch.setitem(sys.modules, "mss", fake_mss(with_primary(), grabs))
+    monkeypatch.setattr(winhdr, "query_displays", lambda: [D_PORTRAIT, D_PRIMARY])
+    grab = probe.screen_grabber(log=logging.getLogger("t"))
+    assert probe.Probe(None, tmp_path, grab=grab).result["hdr"]["enabled"] is True
+    _, cap = track_minimap.capture_live(ReplayClient(mock_api.base), None, tmp_path / "f", 8.0,
+                                        0.0, 1.0, logging.getLogger("t"))
+    assert cap["hdr"]["enabled"] is True and cap["hdr"]["matched_by"] == "rectangle"
