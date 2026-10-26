@@ -125,3 +125,40 @@ def test_ward_window_pre_existing_and_tolerance():
     assert (res["blue"]["detected"], res["blue"]["placed"], res["blue"]["tp"]) == (1, 1, 1)
     assert (res["red"]["placed"], res["red"]["tp"]) == (1, 0)
     assert score.match_wards(wards, tl, {}, None, tol=4.0, window=window)["red"]["tp"] == 1
+
+
+def _locked_track():
+    samples = [{"t": float(t), "pos": {"A": [13390.9, 680.6], "B": [1000.0 + 50 * t, 1000.0]}}
+               for t in range(0, 120)]
+    return {"champions": ["A", "B"], "samples": samples}
+
+
+def test_false_lock_counts_as_not_detected():
+    tl = {"info": {"frames": [{"timestamp": t * 60000, "events": [], "participantFrames": {
+        "1": {"position": {"x": 554, "y": 581}},
+        "2": {"position": {"x": 1000 + 50 * 60 * t, "y": 1000}}}} for t in range(2)]}}
+    res = score.score_positions(_locked_track(), tl, {1: "A", 2: "B"})
+    assert res["false_lock"] == ["A"]
+    assert res["per_champion"]["A"]["false_lock"] and res["per_champion"]["A"]["detection_rate"] == 0
+    assert res["per_champion"]["A"]["median_error"] is None
+    assert not res["per_champion"]["B"]["false_lock"] and res["detection_rate"] == 0.5
+    assert all(e["champion"] == "B" for e in res["errors"])
+
+
+def test_false_lock_needs_the_whole_run_at_one_spot():
+    tr = _locked_track()
+    tr["samples"][5]["pos"]["A"] = [5000.0, 5000.0]
+    assert score.false_locks(tr) == []
+
+
+def test_drop_static_removes_recurring_spot_samples():
+    tr = _locked_track()
+    for s in tr["samples"][::2]:          # A moves half the time, sits at the spot otherwise
+        s["pos"]["A"] = [2000.0 + 30 * s["t"], 3000.0]
+    clean, spots = score.drop_static(tr)
+    assert [(s["champion"], s["px"]) for s in spots["spots"]] == [("A", 13390.9)]
+    assert spots["rejected"] == {"A": 60}
+    assert all(s["pos"]["A"] is None for s in clean["samples"][1::2])
+    assert all(s["pos"]["A"] is not None for s in clean["samples"][::2])
+    assert all(s["pos"]["B"] is not None for s in clean["samples"])
+    assert tr["samples"][1]["pos"]["A"] is not None   # the input is left as it was

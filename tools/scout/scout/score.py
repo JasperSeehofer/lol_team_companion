@@ -15,6 +15,12 @@ marked pre_existing are left out
 fountain radius and stays >= 8 s, confirmed by >= 1 ITEM_PURCHASED by that
 participant within +-15 s of arrival; an arrival within 120 s after that
 champion's death is a respawn, not a recall.
+A champion whose positions all sit at one spot (within FALSE_LOCK_RADIUS) for
+the whole run is a false lock on a static background spot (finding F): it
+counts as not detected (per_champion false_lock). --drop-static removes, before
+scoring, track positions at spots a champion's track recurs at in >= 20 % of
+samples (the tracker's static-spot rule, in world units, for tracks made
+before it).
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from .track import find_gaps
+from .track import StaticSpots, find_gaps
 from .util import mmss, read_json, sample_evenly, write_json
 
 # Fountain centres (world units) and radius. The centres are the Match-V5
@@ -43,6 +49,8 @@ PURCHASE_WINDOW_S = 15.0
 RESPAWN_WINDOW_S = 120.0
 WARD_TOL_S = 2.0
 FRAME_TOL_S = 1.0
+FALSE_LOCK_RADIUS = 100.0       # world units, ~4.5 px on a 679 px minimap
+FALSE_LOCK_MIN_SAMPLES = 10
 SKIP_WARD_TYPES = {"UNDEFINED"}  # timeline entries that are not placed wards
 
 
@@ -78,7 +86,49 @@ class Lookup:
         return best
 
 
+def false_locks(track: dict, radius: float = FALSE_LOCK_RADIUS,
+                min_samples: int = FALSE_LOCK_MIN_SAMPLES) -> list[str]:
+    """Champions whose every position sits within `radius` of their median."""
+    out = []
+    for c in track["champions"]:
+        pts = np.array([s["pos"][c] for s in track["samples"] if s["pos"].get(c)], dtype=float)
+        if len(pts) < min_samples:
+            continue
+        mid = np.median(pts, axis=0)
+        if np.all(np.hypot(*(pts - mid).T) <= radius):
+            out.append(c)
+    return out
+
+
+class _Pt:
+    def __init__(self, label, x, y):
+        self.label, self.x, self.y = label, x, y
+
+
+def drop_static(track: dict, radius: float = FALSE_LOCK_RADIUS, frac: float = 0.2,
+                warmup: int = 60) -> tuple[dict, dict]:
+    """A copy of the track without positions at static spots (world units)."""
+    spots = StaticSpots(radius=radius, frac=frac, warmup=warmup)
+    for s in track["samples"]:
+        spots.observe([_Pt(c, *p) for c, p in s["pos"].items() if p])
+    static = spots.static()
+    samples = []
+    for s in track["samples"]:
+        pos = {}
+        for c, p in s["pos"].items():
+            pos[c] = None if p and spots.is_static(c, p[0], p[1], static) else p
+            if p and pos[c] is None:
+                spots.rejected[c] = spots.rejected.get(c, 0) + 1
+        samples.append({**s, "pos": pos})
+    return {**track, "samples": samples}, spots.describe()
+
+
 def score_positions(track: dict, timeline: dict, pmap: dict[int, str]) -> dict:
+    locked = false_locks(track)
+    if locked:   # a false lock counts as not detected
+        track = {**track, "samples": [{**s, "pos": {c: (None if c in locked else p)
+                                                    for c, p in s["pos"].items()}}
+                                      for s in track["samples"]]}
     look = Lookup(track["samples"])
     errors = []
     for frame in timeline["info"]["frames"]:
@@ -103,7 +153,8 @@ def score_positions(track: dict, timeline: dict, pmap: dict[int, str]) -> dict:
         cg = [g["length_s"] for g in gaps if g["champion"] == c]
         per[c] = {"median_error": statistics.median(errs) if errs else None, "n_scored": len(errs),
                   "detection_rate": round(seen / n, 4) if n else None,
-                  "gaps_count": len(cg), "longest_gap_s": max(cg) if cg else 0.0}
+                  "gaps_count": len(cg), "longest_gap_s": max(cg) if cg else 0.0,
+                  "false_lock": c in locked}
     all_err = [e["err"] for e in errors]
     seen_all = sum(1 for s in track["samples"] for c in track["champions"] if s["pos"].get(c))
     return {"median_error": statistics.median(all_err) if all_err else None,
@@ -111,7 +162,7 @@ def score_positions(track: dict, timeline: dict, pmap: dict[int, str]) -> dict:
             "detection_rate": round(seen_all / (n * len(track["champions"])), 4) if n else None,
             "gaps_count": len(gaps),
             "longest_gap_s": max((g["length_s"] for g in gaps), default=0.0),
-            "per_champion": per, "errors": errors}
+            "false_lock": locked, "per_champion": per, "errors": errors}
 
 
 def match_wards(wards: list[dict], timeline: dict, pmap: dict[int, str],
@@ -241,6 +292,9 @@ def run(args) -> int:
               "missing_classes": track.get("missing_classes", []),
               "notes": ["detection_rate counts all samples (alive approximated as always)",
                         f"fountain radius {FOUNTAIN_RADIUS}, centres {FOUNTAINS}"]}
+    if args.drop_static:
+        track, result["static_spots"] = drop_static(track)
+        result["notes"].append("--drop-static: positions at static spots removed before scoring")
     result.update(score_positions(track, timeline, pmap))
     wards = match_wards(wards_track.get("wards", []), timeline, pmap,
                         (min(ts), max(ts)) if ts else None, args.ward_tol, wards_track.get("ward_window"))
@@ -325,6 +379,8 @@ def main(argv=None) -> int:
     r.add_argument("--ward-tol", type=float, default=WARD_TOL_S,
                    help=f"ward time tolerance, s (default {WARD_TOL_S}; 4 recovered one more red ward "
                         "on Jasper's run)")
+    r.add_argument("--drop-static", action="store_true",
+                   help="remove positions at a champion's recurring static spots first (finding F)")
     r.add_argument("--tag", help="suffix for score_<tag>.json / handcheck_<tag>.csv")
     r.add_argument("--out", required=True, type=Path)
     p = sub.add_parser("plots", help="error bar chart and minimap overlays")

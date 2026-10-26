@@ -125,3 +125,82 @@ def test_static_false_spot_offered_first_does_not_lock_the_track():
     tr.step(0.0, [WorldDet("A", *STATIC, 0.74), WorldDet("A", 1000, 1000, 0.90)])
     pos = tr.step(1.0, [WorldDet("A", 1100, 1000, 0.90), WorldDet("A", *STATIC, 0.74)])
     assert pos["A"] == [1100.0, 1000.0], pos["A"]
+
+
+# Finding F: after K the track still lands on a static spot while the
+# champion is dead or hidden; a spot that recurs in >= 20 % of frames is static.
+def _paste(img, icon, cx, cy, px=26):
+    import cv2
+
+    from scout.detect import circle_mask
+
+    t = cv2.resize(icon, (px, px), interpolation=cv2.INTER_AREA)
+    m = circle_mask(px) > 0
+    y0, x0 = int(round(cy - px / 2)), int(round(cx - px / 2))
+    img[y0:y0 + px, x0:x0 + px][m] = t[m]
+
+
+def test_static_distractor_is_rejected_while_the_icon_is_hidden(tmp_path):
+    import cv2
+
+    from scout.calibrate import bounds_map
+    from scout.detect import TemplateDetector
+
+    ia, ib = mf.make_icon(0), mf.make_icon(1)
+    rng = np.random.default_rng(1)
+    # a dark, noisy copy of A's icon at a fixed spot: scores ~0.84 for "A" in every frame
+    dark = np.clip(cv2.resize(ia, (26, 26)).astype(float) * 0.5 + rng.normal(0, 25, (26, 26, 3)),
+                   0, 255).astype(np.uint8)
+    spot = (280.0, 290.0)
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    hidden = set(range(30, 50))
+    for t in range(80):
+        img = mf.draw_minimap()
+        _paste(img, dark, *spot)
+        if t not in hidden:
+            _paste(img, ia, 40 + 2 * t, 100)
+        _paste(img, ib, 200, 40 + t)
+        cv2.imwrite(str(frames / f"t{t:05d}.png"), img)
+    det = TemplateDetector({"A": ia, "B": ib}, icon_px=26)
+    track = track_minimap.run_offline(frames, ["A", "B"], det, tmp_path / "out")
+    m = bounds_map(mf.MINIMAP_PX, mf.MINIMAP_PX)
+    ss = track["static_spots"]
+    assert [(s["champion"], round(s["px"]), round(s["py"])) for s in ss["spots"]] == [("A", 280, 290)]
+    assert ss["rejected"]["A"] >= 80 and "B" not in ss["rejected"]
+    sw = m.to_world(*spot)
+    for s in track["samples"]:
+        a = s["pos"]["A"]
+        if int(s["t"]) in hidden:
+            assert a is None, (s["t"], a)
+        else:
+            tx, ty = m.to_world(40 + 2 * s["t"], 100)
+            assert a is not None and np.hypot(a[0] - tx, a[1] - ty) < 100, (s["t"], a)
+        assert a is None or np.hypot(a[0] - sw[0], a[1] - sw[1]) > 500
+        assert s["pos"]["B"] is not None
+
+
+def test_static_spots_live_running_count_needs_warmup():
+    from scout.track import StaticSpots
+
+    sp = StaticSpots(radius=4, frac=0.2, warmup=10)
+    kept = []
+    for t in range(30):
+        dets = [WorldDet("A", 50.0 + 0.5 * (t % 3), 60.0), WorldDet("A", 10.0 + 5 * t, 20.0)]
+        sp.observe(dets)
+        kept.append([(d.x, d.y) for d in sp.filter(dets)])
+    assert all(len(k) == 2 for k in kept[:9])       # warm-up: nothing static yet
+    assert all(len(k) == 1 and k[0][0] != 50.0 + 0.5 * (i % 3)
+               for i, k in enumerate(kept[9:], 9))  # the moving icon survives
+    desc = sp.describe()
+    assert len(desc["spots"]) == 1 and desc["spots"][0]["champion"] == "A"
+    assert desc["rejected"] == {"A": 21}
+
+
+def test_static_spots_leave_a_moving_icon_alone():
+    from scout.track import StaticSpots
+
+    sp = StaticSpots(warmup=5)
+    for t in range(50):
+        sp.observe([WorldDet("A", 3.0 * t, 0.0)])
+    assert sp.static() == {}

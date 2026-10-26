@@ -28,7 +28,7 @@ from .detect import TemplateDetector, YoloDetector, fetch_ddragon_icons, load_ic
 from .render import minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
-from .track import Tracker, WorldDet, find_gaps
+from .track import StaticSpots, Tracker, WorldDet, find_gaps
 from .util import frame_name, list_frames, parse_box, read_json, run_logger, sample_evenly, write_json
 
 ICON_FRACTION = 0.08   # icon diameter / minimap width (pyLoL: ~40 px on a 512 px minimap)
@@ -112,12 +112,20 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
         mapping = calibrate.fit_linear(*calibrate.load_anchors(anchors))
     else:
         mapping = calibrate.bounds_map(first.shape[1], first.shape[0])
-    tracker = Tracker(champions)
+    # Two passes (finding F): detect every frame and count each label's
+    # recurring spots, then track with the static spots rejected. The live
+    # path captures to the scratch directory first, so it runs this too.
+    spots = StaticSpots()
+    per_frame = []
     for t, path in frames:
-        img = cv2.imread(str(path))
-        dets = [WorldDet(d.label, *mapping.to_world(d.x, d.y), d.score)
-                for d in detector.detect(img)]
-        tracker.step(t, dets)
+        dets = detector.detect(cv2.imread(str(path)))
+        spots.observe(dets)
+        per_frame.append((t, dets))
+    static = spots.static()
+    tracker = Tracker(champions)
+    for t, dets in per_frame:
+        tracker.step(t, [WorldDet(d.label, *mapping.to_world(d.x, d.y), d.score)
+                         for d in spots.filter(dets, static)])
     keep = out_dir / "frames_minimap"
     keep.mkdir(parents=True, exist_ok=True)
     for _, path in sample_evenly(frames, max_frames):
@@ -128,13 +136,16 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
         "samples": tracker.samples, "gaps": find_gaps(tracker.samples, champions),
         "detector": detector.describe(), "missing_classes": detector.missing_classes,
         "calibration": mapping.as_dict(), "frame_size": [first.shape[1], first.shape[0]],
-        "wards": [],
+        "wards": [], "static_spots": spots.describe(mapping.to_world),
     }
     write_json(out_dir / "track_minimap.json", track)
     if log:
         seen = sum(1 for s in tracker.samples for p in s["pos"].values() if p)
         log.info("track_minimap.json: %d samples, %d positions, %d gaps", len(tracker.samples),
                  seen, len(track["gaps"]))
+        for sp in track["static_spots"]["spots"]:
+            log.info("static spot rejected: %s at px %.0f,%.0f (%d of %d frames)", sp["champion"],
+                     sp["px"], sp["py"], sp["frames"], spots.frames)
     return track
 
 
